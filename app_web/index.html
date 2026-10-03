@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="referrer" content="no-referrer">
+<title>KiCad Visual Review</title>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<header class="top">
+  <div class="identity"><span class="brand">K / VISUAL REVIEW</span><h1>KiCad projects on GitHub</h1><p>Open public schematics and PCB layouts in your browser.</p></div>
+  <div class="header-links"><a id="installLink" class="source-link" hidden target="_blank" rel="noopener noreferrer">Install GitHub App ↗</a><a id="githubLink" class="source-link" hidden target="_blank" rel="noopener noreferrer">Open on GitHub ↗</a></div>
+</header>
+<section class="navigator" aria-label="Find a KiCad design">
+  <form id="branchForm" class="source-form">
+    <label>Repository <input id="repository" required placeholder="owner/repository" autocomplete="off" spellcheck="false"></label>
+    <label>Branch or commit <input id="ref" placeholder="main" autocomplete="off" spellcheck="false"></label>
+    <button type="submit">Browse designs</button>
+  </form>
+  <form id="pullForm" class="source-form">
+    <label>Pull request <input id="pull" type="number" min="1" step="1" placeholder="123"></label>
+    <button type="submit">Open review</button>
+  </form>
+  <div class="pick-row"><label id="fileLabel" for="fileSelect">Design file</label><select id="fileSelect" disabled><option>Select a repository or pull request</option></select><span id="revisionSummary"></span></div>
+</section>
+<div id="status" role="status" aria-live="polite"></div>
+<main id="comparison" class="comparison single">
+  <div class="comparison-bar"><strong id="designName">Choose a KiCad design</strong><div id="modeControls" class="mode-controls" role="group" aria-label="Revision view"></div></div>
+  <div class="panels">
+    <section id="basePanel" class="revision" hidden><div class="revision-label"><strong>BASE</strong><span id="baseRef"></span></div><div id="baseDrawing" class="placeholder">Loading base revision…</div></section>
+    <section id="headPanel" class="revision"><div class="revision-label"><strong id="headLabel">CURRENT</strong><span id="headRef"></span></div><div id="headDrawing" class="placeholder">Choose a design above to begin.</div></section>
+  </div>
+</main>
+<footer>The bundled Canvas2D renderer shows KiCad pages, PCB layers, object properties, and subsheets. SPIKE provides an approximate 3D PCB view. Visual comparison shows both revisions; use GitHub’s source diff for exact text changes.</footer>
+<script src="public-data.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

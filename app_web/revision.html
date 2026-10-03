@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="referrer" content="no-referrer">
+<title>KiCad revision</title>
+<style>
+  :root{color-scheme:dark;font:13px/1.4 system-ui,-apple-system,"Segoe UI",sans-serif}
+  *{box-sizing:border-box}
+  html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#101820;color:#eaf1f4}
+  body{display:flex;flex-direction:column}
+  #status{padding:24px;color:#b9cbd2}#status.error{color:#ffb4b4}#status:empty{display:none}
+  #frameControls{display:flex;align-items:center;gap:7px;flex:0 0 auto;min-height:42px;padding:5px 9px;background:#18232c;border-bottom:1px solid #34444b}
+  #frameControls[hidden],#viewportRow[hidden],#threePane[hidden],#mode3d[hidden],#sheetPanel[hidden],#layerPanel[hidden],#warning[hidden]{display:none}
+  .spacer{flex:1;min-width:0}.hint{font-size:11px;color:#a8bec6;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  button,select{font:600 12px/1.2 system-ui,-apple-system,"Segoe UI",sans-serif;color:#eaf1f4;background:#263842;border:1px solid #4c6570;border-radius:5px;padding:6px 10px;cursor:pointer}
+  button:hover,select:hover{background:#314b54;border-color:#82d8b0}button:focus-visible,select:focus-visible{outline:2px solid #87e3b8;outline-offset:2px}
+  button[aria-pressed="true"]{background:#246c51;border-color:#88d8b6}
+  #viewportRow{display:flex;flex:1;min-height:0;min-width:0}#drawingHost{flex:1;min-width:0;min-height:0;position:relative;overflow:hidden;background:#111820}
+  .owned-canvas{display:block;touch-action:none;outline:none}
+  #sidePanel{width:220px;flex:0 0 220px;overflow:auto;border-left:1px solid #34444b;background:#18232c;padding:12px}
+  #sidePanel h2{font-size:12px;text-transform:uppercase;letter-spacing:.06em;color:#a8bec6;margin:0 0 7px}
+  #sidePanel section{margin:0 0 18px}#sheetSelect{width:100%;max-width:100%;font-weight:400}
+  #layerList{display:grid;gap:5px;max-height:26vh;overflow:auto}.layer{display:flex;gap:7px;align-items:center;overflow-wrap:anywhere}
+  #properties{display:grid;grid-template-columns:max-content 1fr;gap:4px 7px;margin:0;overflow-wrap:anywhere}
+  #properties dt{color:#a8bec6}#properties dd{margin:0}#warning{color:#e7c891;overflow-wrap:anywhere}
+  #threePane{flex:1;min-height:0;width:100%;overflow:hidden}
+  @media(max-width:700px){.hint{display:none}#frameControls{gap:5px;padding:5px}button{padding:6px 8px}#sidePanel{width:150px;flex-basis:150px}}
+</style>
+</head>
+<body>
+  <div id="frameControls" hidden>
+    <button id="fitDrawing" type="button">Fit drawing</button><button id="fitPage" type="button">Full sheet</button>
+    <button id="mode3d" type="button" aria-pressed="false" hidden>SPIKE 3D</button>
+    <span class="spacer"></span><span class="hint">Right-drag to pan · wheel to zoom · click an object to inspect</span>
+    <button id="themeButton" type="button" aria-pressed="false">Dark paper</button>
+  </div>
+  <div id="status" role="status">Loading KiCad project…</div>
+  <div id="viewportRow" hidden>
+    <div id="drawingHost"></div>
+    <aside id="sidePanel" aria-label="Drawing details">
+      <section id="sheetPanel"><h2>Sheet</h2><select id="sheetSelect" aria-label="Schematic sheet"></select></section>
+      <section id="layerPanel" hidden><h2>PCB layers</h2><div id="layerList"></div></section>
+      <section><h2>Selected object</h2><dl id="properties"><dt>Selection</dt><dd>Click a component or board feature.</dd></dl></section>
+      <p id="warning" hidden></p>
+    </aside>
+  </div>
+  <div id="threePane" hidden></div>
+  <script src="public-data.js"></script>
+  <script src="design-diff.js"></script>
+  <script src="owned-canvas.js"></script>
+  <script src="worksheet.js"></script><script src="file-compatibility.js"></script><script src="schematic-renderer.js"></script>
+  <script src="pcb-renderer.js"></script>
+  <script src="revision.js"></script>
+</body>
+</html>

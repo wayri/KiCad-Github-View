@@ -1,0 +1,170 @@
+{
+  "name": "kicad-visual-review",
+  "displayName": "KiCad Visual Review",
+  "description": "Read-only KiCad schematic and PCB review with properties, nets, measurements and local annotations.",
+  "version": "0.11.0",
+  "publisher": "wayri",
+  "license": "UNLICENSED",
+  "engines": {
+    "vscode": "^1.95.0"
+  },
+  "categories": [
+    "Visualization"
+  ],
+  "keywords": [
+    "KiCad",
+    "schematic",
+    "PCB",
+    "github.dev"
+  ],
+  "main": "./extension.js",
+  "browser": "./extension.js",
+  "extensionKind": [
+    "workspace"
+  ],
+  "activationEvents": [
+    "onCustomEditor:kicadVisualReview.viewer",
+    "onCommand:kicadVisualReview.open",
+    "onCommand:kicadVisualReview.openPair"
+  ],
+  "capabilities": {
+    "virtualWorkspaces": true,
+    "untrustedWorkspaces": {
+      "supported": true,
+      "description": "Drawing files are read only. Explicit review actions write the annotation sidecar; no project code or external commands are executed."
+    }
+  },
+  "contributes": {
+    "commands": [
+      {
+        "command": "kicadVisualReview.open",
+        "title": "KiCad: Open Visual Viewer"
+      },
+      {
+        "command": "kicadVisualReview.openPair",
+        "title": "KiCad: Open Paired Schematic and PCB Review"
+      },
+      {
+        "command": "kicadVisualReview.openSidecar",
+        "title": "KiCad: Open Review Sidecar"
+      },
+      {
+        "command": "kicadVisualReview.importLegacyNotes",
+        "title": "KiCad: Import Previous Workspace Notes into Sidecar"
+      },
+      {
+        "command": "kicadVisualReview.refreshNavigator",
+        "title": "KiCad: Refresh Review Navigator"
+      }
+    ],
+    "views": {
+      "explorer": [
+        {
+          "id": "kicadVisualReview.navigator",
+          "name": "KiCad Review"
+        }
+      ]
+    },
+    "customEditors": [
+      {
+        "viewType": "kicadVisualReview.viewer",
+        "displayName": "KiCad Visual Review",
+        "selector": [
+          {
+            "filenamePattern": "*.kicad_sch"
+          },
+          {
+            "filenamePattern": "*.kicad_pcb"
+          },
+          {
+            "filenamePattern": "*.kicad_pro"
+          },
+          {
+            "filenamePattern": "*.kicad_prl"
+          },
+          {
+            "filenamePattern": "*.kicad_dru"
+          },
+          {
+            "filenamePattern": "*.kicad_wks"
+          },
+          {
+            "filenamePattern": "*.gbr"
+          },
+          {
+            "filenamePattern": "*.ger"
+          },
+          {
+            "filenamePattern": "*.gerber"
+          },
+          {
+            "filenamePattern": "*.gtl"
+          },
+          {
+            "filenamePattern": "*.gbl"
+          },
+          {
+            "filenamePattern": "*.gts"
+          },
+          {
+            "filenamePattern": "*.gbs"
+          },
+          {
+            "filenamePattern": "*.gto"
+          },
+          {
+            "filenamePattern": "*.gbo"
+          },
+          {
+            "filenamePattern": "*.gtp"
+          },
+          {
+            "filenamePattern": "*.gbp"
+          },
+          {
+            "filenamePattern": "*.gko"
+          },
+          {
+            "filenamePattern": "*.gm1"
+          },
+          {
+            "filenamePattern": "*.drl"
+          },
+          {
+            "filenamePattern": "*.xln"
+          },
+          {
+            "filenamePattern": "fp-lib-table"
+          },
+          {
+            "filenamePattern": "sym-lib-table"
+          },
+          {
+            "filenamePattern": "*.gm[0-9]*"
+          },
+          {
+            "filenamePattern": "*.g[0-9]*"
+          }
+        ],
+        "priority": "default"
+      }
+    ],
+    "menus": {
+      "explorer/context": [
+        {
+          "command": "kicadVisualReview.open",
+          "when": "resourceExtname =~ /\\.(kicad_(sch|pcb|pro|prl|dru|wks)|gbr|ger|gerber|gtl|gbl|gts|gbs|gto|gbo|gtp|gbp|gko|gm[0-9]+|g[0-9]+|drl|xln)$/",
+          "group": "navigation"
+        },
+        {
+          "command": "kicadVisualReview.openPair",
+          "when": "resourceExtname == .kicad_sch || resourceExtname == .kicad_pcb",
+          "group": "navigation"
+        }
+      ]
+    }
+  },
+  "scripts": {
+    "test": "node --test tests/*.test.cjs"
+  }
+}

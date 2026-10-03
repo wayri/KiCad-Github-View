@@ -1,0 +1,55 @@
+const test = require('node:test');
+const assert = require('node:assert/strict');
+const { route, filePath, embeddedBlobData, blobRequest, viewerParams } = require('../parsing.js');
+
+test('finds KiCad blob and pull request routes only on GitHub', () => {
+  assert.deepEqual(route('https://github.com/owner/repo/blob/main/design/root.kicad_sch'), {
+    kind: 'blob', repository: 'owner/repo', tail: ['main', 'design', 'root.kicad_sch']
+  });
+  assert.deepEqual(route('https://github.com/owner/repo/pull/42/files'), {
+    kind: 'pull', repository: 'owner/repo', number: 42
+  });
+  assert.equal(route('https://example.com/owner/repo/blob/main/root.kicad_sch'), null);
+  assert.equal(route('https://github.com/owner/repo/blob/main/readme.md'), null);
+  assert.equal(route('https://github.com/owner/repo/pull/9007199254740992/files'), null);
+});
+
+test('uses embedded GitHub ref data for slash-containing branch names', () => {
+  const url = route('https://github.com/owner/repo/blob/feature/new-ui/design/root.kicad_sch');
+  const embedded = embeddedBlobData([JSON.stringify({ payload: {
+    path: 'design/root.kicad_sch', refInfo: { name: 'feature/new-ui', currentOid: 'a'.repeat(40) }
+  } })]);
+  assert.deepEqual(blobRequest(url, embedded), {
+    repository: 'owner/repo', file: 'design/root.kicad_sch', head: 'a'.repeat(40)
+  });
+});
+
+test('rejects unsafe and unrelated file paths', () => {
+  for (const path of ['../root.kicad_sch', '/root.kicad_sch', 'a\\b.kicad_pcb', 'root.kicad_sch.txt']) {
+    assert.equal(filePath(path), null);
+  }
+  assert.equal(route('https://github.com/a/b/blob/main/%2e%2e/root.kicad_pcb'), null);
+});
+
+test('viewer query carries revision and absence status for PR additions and removals', () => {
+  const params = viewerParams({ repository: 'owner/repo', headRepository: 'fork/repo',
+    file: 'board.kicad_pcb', oldFile: 'board.kicad_pcb', base: 'a'.repeat(40),
+    head: 'b'.repeat(40), status: 'added', pullNumber: 42, pullRepository: 'owner/repo' });
+  assert.equal(params.get('headRepository'), 'fork/repo');
+  assert.equal(params.get('base'), 'a'.repeat(40));
+  assert.equal(params.get('status'), 'added');
+  assert.equal(params.get('pullNumber'), '42');
+  assert.equal(params.get('pullRepository'), 'owner/repo');
+  assert.equal(viewerParams({ repository: 'owner/repo', file: 'root.kicad_sch', head: 'main' }).has('status'), false);
+  assert.throws(() => viewerParams({ repository: 'fork/repo', file: 'root.kicad_sch', head: 'main',
+    pullNumber: 42 }), /Invalid pull request context/);
+  assert.throws(() => viewerParams({ repository: 'fork/repo', file: 'root.kicad_sch', head: 'main',
+    pullNumber: 0, pullRepository: 'owner/repo' }), /Invalid pull request context/);
+});
+
+
+test('inline project and fabrication routes accept supported files without widening drawing paths',()=>{
+ for(const file of ['board.kicad_pro','board.kicad_prl','rules.kicad_dru','page.kicad_wks','fp-lib-table','sym-lib-table','gerbers/top.gbr','gerbers/top.gtl','holes.drl']){assert.ok(filePath(file));assert.ok(route('https://github.com/owner/repo/blob/main/'+file));}
+ for(const file of ['../top.gbr','C:/top.gbr','x\u0000.gbr','a/../top.gbr','notes.json','top.gbr.exe'])assert.equal(filePath(file),null);
+ assert.equal(require('../browser-data.js').validPath('board.kicad_pro'),false);
+});

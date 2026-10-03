@@ -1,0 +1,10 @@
+* text=auto eol=lf
+*.png binary
+*.jpg binary
+*.woff2 binary
+*.zip binary
+*.vsix binary
+*.glb binary
+
+# Generated GLSL strings contain intentional trailing whitespace
+extension/vendor/spike-board3d.bundle.js -whitespace

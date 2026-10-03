@@ -1,0 +1,75 @@
+{
+  "manifest_version": 3,
+  "name": "KiCad Visual Review for GitHub",
+  "version": "0.11.0",
+  "description": "View KiCad schematics and PCB layouts directly on GitHub, with interactive revision comparisons and SPIKE 3D previews.",
+  "host_permissions": [
+    "https://github.com/*",
+    "https://api.github.com/*"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "options_page": "options.html",
+  "content_scripts": [
+    {
+      "matches": [
+        "https://github.com/*"
+      ],
+      "js": [
+        "parsing.js",
+        "content.js"
+      ],
+      "run_at": "document_idle"
+    }
+  ],
+  "web_accessible_resources": [
+    {
+      "resources": [
+        "browser-viewer.html",
+        "pcb-viewer.html",
+        "schematic-viewer.html",
+        "revision-viewer.html",
+        "project-viewer.html"
+      ],
+      "matches": [
+        "https://github.com/*"
+      ]
+    }
+  ],
+  "action": {
+    "default_title": "KiCad Visual Review",
+    "default_icon": {
+      "16": "icons/icon16.png",
+      "32": "icons/icon32.png",
+      "48": "icons/icon48.png",
+      "128": "icons/icon128.png"
+    }
+  },
+  "icons": {
+    "16": "icons/icon16.png",
+    "32": "icons/icon32.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  },
+  "commands": {
+    "_execute_action": {
+      "suggested_key": {
+        "default": "Alt+Shift+K"
+      },
+      "description": "Focus the inline KiCad viewer on GitHub"
+    }
+  },
+  "permissions": [
+    "storage"
+  ],
+  "sandbox": {
+    "pages": [
+      "html-sandbox.html"
+    ]
+  },
+  "content_security_policy": {
+    "extension_pages": "script-src 'self'; object-src 'self';",
+    "sandbox": "sandbox allow-scripts; default-src 'none'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'unsafe-inline'; frame-src about:; child-src about:; connect-src 'none'; img-src data:; object-src 'none'; form-action 'none'; base-uri 'none';"
+  }
+}

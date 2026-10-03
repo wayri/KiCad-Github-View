@@ -1,0 +1,1 @@
+Owned miniature board/model fixture for real browser loading. The blue VRML box is native asset geometry, not a procedural proxy. It uses KiCad VRML units (2.54 mm). Browser QA retained the same relative directory layout. This fixture establishes loading and selection, not KiCad pixel-equivalent rendering.

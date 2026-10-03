@@ -1,0 +1,209 @@
+const test = require("node:test");
+const assert = require("node:assert/strict");
+const { build } = require("../net-model.js");
+const diff = require("../design-diff.js");
+const pcb = require("../pcb-renderer.js");
+const sch = require("../schematic-renderer.js");
+const file = (path,content) => ({path,content});
+const board = (content,path="board.kicad_pcb") => file(path,`(kicad_pcb (layers (0 "F.Cu" signal) (31 "B.Cu" signal)) ${content})`);
+const schematic = (content,path="root.kicad_sch") => file(path,`(kicad_sch ${content})`);
+const wire = (id,a,b) => `(wire (pts (xy ${a[0]} ${a[1]}) (xy ${b[0]} ${b[1]})) (uuid "${id}"))`;
+const label = (id,name,x,y,type="label") => `(${type} "${name}" (at ${x} ${y}) (uuid "${id}"))`;
+const rendered = (files) => new Map(files.map((f)=>[f.path,pcb.build(diff.parse(f.content),f.path)]));
+
+test("PCB saved net codes define membership; same names and files remain distinct",()=> {
+  const a=board(`(net 0 "") (net 1 "GND") (net 2 "GND") (net 3 "Unused")
+    (segment (start 0 0) (end 3 4) (width .2) (layer "F.Cu") (net 1) (uuid "track"))
+    (via (at 3 4) (size .8) (drill .4) (layers "F.Cu" "B.Cu") (net 2) (uuid "via"))
+    (segment (start 0 0) (end 9 9) (net 0) (uuid "no-net"))`);
+  const b=board(`(net 1 "GND")`,"other.kicad_pcb"), files=[a,b];
+  const result=build(files,rendered(files));
+  assert.equal(result.nets.length,4);
+  assert.equal(new Set(result.nets.map((n)=>n.id)).size,4);
+  const track=result.nets.find((n)=>n.path===a.path && n.code==="1");
+  assert.deepEqual(track.uuids,["track"]);
+  assert.equal(track.stats.lengthMm,5);
+  assert.equal(track.stats.tracks,1);
+  assert.ok(track.objectIds[0].endsWith("segment:uuid:track"));
+  assert.equal(track.primitives.length,1);
+  assert.equal(track.primitives[0].kind,"track");
+  assert.equal(result.nets.find((n)=>n.code==="3").members.length,0);
+  assert.ok(!result.nets.some((n)=>n.uuids.includes("no-net")));
+  assert.deepEqual(result.warnings,[]);
+});
+
+test("inline pad declarations supply names and scope copper to the canonical numeric code",()=> {
+  const source=board(`(footprint "R" (at 100 100 90) (property "Reference" "R1") (uuid "fp")
+    (pad "1" smd rect (at 2 3) (size 1 2) (layers "F.Cu") (net 7 "VCC") (uuid "pad1"))
+    (pad "2" smd circle (at 4 3) (size 1 1) (layers "F.Cu") (net 0 "") (uuid "pad2")))
+    (segment (start 103 98) (end 104 98) (width .2) (layer "F.Cu") (net 7) (uuid "s"))`);
+  const result=build([source],Object.fromEntries(rendered([source])));
+  assert.equal(result.nets.length,1);
+  const net=result.nets[0];
+  assert.equal(net.name,"VCC"); assert.equal(net.code,"7");
+  assert.deepEqual(net.stats,{pads:1,tracks:1,vias:0,zones:0,lengthMm:1});
+  assert.deepEqual(net.members[0],{uuid:"pad1",reference:"R1",pad:"1",kind:"pad",position:{x:103,y:98}});
+  assert.ok(net.primitives.some((p)=>p.uuid==="pad1"));
+  assert.ok(!net.primitives.some((p)=>p.uuid==="pad2" || p.kind==="footprint-hit"));
+});
+
+test("pads without saved UUID match only their own number and footprint",()=> {
+  const source=board(`(net 1 "A") (net 2 "B") (footprint "R" (at 0 0) (uuid "fp")
+    (pad "1" smd rect (at 0 0) (size 1 1) (layers "F.Cu") (net 1))
+    (pad "2" smd rect (at 2 0) (size 1 1) (layers "F.Cu") (net 2)))`);
+  const result=build([source],rendered([source]));
+  assert.deepEqual(result.nets.find((n)=>n.code==="1").primitives.map((p)=>p.name),["1"]);
+  assert.deepEqual(result.nets.find((n)=>n.code==="2").primitives.map((p)=>p.name),["2"]);
+});
+
+test("unknown codes remain selectable with a warning; conflicting names never merge codes",()=> {
+  const source=board(`(net 1 "Root") (footprint "R" (at 0 0) (uuid "f")
+    (pad "1" smd rect (at 0 0) (size 1 1) (layers "F.Cu") (net 1 "Conflict") (uuid "p")))
+    (segment (start 0 0) (end 1 0) (net 99) (uuid "unknown"))`);
+  const result=build([source]);
+  assert.equal(result.nets.find((n)=>n.code==="1").name,"Root");
+  assert.deepEqual(result.nets.find((n)=>n.code==="99").uuids,["unknown"]);
+  assert.match(result.warnings.join(" "),/conflicting saved names/);
+  assert.match(result.warnings.join(" "),/no saved name/);
+});
+
+test("native arcs contribute actual minor and major arc lengths, once per saved object",()=> {
+  const source=board(`(net 1 "Signal")
+    (arc (start 1 0) (mid 0 1) (end -1 0) (width .2) (layer "F.Cu") (net 1) (uuid "semi"))
+    (arc (start 1 0) (mid -1 0) (end 0 1) (width .2) (layer "B.Cu") (net 1) (uuid "major"))
+    (zone (net 1) (uuid "zone") (layer "F.Cu") (polygon (pts (xy 0 0) (xy 2 0) (xy 2 2))))`);
+  const result=build([source],rendered([source])), net=result.nets[0];
+  assert.equal(net.stats.tracks,2);assert.equal(net.stats.zones,1);
+  assert.ok(Math.abs(net.stats.lengthMm-2.5*Math.PI)<1e-10);
+  assert.ok(net.primitives.some((p)=>p.kind==="zone-outline"));
+});
+
+test("degenerate arc lengths are reported instead of estimated by a chord",()=> {
+  const result=build([board(`(net 1 "A") (arc (start 0 0) (mid 1 0) (end 2 0) (net 1) (uuid "arc"))`)]);
+  assert.equal(result.nets[0].stats.lengthMm,0);
+  assert.match(result.warnings.join(" "),/degenerate geometry/);
+});
+
+test("crossing schematic wire interiors are separate; explicit junction joins them",()=> {
+  const wires=wire("horizontal",[0,5],[10,5])+wire("vertical",[5,0],[5,10]);
+  const separate=build([schematic(wires)]);
+  assert.equal(separate.nets.length,2);
+  assert.equal(new Set(separate.nets.map((n)=>n.id)).size,2);
+  const joined=build([schematic(wires+`(junction (at 5 5) (uuid "j"))`)]);
+  assert.equal(joined.nets.length,1);
+  assert.deepEqual(new Set(joined.nets[0].uuids),new Set(["horizontal","vertical","j"]));
+  assert.equal(joined.nets[0].stats.lengthMm,20);
+  assert.match(joined.warnings[0],/not a KiCad netlist/);
+});
+
+test("wire endpoint T connections join, while near misses remain separate",()=> {
+  const t=wire("h",[0,5],[10,5])+wire("v",[5,0],[5,5]);
+  assert.equal(build([schematic(t)]).nets.length,1);
+  const miss=wire("h",[0,5],[10,5])+wire("v",[5,0],[5,4.999]);
+  assert.equal(build([schematic(miss)]).nets.length,2);
+});
+
+test("equal local labels join disconnected wires only inside their source file",()=> {
+  const forms=wire("a",[0,0],[10,0])+wire("b",[20,0],[30,0])+
+    label("l1","CLK",0,0)+label("l2","CLK",20,0);
+  const result=build([schematic(forms),schematic(forms,"other.kicad_sch")]);
+  assert.equal(result.nets.length,2);
+  assert.ok(result.nets.every((n)=>n.name==="CLK" && n.scope==="file" && n.uuids.length===4));
+  assert.notEqual(result.nets[0].id,result.nets[1].id);
+});
+
+test("label at an unjoined crossing does not invent a conductive junction",()=> {
+  const result=build([schematic(wire("h",[0,5],[10,5])+wire("v",[5,0],[5,10])+label("l","A",5,5))]);
+  assert.equal(result.nets.length,3);
+  assert.equal(result.nets.find((n)=>n.name==="A").members.length,1);
+  assert.match(result.warnings.join(" "),/ambiguous label\/pin/);
+});
+
+test("pin members use conductive metadata and highlight only that pin, including hidden pins",()=> {
+  const source=schematic(`(symbol (lib_id "Test:X") (at 0 0) (unit 1) (uuid "s") (property "Reference" "U1"))
+    ${wire("a",[0,0],[10,0])} ${wire("b",[0,10],[10,10])}`);
+  const pin1={type:"line",kind:"pin",uuid:"s",ownerUuid:"s",pinNumber:"1",connectPoint:{x:0,y:0}};
+  const pin2={type:"line",kind:"pin",uuid:"s",ownerUuid:"s",pinNumber:"2",connectPoint:{x:0,y:10},hidden:true,stroke:false,pick:false};
+  const body={kind:"symbol",uuid:"s",type:"polygon"};
+  const result=build([source],new Map([[source.path,{primitives:[pin1,pin2,body]}]]));
+  assert.equal(result.nets.length,2);
+  assert.equal(new Set(result.nets.map((n)=>n.id)).size,2);
+  for(const net of result.nets) {
+    assert.equal(net.primitives.length,1);assert.notEqual(net.primitives[0],body);
+    const member=net.members.find((m)=>m.kind==="pin");
+    assert.equal(member.reference,"U1");assert.ok(["1","2"].includes(member.pin));
+    assert.ok(net.objectIds.includes(`${source.path}/symbol:uuid:s`));
+  }
+  assert.ok(!result.warnings.some((w)=>/no conductive pin/.test(w)));
+});
+
+test("invalid project input fails through the bounded source parser",()=> {
+  assert.throws(()=>build([board(""),board("")]),/duplicate/);
+  assert.throws(()=>build([file("bad.kicad_pcb","(kicad_pcb")]),/Incomplete/);
+  assert.throws(()=>build(new Array(33).fill(board(""))),/Too many/);
+});
+
+// Minimal native source subset from installed KiCad 10 pic_programmer demo:
+// (power global), hidden zero-length input, placed Value/UUID/positions retained.
+const powerDefinition = (id="pic_programmer:GND",flag="(power global)",pinType="power_in",pinName="GND") =>
+  `(symbol "${id}" ${flag} (property "Reference" "#PWR") (property "Value" "GND")
+    (symbol "GND_0_1" (polyline (pts (xy -1.27 0) (xy 0 -1.27) (xy 1.27 0) (xy -1.27 0))))
+    (symbol "GND_1_1" (pin ${pinType} line (at 0 0 90) (length 0) (hide yes) (name "${pinName}") (number "1"))))`;
+const placedPower = (uuid,x,y,name="GND",id="pic_programmer:GND") =>
+  `(symbol (lib_id "${id}") (at ${x} ${y} 0) (unit 1) (uuid "${uuid}")
+    (property "Reference" "#PWR${uuid}") (property "Value" "${name}"))`;
+const powerSource = (forms,definitions=powerDefinition(),version=20260101,path="power.kicad_sch") =>
+  file(path,`(kicad_sch (version ${version}) (lib_symbols ${definitions}) ${forms})`);
+const schRendered = (files) => new Map(files.map((f)=>[f.path,sch.build(diff.parse(f.content),f.path)]));
+
+test("native explicit power flag names and joins separated GND symbols inside one file",()=> {
+  const source=powerSource(placedPower("00000000-0000-0000-0000-0000442a4d38",102.87,48.26)+
+    placedPower("00000000-0000-0000-0000-0000442a4d3b",87.63,55.88)+
+    wire("ground-a",[102.87,48.26],[100,48.26])+wire("ground-b",[87.63,55.88],[85,55.88]));
+  const other={...source,path:"other.kicad_sch"},result=build([source,other],schRendered([source,other]));
+  assert.equal(result.nets.length,2);
+  for (const net of result.nets) {
+    assert.equal(net.name,"GND");assert.equal(net.code,"label:GND");assert.equal(net.scope,"file");
+    assert.equal(net.members.filter((m)=>m.kind==="pin").length,2);
+    assert.deepEqual(net.names,["GND"]);
+    assert.ok(net.primitives.some((p)=>p.kind==="symbol" && p.stroke!==false));
+  }
+});
+
+test("modern power net naming uses saved placed Value even when the library pin name differs",()=> {
+  const source=powerSource(placedPower("a",0,0,"RETURN")+placedPower("b",20,0,"RETURN")+
+    placedPower("c",40,0,"GND"));
+  const result=build([source],schRendered([source]));
+  assert.deepEqual(result.nets.map((n)=>[n.name,n.members.length]),[["GND",1],["RETURN",2]]);
+});
+
+test("ordinary GND-named symbols and power-output flags never create a named net",()=> {
+  const ordinary=powerDefinition("Ordinary:GND",""),flag=powerDefinition("Any:Flag","(power global)","power_out","PWR_FLAG");
+  const source=powerSource(placedPower("ordinary",0,0,"GND","Ordinary:GND")+
+    placedPower("flag",20,0,"PWR_FLAG","Any:Flag")+wire("a",[0,0],[10,0])+wire("b",[20,0],[30,0]),ordinary+flag);
+  const result=build([source],schRendered([source]));
+  assert.equal(result.nets.length,2);
+  assert.ok(result.nets.every((n)=>n.names.length===0 && n.name.startsWith("Unnamed network")));
+});
+
+test("legacy power symbols use hidden pin names and unknown versions decline naming",()=> {
+  const legacy=powerSource(placedPower("a",0,0,"Different value"),powerDefinition("pic_programmer:GND","(power)"),20211123);
+  assert.equal(build([legacy],schRendered([legacy])).nets[0].name,"GND");
+  const uncertain=powerSource(placedPower("a",0,0,"GND")+wire("a",[0,0],[10,0]),powerDefinition(),0);
+  const result=build([uncertain],schRendered([uncertain]));
+  assert.ok(result.nets[0].name.startsWith("Unnamed network"));
+  assert.match(result.warnings.join(" "),/unproven schematic version/);
+});
+
+test("connected aliases are retained and native name priority prefers global then power labels",()=> {
+  const source=powerSource(placedPower("p",0,0,"Z_POWER")+wire("a",[0,0],[10,0])+
+    label("local","A_LOCAL",10,0)+label("global","B_GLOBAL",5,0,"global_label"));
+  const result=build([source],schRendered([source]));
+  assert.equal(result.nets.length,1);
+  assert.equal(result.nets[0].name,"B_GLOBAL");
+  assert.equal(result.nets[0].code,"label:A_LOCAL"); // Canonical alias identity remains deterministic.
+  assert.deepEqual(result.nets[0].names,["A_LOCAL","B_GLOBAL","Z_POWER"]);
+  assert.match(result.warnings.join(" "),/multiple labels/);
+  const powerOverLocal=powerSource(placedPower("p",0,0,"Z_POWER")+wire("a",[0,0],[10,0])+label("local","A_LOCAL",10,0));
+  assert.equal(build([powerOverLocal],schRendered([powerOverLocal])).nets[0].name,"Z_POWER");
+});

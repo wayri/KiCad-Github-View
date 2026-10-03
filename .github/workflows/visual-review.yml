@@ -1,0 +1,38 @@
+name: KiCad visual review
+on:
+  pull_request:
+    paths:
+      - '**/*.kicad_sch'
+      - '**/*.kicad_pcb'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  visual-review:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install KiCad 10
+        run: |
+          sudo add-apt-repository --yes ppa:kicad/kicad-10.0-releases
+          sudo apt-get update
+          sudo apt-get install --yes --no-install-recommends kicad
+          kicad-cli version
+      - name: Install visual review tool
+        run: python -m pip install .
+      - name: Render changed designs
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: python scripts/ci.py
+      - name: Upload visual reports
+        uses: actions/upload-artifact@v4
+        with:
+          name: kicad-visual-review
+          path: kicad-review/
+          if-no-files-found: ignore

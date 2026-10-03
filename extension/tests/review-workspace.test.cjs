@@ -1,0 +1,240 @@
+const test = require('node:test');
+const assert = require('node:assert/strict');
+const { resolveObject, measurement } = require('../review-workspace.js');
+const objects = [
+  { id: 'root-r1', path: 'root.kicad_sch', uuid: 'root-symbol', reference: 'R1' },
+  { id: 'child-r1', path: 'power.kicad_sch', uuid: 'child-symbol', reference: 'R1' },
+  { id: 'footprint', path: 'board.kicad_pcb', uuid: 'footprint-uuid', reference: 'R1' },
+  { id: 'pad', path: 'board.kicad_pcb', uuid: 'pad-uuid', reference: 'R1', parentId: 'footprint' }
+];
+test('selection UUID and reference are scoped to the active drawing', () => {
+  assert.equal(resolveObject(objects, 'power.kicad_sch', { uuid: 'root-symbol' }), null);
+  assert.equal(resolveObject(objects, 'power.kicad_sch', { reference: 'R1' }).id, 'child-r1');
+  assert.equal(resolveObject(objects, 'board.kicad_pcb', { ref: 'R1' }).id, 'footprint');
+});
+test('native pick resolves pad identity before its footprint ancestor', () => {
+  assert.equal(resolveObject(objects, 'board.kicad_pcb', { uuid: 'pad-uuid', parent: { uuid: 'footprint-uuid' } }).id, 'pad');
+  assert.equal(resolveObject(objects, 'board.kicad_pcb', { parent: { tstamp: 'footprint-uuid' } }).id, 'footprint');
+});
+test('ambiguous identity is never attached to an arbitrary part', () => {
+  const duplicates = [...objects, { ...objects[2], id: 'duplicate' }];
+  assert.equal(resolveObject(duplicates, 'board.kicad_pcb', { uuid: 'footprint-uuid', reference: 'R1' }), null);
+  const cycle = {}; cycle.parent = cycle;
+  assert.equal(resolveObject(objects, 'board.kicad_pcb', cycle), null);
+});
+test('measurement retains signed millimetre offsets and rejects invalid coordinates', () => {
+  assert.deepEqual(measurement({x: 10, y: 20}, {x: 7, y: 24}), {dx: -3, dy: 4, distance: 5});
+  assert.deepEqual(measurement({x: 0, y: 0}, {x: 0, y: 0}), {dx: 0, dy: 0, distance: 0});
+  assert.equal(measurement({x: Infinity, y: 0}, {x: 0, y: 0}), null);
+  assert.equal(measurement({x: '1', y: 0}, {x: 0, y: 0}), null);
+});
+const vm=require('node:vm'),fs=require('node:fs'),path=require('node:path');
+function workspaceRuntime(respond=async()=>[], hooks={}){
+  class Element extends EventTarget{
+    constructor(){super();this.children=[];this.attributes={};this.hidden=false;this.value='';this.checked=false;this.style={};this.text='';this.parentElement={hidden:false};this.classList={toggle(){}};}
+    set textContent(value){this.text=String(value);this.children=[];}get textContent(){return this.text+this.children.map(c=>c.textContent).join(' ');}
+    append(...children){this.children.push(...children);}replaceChildren(...children){this.text='';this.children=children;}setAttribute(k,v){this.attributes[k]=String(v);}contains(){return false;}focus(){}click(){return this.onclick?.();}getBoundingClientRect(){return{left:0,top:0,width:800,height:600};}
+  }
+  const elements=new Map(),get=id=>{if(!elements.has(id))elements.set(id,new Element());return elements.get(id);};
+  get('objectFilter').value='parts';get('severityFilter').value='all';get('stateFilter').value='all';get('readFilter').value='all';get('commentSort').value='severity';
+  const file=hooks.files?.[0]||{path:'board.kicad_pcb',content:'(kicad_pcb (net 1 "SIGNAL") (footprint "Resistor" (layer "F.Cu") (at 30 40) (uuid "fp") (property "Reference" "R1") (property "Value" "10k") (pad "1" smd rect (at 1 0) (size 2 2) (layers "F.Cu") (net 1 "SIGNAL") (uuid "pad"))))'};
+  if(hooks.source)file.content=hooks.source;
+  const diff=require('../design-diff.js'),design=require(hooks.pcb===false?'../schematic-renderer.js':'../pcb-renderer.js').build(diff.parse(file.content),file.path),designs=new Map();
+  const canvas=new EventTarget();canvas.canvas=new Element();canvas.visibleLayers=new Set(['F.Cu']);canvas.viewport={camera:new(require('../owned-canvas.js').Camera)(800,600)};canvas.setNetHighlight=net=>canvas.netHighlight=net;canvas.resize=()=>{};canvas.draw=()=>workspace.draw();
+  const receipts=new Map(),localStorage={getItem:key=>receipts.get(key)||null,setItem:(key,value)=>receipts.set(key,value),removeItem:key=>receipts.delete(key)};
+  const keyHandlers=new Set();
+  const context={EventTarget,CustomEvent,Map,Set,console,crypto:require('node:crypto').webcrypto,localStorage,document:{getElementById:get,createElement:()=>new Element(),createElementNS:()=>new Element()},addEventListener:(type,fn)=>{if(type==='keydown')keyHandlers.add(fn);},removeEventListener:(type,fn)=>{if(type==='keydown')keyHandlers.delete(fn);},matchMedia:()=>({matches:true}),
+    KiCadReviewTools:require('../review-tools.js'),KiCadDesignModel:require('../design-model.js'),KiCadNetModel:require('../net-model.js'),KiCadReviewComments:require('../review-comments.js'),KiCadBrowserData:require('../browser-data.js'),KiCadOwnedCanvas:require('../owned-canvas.js'),
+    KiCadPairedReview:require('../paired-review.js'),KiCadBomAnalytics:require('../bom-analytics.js'),
+    chrome:{runtime:{sendMessage:async message=>({ok:true,result:await respond(message)})}},setTimeout,URL,Blob};
+  if(hooks.navigation){Object.assign(context,{KiCadProjectSearch:require('../project-search.js'),KiCadRuleReports:require('../rule-reports.js'),KiCadDesignDiff:diff,KiCadPCBRenderer:require('../pcb-renderer.js'),KiCadSchematicRenderer:require('../schematic-renderer.js')});vm.runInNewContext(fs.readFileSync(path.join(__dirname,'../review-navigation.js'),'utf8'),context);get('ruleSeverity').value='all';get('showRuleMarkers').checked=true;}
+  canvas.setNetHighlights=(nets,options)=>{canvas.highlightNets=nets;canvas.netHighlight=nets[0]||null;canvas.netPrimitives=new Set(nets.flatMap(n=>n.primitives||[]));canvas.highlightMode=options.mode;};
+  vm.runInNewContext(fs.readFileSync(path.join(__dirname,'../review-workspace.js'),'utf8'),context);
+  const workspace=context.KiCadReviewWorkspace.mount({files:[file],repository:'wayri/fixture',ref:'main',rootFile:file.path,pcb:true,getCanvas:()=>canvas,currentFile:()=>file.path,focus(){},openSheet(){},getDesigns:()=>designs,...hooks});
+  canvas.layers={query_point:at=>hooks.query?.(at)||[]};
+  workspace.attachCanvas(canvas);
+  function load(){designs.set(file.path,design);canvas.design=design;canvas.primitives=design.primitives;workspace.draw();}
+  function key(value,extra={}){const event={key:value,target:canvas.canvas,composedPath:()=>[],preventDefault(){this.defaultPrevented=true;},...extra};for(const fn of keyHandlers)fn(event);return event;}
+  return{get,workspace,canvas,design,load,receipts,key};
+}
+test('workspace initializes net geometry after the drawing loads without a file-path change',()=>{
+  const view=workspaceRuntime();assert.equal(view.get('netList').children.length,0);view.load();assert.equal(view.get('netCount').textContent,'1 net');
+  view.get('netList').children[0].click();assert.equal(view.canvas.netHighlight.name,'SIGNAL');assert.ok(view.canvas.netHighlight.primitives.some(p=>p.uuid==='pad'));
+  assert.match(view.get('propertyList').textContent,/Saved code 1/);assert.match(view.get('netMemberList').textContent,/R1 · pad 1/);
+  view.get('clearNet').click();assert.equal(view.canvas.netHighlight,null);assert.equal(view.get('clearNet').disabled,true);
+});
+test('part inspector groups saved properties and offers only connected net selection',()=>{
+  const view=workspaceRuntime();view.load();view.get('objectList').children[0].click();assert.equal(view.get('selectedName').textContent,'R1');assert.match(view.get('propertyList').textContent,/Electrical Net SIGNAL/);assert.match(view.get('propertyList').textContent,/Geometry/);assert.equal(view.get('selectObjectNet').hidden,false);
+  view.get('selectObjectNet').click();assert.equal(view.canvas.netHighlight.name,'SIGNAL');assert.equal(view.get('selectedName').textContent,'SIGNAL');
+});
+
+test('3D keeps parts interaction while clearly disabling unavailable 2D net and layer tools',()=>{
+ const view=workspaceRuntime();view.load();view.get('navNets').click();view.workspace.setScene({setPopulation(){}});
+ assert.equal(view.get('navNets').disabled,true);assert.equal(view.get('navLayers').disabled,true);assert.equal(view.get('measureButton').disabled,true);assert.equal(view.get('navParts').attributes['aria-selected'],'true');
+ view.workspace.setScene(null);assert.equal(view.get('navNets').disabled,false);assert.equal(view.get('navLayers').disabled,false);assert.equal(view.get('measureButton').disabled,false);
+});
+
+test('saving metadata stays local until explicit publish and records its thread link',async()=>{
+ const validator=require('../review-comments.js'),messages=[];let notes=[];
+ const remoteRef={kind:'issue',repository:'wayri/fixture',number:7,url:'https://github.com/wayri/fixture/issues/7',publishedAt:'2026-10-04T00:00:00.000Z'};
+ const view=workspaceRuntime(async m=>{messages.push(m);if(m.type==='comment-list')return notes;if(m.type==='comment-save'){notes=[m.comment];return m.comment;}if(m.type==='github-publish-comment')return{remoteRef};return[];});view.load();await new Promise(resolve=>setImmediate(resolve));
+ view.get('newComment').click();view.get('commentText').value='Review R1';view.get('commentSeverity').value='major';view.get('commentState').value='resolved';view.get('commentTags').value='assembly, review';view.get('commentMentions').value='@alice, bob';await view.get('saveComment').click();
+ assert.equal(messages.some(m=>m.type==='github-publish-comment'),false);assert.equal(notes[0].state,'resolved');assert.deepEqual(Array.from(notes[0].tags),['assembly','review']);assert.deepEqual(Array.from(notes[0].mentions),['alice','bob']);
+ const card=view.get('commentList').children[0],actions=card.children.at(-1);await actions.children.find(e=>e.textContent==='Publish to GitHub').click();
+ const publish=messages.find(m=>m.type==='github-publish-comment');assert.equal(publish.destination,'new-issue');assert.equal(publish.comment.anchor.repository,'wayri/fixture');assert.equal(notes[0].remoteRefs[0].url,remoteRef.url);assert.match(view.get('commentStatus').textContent,/Published/);
+ assert.deepEqual(validator.parseSidecar(validator.serializeSidecar(notes))[0].tags,['assembly','review']);
+});
+test('known repository policy restriction disables direct publish while preserving local comments',async()=>{
+ const validate=require('../review-comments.js').validateComment;const note=validate({id:'policy-note',text:'Review placement',createdAt:'2025-01-01T00:00:00.000Z',anchor:{repository:'wayri/fixture',ref:'main',file:'board.kicad_pcb'}});
+ const view=workspaceRuntime(async request=>request.type==='comment-list'?[note]:request.type==='comment-policy-status'?{mode:'allowlist',allowed:false,reason:'Only approved reviewers may publish',login:'alice'}:[]);
+ view.load();await view.workspace.refreshComments();await new Promise(resolve=>setImmediate(resolve));
+ const actions=view.get('commentList').children[0].children.at(-1),publish=actions.children.find(node=>node.textContent==='Publish to GitHub');
+ assert.equal(publish.disabled,true);assert.match(view.get('commentPolicyStatus').textContent,/publishing restricted/);
+ assert.ok(actions.children.find(node=>node.textContent==='Edit'));assert.equal(view.get('refreshCommentPolicy').disabled,false);
+});
+test('read receipts, lifecycle actions and creation order remain independent',async()=>{
+ const validate=require('../review-comments.js').validateComment;const changed=[];
+ let notes=[validate({id:'older',text:'Old question',createdAt:'2025-01-01T00:00:00.000Z',anchor:{repository:'wayri/fixture',ref:'main',file:'board.kicad_pcb'}}),
+  validate({id:'newer',text:'New question',createdAt:'2025-02-01T00:00:00.000Z',anchor:{repository:'wayri/fixture',ref:'main',file:'board.kicad_pcb'}})];
+ const view=workspaceRuntime(async request=>{if(request.type==='comment-list')return notes;if(request.type==='comment-save'){notes=notes.map(n=>n.id===request.comment.id?request.comment:n);return request.comment;}return[];},{onCommentsChanged:()=>changed.push(true)});
+ view.load();await view.workspace.refreshComments();view.get('commentSort').value='newest';view.get('commentSort').onchange();
+ assert.match(view.get('commentList').children[0].textContent,/New question/);
+ const actions=view.get('commentList').children[0].children.at(-1);actions.children.find(node=>node.textContent==='Mark read').click();
+ view.get('readFilter').value='unread';view.get('readFilter').onchange();assert.equal(view.get('commentList').children.length,1);assert.match(view.get('commentList').textContent,/Old question/);
+ view.get('readFilter').value='all';view.get('readFilter').onchange();
+ await view.get('commentList').children[0].children.at(-1).children.find(node=>node.textContent==='Skip').click();
+ assert.equal(notes.find(n=>n.id==='newer').state,'skipped');assert.equal(changed.length,1);
+ view.get('stateFilter').value='skipped';view.get('stateFilter').onchange();assert.equal(view.get('commentList').children.length,1);
+ assert.match(view.get('commentList').textContent,/Unread/);
+});
+test('paired selection emits a bounded saved part and net; incoming highlight resolves a unique part',()=>{
+ const selections=[];const view=workspaceRuntime(async()=>[],{onSelection:value=>selections.push(value)});view.load();
+ view.get('objectList').children[0].click();assert.equal(selections[0].kind,'part');assert.equal(selections[0].reference,'R1');assert.equal(selections[0].uuid,'fp');assert.equal(selections[0].path,'board.kicad_pcb');
+ assert.equal(view.workspace.highlightRelated({kind:'part',reference:'R1',uuid:'symbol-uuid',path:'root.kicad_sch'}),true);
+ view.get('netList').children[0].click();assert.equal(selections.at(-1).kind,'net');assert.equal(selections.at(-1).netName,'SIGNAL');
+ assert.equal(view.workspace.highlightRelated({kind:'net',netName:'NO_SUCH_NET',path:'root.kicad_sch'}),false);
+});
+
+test('point and dragged-area review tools persist millimetre anchors and disable ruler interception',async()=>{
+ let notes=[];const view=workspaceRuntime(async request=>{if(request.type==='comment-list')return notes;if(request.type==='comment-save'){notes.push(request.comment);return request.comment;}return[];});view.load();await new Promise(resolve=>setImmediate(resolve));
+ const fire=(type,props)=>{const event=new Event(type,{cancelable:true});Object.assign(event,props);view.canvas.canvas.dispatchEvent(event);};
+ view.get('pointComment').click();fire('click',{clientX:400,clientY:300});view.get('commentText').value='Point note';await view.get('saveComment').click();assert.equal(notes[0].anchor.position.x,0);assert.equal(notes[0].anchor.position.y,0);
+ view.get('areaComment').click();fire('pointerdown',{button:0,pointerId:1,clientX:100,clientY:100});fire('pointermove',{buttons:1,pointerId:1,clientX:180,clientY:160});fire('pointerup',{button:0,pointerId:1,clientX:180,clientY:160});view.get('commentText').value='Area note';await view.get('saveComment').click();assert.equal(notes[1].anchor.area.width,20);assert.equal(notes[1].anchor.area.height,15);assert.equal(view.get('areaComment').attributes['aria-pressed'],'false');
+ view.get('commentSearch').value='Area';view.get('commentSearch').oninput();assert.equal(view.get('commentList').children.length,1);assert.match(view.get('commentList').textContent,/Area note/);
+});
+
+ test('ruler updates live before second click, pins results and resumes after panning',()=>{
+ const view=workspaceRuntime();view.load();const fire=(type,props)=>{const e=new Event(type,{cancelable:true});Object.assign(e,props);view.canvas.canvas.dispatchEvent(e);};view.get('rulerSnap').value='grid';view.get('rulerPitch').value='1';view.get('measureButton').click();assert.equal(view.get('rulerControls').hidden,false);
+ fire('click',{clientX:400,clientY:300});fire('pointermove',{buttons:0,clientX:440,clientY:330});assert.match(view.get('measurementStatus').textContent,/Live.*12.806/);assert.match(view.get('reviewOverlay').textContent,/X: 10.000 mm/);assert.match(view.get('reviewOverlay').textContent,/Y: 8.000 mm/);
+ fire('click',{clientX:440,clientY:330,altKey:true});assert.match(view.get('measurementStatus').textContent,/Pinned.*12.500/);fire('pointermove',{buttons:0,clientX:600,clientY:500});assert.match(view.get('measurementStatus').textContent,/Pinned.*12.500/);
+ view.get('clearRuler').click();fire('click',{clientX:400,clientY:300});fire('pointerdown',{button:2,clientX:400,clientY:300});fire('pointerup',{button:2,clientX:400,clientY:300});fire('pointermove',{buttons:0,clientX:440,clientY:300});assert.match(view.get('measurementStatus').textContent,/Live.*10.000/);view.get('measureButton').click();assert.equal(view.get('rulerControls').hidden,true);
+ });
+ test('board extents measurement uses saved outline and reports missing outline',()=>{const view=workspaceRuntime();view.load();view.get('measureButton').click();view.get('measureBoard').click();assert.match(view.get('measurementStatus').textContent,/No saved Edge.Cuts/);view.design.primitives.push({type:'line',layer:'Edge.Cuts',points:[{x:0,y:0},{x:40,y:25}],width:1});view.get('measureBoard').click();assert.match(view.get('reviewOverlay').textContent,/X: 40.000 mm/);assert.match(view.get('reviewOverlay').textContent,/Y: 25.000 mm/);assert.match(view.get('measurementStatus').textContent,/Board extents/);});
+
+const {matchesSearch,sheetTarget}=require('../review-workspace.js');
+test('advanced search combines fields, quoted values, custom properties and exclusions literally',()=>{
+ const item={label:'R1',reference:'R1',kind:'symbol',path:'power.kicad_sch',properties:{Value:'10 k Ohm',Manufacturer:'Acme','DNP':'No'}};
+ assert.equal(matchesSearch(item,'ref:R1 value:"10 k" manufacturer:acme -type:pad',['VCC']),true);
+ assert.equal(matchesSearch(item,'net:VCC sheet:power',['VCC']),true);
+ assert.equal(matchesSearch(item,'net:GND',['VCC']),false);
+ assert.equal(matchesSearch(item,'-manufacturer:acme'),false);
+ assert.equal(matchesSearch(item,'value:.*'),false);
+});
+test('sheet links resolve safe relative paths without escaping repository',()=>{
+ assert.equal(sheetTarget({path:'root/main.kicad_sch',properties:{Sheetfile:'../power.kicad_sch'}}),'power.kicad_sch');
+ for(const name of ['../../escape.kicad_sch','/abs.kicad_sch','C:\\bad.kicad_sch'])assert.equal(sheetTarget({path:'root/main.kicad_sch',properties:{Sheetfile:name}}),null);
+});
+test('saved settings inspector includes nested KiCad settings with empty fields',()=>{
+ const {workspace,get,load}=workspaceRuntime();load();workspace.select3D({uuid:'fp'});
+ assert.match(get('propertyList').textContent,/Saved KiCad settings/);
+ assert.match(get('propertyList').textContent,/pad/);
+});
+
+
+test('multi highlight toggles separate networks and single mode replaces the set',()=>{
+ const source='(kicad_pcb (net 1 "A") (net 2 "B") (segment (start 1 1) (end 10 1) (width 1) (layer "F.Cu") (net 1) (uuid "a")) (segment (start 1 3) (end 10 3) (width 1) (layer "F.Cu") (net 2) (uuid "b")))';
+ const view=workspaceRuntime(async()=>[],{source});view.load();view.get('multiHighlight').checked=true;view.get('netList').children[0].click();view.get('netList').children[1].click();assert.equal(view.canvas.highlightNets.length,2);view.get('netList').children[0].click();assert.equal(view.canvas.highlightNets.length,1);assert.equal(view.canvas.netHighlight.name,'B');
+ view.get('multiHighlight').checked=false;view.get('netList').children[0].click();assert.equal(view.canvas.highlightNets.length,1);assert.equal(view.canvas.netHighlight.name,'A');view.get('highlightStyle').value='isolate';view.get('highlightStyle').onchange();assert.equal(view.canvas.highlightMode,'isolate');view.get('clearHighlights').click();assert.equal(view.canvas.highlightNets.length,0);
+});
+
+test('global search navigation highlights a saved component and rejects malformed query feedback',()=>{
+ const view=workspaceRuntime(async()=>[],{navigation:true});view.load();view.get('navSearch').click();view.get('projectSearch').value='ref:R1 type:footprint';view.get('projectSearch').oninput();assert.equal(view.get('projectResults').children.length,1);view.get('projectResults').children[0].click();assert.match(view.get('highlightSummary').textContent,/1 components/);assert.ok(view.canvas.netPrimitives.size>0);
+ view.get('projectSearch').value='ref:R1 OR';view.get('projectSearch').oninput();assert.equal(view.get('projectResults').children.length,0);assert.match(view.get('projectSearchCount').textContent,/OR|term|query/i);
+});
+
+test('saved rule report navigation uses millimetre coordinates and clickable arrows; clearing removes markers',async()=>{
+ const focused=[],view=workspaceRuntime(async()=>[],{navigation:true,focus:position=>focused.push(position)});view.load();view.get('navRules').click();
+ const report={source:'board.kicad_pcb',date:'2026-10-04T00:00:00Z',kicad_version:'9.0.0',coordinate_units:'mils',violations:[{type:'clearance',description:'Copper clearance',severity:'error',items:[{description:'Track',pos:{x:1000,y:2000}}]}]};
+ view.get('ruleReportFile').files=[{size:200,name:'board-drc.json',text:async()=>JSON.stringify(report)}];await view.get('ruleReportFile').onchange();assert.match(view.get('ruleCount').textContent,/1 saved/);view.get('nextRule').click();assert.equal(focused[0].x,25.4);assert.equal(focused[0].y,50.8);assert.match(view.get('ruleProvenance').textContent,/unverified/);assert.ok(view.get('commentPins').children.some(n=>n.className.includes('rule-marker')));assert.ok(view.get('reviewOverlay').children.some(n=>n.attributes.d?.includes('L')));
+ view.get('clearRuleReports').click();assert.equal(view.get('commentPins').children.filter(n=>n.className?.includes('rule-marker')).length,0);
+});
+
+test('overlapping selected net classes retain shared nets when one class is removed',async()=>{
+ const view=workspaceRuntime(async()=>[],{navigation:true});view.load();view.get('multiHighlight').checked=true;
+ const settings={net_settings:{classes:[{name:'Default',priority:100},{name:'Power',priority:0},{name:'Shared',priority:1}],netclass_assignments:{SIGNAL:['Power','Shared']},netclass_patterns:[]}};
+ view.get('netClassFile').files=[{size:200,name:'board.kicad_pro',text:async()=>JSON.stringify(settings)}];await view.get('netClassFile').onchange();
+ for(const name of ['Power','Shared']){view.get('netClassSelect').value=name;view.get('highlightNetClass').click();}
+ assert.equal(view.canvas.highlightNets.length,1);assert.match(view.get('netClassStatus').textContent,/Power, Shared/);
+ view.get('netClassSelect').value='Power';view.get('highlightNetClass').click();assert.equal(view.canvas.highlightNets.length,1);assert.match(view.get('netClassStatus').textContent,/Highlighted classes: Shared/);
+ view.get('netClassSelect').value='Shared';view.get('highlightNetClass').click();assert.equal(view.canvas.highlightNets.length,0);
+});
+
+
+test('search selects multiple net classes and single mode replaces component highlights',async()=>{
+ const view=workspaceRuntime(async()=>[],{navigation:true});view.load();view.get('multiHighlight').checked=true;
+ const settings={net_settings:{classes:[{name:'Default',priority:100},{name:'Power',priority:0},{name:'Shared',priority:1}],netclass_assignments:{SIGNAL:['Power','Shared']},netclass_patterns:[]}};
+ view.get('netClassFile').files=[{size:200,name:'board.kicad_pro',text:async()=>JSON.stringify(settings)}];await view.get('netClassFile').onchange();
+ view.get('projectSearch').value='type:netclass';view.get('projectSearch').oninput();assert.equal(view.get('projectResults').children.length,2);
+ view.get('projectResults').children[0].click();view.get('projectResults').children[1].click();assert.equal(view.canvas.highlightNets.length,1);assert.match(view.get('netClassStatus').textContent,/Power, Shared/);
+ view.get('projectResults').children[0].click();assert.equal(view.canvas.highlightNets.length,1);assert.match(view.get('netClassStatus').textContent,/Highlighted classes: Shared/);
+ view.get('multiHighlight').checked=false;view.get('projectSearch').value='ref:R1 type:footprint';view.get('projectSearch').oninput();view.get('projectResults').children[0].click();assert.match(view.get('highlightSummary').textContent,/0 nets.*1 components/);
+ view.get('projectSearch').value='type:net';view.get('projectSearch').oninput();view.get('projectResults').children[0].click();assert.equal(view.canvas.highlightNets.length,1);assert.match(view.get('highlightSummary').textContent,/0 components/);
+});
+
+
+test('disabling multihighlight immediately reduces combined net and component selection to one',()=>{
+ const source='(kicad_pcb (net 1 "A") (net 2 "B") (segment (start 1 1) (end 10 1) (width 1) (layer "F.Cu") (net 1) (uuid "a")) (segment (start 1 3) (end 10 3) (width 1) (layer "F.Cu") (net 2) (uuid "b")))';
+ const view=workspaceRuntime(async()=>[],{navigation:true,source});view.load();view.get('multiHighlight').checked=true;view.get('netList').children[0].click();view.get('netList').children[1].click();assert.equal(view.canvas.highlightNets.length,2);
+ view.get('multiHighlight').checked=false;view.get('multiHighlight').onchange();assert.equal(view.canvas.highlightNets.length,1);assert.equal(view.canvas.netHighlight.name,'B');assert.match(view.get('highlightSummary').textContent,/1 nets.*0 components/);
+});
+
+
+test('double click enters only a resolved loaded subsheet, never schematic editing',()=>{
+ const files=[{path:'root.kicad_sch',content:'(kicad_sch (sheet (at 0 0) (size 10 10) (uuid "sheet-1") (property "Sheetname" "Power") (property "Sheetfile" "power.kicad_sch")))'},{path:'power.kicad_sch',content:'(kicad_sch)'}],opened=[];
+ const view=workspaceRuntime(async()=>[],{pcb:false,files,query:()=>[{bbox:{context:{uuid:'sheet-1'}}}],openSheet:path=>opened.push(path)});view.load();const before=JSON.stringify(files);
+ const double=()=>{const event=new Event('dblclick',{cancelable:true});Object.assign(event,{button:0,clientX:400,clientY:300});view.canvas.canvas.dispatchEvent(event);};double();assert.deepEqual(opened,['power.kicad_sch']);
+ view.get('measureButton').click();double();assert.equal(opened.length,1);view.get('measureButton').click();view.get('areaComment').click();double();assert.equal(opened.length,1);assert.equal(JSON.stringify(files),before);
+ view.workspace.dispose();double();assert.equal(opened.length,1);
+});
+
+test('missing sheet double click reports absence; parent navigation rejects ambiguous parents',()=>{
+ const files=[{path:'root.kicad_sch',content:'(kicad_sch (sheet (at 0 0) (size 10 10) (uuid "sheet-1") (property "Sheetname" "Power") (property "Sheetfile" "missing.kicad_sch")))'}],opened=[];
+ const view=workspaceRuntime(async()=>[],{pcb:false,files,query:()=>[{bbox:{context:{uuid:'sheet-1'}}}],openSheet:path=>opened.push(path)});view.load();const event=new Event('dblclick');Object.assign(event,{clientX:400,clientY:300});view.canvas.canvas.dispatchEvent(event);assert.deepEqual(opened,[]);assert.match(view.get('reviewNotice').textContent,/missing/);
+ const parentFiles=[files[0],{path:'other.kicad_sch',content:files[0].content},{path:'missing.kicad_sch',content:'(kicad_sch)'}];const child=workspaceRuntime(async()=>[],{pcb:false,files:parentFiles,currentFile:()=> 'missing.kicad_sch',openSheet:path=>opened.push(path)});child.load();child.key('ArrowUp',{altKey:true});assert.deepEqual(opened,[]);assert.match(child.get('reviewNotice').textContent,/multiple parents/);
+ const unique=workspaceRuntime(async()=>[],{pcb:false,files:[files[0],parentFiles[2]],currentFile:()=> 'missing.kicad_sch',openSheet:path=>opened.push(path)});unique.load();unique.key('ArrowUp',{altKey:true});assert.deepEqual(opened,['root.kicad_sch']);
+});
+
+test('review shortcuts inspect pointer, highlight net, focus search, respect typing and never mutate sources',()=>{
+ const focused=[],messages=[],view=workspaceRuntime(async request=>{messages.push(request.type);return[];},{navigation:true,query:()=>[{bbox:{context:{uuid:'pad'}}}],focus:p=>focused.push(p)});view.load();
+ view.get('designInspector').hidden=true;view.key('e',{ctrlKey:true});assert.equal(view.get('designInspector').hidden,true);view.key('e',{composedPath:()=>[{tagName:'TEXTAREA'}]});assert.equal(view.get('designInspector').hidden,true);
+ const move=new Event('pointermove');Object.assign(move,{clientX:400,clientY:300,buttons:0});view.canvas.canvas.dispatchEvent(move);view.key('e');assert.equal(view.get('selectedName').textContent,'R1 pad 1');assert.equal(view.get('designInspector').hidden,false);
+ view.key('h');assert.equal(view.canvas.netHighlight.name,'SIGNAL');view.key(' ');assert.equal(focused[0].x,0);assert.equal(focused[0].y,0);view.key('/');assert.equal(view.get('navSearch').attributes['aria-selected'],'true');view.key('?');assert.equal(view.get('shortcutHelp').open,true);
+ for(const key of ['r','Delete','Backspace','x','g'])assert.equal(view.key(key).defaultPrevented,undefined);
+ const count=messages.length;view.workspace.dispose();view.key('c');assert.equal(messages.length,count);
+});
+
+
+test('BOM reflects saved DNP and exposes counts, safe component navigation and copper stats',()=>{
+ const source='(kicad_pcb (general (thickness 1.6)) (footprint "Resistor" (at 30 40) (uuid "fp") (attr smd dnp) (property "Reference" "R1") (property "Value" "10k") (pad "1" smd rect (at 1 0) (size 2 2) (layers "F.Cu") (uuid "pad"))))';
+ const view=workspaceRuntime(undefined,{source});view.load();view.get('navBom').click();
+ assert.match(view.get('bomSummary').textContent,/1 components.*0 fitted.*1 DNP/);
+ assert.match(view.get('boardStats').textContent,/Saved board thickness 1.6 mm/);
+ view.get('bomRows').children[0].children.find(e=>e.textContent==='R1').click();assert.equal(view.get('selectedName').textContent,'R1');
+ view.get('highlightDnp').checked=true;view.get('highlightDnp').onchange();assert.ok(view.canvas.netPrimitives.has(view.design.primitives.find(p=>p.ownerUuid==='fp')));
+ view.get('clearHighlights').click();assert.equal(view.get('highlightDnp').checked,false);assert.equal(view.canvas.netPrimitives.size,0);
+});
+test('zone analytics navigation selects saved zone UUID and displays square-millimetre sums',()=>{
+ const source='(kicad_pcb (zone (uuid "zone") (net_name "GND") (layer "F.Cu") (polygon (pts (xy 0 0)(xy 10 0)(xy 10 10)(xy 0 10))) (filled_polygon (layer "F.Cu") (pts (xy 1 1)(xy 9 1)(xy 9 9)(xy 1 9)))))';
+ const view=workspaceRuntime(undefined,{source});view.load();view.get('navBom').click();view.get('zoneStats').children.find(e=>e.onclick).click();
+ assert.match(view.get('propertyList').textContent,/Outline polygon area sum 100.000 mm²/);assert.match(view.get('propertyList').textContent,/Saved fill polygon area sum 64.000 mm²/);assert.match(view.get('propertyList').textContent,/overlaps are counted repeatedly/);assert.ok(view.canvas.netPrimitives.size>0);
+});

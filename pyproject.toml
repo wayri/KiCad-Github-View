@@ -1,0 +1,24 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "kicad-vizdiff"
+version = "0.1.0"
+description = "Git-native KiCad schematic and PCB visual review"
+requires-python = ">=3.10"
+dependencies = []
+
+[project.optional-dependencies]
+github = ["cryptography>=43"]
+
+[project.scripts]
+kicad-vizdiff = "kicad_vizdiff.cli:main"
+git-kicad = "kicad_vizdiff.cli:main"
+kicad-github-app = "kicad_vizdiff.app_server:main"
+
+[tool.setuptools.package-data]
+kicad_vizdiff = ["viewer.html"]
+
+[tool.setuptools.packages.find]
+include = ["kicad_vizdiff*"]

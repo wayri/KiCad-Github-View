@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="referrer" content="no-referrer">
+<title>Open a KiCad project · KiCad Visual Review</title>
+<link rel="stylesheet" href="setup.css">
+</head>
+<body>
+<header><a class="brand" href="/app/">K / VISUAL REVIEW</a><a id="installLink" class="secondary" hidden target="_blank" rel="noopener noreferrer">Install or manage GitHub App ↗</a></header>
+<main>
+  <div class="eyebrow">GITHUB APP · GET STARTED</div>
+  <h1>Open a saved KiCad project</h1>
+  <p class="lead">Enter a public GitHub repository to view its schematics and PCB layouts in your browser. Open a pull request to compare its base and head revisions.</p>
+  <form id="openForm" novalidate>
+    <label for="repository">Repository</label>
+    <input id="repository" name="repository" required placeholder="owner/repository" autocomplete="off" spellcheck="false" aria-describedby="repoHint">
+    <p id="repoHint" class="hint">Use the public repository that contains the KiCad files.</p>
+    <div class="choices">
+      <div><label for="ref">Branch or commit <span>optional</span></label><input id="ref" name="ref" placeholder="Default branch" autocomplete="off" spellcheck="false"></div>
+      <div><label for="pull">Pull request number <span>for review</span></label><input id="pull" name="pull" type="number" min="1" step="1" inputmode="numeric" placeholder="123"></div>
+    </div>
+    <div class="actions"><button type="submit" data-action="browse">Browse designs</button><button type="submit" data-action="review" class="secondary-button">Review pull request</button></div>
+    <p id="status" role="alert" aria-live="polite"></p>
+  </form>
+  <section class="note" aria-label="Access information"><strong>Public repository preview</strong><p>The current viewer reads public GitHub files only. This page does not verify an App installation or grant private repository access. Installation status is managed on GitHub.</p></section>
+</main>
+<footer>The bundled Canvas2D renderer displays schematic pages, PCB layers, and part properties. Boards can also open in SPIKE 3D.</footer>
+<script src="public-data.js"></script>
+<script src="setup.js"></script>
+</body>
+</html>

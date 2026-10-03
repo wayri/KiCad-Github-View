@@ -1,0 +1,114 @@
+"""Prepare explicit shared media and build a deterministic local VSIX."""
+from pathlib import Path
+import hashlib
+import json
+import zipfile
+from xml.sax.saxutils import escape
+
+ROOT = Path(__file__).resolve().parents[1]
+ASSETS = (
+    'bom-analytics.js', 'file-compatibility.js', 'html-preview.js', 'html-sandbox.html', 'html-sandbox.js',
+    'parsing.js', 'project-viewer.html', 'project-viewer.css', 'project-viewer.js', 'project-settings.js', 'gerber-renderer.js',
+    'revision-viewer.html', 'revision-viewer.css', 'revision-viewer.js',
+    'ui-icons.js', 'browser-data.js', 'design-diff.js', 'design-model.js',
+    'net-model.js', 'paired-review.js', 'project-search.js', 'rule-reports.js', 'review-navigation.js', 'view-state.js', 'review-comments.js', 'review-workspace.js', 'review-tools.js', 'repo-models.js',
+    'worksheet.js', 'schematic-renderer.js', 'pcb-renderer.js', 'owned-canvas.js',
+    'vendor/spike-board3d.bundle.js', 'vendor/SPIKE-ENGINE-NOTICE.md', 'vendor/THREE-LICENSE',
+)
+HOST_FILES = ('package.json', 'extension.js', 'webview-bridge.js', 'README.md')
+
+
+def adapt_entry(source: bytes) -> bytes:
+    original = b'new URLSearchParams(location.search)'
+    if source.count(original) != 1:
+        raise ValueError('Shared revision entry changed; review the VS Code context adapter.')
+    return source.replace(original, b'new URLSearchParams(globalThis.KiCadVSCodeContext?.search ?? location.search)')
+
+
+def prepare_media(root: Path = ROOT) -> dict[str, bytes]:
+    payload, hashes = {}, {}
+    destination = root / 'vscode-extension' / 'media'
+    for name in ASSETS:
+        path = root / 'extension' / name
+        if not path.is_file():
+            raise ValueError(f'Missing shared viewer asset: {name}')
+        source = path.read_bytes()
+        content = adapt_entry(source) if name == 'revision-viewer.js' else source
+        target = destination / name
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_bytes(content)
+        payload[f'extension/media/{name}'] = content
+        hashes[name] = {'sourceSha256': hashlib.sha256(source).hexdigest(),
+                        'packagedSha256': hashlib.sha256(content).hexdigest()}
+    inventory = (json.dumps({'format': 1, 'assets': hashes}, indent=2, sort_keys=True) + '\n').encode()
+    (destination / 'shared-assets.json').write_bytes(inventory)
+    payload['extension/media/shared-assets.json'] = inventory
+    return payload
+
+
+def vsix_manifest(manifest: dict) -> bytes:
+    name, publisher, version = (escape(str(manifest[key]), {'"': '&quot;'}) for key in ('name', 'publisher', 'version'))
+    title, description = escape(manifest['displayName']), escape(manifest['description'])
+    engine = escape(manifest['engines']['vscode'], {'"': '&quot;'})
+    return f'''<?xml version="1.0" encoding="utf-8"?>
+<PackageManifest Version="2.0.0" xmlns="http://schemas.microsoft.com/developer/vsx-schema/2011">
+  <Metadata>
+    <Identity Language="en-US" Id="{name}" Version="{version}" Publisher="{publisher}" />
+    <DisplayName>{title}</DisplayName><Description xml:space="preserve">{description}</Description>
+    <Categories>Visualization</Categories><Tags>KiCad,schematic,PCB,github.dev</Tags>
+    <Properties>
+      <Property Id="Microsoft.VisualStudio.Code.Engine" Value="{engine}" />
+      <Property Id="Microsoft.VisualStudio.Code.ExtensionKind" Value="workspace" />
+      <Property Id="Microsoft.VisualStudio.Code.ExecutesCode" Value="true" />
+    </Properties>
+  </Metadata>
+  <Installation><InstallationTarget Id="Microsoft.VisualStudio.Code" /></Installation>
+  <Dependencies />
+  <Assets>
+    <Asset Type="Microsoft.VisualStudio.Code.Manifest" Path="extension/package.json" Addressable="true" />
+    <Asset Type="Microsoft.VisualStudio.Services.Content.Details" Path="extension/README.md" Addressable="true" />
+  </Assets>
+</PackageManifest>
+'''.encode()
+
+
+CONTENT_TYPES = b'''<?xml version="1.0" encoding="utf-8"?>
+<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
+  <Default Extension="json" ContentType="application/json" />
+  <Default Extension="js" ContentType="application/javascript" />
+  <Default Extension="css" ContentType="text/css" />
+  <Default Extension="html" ContentType="text/html" />
+  <Default Extension="md" ContentType="text/markdown" />
+  <Default Extension="xml" ContentType="application/xml" />
+  <Default Extension="vsixmanifest" ContentType="text/xml" />
+  <Override PartName="/extension/media/vendor/THREE-LICENSE" ContentType="text/plain" />
+</Types>
+'''
+
+
+def package(root: Path = ROOT, output: Path | None = None) -> Path:
+    folder = root / 'vscode-extension'
+    manifest = json.loads((folder / 'package.json').read_text(encoding='utf-8'))
+    if manifest['main'] != './extension.js' or manifest['browser'] != './extension.js':
+        raise ValueError('Desktop and browser entrypoints must use the audited shared host.')
+    payload = prepare_media(root)
+    for name in HOST_FILES:
+        path = folder / name
+        if not path.is_file():
+            raise ValueError(f'Missing VS Code host file: {name}')
+        payload[f'extension/{name}'] = path.read_bytes()
+    payload['extension.vsixmanifest'] = vsix_manifest(manifest)
+    payload['[Content_Types].xml'] = CONTENT_TYPES
+    output = output or root / 'build' / f"kicad-visual-review-vscode-{manifest['version']}.vsix"
+    output.parent.mkdir(parents=True, exist_ok=True)
+    with zipfile.ZipFile(output, 'w', compression=zipfile.ZIP_DEFLATED, compresslevel=9) as archive:
+        for name, content in sorted(payload.items()):
+            info = zipfile.ZipInfo(name, date_time=(2020, 1, 1, 0, 0, 0))
+            info.compress_type = zipfile.ZIP_DEFLATED
+            info.external_attr = 0o100644 << 16
+            archive.writestr(info, content)
+    return output
+
+
+if __name__ == '__main__':
+    print(package())

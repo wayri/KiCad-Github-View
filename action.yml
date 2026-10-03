@@ -1,0 +1,45 @@
+name: KiCad Visual Review
+description: Render a KiCad schematic or PCB file and compare two Git revisions as a portable HTML report.
+branding:
+  icon: eye
+  color: green
+inputs:
+  file:
+    description: Repository-relative root .kicad_sch or .kicad_pcb path
+    required: true
+  base:
+    description: Base Git revision
+    required: true
+  head:
+    description: Head Git revision
+    required: true
+  output:
+    description: Output HTML report path
+    required: false
+    default: kicad-review.html
+  layers:
+    description: Comma-separated PCB layers
+    required: false
+    default: F.Cu,B.Cu,F.Silkscreen,B.Silkscreen,Edge.Cuts
+outputs:
+  report:
+    description: Generated HTML report path
+    value: ${{ steps.render.outputs.report }}
+runs:
+  using: composite
+  steps:
+    - name: Install renderer
+      shell: bash
+      run: python -m pip install --disable-pip-version-check "$GITHUB_ACTION_PATH"
+    - name: Render visual comparison
+      id: render
+      shell: bash
+      env:
+        KICAD_FILE: ${{ inputs.file }}
+        KICAD_BASE: ${{ inputs.base }}
+        KICAD_HEAD: ${{ inputs.head }}
+        KICAD_OUTPUT: ${{ inputs.output }}
+        KICAD_LAYERS: ${{ inputs.layers }}
+      run: |
+        kicad-vizdiff diff "$KICAD_FILE" --base "$KICAD_BASE" --head "$KICAD_HEAD" --layers "$KICAD_LAYERS" --output "$KICAD_OUTPUT"
+        echo "report=$KICAD_OUTPUT" >> "$GITHUB_OUTPUT"

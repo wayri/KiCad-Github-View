@@ -1,0 +1,17 @@
+{
+  "name": "KiCad Visual Review",
+  "url": "https://YOUR-SERVICE.example",
+  "setup_url": "https://YOUR-SERVICE.example/setup",
+  "description": "Interactive browser-rendered KiCad schematic, PCB and SPIKE 3D review from GitHub pull requests.",
+  "hook_attributes": {
+    "url": "https://YOUR-SERVICE.example/api/github/webhook",
+    "active": true
+  },
+  "public": true,
+  "default_permissions": {
+    "contents": "read",
+    "checks": "write",
+    "pull_requests": "read"
+  },
+  "default_events": ["pull_request"]
+}

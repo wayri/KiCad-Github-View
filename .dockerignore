@@ -1,0 +1,10 @@
+.git
+.vizdiff
+.venv
+**/__pycache__
+build
+dist
+*.pem
+*.key
+.env
+.env.*

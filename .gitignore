@@ -1,0 +1,31 @@
+__pycache__/
+*.egg-info/
+.venv/
+build/
+dist/
+.vizdiff/
+*.pyc
+
+# Generated copies of shared browser assets; prepare with package_vscode.py
+vscode-extension/media/
+
+# Local dependencies, credentials, editor state and test caches
+node_modules/
+.pytest_cache/
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+.code*/
+.agents/
+.aws/
+.vscode/
+*.log
+kicad-review/
+
+# Retired third-party rendering assets; current releases use the owned engine
+/extension/vendor/kicanvas.js
+/extension/vendor/kicanvas-fonts.css
+/extension/vendor/material-symbols.woff2
+/*-skill-candidates/

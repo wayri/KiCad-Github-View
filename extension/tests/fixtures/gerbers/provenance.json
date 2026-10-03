@@ -1,0 +1,11 @@
+{
+  "KiCadVersion": "10.0.6",
+  "sourceSha256": "51317266624b8f9941d22533b335838d91a88648f0a497e5c3126ce719947771",
+  "layers": [
+    "F.Cu",
+    "B.Cu",
+    "Edge.Cuts"
+  ],
+  "apertureMacrosDisabled": true,
+  "source": "Own retained sensor board fixture; fixed outline 80,65 to 150,115 mm; 0.1 mm outline stroke."
+}

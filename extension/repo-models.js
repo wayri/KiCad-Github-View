@@ -1,0 +1,99 @@
+/* Safe, source-bound KiCad footprint 3D model references for the browser viewer. */
+((root) => {
+  "use strict";
+  const MAX_MODELS = 32;
+  const MAX_PATH = 500;
+  const value = item => item && typeof item === "object" && !Array.isArray(item) ? item.quoted : item;
+  const kind = node => Array.isArray(node) ? String(value(node[0])) : "";
+  const children = (node, type) => Array.isArray(node) ? node.filter(item => Array.isArray(item) && kind(item) === type) : [];
+  const child = (node, type) => children(node, type)[0];
+  const scalar = (node, type) => value(child(node, type)?.[1]);
+  const number = (item, fallback) => typeof value(item) === "number" && Number.isFinite(value(item)) ? value(item) : fallback;
+  const xyz = (node, name, fallback) => {
+    const item = child(child(node, name), "xyz");
+    return item ? [number(item[1], NaN), number(item[2], NaN), number(item[3], NaN)] : [...fallback];
+  };
+  const isPath = path => typeof path === "string" && path.length > 0 && path.length <= MAX_PATH &&
+    !/[\\\u0000-\u001f\u007f?#%]/.test(path) && !/^[a-z][a-z\d+.-]*:/i.test(path) && !path.startsWith("/");
+
+  function resolveModelPath(boardPath, modelPath) {
+    if (!isPath(boardPath) || !/\.kicad_pcb$/i.test(boardPath) || !isPath(modelPath)) return null;
+    const boardParts = boardPath.split("/");
+    if (boardParts.some(part => !part || part === "." || part === "..")) return null;
+    const projectPrefix = "${KIPRJMOD}/";
+    if (modelPath.includes("${") && !modelPath.startsWith(projectPrefix)) return null;
+    const relative = modelPath.startsWith(projectPrefix) ? modelPath.slice(projectPrefix.length) : modelPath;
+    if (relative.includes("${") || relative.includes("}")) return null;
+    const parts = boardParts.slice(0, -1);
+    for (const part of relative.split("/")) {
+      if (!part || part === ".") continue;
+      if (part === "..") { if (!parts.length) return null; parts.pop(); }
+      else parts.push(part);
+    }
+    const resolved = parts.join("/");
+    return resolved.length <= MAX_PATH && isPath(resolved) ? resolved : null;
+  }
+
+  function collect(source, boardPath, parser = root.KiCadDesignDiff?.parse) {
+    if (typeof parser !== "function") throw new Error("KiCad S-expression parser is unavailable.");
+    const ast = parser(source);
+    if (kind(ast) !== "kicad_pcb") throw new Error("Expected a saved KiCad PCB.");
+    const models = [], diagnostics = [];
+    const warn = message => { if (diagnostics.length < 48) diagnostics.push(message); };
+    for (const [footprintIndex, footprint] of children(ast, "footprint").entries()) {
+      const modelForms = children(footprint, "model");
+      if (!modelForms.length) continue;
+      const reference = children(footprint, "property").find(item => value(item[1]) === "Reference");
+      const legacyReference = children(footprint, "fp_text").find(item => value(item[1]) === "reference");
+      const ref = String(value(reference?.[2]) || value(legacyReference?.[2]) || `REF${footprintIndex + 1}`);
+      const id = scalar(footprint, "uuid") || `component-${ref}`;
+      const at = child(footprint, "at"), x = number(at?.[1], NaN), y = number(at?.[2], NaN);
+      const angle = number(at?.[3], 0), layer = String(scalar(footprint, "layer") || "F.Cu");
+      if (![x, y, angle].every(Number.isFinite) || !["F.Cu", "B.Cu"].includes(layer)) {
+        warn(`${ref}: footprint placement or side is unsupported.`); continue;
+      }
+      for (const entry of modelForms) {
+        if (models.length >= MAX_MODELS) { warn(`Only the first ${MAX_MODELS} footprint model references are loaded.`); return { models, diagnostics }; }
+        const rawPath = value(entry[1]);
+        const path = resolveModelPath(boardPath, rawPath);
+        if (!path) { warn(`${ref}: model path is not a repository-relative file: ${String(rawPath).slice(0, 100)}`); continue; }
+        const extension = /\.([a-z\d]+)$/i.exec(path)?.[1]?.toLowerCase();
+        if (!["wrl", "vrml", "glb"].includes(extension)) {
+          warn(`${ref}: ${extension === "step" || extension === "stp" ? "STEP" : "model format"} is not supported in the browser: ${path}`);
+          continue;
+        }
+        const hidden = child(entry, "hide");
+        if (hidden && value(hidden[1]) !== "no" && value(hidden[1]) !== false) continue;
+        const offset = xyz(entry, "offset", [0, 0, 0]);
+        const scale = xyz(entry, "scale", [1, 1, 1]);
+        const rotate = xyz(entry, "rotate", [0, 0, 0]);
+        if (offset.some(v => !Number.isFinite(v) || Math.abs(v) > 10000) ||
+            scale.some(v => !Number.isFinite(v) || v <= 0 || v > 1000) ||
+            rotate.some(v => !Number.isFinite(v) || Math.abs(v) > 3600)) {
+          warn(`${ref}: model transform is invalid: ${path}`); continue;
+        }
+        models.push({ path, format: extension, footprintId: String(id), reference: ref,
+          footprint: { x, y, angle, layer }, offset, scale, rotate });
+      }
+    }
+    return { models, diagnostics };
+  }
+  function modelPose(entry, centerX, centerY, thickness) {
+    const back = entry.footprint.layer === "B.Cu";
+    const angle = entry.footprint.angle * Math.PI / 180;
+    const [offsetX, offsetY, offsetZ] = entry.offset;
+    const localY = back ? -offsetY : offsetY;
+    const unitScale = entry.format === "glb" ? 1 : 2.54;
+    return {
+      position: [entry.footprint.x - centerX + offsetX * Math.cos(angle) - localY * Math.sin(angle),
+        centerY - entry.footprint.y + offsetX * Math.sin(angle) + localY * Math.cos(angle),
+        (back ? -1 : 1) * (thickness / 2 + offsetZ)],
+      footprintAngle: angle,
+      modelRotation: [(back ? 180 : 0) - entry.rotate[0], (back ? 1 : -1) * entry.rotate[1],
+        (back ? 1 : -1) * entry.rotate[2]].map(degrees => degrees * Math.PI / 180),
+      scale: entry.scale.map(axis => axis * unitScale)
+    };
+  }
+  root.KiCadRepoModels = { collect, resolveModelPath, modelPose };
+  if (typeof module === "object" && module.exports) module.exports = root.KiCadRepoModels;
+})(typeof globalThis === "object" ? globalThis : this);
