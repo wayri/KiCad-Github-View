@@ -1,0 +1,9 @@
+/* Presentation of saved values; no rule evaluation, defaults, or editing. */
+((root)=>{'use strict';
+ const lengthFields=new Set(['min_clearance','min_track_width','min_connection','min_copper_edge_clearance','min_hole_clearance','min_hole_to_hole','min_through_hole_diameter','min_via_annular_width','min_via_diameter','min_microvia_diameter','min_microvia_drill','min_silk_clearance','min_silk_text_height','min_silk_text_thickness','clearance','track_width','via_diameter','via_drill','microvia_diameter','microvia_drill','diff_pair_width','diff_pair_gap','diff_pair_via_gap','board_outline_line_width','copper_line_width','copper_text_size_h','copper_text_size_v','copper_text_thickness','fab_line_width','fab_text_size_h','fab_text_size_v','fab_text_thickness','silk_line_width','silk_text_size_h','silk_text_size_v','silk_text_thickness','other_line_width','other_text_size_h','other_text_size_v','other_text_thickness']);
+ function label(key){return String(key).replace(/_/g,' ').replace(/\b(?:pcb|erc|drc|bom|dnp)\b/gi,s=>s.toUpperCase()).replace(/^./,s=>s.toUpperCase());}
+ function unit(entry,file){return entry.unit||(/\.kicad_pro$/i.test(file)&&typeof entry.value==='number'&&(lengthFields.has(entry.path.split('/').at(-1))||/^\/board\/design_settings\/diff_pair_dimensions\/\d+\/(width|gap|via_gap)$/.test(entry.path))?'mm':'');}
+ function group(entry){const parts=entry.path.split('/').filter(Boolean).slice(0,-1);return parts.map(p=>/^\d+$/.test(p)?`Item ${Number(p)+1}`:label(p)).join(' / ')||'Saved values';}
+ function netClasses(settings){const classes=settings?.tree?.net_settings?.classes;return Array.isArray(classes)?classes.filter(c=>c&&typeof c==='object'&&!Array.isArray(c)):[];}
+ const api={label,unit,group,netClasses};if(typeof module==='object'&&module.exports)module.exports=api;root.KiCadProjectSettingsUI=api;
+})(globalThis);

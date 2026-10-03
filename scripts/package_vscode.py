@@ -8,7 +8,7 @@ from xml.sax.saxutils import escape
 ROOT = Path(__file__).resolve().parents[1]
 ASSETS = (
     'bom-analytics.js', 'file-compatibility.js', 'html-preview.js', 'html-sandbox.html', 'html-sandbox.js',
-    'parsing.js', 'project-viewer.html', 'project-viewer.css', 'project-viewer.js', 'project-settings.js', 'gerber-renderer.js',
+    'parsing.js', 'project-viewer.html', 'project-viewer.css', 'project-viewer.js', 'project-settings.js', 'project-settings-ui.js', 'gerber-renderer.js',
     'revision-viewer.html', 'revision-viewer.css', 'revision-viewer.js',
     'ui-icons.js', 'browser-data.js', 'design-diff.js', 'design-model.js',
     'net-model.js', 'paired-review.js', 'project-search.js', 'rule-reports.js', 'review-navigation.js', 'view-state.js', 'review-comments.js', 'review-workspace.js', 'review-tools.js', 'repo-models.js',

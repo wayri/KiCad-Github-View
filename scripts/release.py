@@ -48,7 +48,7 @@ def run_tests(root: Path = ROOT):
     # Python expands paths so this also works on Windows and Node 22 runners.
     tests = sorted(str(p.relative_to(root)) for pattern in (
         'extension/tests/*.test.cjs', 'vscode-extension/tests/*.test.cjs',
-        'app_web/tests/*.test.cjs', 'tests/*.test.mjs') for p in root.glob(pattern))
+        'app_web/tests/*.test.cjs', 'tests/*.test.cjs', 'tests/*.test.mjs') for p in root.glob(pattern))
     if not tests:
         raise ValueError('No JavaScript acceptance tests found.')
     run([sys.executable, 'scripts/package_vscode.py'], root)
@@ -147,6 +147,7 @@ def build(output: Path, tag: str | None = None):
     digests = {p.name: hashlib.sha256(p.read_bytes()).hexdigest() for p in assets}
     report = {'schemaVersion': 1, 'version': version, 'tag': tag, 'sourceCommit': commit,
               'prerelease': True, 'packageAudit': evidence, 'assets': digests,
+              'sourceDirty': bool(subprocess.check_output(['git', 'status', '--porcelain', '--untracked-files=normal'], cwd=ROOT)) if commit else True,
               'verification': 'Tests must pass before this command builds. Native CLI tests skip when KiCad is unavailable. Live GitHub/store acceptance is not implied.',
               'pythonToolVersion': '0.1.0'}
     (output / 'release-manifest.json').write_text(json.dumps(report, indent=2, sort_keys=True)+'\n', encoding='utf-8')

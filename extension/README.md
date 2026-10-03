@@ -63,3 +63,5 @@ Version 0.9.6 adds double-click/Enter subsheet navigation, Alt+Up parent navigat
 Version 0.10.0 adds a read-only project workspace, settings/constraint inspection, PCB stackup, file navigation and our browser Gerber/drill viewer. See [project and fabrication workspace](docs/project-workspace.md).
 
 Version 0.11.0 adds BOM / Stats, variant-aware DNP highlighting, source-bound board and zone analytics, bounded regex/wildcard global search, isolated HTML previews, and the Git revisions commit/branch comparison picker. See [BOM and analytics](docs/bom-analytics.md), [HTML previews](docs/html-preview.md), [version handling](docs/version-compatibility.md) and [revision comparisons](docs/git-revisions.md).
+
+Version 0.11.1 refines project setup into grouped read-only forms, typed values and net-class/stackup tables. Releases now include verified download packages and tag-driven GitHub publication; see [releasing](../docs/RELEASING.md).
