@@ -7,7 +7,7 @@ const path = require('node:path');
 function optionsHarness(respond) {
   const elements = new Map();
   for (const id of ['token', 'tokenStatus', 'saveToken', 'clearToken', 'clientId',
-    'connectGitHub', 'cancelGitHub', 'deviceInstructions', 'deviceCode', 'verificationLink', 'deviceStatus']) {
+    'connectGitHub', 'cancelGitHub', 'deviceInstructions', 'deviceCode', 'verificationLink', 'deviceStatus', 'githubAccess', 'scopeHelp', 'signinAvailability']) {
     elements.set(id, { value: '', textContent: '', disabled: false, hidden: false, href: '', listeners: new Map(),
       addEventListener(type, fn) { this.listeners.set(type, fn); } });
   }
@@ -56,6 +56,7 @@ test('Connect shows only a verification code and polls after the worker interval
   assert.equal(requests.some((r) => r.type === 'github-device-start'), false);
   await elements.get('connectGitHub').listeners.get('click')();
   assert.equal(requests.at(-1).clientId, 'Ov23liSavedClient');
+  assert.equal(requests.at(-1).scope, 'public_repo');
   assert.equal(elements.get('deviceCode').textContent, 'ABCD-EFGH');
   assert.equal(elements.get('verificationLink').href, 'https://github.com/login/device');
   assert.equal(timers[0].delay, 5000);
@@ -64,4 +65,30 @@ test('Connect shows only a verification code and polls after the worker interval
   assert.equal(requests.some((r) => r.type === 'github-device-poll'), true);
   assert.equal(elements.get('deviceInstructions').hidden, true);
   assert.equal(JSON.stringify([...elements.values()].map((element) => element.textContent)).includes(token), false);
+});
+
+test('private access is an explicit choice with a broad-permission explanation', async () => {
+  const { elements, requests } = optionsHarness(request => request.type === 'github-device-status' ?
+    {active:false, clientId:'Ov23liSavedClient'} : request.type === 'github-device-start' ?
+    {state:'pending',userCode:'TEST-CODE',verificationUrl:'https://github.com/login/device',scope:'repo'} : {configured:false});
+  await new Promise(resolve => setImmediate(resolve));
+  const access = elements.get('githubAccess');
+  assert.equal(access.value, 'public_repo');
+  access.value = 'repo';access.listeners.get('change')();
+  assert.match(elements.get('scopeHelp').textContent, /broad read and write/);
+  await elements.get('connectGitHub').listeners.get('click')();
+  assert.equal(requests.at(-1).scope, 'repo');
+  assert.equal(access.disabled, true);
+});
+
+test('unconfigured release explains publisher setup and advanced fields are collapsed', async () => {
+  const { elements } = optionsHarness();
+  await new Promise(resolve => setImmediate(resolve));
+  assert.match(elements.get('signinAvailability').textContent, /publisher's OAuth App registration/);
+  const html = fs.readFileSync(path.join(__dirname,'../options.html'),'utf8');
+  assert.match(html, /<button id="connectGitHub"[^>]*>Sign in with GitHub<\/button>/);
+  assert.match(html, /<details id="advancedAuth">/);
+  assert.equal(html.match(/id="clearToken"/g).length, 1);
+  assert.ok(html.indexOf('<details id="advancedAuth">') < html.indexOf('id="clientId"'));
+  assert.ok(html.indexOf('<details id="advancedAuth">') < html.indexOf('id="token"'));
 });

@@ -10,34 +10,44 @@
     h1 { font-size: 1.6rem; } h2 { font-size: 1.25rem; }
     section { border: 1px solid #8886; border-radius: .6rem; padding: 1.2rem; margin: 1.3rem 0; }
     label { display: block; font-weight: 600; margin: 1rem 0 .35rem; }
-    input { box-sizing: border-box; width: 100%; font: inherit; padding: .55rem; }
+    input, select { box-sizing: border-box; width: 100%; font: inherit; padding: .55rem; }
     button { font: inherit; padding: .5rem .85rem; margin: .75rem .5rem .25rem 0; cursor: pointer; }
+    #connectGitHub { background: #238636; border: 1px solid #238636; color: white; border-radius: .35rem; font-weight: 600; }
+    details { margin-top: 1.2rem; border-top: 1px solid #8886; padding-top: 1rem; } summary { cursor: pointer; font-weight: 600; }
+    #deviceCode { font: bold 1.6rem/1.5 monospace; letter-spacing: .12em; } #signinAvailability { font-size: .9rem; }
     #tokenStatus { min-height: 1.5em; } p { max-width: 65ch; }
   </style>
 </head>
 <body>
   <h1>KiCad Visual Review settings</h1>
   <section>
-    <h2>GitHub publishing</h2>
-    <p>Connect a GitHub account to publish a saved note to an Issue or Discussion when you click Publish. Sign-in tokens stay in this browser session and are never shown to GitHub pages.</p>
-    <label for="clientId">Registered OAuth App client ID</label>
-    <input id="clientId" type="text" autocomplete="off" spellcheck="false" aria-describedby="clientHelp">
-    <p id="clientHelp">The OAuth App must have Device Flow enabled. Sign-in requests the <code>public_repo</code> scope for public repositories.</p>
-    <button id="connectGitHub" type="button">Connect GitHub</button>
+    <h2>GitHub account</h2>
+    <p>Sign in to read repositories using your account and publish saved review notes to Issues or Discussions. Saving a note never posts it automatically.</p>
+    <label for="githubAccess">Repository access</label>
+    <select id="githubAccess" aria-describedby="scopeHelp"><option value="public_repo">Public repositories</option><option value="repo">Public and private repositories</option></select>
+    <p id="scopeHelp">Public access requests GitHub's <code>public_repo</code> scope. Tokens stay in this browser session.</p>
+    <button id="connectGitHub" type="button">Sign in with GitHub</button>
+    <button id="clearToken" type="button">Sign out</button>
     <button id="cancelGitHub" type="button" hidden>Cancel sign-in</button>
+    <p id="signinAvailability" role="status"></p>
     <div id="deviceInstructions" hidden>
       <p>Open <a id="verificationLink" href="https://github.com/login/device" target="_blank" rel="noopener noreferrer">GitHub device verification</a> and enter this code:</p>
       <p><strong id="deviceCode"></strong></p>
     </div>
     <p id="deviceStatus" role="status" aria-live="polite"></p>
-    <h2>Manual token</h2>
-    <p>You can still paste a GitHub personal access token instead of signing in. It also remains in this browser session.</p>
+    <p id="tokenStatus" role="status" aria-live="polite"></p>
+    <details id="advancedAuth"><summary>Advanced connection settings</summary>
+    <p>Developers can use their own registered OAuth App. Most users should use the sign-in button above once the publisher has configured this build.</p>
+    <label for="clientId">Custom OAuth App client ID</label>
+    <input id="clientId" type="text" autocomplete="off" spellcheck="false" aria-describedby="clientHelp">
+    <p id="clientHelp">Enable Device Flow in the OAuth App. This ID is public; never enter a client secret. Leave blank to use the publisher's configured App.</p>
+    <h2>Manual access token</h2>
+    <p>A manual token also stays in this browser session. Use a fine-grained token for narrower repository permissions when appropriate.</p>
     <label for="token">GitHub access token</label>
     <input id="token" type="password" autocomplete="new-password" spellcheck="false" aria-describedby="tokenHelp">
     <p id="tokenHelp">Grant access only to repositories you review. Issues need Issues write permission; Discussions need access to Discussions through GitHub GraphQL.</p>
     <button id="saveToken" type="button">Save for this browser session</button>
-    <button id="clearToken" type="button">Remove token</button>
-    <p id="tokenStatus" role="status" aria-live="polite"></p>
+    </details>
   </section>
   <section id="reviewFileSettings"></section>
   <script src="review-comments.js"></script>

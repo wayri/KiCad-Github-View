@@ -47,7 +47,7 @@
     return parts.every((part) => part && part !== "." && part !== ".." && !/[\\:\x00-\x1f\x7f]/.test(part)) ? value : null;
   }
 
-  function embeddedBlobData(scripts) {
+  function embeddedBlobData(scripts, parsedRoute = null) {
     const candidates = [];
     for (const text of scripts) {
       if (!text || text.length > 5_000_000) continue;
@@ -62,7 +62,11 @@
         const ref = typeof refInfo === "string" ? refInfo : refInfo.name || refInfo.ref || refInfo.currentOid;
         const oid = typeof refInfo === "object" && (refInfo.currentOid || refInfo.oid);
         if (path && (typeof ref === "string" || typeof oid === "string")) {
-          candidates.push({ file: path, head: oid || ref, score: (oid ? 2 : 0) + (value.refInfo ? 1 : 0) });
+          const candidate = { file: path, head: oid || ref, ref, score: (oid ? 2 : 0) + (value.refInfo ? 1 : 0) };
+          // SPA payloads can contain sibling files and stale branch metadata.
+          // Match the full route, not a basename suffix or the globally best SHA.
+          const tail = parsedRoute?.tail?.join("/");
+          if (!tail || tail === `${ref}/${path}` || tail === `${oid}/${path}`) candidates.push(candidate);
         }
         for (const child of Object.values(value)) if (typeof child === "object") visit(child, depth + 1);
       }
@@ -76,7 +80,8 @@
     if (!parsedRoute || parsedRoute.kind !== "blob") return null;
     if (embedded && filePath(embedded.file) && typeof embedded.head === "string" && embedded.head) {
       const tail = parsedRoute.tail.join("/");
-      if (tail.endsWith("/" + embedded.file) && (parsedRoute.provider !== "gitlab" ||
+      const routeMatches = embedded.ref ? tail === `${embedded.ref}/${embedded.file}` || tail === `${embedded.head}/${embedded.file}` : tail.endsWith("/" + embedded.file);
+      if (routeMatches && (parsedRoute.provider !== "gitlab" ||
           tail === `${embedded.head}/${embedded.file}` && embedded.repository === parsedRoute.repository)) {
         return { repository: parsedRoute.repository, file: embedded.file, head: embedded.head,
           ...(parsedRoute.provider ? { provider: parsedRoute.provider } : {}) };

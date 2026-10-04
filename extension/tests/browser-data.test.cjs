@@ -23,7 +23,7 @@ test('rejects paths that escape the repository and invalid input', async () => {
 
 test('reports a missing root revision', async () => {
   await assert.rejects(data.loadProject('wayri/demo', 'abc123', 'board.kicad_pcb', async () => null),
-    /absent at this revision/);
+    /HTTP 404.*wayri\/demo.*abc123.*board\.kicad_pcb.*access.*Contents read/);
 });
 
 test('opening a leaf discovers its ancestor root and descendants, excluding unrelated siblings', async () => {
@@ -124,4 +124,20 @@ test('PCB discovery permits large bounded boards without scanning them as schema
   const board = '(kicad_pcb ' + ' '.repeat(9 * 1024 * 1024) + ')';
   const files = await data.loadProject('owner/board', 'main', 'large.kicad_pcb', async () => board);
   assert.equal(files.length, 1); assert.equal(files[0].content, board);
+});
+
+
+test('nested project hierarchy retains exact case and ignores asset folders for board retrieval', async () => {
+  const files = new Map([
+    ['Hardware/HPBM-SMALL.kicad_sch','(kicad_sch (sheet (property "Sheetfile" "SubSheets/Power.kicad_sch")))'],
+    ['Hardware/SubSheets/Power.kicad_sch','(kicad_sch)'],
+    ['Hardware/HPBM-SMALL.kicad_pcb','(kicad_pcb ' + ' '.repeat(2*1024*1024) + ')']
+  ]);
+  const reads = [];
+  const reader = async (repo,ref,path) => {assert.equal(ref,'private-review');reads.push(path);return files.get(path) ?? null;};
+  const board = await data.loadProject('owner/private','private-review','Hardware/HPBM-SMALL.kicad_pcb',reader);
+  assert.deepEqual(board.map(file=>file.path),['Hardware/HPBM-SMALL.kicad_pcb']);
+  const schematic = await data.loadProject('owner/private','private-review','Hardware/HPBM-SMALL.kicad_sch',reader);
+  assert.deepEqual(schematic.map(file=>file.path),['Hardware/HPBM-SMALL.kicad_sch','Hardware/SubSheets/Power.kicad_sch']);
+  assert.ok(reads.every(path=>!path.includes('packages3D')&&!path.includes('assets')));
 });

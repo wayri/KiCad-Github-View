@@ -2,7 +2,7 @@
 
 Captured on 2026-10-04 from the project's actual browser viewer, running through the local preview harness at `127.0.0.1:8773`. Images are JPEG screenshots, not design mockups or AI-generated images. Capture includes the application controls and canvas; unused browser viewport margins were excluded. Browser device scaling determines image pixel dimensions.
 
-The harness replaces extension transport with local files and mocked Git metadata/policy. It does not prove installed-browser integration, live authentication or successful remote publication. Screenshots show the working-tree viewer after the GitHub collaboration and large-board loading changes; they may differ from the already published v0.11.5 package.
+The harness replaces extension transport with local files and mocked Git metadata/policy. It does not prove installed-browser integration, live authentication or successful remote publication. Screenshots show the working-tree viewer after the GitHub collaboration and large-board loading changes; they may differ from the already published v0.11.5 package. In particular, the GitHub destination and saved-note screenshots show a local draft with mocked policy; no Issue, Discussion, comment, or account sign-in was performed. The account-settings screenshot contains blank credential fields. GitLab captures also use local fixture content and mocked project metadata; no live GitLab posting occurred.
 
 | Image | Source and displayed behavior |
 | --- | --- |
@@ -17,8 +17,18 @@ The harness replaces extension transport with local files and mocked Git metadat
 | `github-collaboration.jpg` | Synthetic highlights board; GitHub type/destination selectors and mocked review policy. No account credentials or live thread. |
 | `comment-editor.jpg` | Same fixture; unsaved demonstration draft. No external comment was created. |
 | `revision-comparison.jpg` | Synthetic sensor base/head sources and mocked revision identifiers; side-by-side drawings and Changes panel. |
+| `integration/github-account-settings.jpg` | Blank extension settings form for GitHub device sign-in and manual token; no account connected and no secret displayed. |
+| `integration/github-discussion-destination.jpg` | Synthetic `highlights.kicad_pcb` fixture; Discussion type, new-thread destination, category, local review note and mocked policy status. No post was made. |
+| `integration/github-saved-discussion.jpg` | Same synthetic fixture; saved local Discussion-type note and available controls. It is a draft, not evidence of successful publication. |
+| `integration/gitlab-part-properties.jpg` | Synthetic `highlights.kicad_pcb` fixture with selected R1 footprint, saved properties and project explorer; GitLab project metadata is mocked. |
+| `integration/gitlab-comment-editor.jpg` | Same fixture with an unsaved local note form, severity, state, tags, mention and area capture control. No GitLab API write was made. |
+| `integration/gitlab-saved-note.jpg` | Same fixture with the saved local note and its annotation marker. No remote issue or merge-request comment exists. |
+
+The new integration images accompany the step-by-step [GitHub guide](../using-github-integration/README.md) and [GitLab guide](../using-gitlab-integration/README.md). The three earlier collaboration images in the table above are a separate UI capture set; each set's provenance and limitations are described here.
 
 ## Marble attribution and limits
+
+`integration/github-sign-in.jpg` captures the v0.11.7 primary sign-in screen in the same local harness on 2026-10-04. Advanced fields are collapsed, the account is signed out, and the missing publisher OAuth registration is visible. No device authorization or account login was performed. The earlier `github-account-settings.jpg` shows the preceding advanced configuration layout.
 
 Marble hardware is the work of its upstream authors at [BerkeleyLab/Marble](https://github.com/BerkeleyLab/Marble), whose repository identifies the hardware license as CERN OHL v1.2. This project claims no ownership of that design and no upstream endorsement. The screenshots illustrate the viewer; the board source is not bundled in the extension release.
 

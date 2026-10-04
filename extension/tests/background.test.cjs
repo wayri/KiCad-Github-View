@@ -835,3 +835,31 @@ test('failed raw fallback retains the rate limit reset guidance without retrying
   sessionStore.clear();let calls=0;withFetch(t,async()=>++calls===1?new Response(null,{status:403,headers:{'x-ratelimit-remaining':'0','x-ratelimit-reset':'2000000000'}}):new Response(null,{status:404}));
   await assert.rejects(background.githubFile('wayri/board','main','board.kicad_pcb'),/rate limit reached.*2033.*Connect your GitHub account/);assert.equal(calls,2);
 });
+
+
+test('private Contents and linked 3D assets use the configured token only on the fixed API origin', async t => {
+  const token = 'private-test-token-1234567890';
+  sessionStore.set('github-review-token',token);
+  sessionStore.delete('github-review-token-expiry');
+  t.after(()=>sessionStore.delete('github-review-token'));
+  const seen = [];
+  withFetch(t,async (url,options)=>{
+    seen.push(url);
+    assert.ok(url.startsWith('https://api.github.com/repos/owner/private/contents/'));
+    assert.equal(options.headers.Authorization,'Bearer '+token);
+    assert.equal(options.credentials,'omit');assert.equal(options.redirect,'error');
+    return new Response(url.includes('packages3D') ? 'solid test' : '(kicad_pcb)');
+  });
+  assert.equal(await background.githubFile('owner/private',sha('d'),'Hardware/HPBM-SMALL.kicad_pcb'),'(kicad_pcb)');
+  const model = await background.githubAsset('owner/private',sha('d'),'Hardware/packages3D/test.wrl');
+  assert.ok(model);assert.equal(seen.length,2);
+});
+
+test('concealed private-repository 404 stays on the requested revision and yields actionable guidance', async t => {
+  let calls=0;
+  withFetch(t,async ()=>{calls++;return new Response(null,{status:404});});
+  const response=await message({type:'project',repository:'owner/private',ref:sha('e'),file:'Hardware/HPBM-SMALL.kicad_pcb'});
+  assert.equal(response.ok,false);
+  assert.match(response.error,/HTTP 404.*owner\/private.*eeee.*Hardware\/HPBM-SMALL.*access.*website sign-in.*Contents read/);
+  assert.equal(calls,1);
+});

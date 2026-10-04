@@ -69,3 +69,19 @@ test('GitLab nested namespaces use authoritative blob data for slash refs', () =
   assert.equal(route('https://gitlab.com/group/board/-/merge_requests/1/diffs'), null);
   assert.equal(route('https://gitlab.com/group/%2Fboard/-/blob/main/root.kicad_sch'), null);
 });
+
+
+test('current nested file and branch determine the embedded SHA, not stale or same-basename tree entries', () => {
+  const current = route('https://github.com/owner/private/blob/feature/review/SubSheets/HPBM-SMALL.kicad_pcb');
+  const scripts = [JSON.stringify({entries: [
+    {path:'HPBM-SMALL.kicad_pcb',refInfo:{name:'feature/review',currentOid:'a'.repeat(40)}},
+    {path:'SubSheets/HPBM-SMALL.kicad_pcb',refInfo:{name:'old-branch',currentOid:'b'.repeat(40)}},
+    {path:'SubSheets/HPBM-SMALL.kicad_pcb',refInfo:{name:'feature/review',currentOid:'c'.repeat(40)}}
+  ]})];
+  assert.deepEqual(blobRequest(current, embeddedBlobData(scripts, current)), {
+    repository:'owner/private',file:'SubSheets/HPBM-SMALL.kicad_pcb',head:'c'.repeat(40)
+  });
+  const stale = embeddedBlobData([JSON.stringify({path:'SubSheets/HPBM-SMALL.kicad_pcb',refInfo:{name:'old-branch',currentOid:'b'.repeat(40)}})],current);
+  assert.equal(stale,null);
+  assert.notEqual(blobRequest(current,stale)?.head,'b'.repeat(40));
+});

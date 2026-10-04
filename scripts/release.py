@@ -117,6 +117,23 @@ def audit_packages(chrome: Path, native: Path, root: Path = ROOT):
     return {'chromeFiles': len(expected), 'sharedVSCodeAssets': len(native_builder.ASSETS)}
 
 
+def package_guides(output: Path, root: Path = ROOT):
+    paths = [root / 'README.md', *sorted((root / 'docs').rglob('*.md')),
+             *sorted((root / 'extension/docs').rglob('*.md')),
+             *([root / 'vscode-extension/README.md'] if (root / 'vscode-extension/README.md').is_file() else []),
+             *sorted((root / 'docs/images').rglob('*.jpg')),
+             *sorted((root / 'docs/images').rglob('*.png'))]
+    with zipfile.ZipFile(output, 'w', compression=zipfile.ZIP_DEFLATED, compresslevel=9) as archive:
+        for path in paths:
+            if path.is_symlink() or not path.resolve().is_relative_to(root.resolve()):
+                raise ValueError('Unsafe guide source.')
+            info = zipfile.ZipInfo(path.relative_to(root).as_posix(), (2020, 1, 1, 0, 0, 0))
+            info.compress_type = zipfile.ZIP_DEFLATED
+            info.external_attr = 0o100644 << 16
+            archive.writestr(info, path.read_bytes())
+    return output
+
+
 def build(output: Path, tag: str | None = None):
     version = versions(tag=tag)
     commit = source_commit(tag=tag)
@@ -125,6 +142,8 @@ def build(output: Path, tag: str | None = None):
     output = output.resolve()
     # Refuse any unknown/stale files so the publisher's wildcard cannot upload extras.
     names = {f'kicad-visual-review-extension-{version}.zip', f'kicad-visual-review-vscode-{version}.vsix',
+             f'kicad-visual-review-firefox-{version}.zip', f'kicad-visual-review-safari-{version}.zip',
+             f'kicad-visual-review-guides-{version}.zip', 'FIREFOX.md', 'SAFARI.md',
              f'kicad-visual-review-app-web-{version}.zip', f'kicad-visual-review-github-app-{version}.zip',
              'SHA256SUMS.txt', 'RELEASE-NOTES.md', 'INSTALL.md', 'COMMENTS.md', 'GIT-HOSTS.md', 'THIRD-PARTY-NOTICES.md', 'release-manifest.json'}
     if output.is_symlink():
@@ -135,13 +154,24 @@ def build(output: Path, tag: str | None = None):
     chrome = module('package_extension').package(output=output / f'kicad-visual-review-extension-{version}.zip')
     native = module('package_vscode').package(output=output / f'kicad-visual-review-vscode-{version}.vsix')
     evidence = audit_packages(chrome, native)
+    for target in ('firefox', 'safari'):
+        builder = module(f'package_{target}')
+        path = builder.package(output=output / f'kicad-visual-review-{target}-{version}.zip')
+        expected = builder.payload()
+        with zipfile.ZipFile(path) as archive:
+            if set(archive.namelist()) != set(expected) or any(archive.read(name) != data for name, data in expected.items()):
+                raise ValueError(f'{target} package/source mismatch.')
+        evidence[f'{target}Files'] = len(expected)
+    evidence['installedFirefoxAcceptance'] = 'Not performed; unsigned development package.'
+    evidence['nativeSafariAcceptance'] = 'Not performed; macOS conversion, signing and runtime verification required.'
+    package_guides(output / f'kicad-visual-review-guides-{version}.zip')
     run([sys.executable, 'scripts/package_app_web.py'])
     run([sys.executable, 'scripts/package_github_app.py'])
     for kind in ('app-web', 'github-app'):
         normalize_archive(ROOT / '.vizdiff' / f'kicad-visual-review-{kind}.zip',
                           output / f'kicad-visual-review-{kind}-{version}.zip')
     for source, destination in ((f'docs/releases/v{version}.md', 'RELEASE-NOTES.md'),
-                                ('docs/INSTALL.md', 'INSTALL.md'), ('docs/COMMENTS.md', 'COMMENTS.md'), ('docs/GIT-HOSTS.md', 'GIT-HOSTS.md'), ('THIRD-PARTY-NOTICES.md', 'THIRD-PARTY-NOTICES.md')):
+                                ('docs/INSTALL.md', 'INSTALL.md'), ('docs/FIREFOX.md', 'FIREFOX.md'), ('docs/SAFARI.md', 'SAFARI.md'), ('docs/COMMENTS.md', 'COMMENTS.md'), ('docs/GIT-HOSTS.md', 'GIT-HOSTS.md'), ('THIRD-PARTY-NOTICES.md', 'THIRD-PARTY-NOTICES.md')):
         shutil.copyfile(ROOT / source, output / destination)
     assets = sorted(p for p in output.iterdir() if p.name not in {'SHA256SUMS.txt', 'release-manifest.json'})
     digests = {p.name: hashlib.sha256(p.read_bytes()).hexdigest() for p in assets}

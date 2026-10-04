@@ -11,6 +11,9 @@ const deviceInstructions = document.getElementById("deviceInstructions");
 const deviceCode = document.getElementById("deviceCode");
 const verificationLink = document.getElementById("verificationLink");
 const deviceStatus = document.getElementById("deviceStatus");
+const accessInput = document.getElementById("githubAccess");
+const scopeHelp = document.getElementById("scopeHelp");
+const availability = document.getElementById("signinAvailability");
 let pollTimer = null;
 
 async function request(type, extras = {}) {
@@ -21,8 +24,14 @@ async function request(type, extras = {}) {
 async function refresh() {
   const result = await request("github-auth-status");
   statusElement.textContent = result.configured ? "GitHub access is available for this browser session." :
-    "No GitHub token is configured.";
+    "You are signed out. Public previews and local comments work without signing in.";
 }
+function showScope() {
+  scopeHelp.textContent = accessInput.value === "repo" ?
+    "Private access requests GitHub's repo scope, which grants broad read and write access to public and private repositories. Approve it only if you need private repository access; organization approval or SSO may also be required." :
+    "Public access requests GitHub's public_repo scope. Tokens stay in this browser session.";
+}
+accessInput.addEventListener("change", showScope);
 function stopTimer() {
   if (pollTimer !== null) clearTimeout(pollTimer);
   pollTimer = null;
@@ -32,11 +41,13 @@ function showDevice(flow) {
   deviceInstructions.hidden = !active;
   cancelButton.hidden = !active;
   connectButton.disabled = active;
+  accessInput.disabled = active;
   if (!active) {
     deviceCode.textContent = "";
     return;
   }
   deviceCode.textContent = flow.userCode;
+  if (flow.scope) { accessInput.value = flow.scope; showScope(); }
   verificationLink.href = flow.verificationUrl;
   deviceStatus.textContent = "Enter the code on GitHub. Waiting for authorization…";
 }
@@ -73,7 +84,7 @@ async function pollOnce() {
 connectButton.addEventListener("click", async () => {
   connectButton.disabled = true;
   try {
-    const result = await request("github-device-start", { clientId: clientInput.value.trim() });
+    const result = await request("github-device-start", { clientId: clientInput.value.trim(), scope: accessInput.value });
     showDevice(result);
     schedulePoll(result.retryAfterMs);
   } catch (error) {
@@ -116,7 +127,11 @@ buttonClear.addEventListener("click", async () => {
   finally { buttonClear.disabled = false; }
 });
 Promise.all([refresh(), request("github-device-status")]).then(([, state]) => {
-  clientInput.value = state.clientId;
+  clientInput.value = state.customClientId ?? state.clientId ?? "";
+  availability.textContent = state.releaseConfigured || state.clientId ? "Authorize this extension on GitHub using the code shown after sign-in." :
+    "GitHub sign-in needs the publisher's OAuth App registration in this build. Local review and GitHub draft links are available. Developers can configure their own App in Advanced connection settings.";
+  if (!accessInput.value) accessInput.value = "public_repo";
+  showScope();
   if (state.active) { showDevice(state); schedulePoll(state.retryAfterMs); }
   else if (state.expired) deviceStatus.textContent = "The previous GitHub code expired. Start sign-in again.";
 }).catch((error) => { deviceStatus.textContent = error.message; });

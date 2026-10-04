@@ -4,13 +4,13 @@ The browser extension embeds the viewer in supported repository file pages. A Gi
 
 | Capability | GitHub.com | GitLab.com | VS Code local checkout |
 | --- | --- | --- | --- |
-| Schematic and PCB viewers, selection and properties | Public repositories | Public repositories | Saved local files |
+| Schematic and PCB viewers, selection and properties | Public; private file reads with authorized extension token | Public repositories | Saved local files |
 | Project explorer, hierarchy, setup and repository assets | Yes | Yes, including subgroup namespaces | Yes |
 | Branch/commit visual comparison | Yes | Yes | Not yet |
 | Inline pull-request / merge-request file cards | Pull requests | Not yet | Not applicable |
 | Local annotations and review JSON export | Yes | Yes, isolated by provider | Yes |
 | Account connection and issue/discussion publication | GitHub controls | Not yet | Local sidecar only |
-| Private repository browser previews | Not yet | Not yet | Available after a local checkout |
+| Private repository browser previews | File/project/model reads with repository access; private PR comparison and annotation readback/publication unavailable | Not yet | Available after a local checkout |
 | Self-hosted hostnames | Not yet | Not yet | Local files are host-independent |
 
 ## GitLab.com installation and behavior

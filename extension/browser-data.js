@@ -87,7 +87,7 @@
       cache.set(path, content);
       return content;
     }
-    if (await read(file) === null) throw new Error("KiCad file is absent at this revision.");
+    if (await read(file) === null) throw new Error(`KiCad file was not returned by ${provider === "gitlab" ? "GitLab" : "GitHub"} (HTTP 404): ${repository}, revision ${ref}, path ${file}. The file may be missing or repository access may be unavailable. ${provider === "gitlab" ? "Only public GitLab repositories are supported." : "GitHub website sign-in does not sign the extension in. Connect an account with private repository access or a token with this repository's Contents read permission in extension settings."}`);
     let roots = [file];
     let discoveryWarning = null;
     if (/\.kicad_sch$/i.test(file) && listDirectory) {

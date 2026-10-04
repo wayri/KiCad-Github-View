@@ -399,7 +399,7 @@
     function editComment(note = null, at = null) {
       try { editor = note || {id:crypto.randomUUID(), createdAt:new Date().toISOString(), text:"", severity:"info", threadType:$("githubCommentType").value||"issue", anchor:at || anchor()}; }
       catch (error) { commentStatus(error.message,true); inspector("comments"); return; }
-      if(note?.threadType){$("githubCommentType").value=note.threadType;chooseCommentType();} $("commentEditor").hidden = false; $("commentAnchor").textContent = `${$("githubCommentType").value==="discussion"?"Discussion":"Issue"} · ${anchorLabel(editor.anchor)}; choose its type in the GitHub tab.`; $("commentText").value = editor.text; $("commentSeverity").value = editor.severity || "info";$("commentState").value=editor.state||"open";$("commentTags").value=(editor.tags||[]).join(", ");$("commentMentions").value=(editor.mentions||[]).map(login=>"@"+login).join(", ");
+      if(note?.threadType){$("githubCommentType").value=note.threadType;chooseCommentType();} $("commentEditor").hidden = false; $("commentAnchor").textContent=remoteAvailable?`${$("githubCommentType").value==="discussion"?"Discussion":"Issue"} � ${anchorLabel(editor.anchor)}; choose its type in the GitHub tab.`:`Local review: ${anchorLabel(editor.anchor)}`; $("commentText").value = editor.text; $("commentSeverity").value = editor.severity || "info";$("commentState").value=editor.state||"open";$("commentTags").value=(editor.tags||[]).join(", ");$("commentMentions").value=(editor.mentions||[]).map(login=>"@"+login).join(", ");
       inspector("comments"); $("commentText").focus();
       capturePreview();draw();
     }
@@ -465,7 +465,7 @@
       for (const note of shown) {
         const card=make("article");card.className="note severity-"+(note.severity||"info");
         const unread=KiCadReviewComments.isUnread(note,receipt(note));
-        card.append(make("strong",`${(note.severity||"info").toUpperCase()} · ${note.threadType==='discussion'?'Discussion':note.threadType==='issue'?'Issue':'Unassigned type'} · ${unread?"Unread":"Read"}`),make("small",anchorLabel(note.anchor)),make("p",note.text),
+        card.append(make("strong",`${(note.severity||"info").toUpperCase()} · ${!remoteAvailable?'Local review':note.threadType==='discussion'?'Discussion':note.threadType==='issue'?'Issue':'Unassigned type'} · ${unread?"Unread":"Read"}`),make("small",anchorLabel(note.anchor)),make("p",note.text),
           make("small",`Created ${new Date(note.createdAt).toLocaleString()} · Updated ${new Date(note.updatedAt||note.createdAt).toLocaleString()} · ${note.github?`GitHub ${note.github.source} #${note.github.number} · ${note.github.state} · ${note.github.author||""}`:"local"}`));
         if(note.mentions?.length)card.append(make("small",`Mentions: ${note.mentions.map(login=>"@"+login).join(", ")}`));
         const actions=make("div");actions.className="inspector-actions";
@@ -640,7 +640,7 @@
     $("commentSelected").onclick=()=>editComment(null,selectedNet?anchor(selectedNet.members.find(m=>m.position)?.position,{path:selectedNet.path,id:selectedNet.id,kind:"net",reference:selectedNet.name.slice(0,100)}):null);$("newComment").onclick=()=>editComment();
     function destinationChanged(){const value=$("commentDestination").value;$("githubCommentType").value=value.includes("discussion")?"discussion":"issue";$("threadNumberLabel").hidden=!value.startsWith("existing-");for(const id of ["discussionCategoryLabel","loadCategories"])$(id).hidden=value!=="discussion";$("threadNumber").placeholder=value.includes("discussion")?"Discussion number":"Issue number";}
     function chooseCommentType(initial=false){const discussion=$("githubCommentType").value==="discussion", choices=discussion?[["discussion","New discussion"],["existing-discussion","Existing discussion"]]:[["issue","New issue"],["existing-issue","Existing issue"],...(options.pullNumber?[["pull-request",`This pull request #${options.pullNumber}`]]:[])];
-      $("commentDestination").replaceChildren();for(const [value,label]of choices){const item=make("option",label);item.value=value;$("commentDestination").append(item);}$("commentDestination").value=initial&&options.pullNumber?"pull-request":choices[0][0];destinationChanged();if(editor)$("commentAnchor").textContent=`${discussion?"Discussion":"Issue"} · ${anchorLabel(editor.anchor)}; choose its type in the GitHub tab.`;}
+      $("commentDestination").replaceChildren();for(const [value,label]of choices){const item=make("option",label);item.value=value;$("commentDestination").append(item);}$("commentDestination").value=initial&&options.pullNumber?"pull-request":choices[0][0];destinationChanged();if(editor)$("commentAnchor").textContent=remoteAvailable?`${$("githubCommentType").value==="discussion"?"Discussion":"Issue"} � ${anchorLabel(editor.anchor)}; choose its type in the GitHub tab.`:`Local review: ${anchorLabel(editor.anchor)}`;}
     $("githubCommentType").value="issue";$("githubCommentType").onchange=()=>chooseCommentType();$("commentDestination").onchange=destinationChanged;chooseCommentType(true);
     const targetRepository=options.pullRepository||repository;
     $("repositoryIssues").href=`https://github.com/${targetRepository}/issues`;$("repositoryDiscussions").href=`https://github.com/${targetRepository}/discussions`;

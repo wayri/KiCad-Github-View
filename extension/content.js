@@ -56,7 +56,7 @@
     }
     return parse.embeddedBlobData([...document.querySelectorAll('script[type="application/json"]')]
       .filter((script) => script.dataset.target?.includes("embeddedData") || script.closest("react-app"))
-      .map((script) => script.textContent));
+      .map((script) => script.textContent), parse.route(location.href));
   }
   function findBlobTarget() {
     if (location.href.startsWith("https://gitlab.com/")) {

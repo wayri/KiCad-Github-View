@@ -10,6 +10,10 @@ const KiCadGitHubReviewApi = (() => {
   const CLIENT_ID_KEY = "github-oauth-client-id";
   const DEVICE_KEY = "github-device-pending";
   const CLIENT_ID = /^[A-Za-z0-9_]{10,100}$/;
+  // Publisher configuration: the OAuth App's public client ID, never its secret.
+  // Leave blank until wayri registers an OAuth App with Device Flow enabled.
+  const RELEASE_OAUTH_CLIENT_ID = "";
+  const DEVICE_SCOPES = new Set(["public_repo", "repo"]);
   const DESTINATIONS = new Set(["new-issue", "issue", "new-discussion", "discussion"]);
   const validRepository = (value) => typeof value === "string" && REPOSITORY.test(value) &&
     value.split("/").every((part) => part !== "." && part !== "..");
@@ -69,21 +73,28 @@ const KiCadGitHubReviewApi = (() => {
   }
   const safeFlow = (pending) => ({ userCode: pending.userCode,
     verificationUrl: "https://github.com/login/device", expiresAt: pending.expiresAt,
-    retryAfterMs: Math.max(0, pending.nextPollAt - Date.now()), intervalSeconds: pending.intervalSeconds });
+    retryAfterMs: Math.max(0, pending.nextPollAt - Date.now()), intervalSeconds: pending.intervalSeconds,
+    scope: pending.scope || "public_repo" });
   async function deviceStatus() {
-    const clientId = (await chrome.storage.local.get(CLIENT_ID_KEY))[CLIENT_ID_KEY] || "";
+    const customClientId = (await chrome.storage.local.get(CLIENT_ID_KEY))[CLIENT_ID_KEY] || "";
+    const clientId = customClientId || RELEASE_OAUTH_CLIENT_ID;
+    const configuration = { clientId, customClientId, releaseConfigured: Boolean(RELEASE_OAUTH_CLIENT_ID) };
     const pending = (await chrome.storage.session.get(DEVICE_KEY))[DEVICE_KEY];
     if (pending && Date.now() >= pending.expiresAt) {
       await chrome.storage.session.remove(DEVICE_KEY);
-      return { clientId, active: false, expired: true };
+      return { ...configuration, active: false, expired: true };
     }
-    return { clientId, active: Boolean(pending), ...(pending ? safeFlow(pending) : {}) };
+    return { ...configuration, active: Boolean(pending), ...(pending ? safeFlow(pending) : {}) };
   }
-  async function startDevice(value) {
-    if (typeof value !== "string" || !CLIENT_ID.test(value)) throw fail("Enter the registered GitHub OAuth App client ID.", true);
+  async function startDevice(value = "", scope = "public_repo") {
+    if (!DEVICE_SCOPES.has(scope)) throw fail("Choose public repositories or public and private repositories.", true);
+    if (typeof value !== "string") throw fail("Invalid GitHub OAuth App configuration.", true);
+    value = value.trim() || RELEASE_OAUTH_CLIENT_ID;
+    if (!value) throw fail("GitHub sign-in is not configured in this build. The publisher must register an OAuth App with Device Flow enabled. Local review and GitHub draft links still work; advanced setup is available below.", true);
+    if (!CLIENT_ID.test(value)) throw fail("Enter the registered GitHub OAuth App client ID.", true);
     const current = await deviceStatus();
     if (current.active) throw fail("A GitHub sign-in is already in progress. Cancel it before starting another.", true);
-    const data = await deviceHttp("/login/device/code", { client_id: value, scope: "public_repo" });
+    const data = await deviceHttp("/login/device/code", { client_id: value, scope });
     if (data.error) throw fail("GitHub rejected the OAuth App client ID or device flow is disabled.", true);
     if (typeof data.device_code !== "string" || !/^[A-Za-z0-9_-]{20,200}$/.test(data.device_code) ||
         typeof data.user_code !== "string" || !/^[A-Z0-9-]{4,30}$/.test(data.user_code) ||
@@ -93,7 +104,7 @@ const KiCadGitHubReviewApi = (() => {
       throw fail("GitHub returned an invalid device authorization response.", true);
     }
     const now = Date.now();
-    const pending = { clientId: value, deviceCode: data.device_code, userCode: data.user_code,
+    const pending = { clientId: value, scope, deviceCode: data.device_code, userCode: data.user_code,
       expiresAt: now + data.expires_in * 1000, intervalSeconds: Math.max(5, data.interval),
       nextPollAt: now + Math.max(5, data.interval) * 1000,
       nonce: crypto.randomUUID() };
@@ -134,10 +145,12 @@ const KiCadGitHubReviewApi = (() => {
       return { state: "expired" };
     }
     if (data.access_token) {
-      if (data.token_type?.toLowerCase() !== "bearer" || typeof data.scope !== "string" ||
-          !data.scope.split(/[\s,]+/).includes("public_repo")) {
+      const granted = typeof data.scope === "string" ? data.scope.split(/[\s,]+/) : [];
+      const requested = pending.scope || "public_repo";
+      if (data.token_type?.toLowerCase() !== "bearer" ||
+          !(requested === "repo" ? granted.includes("repo") : granted.includes("public_repo") || granted.includes("repo"))) {
         await chrome.storage.session.remove(DEVICE_KEY);
-        throw fail("GitHub did not grant public repository access. Start sign-in again and approve that scope.", true);
+        throw fail(`GitHub did not grant ${requested === "repo" ? "private" : "public"} repository access. Start sign-in again and approve that scope.`, true);
       }
       await setToken(data.access_token);
       if (Number.isInteger(data.expires_in) && data.expires_in > 0) {

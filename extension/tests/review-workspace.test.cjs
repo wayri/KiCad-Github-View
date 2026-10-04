@@ -306,9 +306,12 @@ test('root navigation resolves an initially opened child and rejects reused-pare
 });
 
 test('GitLab viewer isolates local anchors and hides GitHub account/publication tools',async()=>{
- const calls=[];const view=workspaceRuntime(async message=>{calls.push(message);return [];},{provider:'gitlab',repository:'group/sub/design'});view.load();await new Promise(resolve=>setImmediate(resolve));
+ let notes=[];const calls=[];const view=workspaceRuntime(async message=>{calls.push(message);if(message.type==='comment-save'){notes=[message.comment];return message.comment;}if(message.type==='comment-list')return notes;return [];},{provider:'gitlab',repository:'group/sub/design'});view.load();await new Promise(resolve=>setImmediate(resolve));
  assert.equal(view.get('reviewSettings').hidden,true);assert.equal(view.get('refreshGitHub').hidden,true);assert.match(view.get('commentPolicyStatus').textContent,/GitLab.*browser/);
  view.get('newComment').click();view.get('commentText').value='Check layout';await view.get('saveComment').click();
+ assert.match(view.get('commentAnchor').textContent,/^Local review:/);
+ assert.match(view.get('commentList').textContent,/Local review/);
+ assert.doesNotMatch(view.get('commentList').textContent,/Unassigned type|Publish to GitHub/);
  const saved=calls.find(message=>message.type==='comment-save');assert.equal(saved.provider,'gitlab');assert.equal(saved.comment.anchor.provider,'gitlab');assert.equal(saved.comment.anchor.repository,'group/sub/design');
  assert.equal(calls.some(message=>message.type.startsWith('github-')||message.type==='comment-policy-status'),false);
 });

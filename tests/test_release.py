@@ -13,6 +13,21 @@ spec.loader.exec_module(release)
 
 
 class ReleaseTests(unittest.TestCase):
+    def test_guides_archive_retains_relative_image_paths_and_is_deterministic(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            (root / 'docs/images').mkdir(parents=True)
+            (root / 'docs/using-github-integration').mkdir()
+            (root / 'README.md').write_text('Guide index')
+            (root / 'docs/using-github-integration/README.md').write_text('![Example](../images/example.jpg)')
+            (root / 'docs/images/example.jpg').write_bytes(b'fixture pixels')
+            first = release.package_guides(root / 'first.zip', root)
+            second = release.package_guides(root / 'second.zip', root)
+            self.assertEqual(first.read_bytes(), second.read_bytes())
+            with zipfile.ZipFile(first) as archive:
+                self.assertEqual(archive.read('docs/images/example.jpg'), b'fixture pixels')
+                self.assertIn('docs/using-github-integration/README.md', archive.namelist())
+
     def test_tag_binding_and_dirty_checkout_rejection(self):
         with tempfile.TemporaryDirectory() as folder:
             root = Path(folder)

@@ -50,7 +50,7 @@ async function githubResponse(url, headers = {}) {
 
 async function githubJson(url) {
   const response = await githubResponse(url, { Accept: "application/vnd.github+json" });
-  if (!response) throw new Error("GitHub resource was not found.");
+  if (!response) throw new Error("GitHub returned HTTP 404: this resource may be missing or your extension account may lack private repository access. GitHub website sign-in does not sign the extension in. Check the path/revision and connect a token with access to this repository in extension settings.");
   return response.json();
 }
 
@@ -133,7 +133,7 @@ async function revisionJson(url){
   const configured=(await KiCadGitHubReviewApi.tokenStatus()).configured;
   const token=configured?(await chrome.storage.session.get('github-review-token'))['github-review-token']:null;
   const response=await githubResponse(url,{Accept:'application/vnd.github+json',...(token?{Authorization:`Bearer ${token}`}:{})});
-  if(!response)throw new Error('GitHub revision was not found.');
+  if(!response)throw new Error('GitHub revision was not found (HTTP 404), or your extension account lacks private repository access. Check the exact revision and sign in with private repository access in extension settings.');
   if(Number(response.headers.get('content-length'))>1024*1024)throw new Error('Revision response exceeds 1 MiB.');
   const text=await response.text();if(new TextEncoder().encode(text).byteLength>1024*1024)throw new Error('Revision response exceeds 1 MiB.');
   return {value:JSON.parse(text),next:/rel="next"/.test(response.headers.get('link')||'')};
@@ -260,10 +260,10 @@ async function githubAsset(repository, ref, file) {
   const timeout = setTimeout(() => controller.abort(), 30000);
   let response;
   try {
-    response = await fetch(url, { headers: { Accept: "application/vnd.github.raw+json",
-      "X-GitHub-Api-Version": "2022-11-28" }, credentials: "omit", cache: "no-store",
+    response = await fetch(url, { headers: await githubReadHeaders({ Accept: "application/vnd.github.raw+json" }), credentials: "omit", cache: "no-store",
     redirect: "error", signal: controller.signal });
-    if (!response.ok) throw new Error(`GitHub 3D model retrieval returned HTTP ${response.status}.`);
+    if (response.status === 404) throw new Error("GitHub 3D model retrieval returned HTTP 404: the model may be absent or your extension account lacks access to this private repository. Check the saved model path and token repository permissions.");
+    if (!response.ok) throw githubReadError(response);
     const jsonBody = response.headers.get("content-type")?.includes("json");
     const responseLimit = jsonBody ? 12 * 1024 * 1024 : ASSET_MAX_BYTES;
     if (Number(response.headers.get("content-length")) > responseLimit) {
@@ -747,7 +747,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         return KiCadGitHubReviewApi.deviceStatus();
       case "github-device-start":
         if (!optionsSender(sender)) throw new Error("Only extension options can start GitHub sign-in.");
-        return KiCadGitHubReviewApi.startDevice(message.clientId);
+        return KiCadGitHubReviewApi.startDevice(message.clientId, message.scope);
       case "github-device-poll":
         if (!optionsSender(sender)) throw new Error("Only extension options can poll GitHub sign-in.");
         return KiCadGitHubReviewApi.pollDevice();

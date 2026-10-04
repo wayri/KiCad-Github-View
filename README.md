@@ -11,7 +11,9 @@
 
 **Interactive KiCad review inside GitHub and public GitLab.com file pages.** Open schematics and PCB layouts as drawings, inspect saved parts and nets, compare revisions, and anchor review notes to the design. The viewer runs in the browser with our own schematic/PCB engine and the owner-authorized SPIKE 3D adapter. No KiCad installation, local companion process or rendering server is needed for the browser extension.
 
-[Download v0.11.6](https://github.com/wayri/KiCad-Github-View/releases/tag/v0.11.6) · [Install](docs/INSTALL.md) · [Comment integration](docs/COMMENTS.md) · [Git services](docs/GIT-HOSTS.md) · [Release notes](docs/releases/v0.11.6.md)
+[Download v0.11.7](https://github.com/wayri/KiCad-Github-View/releases/tag/v0.11.7) · [Install](docs/INSTALL.md) · [Comment integration](docs/COMMENTS.md) · [Git services](docs/GIT-HOSTS.md) · [Release notes](docs/releases/v0.11.7.md)
+
+Illustrated walkthroughs: [Using GitHub integration](docs/using-github-integration/README.md) · [Using GitLab integration](docs/using-gitlab-integration/README.md). Browser packages: [Firefox](docs/FIREFOX.md) · [Safari](docs/SAFARI.md).
 
 **Status: preview release.** Source designs are read-only: no routing, schematic editing or automatic design changes. This project is not affiliated with KiCad, GitHub or GitLab. Browser-store and VS Code Marketplace listings are not published. Public repository previews are supported; browser access to private repositories is not implemented. See the limitations below before relying on a view for engineering review.
 
@@ -67,7 +69,7 @@ Properties and analytics come from the saved source revision. Missing settings a
 
 ## Install in Chrome or Edge
 
-1. Download **`kicad-visual-review-extension-0.11.6.zip`** from [Releases](https://github.com/wayri/KiCad-Github-View/releases/tag/v0.11.6). The GitHub **Source code** archives are not the prepared extension package.
+1. Download **`kicad-visual-review-extension-0.11.7.zip`** from [Releases](https://github.com/wayri/KiCad-Github-View/releases/tag/v0.11.7). The GitHub **Source code** archives are not the prepared extension package.
 2. Extract the ZIP into a permanent folder. Select the folder containing `manifest.json`, not the ZIP itself.
 3. Open `chrome://extensions` in Chrome/Chromium or `edge://extensions` in Edge.
 4. Enable **Developer mode**, select **Load unpacked**, and choose that folder.
@@ -87,13 +89,13 @@ See [the full installation guide](docs/INSTALL.md) for Brave, other Chromium bro
 | Desktop Microsoft Edge | Same Chromium package and Load unpacked workflow; separate installed-browser acceptance remains necessary |
 | Desktop Brave | Chromium candidate using the same package; not independently verified |
 | Other desktop Chromium browsers, including Opera/Vivaldi | May load the same package if their extension manager supports Manifest V3 and required APIs; browser-specific smoke testing is pending |
-| Firefox | No Firefox package yet; requires a background-runtime port and API/storage/file-access validation |
-| Safari | No Safari extension package or signing/distribution integration yet |
+| Firefox 128+ | Unsigned development ZIP with event-page runtime; temporary installation, installed-browser acceptance pending |
+| Safari 16.4+ on macOS | Development payload and Apple conversion helper; Mac build, signing and installed-browser acceptance pending |
 | Mobile browsers | Not supported by this release |
 | VS Code Desktop | Separate VSIX using the shared read-only viewer |
 | github.dev / VS Code web hosts | Web entry point exists; actual hosted installation and filesystem behavior need separate validation |
 
-The Chromium ZIP is not advertised as a Firefox or Safari add-on. Firefox uses different background requirements; see [Mozilla's background manifest reference](https://developer.mozilla.org/en-US/docs/Mozilla/Add-ons/WebExtensions/manifest.json/background). Browser rendering fixtures and transport tests are not proof of acceptance in every installed browser.
+Use each browser's dedicated package: [Firefox installation](docs/FIREFOX.md) and [Safari conversion and installation](docs/SAFARI.md). Firefox offers static repository HTML; Safari disables that preview. Interactive iBOM remains a Chromium feature. Firefox and Safari use review JSON import/export instead of automatic selected-file writes. These development packages are not signed store releases; packaging tests do not establish installed-browser acceptance.
 
 ## Git service compatibility
 
@@ -134,7 +136,7 @@ There are two separate review records: a **Git-trackable local annotation file**
 
 1. In **Review**, create a part note, click a point or draw an area. Set text, severity, tags, mentions and state. Save the note.
 2. Without a connected file, the browser keeps notes in device storage. In extension settings, connect/create **`.kicad-review.json`** inside a local checkout to use it as the review store. Stage, commit and push that file with normal Git tools. Existing browser notes need explicit export/import when changing stores.
-3. For remote publication, open **GitHub sign-in and review file**. Use a personal access token or configure a registered OAuth App client ID with Device Flow enabled. No production OAuth client ID is bundled. Tokens stay in browser session storage and are excluded from review JSON.
+3. For remote publication, open **Account and review-file settings** and choose **Sign in with GitHub**. Advanced token/client-ID fields are collapsed. The publisher still needs to register and configure the OAuth App before this build's sign-in works; see [sign-in setup](docs/GITHUB-SIGNIN.md). Tokens stay in browser session storage and are excluded from review JSON. Private file reads require an authorized extension account/token; private remote publication and private PR comparison are unavailable.
 4. Choose a new/existing issue, new/existing discussion, or the current PR; for a new discussion, select a category. Click **Publish to GitHub** on the saved note. A successful request records the remote URL in the note. **Open GitHub composer** prepares a manual post without submitting it.
 5. Public issue/PR readback recognizes the extension's validated annotation markers for the matching repository, revision and drawing. Discussion readback and automatic two-way state synchronization are not implemented.
 
@@ -146,10 +148,10 @@ Read [the complete comment guide](docs/COMMENTS.md) for authentication, permissi
 
 ## VS Code installation
 
-Download **`kicad-visual-review-vscode-0.11.6.vsix`** from Releases. In VS Code run **Extensions: Install from VSIX**, select the file and run **Developer: Reload Window**. Open a KiCad project folder and use **KiCad: Open Visual Viewer** or **Reopen Editor With → KiCad Visual Review**. The **KiCad Review** explorer lists saved drawings and review sidecars.
+Download **`kicad-visual-review-vscode-0.11.7.vsix`** from Releases. In VS Code run **Extensions: Install from VSIX**, select the file and run **Developer: Reload Window**. Open a KiCad project folder and use **KiCad: Open Visual Viewer** or **Reopen Editor With → KiCad Visual Review**. The **KiCad Review** explorer lists saved drawings and review sidecars.
 
 ```sh
-code --install-extension kicad-visual-review-vscode-0.11.6.vsix --force
+code --install-extension kicad-visual-review-vscode-0.11.7.vsix --force
 ```
 
 Local notes use `.kicad-review.json` in the workspace root (or drawing directory outside a workspace). Filesystem-provider permissions still apply. The VSIX is not currently published in Visual Studio Marketplace. See [the VS Code guide](vscode-extension/README.md).
