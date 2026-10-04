@@ -6,7 +6,7 @@ The screenshots below show the real viewer UI in a local harness with mocked rep
 
 ## Open and inspect a drawing
 
-Install and enable a supported browser build as described in [INSTALL.md](../INSTALL.md), grant it access to `github.com`, and open a public repository file ending in `.kicad_sch` or `.kicad_pcb`. The viewer renders the saved file in a read-only drawing canvas. A personal access token with repository access can also authorize file and metadata reads for a private repository. Private pull-request comparison and private-repository annotation readback are not supported. Use **Show source** to return to the file text and **Open full viewer** or **Pop out** when you need more space.
+Install and enable a supported browser build as described in [INSTALL.md](../INSTALL.md), grant it access to `github.com`, and open a public repository file ending in `.kicad_sch` or `.kicad_pcb`. The viewer renders the saved file in a read-only drawing canvas. A personal access token with repository access can also authorize file and metadata reads for a private repository. Authorized private annotation readback is supported; private pull-request comparison is not supported. Use **Show source** to return to the file text and **Open full viewer** or **Pop out** when you need more space.
 
 Use **Explorer** to move among loaded schematic sheets, parts, nets, layers, search results, BOM, and saved ERC/DRC reports. Search can filter design objects and project files; selecting a result locates it in the drawing. Select a footprint or symbol to view its saved properties in **Inspect**. For PCBs, highlight nets or net classes, change visible layers, and use the connection controls to step through connected objects. The renderer displays saved data; it does not edit the KiCad source or run native ERC/DRC checks.
 
@@ -63,7 +63,7 @@ The comment form now includes **Thread type**, **Destination**, **Thread title**
 
 **Preview GitHub Markdown** shows the formatted review text and design-context table before transmission. Posted fields include severity, state, source revision/file link, object or area, tags, mentions and times. A successful request records the returned GitHub thread link. Failed publication leaves an editable draft; no automatic retry is made. This screenshot uses mocked repository/category data and does not show a live publication.
 
-Authorized private Issue/Discussion publication is supported when the connected account has write permission and Contents read access for policy verification. Private annotation readback and private PR comparison remain unavailable.
+Authorized private Issue/Discussion publication is supported when the connected account has write permission and Contents read access for policy verification. Authorized private annotation readback is supported; private PR comparison remains unavailable.
 
 ## Choose an Issue or Discussion
 
@@ -91,7 +91,11 @@ This screenshot shows a saved draft and the available actions in the mocked view
 
 ## Read existing annotations
 
-Choose **Load GitHub annotations** in the GitHub tab to scan public issue and pull-request bodies. The extension matches only valid `kicad-review:v1` annotations for the exact repository, revision, and file. It scans at most 200 recent issues/pull requests and up to 100 comments on a selected thread. Annotation readback uses GitHub's unauthenticated public API; API limits or older threads can make results incomplete. Discussion readback and ordinary unmarked GitHub messages are not supported; the full conversation remains on GitHub. See [the detailed integration notes](../COMMENTS.md#reading-existing-github-annotations).
+In **Comments / View comments / GitHub collaboration**, choose **Issue / Existing issue** or **Discussion / Existing discussion**, enter the number, then **Load GitHub annotations**. Connected-account reads support authorized private repositories. Public Issue/PR reads work anonymously; Discussions require sign-in. Only valid markers for this exact repository, revision and drawing become cards. Selected Issues/PRs read their body and up to 500 comments; Discussions read up to 500 source records across 20 requests. Unselected scans read only 200 recent Issue/PR bodies. Cards show remote authors and times; **Reply** makes a fresh anchored draft for the same thread. Enter text and **Post to GitHub**, then refresh to see other reviewers' notes. Ordinary messages and automatic state synchronization remain outside the viewer. See [integration notes](../COMMENTS.md#reading-existing-github-annotations).
+
+![Reply draft retaining the drawing anchor and existing Discussion number](../images/discussion-reply-draft.png)
+
+This screenshot uses the real comment editor with a synthetic remote annotation and mocked provider transport. It shows a blank Reply draft targeting Discussion #17; no remote post was made.
 
 ## Other Git providers and editors
 

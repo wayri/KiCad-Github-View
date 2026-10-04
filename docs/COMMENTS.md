@@ -48,9 +48,15 @@ The state shown on a note is local review metadata. Marking a note resolved or s
 
 ## Reading existing GitHub annotations
 
-For public repositories, **Refresh from GitHub** reads issue and pull-request bodies and comments through GitHub's unauthenticated public REST API. It scans up to 200 recent issues and pull requests, and up to 100 comments on the selected issue or pull request. It imports only bodies with a valid `kicad-review:v1` marker whose repository, revision, and file match the open drawing. Older threads, excess comments, malformed markers, and API rate limits can limit results; the viewer reports truncation or API warnings. A selected issue or pull request can be fetched separately when it falls outside the recent-thread scan.
+**Load GitHub annotations** uses the connected account when available, including for authorized private repositories. Public Issue/PR reads use the anonymous REST API when signed out. Only valid markers matching the exact repository, revision and drawing become cards; ordinary messages remain on GitHub.
 
-Discussion readback is not implemented. Ordinary GitHub comments without the extension's marker are not converted into KiCad annotations. Readback does not merge remote edits or state changes into existing local notes. To discuss an imported note, open its linked GitHub thread. GitHub's public API limits apply.
+Select **Issue / Existing issue** and its number to read the body and up to 500 comments. Selected PRs use their body and Issue-comment conversation. Without a selected thread, refresh scans at most 200 recent Issue/PR bodies, without fetching every conversation.
+
+For Discussions, sign in, choose **Discussion / Existing discussion**, enter its number and **Load GitHub annotations**. Authenticated GraphQL reads marked body, comments and replies, bounded to 500 source records and 20 requests. Warnings describe truncation, invalid data and API limits.
+
+Cards show actual GitHub authors, posting/editing times and canonical links. **Reply** creates a fresh draft at the same anchor and selects the existing thread; enter text and **Post to GitHub** explicitly. Successful posts select their confirmed thread for subsequent refresh. Multiple reviewers can append posts and refresh them. Discussion replies from this viewer append to the conversation, rather than nesting under an individual reply.
+
+Readback holds one account identity through pagination. Sign-out, account changes or credential expiry abort it. It does not synchronize remote state or edits into existing local notes, close issues or replace GitHub conversations and notifications. Private PR revision comparison remains unavailable.
 
 ## GitLab and VS Code
 
@@ -71,4 +77,4 @@ The note editor has a **Post to GitHub** section. Select Issue or Discussion, ne
 
 Posted Markdown contains review text and a design-context table with severity/state, Issue/Discussion type, component or net, point/area, repository, revision/file permalink, variant, identifiers, tags, mentions and UTC times. The validated hidden annotation marker remains available for supported readback. PNG data is excluded from the API body.
 
-Authorized private repositories can receive Issue/Discussion posts. The connected account must have the relevant write permission and Contents read permission for policy verification. Private policy requests are authenticated on GitHub's API. A private policy 404 is treated as absence only after a complete authenticated root listing verifies that no policy file exists. Unverifiable access or policy blocks the post. Public policies retain anonymous verification. Private annotation readback and private PR comparison remain unavailable.
+Authorized private repositories can receive Issue/Discussion posts. The connected account must have the relevant write permission and Contents read permission for policy verification. Private policy requests are authenticated on GitHub's API. A private policy 404 is treated as absence only after a complete authenticated root listing verifies that no policy file exists. Unverifiable access or policy blocks the post. Public policies retain anonymous verification. Authorized private annotation readback is supported; private PR comparison remains unavailable.

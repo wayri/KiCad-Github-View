@@ -132,3 +132,11 @@ body .object-row.selected{background:var(--selected);color:var(--text);border:1p
 #companionChooser{display:flex;flex-wrap:wrap;gap:6px;align-items:center;padding:7px;border-bottom:1px solid var(--line);background:var(--panel);font-size:11px}#companionChooser select{width:min(390px,100%)}
 .review-footer{min-height:24px;padding:3px 8px}.shortcut-help{padding:3px 8px}.diagnostics summary{padding:3px 8px}
 @media(max-width:720px){.drawing-title .mode-badge,.drawing-title .ref-badge{display:none}.top-sheet-navigation #sheetSelect{width:125px}.review-footer .hint{display:none}}
+
+/* Avoid a full-height scrollbar row in narrow split toolbars. */
+#frameControls{scrollbar-width:thin}
+#frameControls::-webkit-scrollbar{height:4px}
+#frameControls::-webkit-scrollbar-thumb{background:var(--line);border-radius:3px}
+@media(max-width:1000px){.tool-group .button-label{display:none}.tool-group button{min-width:26px}.drawing-title .mode-badge,.drawing-title .ref-badge{display:none}}
+
+@media(max-width:1000px){#frameControls .drawing-title{display:none}.frame-actions{min-width:0;flex-shrink:0;overflow:visible}}

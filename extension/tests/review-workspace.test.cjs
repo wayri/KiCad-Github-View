@@ -39,7 +39,7 @@ function workspaceRuntime(respond=async()=>[], hooks={}){
     insertBefore(child,reference){child.remove();child.parentElement=this;const index=this.children.indexOf(reference);if(index<0)this.children.push(child);else this.children.splice(index,0,child);}
     setAttribute(k,v){this.attributes[k]=String(v);if(k==='id')this.id=v;if(k==='class')this.className=v;}matches(selector){return selector.startsWith('.')?this.classes.has(selector.slice(1)):selector.startsWith('#')?this.id===selector.slice(1):this.tagName.toLowerCase()===selector.split('.')[0]&&(!selector.includes('.')||this.classes.has(selector.split('.')[1]));}
     closest(selector){for(let node=this;node;node=node.parentElement)if(node.matches(selector))return node;return null;}querySelector(selector){for(const child of this.children){if(child.matches(selector))return child;const nested=child.querySelector(selector);if(nested)return nested;}return null;}
-    contains(node){return node===this||this.children.some(child=>child.contains(node));}focus(){this.focused=true;}click(){return this.onclick?.();}getBoundingClientRect(){return{left:0,top:0,width:hooks.width||800,height:600};}
+    contains(node){return node===this||this.children.some(child=>child.contains(node));}focus(){this.focused=true;}click(){return this.onclick?.();}getBoundingClientRect(){return{left:0,top:0,width:hooks.width||800,height:this.id==='reviewWorkspace'?(hooks.workspaceHeight||600):(hooks.frameHeight||600)};}
   }
   const get=id=>{if(!elements.has(id)){const element=new Element();element.id=id;}return elements.get(id);};
   // Retain the shared HTML's ownership hierarchy so moving panes is exercised.
@@ -104,6 +104,17 @@ test('narrow and resized paired panes show the active sidebar without losing ope
  view.get('propertiesButton').click();assert.equal(view.get('commentsSidebar').hidden,true);assert.equal(view.get('designInspector').hidden,false);
  view.resize(1600);assert.equal(view.get('commentsSidebar').hidden,false);assert.equal(view.get('designInspector').hidden,false);
  view.resize(350);assert.equal(view.get('panelSpaceStatus').hidden,false);
+});
+test('short split views preserve the drawing budget and switch panels instead of crushing them',()=>{
+ const view=workspaceRuntime(undefined,{width:1600,frameHeight:500,workspaceHeight:440});
+ view.get('partsButton').click();view.get('propertiesButton').click();view.get('commentsButton').click();
+ assert.equal(view.get('designInspector').hidden,true);assert.equal(view.get('designNavigator').hidden,true);assert.equal(view.get('commentsSidebar').hidden,false);
+ const area=1600*440-parseFloat(view.get('commentsSidebar').style.width)*parseFloat(view.get('commentsSidebar').style.height);
+ assert.ok(area/(1600*500)>=.86-1e-6,'unobscured drawing is at least 86% of the full frame');
+ view.get('propertiesButton').click();assert.equal(view.get('designInspector').hidden,false);assert.equal(view.get('commentsSidebar').hidden,true);
+ view.resize(350);
+ const smallArea=350*440-Math.min(318,parseFloat(view.get('designInspector').style.width))*parseFloat(view.get('designInspector').style.height);
+ assert.ok(smallArea/(350*500)>=.86-1e-6,'no minimum panel height silently breaks the budget');
 });
 test('switching comment subtabs and collapsing a sidebar preserve an unsaved draft and never publish',async()=>{
  const calls=[];const view=workspaceRuntime(async message=>{calls.push(message);return[];},{width:1600});view.load();view.get('newComment').click();view.get('commentText').value='Unsaved review';
@@ -421,7 +432,7 @@ test('all shared viewers contain exactly one collaboration control and a distinc
  for(const file of ['pcb-viewer.html','schematic-viewer.html','revision-viewer.html']){
   const html=fs.readFileSync(path.join(__dirname,'..',file),'utf8');
   for(const id of ['showGitHub','githubPane','githubCommentType','commentDestination','reviewSettings','refreshCommentPolicy','refreshGitHub','severityFilter'])assert.equal((html.match(new RegExp(`id="${id}"`,'g'))||[]).length,1,`${file}: ${id}`);
-  assert.match(html,/<section id="githubPane" hidden>/);assert.match(html,/Comment type <select id="githubCommentType">/);assert.match(html,/Post to GitHub uploads a captured screenshot/);assert.match(html,/Full conversation history/);
+  assert.match(html,/<section id="githubPane" hidden>/);assert.match(html,/Comment type <select id="githubCommentType">/);assert.match(html,/Post to GitHub uploads a captured screenshot/);assert.match(html,/Use Reply to start a new anchored draft/);assert.match(html,/Ordinary messages, subscriptions and closing issues remain on GitHub/);
  }
 });
 
@@ -482,6 +493,19 @@ test('GitLab direct publication saves confirmed issue links and discussions targ
 });
 test('GitLab annotations readback and settings retain exact provider host and no GitHub category lookup',async()=>{
  const calls=[];const view=workspaceRuntime(async m=>{calls.push(m);if(m.type==='comment-remote-list')return{notes:[],warnings:['Only marked review notes are included.']};return[];},{provider:'gitlab',host:'https://gitlab.example.com',repository:'group/project'});await view.get('refreshGitHub').click();await view.get('reviewSettings').click();assert.equal(calls.find(m=>m.type==='comment-remote-list').host,'https://gitlab.example.com');assert.equal(calls.find(m=>m.type==='open-options').provider,'gitlab');assert.match(view.get('commentStatus').textContent,/Loaded 0 GitLab annotations/);view.get('githubCommentType').value='discussion';view.get('githubCommentType').onchange();assert.equal(view.get('loadCategories').hidden,true);assert.deepEqual(Array.from(view.get('commentDestination').children,e=>e.value),['existing-issue']);
+});
+
+test('existing Discussion readback forwards the selected thread number without an Issue lookup',async()=>{
+ const calls=[];const view=workspaceRuntime(async m=>{calls.push(m);if(m.type==='github-annotations')return{notes:[],warnings:[]};return[];});
+ view.get('githubCommentType').value='discussion';view.get('githubCommentType').onchange();view.get('commentDestination').value='existing-discussion';view.get('threadNumber').value='17';await view.get('refreshGitHub').click();
+ const request=calls.find(m=>m.type==='github-annotations');assert.equal(request.discussionNumber,17);assert.equal(request.issueNumber,undefined);assert.equal(request.includeDiscussions,true);
+});
+
+test('Reply to a remote annotation retains its drawing anchor and selects the existing thread without posting',async()=>{
+ const calls=[],note={id:'remote-note',text:'Review this part',createdAt:'2026-10-04T00:00:00Z',severity:'major',threadType:'discussion',anchor:{repository:'wayri/fixture',ref:'main',file:'board.kicad_pcb',position:{x:3,y:4}},github:{source:'discussion-comment',number:17,state:'open',author:'alice',url:'https://github.com/wayri/fixture/discussions/17#discussioncomment-1',createdAt:'2026-10-04T01:00:00Z',updatedAt:'2026-10-04T02:00:00Z'}};
+ const view=workspaceRuntime(async m=>{calls.push(m);if(m.type==='github-annotations')return{notes:[note],warnings:[]};return[];});await view.get('refreshGitHub').click();
+ const elements=node=>[node,...node.children.flatMap(elements)];elements(view.get('commentList')).find(node=>node.tagName==='BUTTON'&&node.textContent==='Reply').click();
+ assert.equal(view.get('editorDestination').value,'existing-discussion');assert.equal(view.get('editorThreadNumber').value,'17');assert.equal(view.get('commentText').value,'');assert.match(view.get('commentAnchor').textContent,/3.00, 4.00/);assert.equal(calls.some(m=>m.type==='github-publish-comment'),false);
 });
 
 test('net review drafts preserve the selected saved net name in formatted GitHub context',async()=>{

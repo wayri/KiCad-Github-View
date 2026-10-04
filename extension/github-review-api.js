@@ -353,6 +353,149 @@ const KiCadGitHubReviewApi = (() => {
   }
   async function categories(repository) { return (await categoryBundle(repository)).categories; }
 
+  // Readback keeps one account identity for the entire paginated operation.
+  async function readbackSession(optional = false) {
+    await authOperation(async () => {});
+    const epoch = authEpoch;
+    const credential = await authOperation(readCredential);
+    const token = credential?.token;
+    if (!optional && !token) throw fail("Sign in to GitHub to read Discussion review comments.", true);
+    const check = async () => {
+      if (epoch !== authEpoch) throw fail("GitHub account changed or signed out. Refresh review comments.", true);
+      if (token) await assertCurrentToken(token, epoch);
+    };
+    await check();
+    return { token, epoch, check };
+  }
+  async function readbackJson(url, session, body) {
+    await session.check();
+    const controller = new AbortController(), timeout = setTimeout(() => controller.abort(), 30000);
+    try {
+      const response = await fetch(url, { method: body === undefined ? "GET" : "POST",
+        headers: { Accept: "application/vnd.github+json", "X-GitHub-Api-Version": "2022-11-28",
+          ...(body === undefined ? {} : { "Content-Type": "application/json" }),
+          ...(session.token ? { Authorization: `Bearer ${session.token}` } : {}) },
+        ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+        credentials: "omit", cache: "no-store", redirect: "error", signal: controller.signal });
+      await session.check();
+      if (response.status === 429 || response.status === 403 && response.headers.get('x-ratelimit-remaining') === '0') throw fail("GitHub API rate limit reached. Wait before refreshing review comments.", true);
+      if (!response.ok) throw fail(`GitHub review readback returned HTTP ${response.status}. Check repository and account access.`, true);
+      if (Number(response.headers.get("content-length")) > 4 * 1024 * 1024) throw fail("GitHub review response exceeds the 4 MiB limit.", true);
+      if (!response.body?.getReader) throw fail("GitHub review response cannot be read safely.", true);
+      const reader = response.body.getReader(), chunks = []; let length = 0;
+      try {
+        for (;;) {
+          const { done, value } = await reader.read();
+          await session.check();
+          if (done) break;
+          length += value.byteLength;
+          if (length > 4 * 1024 * 1024) throw fail("GitHub review response exceeds the 4 MiB limit.", true);
+          chunks.push(value);
+        }
+      } catch (error) { await reader.cancel().catch(() => {}); throw error; }
+      const bytes = new Uint8Array(length); let offset = 0;
+      for (const chunk of chunks) { bytes.set(chunk, offset); offset += chunk.byteLength; }
+      const result = JSON.parse(new TextDecoder().decode(bytes));
+      await session.check();
+      if (Array.isArray(result?.errors) && result.errors.length) throw fail("GitHub denied or could not complete Discussion readback.", true);
+      return result;
+    } catch (error) {
+      if (error.definitive) throw error;
+      throw fail("GitHub review comments could not be read. Try refreshing later.", true);
+    } finally { clearTimeout(timeout); }
+  }
+  async function createAnnotationReader() {
+    const session = await readbackSession(true);
+    return async path => {
+      if (typeof path !== "string" || !/^\/repos\/[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+\/issues(?:\/[1-9]\d*(?:\/comments)?)?(?:\?[^#]*)?$/.test(path)) throw fail("Invalid GitHub review readback path.", true);
+      const parts = path.split('?')[0].split('/'), url = new URL(API + path);
+      if (!validRepository(`${parts[2]}/${parts[3]}`) || (parts[5] && !NUMBER(Number(parts[5])))) throw fail("Invalid GitHub review readback path.", true);
+      const seen = new Set();
+      for (const [key, value] of url.searchParams) {
+        if (seen.has(key) || !(key === 'state' && ['all','open','closed'].includes(value) || key === 'per_page' && /^(?:[1-9]\d?|100)$/.test(value) || key === 'page' && /^(?:[1-9]|10)$/.test(value))) throw fail("Invalid GitHub review readback query.", true);
+        seen.add(key);
+      }
+      return readbackJson(url.href, session);
+    };
+  }
+  async function readDiscussionAnnotations({ repository, number, scope } = {}) {
+    const [owner, name] = repoParts(repository);
+    if (!NUMBER(number)) throw fail("Invalid GitHub Discussion number.", true);
+    scope = KiCadReviewComments.normalizeScope(scope);
+    if (scope.provider === 'gitlab') throw fail("Invalid GitHub Discussion file scope.", true);
+    const session = await readbackSession(), notes = [], warnings = [], seen = new Set();
+    const warn = message => { if (!warnings.includes(message)) warnings.push(message); };
+    const fields = `id databaseId body createdAt updatedAt author{login}`;
+    const connection = `nodes{${fields} replies(first:10){nodes{${fields}} pageInfo{hasNextPage endCursor}}} pageInfo{hasNextPage endCursor}`;
+    const query = `query($owner:String!,$name:String!,$number:Int!,$cursor:String){repository(owner:$owner,name:$name){discussion(number:$number){number body createdAt updatedAt closed author{login} comments(first:50,after:$cursor){${connection}}}}}`;
+    const replyQuery = `query($id:ID!,$cursor:String){node(id:$id){... on DiscussionComment{replies(first:50,after:$cursor){nodes{${fields}} pageInfo{hasNextPage endCursor}}}}}`;
+    let requests = 0, scanned = 0, cursor = null, discussion, stopped = false;
+    const replies = [], validCursor = value => typeof value === 'string' && value.length > 0 && value.length <= 512 && !/[\x00-\x1f\x7f]/.test(value);
+    const timestamp = value => typeof value === 'string' && /^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d(?:\.\d{1,3})?Z$/.test(value) && Number.isFinite(Date.parse(value));
+    const add = (item, source) => {
+      if (scanned >= 500) { stopped = true; return; }
+      scanned++;
+      if (!item || typeof item.body !== 'string') return;
+      let parsed;
+      try { parsed = KiCadReviewComments.fromMarkdown(item.body); }
+      catch { warn('Some Discussion bodies exceeded the annotation size limit and were omitted.'); return; }
+      if (!parsed.length) return;
+      if (source !== 'discussion' && !NUMBER(item.databaseId) || !timestamp(item.createdAt) || !timestamp(item.updatedAt) || item.author !== null && !LOGIN.test(item.author?.login || '')) {
+        warn('Some Discussion review comments had invalid provenance and were omitted.'); return;
+      }
+      const url = `https://github.com/${repository}/discussions/${number}` + (source === 'discussion' ? '' : `#discussioncomment-${item.databaseId}`);
+      for (const note of parsed) {
+        const anchor = note.anchor;
+        if (anchor.provider === 'gitlab' || anchor.repository.toLowerCase() !== scope.repository.toLowerCase() || anchor.ref !== scope.ref || anchor.file !== scope.file) continue;
+        const key = `${url}:${note.id}`;
+        if (seen.has(key)) continue;
+        if (notes.length >= 500) { stopped = true; break; }
+        seen.add(key);
+        notes.push({ ...note, github: { url, number, state: discussion.closed ? 'closed' : 'open', source,
+          author: item.author?.login || null, createdAt: item.createdAt, updatedAt: item.updatedAt } });
+      }
+    };
+    const pageCursor = (pageInfo, previous) => {
+      if (!pageInfo || typeof pageInfo.hasNextPage !== 'boolean') { warn('Discussion pagination was incomplete; some review comments may be missing.'); return null; }
+      if (!pageInfo.hasNextPage) return null;
+      if (!validCursor(pageInfo.endCursor) || pageInfo.endCursor === previous) { warn('Discussion pagination was invalid; some review comments may be missing.'); return null; }
+      return pageInfo.endCursor;
+    };
+    do {
+      if (requests >= 20 || scanned >= 500 || stopped) break;
+      const result = await readbackJson(API + '/graphql', session, { query, variables: { owner, name, number, cursor } }); requests++;
+      discussion = result.data?.repository?.discussion;
+      if (!discussion || discussion.number !== number || typeof discussion.closed !== 'boolean' || !Array.isArray(discussion.comments?.nodes) || discussion.comments.nodes.length > 50) throw fail("GitHub returned an invalid Discussion response.", true);
+      if (cursor === null) add(discussion, 'discussion');
+      for (const item of discussion.comments.nodes) {
+        if (scanned >= 500 || stopped) { stopped = true; break; }
+        add(item, 'discussion-comment');
+        if (!Array.isArray(item?.replies?.nodes) || item.replies.nodes.length > 10) { warn('Some Discussion replies were unavailable.'); continue; }
+        for (const reply of item.replies.nodes) { add(reply, 'discussion-comment'); if (stopped) break; }
+        const next = pageCursor(item.replies.pageInfo, null);
+        if (next && validId(item.id)) replies.push({ id: item.id, cursor: next, seen: new Set([next]) });
+        else if (next) warn('Some Discussion replies had invalid identifiers and were omitted.');
+      }
+      cursor = pageCursor(discussion.comments.pageInfo, cursor);
+    } while (cursor);
+    for (const task of replies) {
+      do {
+        if (requests >= 20 || scanned >= 500 || stopped) { stopped = true; break; }
+        const result = await readbackJson(API + '/graphql', session, { query: replyQuery, variables: { id: task.id, cursor: task.cursor } }); requests++;
+        const page = result.data?.node?.replies;
+        if (!Array.isArray(page?.nodes) || page.nodes.length > 50) throw fail("GitHub returned an invalid Discussion reply response.", true);
+        for (const reply of page.nodes) { add(reply, 'discussion-comment'); if (stopped) break; }
+        const next = pageCursor(page.pageInfo, task.cursor);
+        if (next && task.seen.has(next)) { warn('Discussion reply pagination repeated; some review comments may be missing.'); break; }
+        task.cursor = next; if (next) task.seen.add(next);
+      } while (task.cursor);
+      if (stopped) break;
+    }
+    if (cursor || stopped || requests >= 20 && replies.some(task => task.cursor)) warn('Discussion readback was truncated at 500 source records or 20 requests. Some review comments may be missing.');
+    await session.check();
+    return { notes, warnings };
+  }
+
   const LOGIN = /^[A-Za-z0-9](?:[A-Za-z0-9-]{0,37}[A-Za-z0-9])?$/;
   const POLICY_MODES = new Set(["all", "contributors", "collaborators", "allowlist"]);
   function validatePolicy(value) {
@@ -690,7 +833,7 @@ const KiCadGitHubReviewApi = (() => {
     }
   }
   return { tokenStatus, setToken, clearToken, resetAuth, authorizationHeaders, deviceStatus, startDevice, pollDevice, cancelDevice,
-    commentPolicyStatus, validatePolicy, categories, publish, publishArgs, validRepository };
+    commentPolicyStatus, validatePolicy, categories, publish, publishArgs, validRepository, createAnnotationReader, readDiscussionAnnotations };
 })();
 
 if (typeof globalThis === "object") globalThis.KiCadGitHubReviewApi = KiCadGitHubReviewApi;

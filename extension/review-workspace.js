@@ -189,21 +189,22 @@
     function layoutSidebars(){
       const width=workspaceElement.getBoundingClientRect().width||root.innerWidth||800;
       const required=Object.keys(sidebarState).reduce((sum,name)=>sum+(sidebarState[name]?sidebarWidths[name]:0),480);
-      const overlay=width<required;workspaceElement.classList.toggle("sidebar-overlays",overlay);
+      const workspaceHeight=workspaceElement.getBoundingClientRect().height||600,frameHeight=document.body?.getBoundingClientRect().height||root.innerHeight||workspaceHeight;
+      // Reserve 86% of the entire viewer for unobscured drawing, including chrome.
+      const totalArea=width*frameHeight,panelBudget=Math.max(0,Math.min(totalArea*.14,width*workspaceHeight-totalArea*.86));
+      const requestedWidth=Object.keys(sidebarState).reduce((sum,name)=>sum+(sidebarState[name]?Math.min(sidebarWidths[name],Math.max(0,width-32)):0),0);
+      // Switch panels rather than squeezing several into unusably short strips.
+      const overlay=width<required||(requestedWidth>0&&panelBudget/requestedWidth<180);workspaceElement.classList.toggle("sidebar-overlays",overlay);
       workspaceElement.classList.toggle("two-sidebars",!overlay&&sidebarState.properties&&sidebarState.comments);workspaceElement.style.setProperty("--comments-sidebar-width",sidebarWidths.comments+"px");
       const visiblePanels=[];
       for(const [name,id,buttonId]of [["properties","designInspector","propertiesButton"],["comments","commentsSidebar","commentsButton"],["navigator","designNavigator","partsButton"]]){
         const visible=sidebarState[name]&&(!overlay||activeSidebar===name);$(id).hidden=!visible;$(buttonId).setAttribute("aria-pressed",String(visible));$(buttonId).setAttribute("aria-expanded",String(visible));
         if(visible)visiblePanels.push({name,panel:$(id)});
       }
-      // Budget obscured area against the whole frame, including toolbar/footer.
-      // Panels scroll independently; small frames retain a usable minimum height.
-      const workspaceHeight=workspaceElement.getBoundingClientRect().height||600,frameHeight=document.body?.getBoundingClientRect().height||root.innerHeight||workspaceHeight;
-      const totalArea=width*frameHeight,panelBudget=Math.max(0,Math.min(totalArea*.18,width*workspaceHeight-totalArea*.82));
       const visibleWidth=visiblePanels.reduce((sum,item)=>sum+Math.min(sidebarWidths[item.name],Math.max(0,width-32)),0);
-      const budgetHeight=visibleWidth?panelBudget/visibleWidth:workspaceHeight,panelHeight=Math.min(workspaceHeight,Math.max(180,budgetHeight));
+      const budgetHeight=visibleWidth?panelBudget/visibleWidth:workspaceHeight,panelHeight=Math.min(workspaceHeight,Math.max(0,budgetHeight));
       for(const {panel}of visiblePanels)panel.style.height=panelHeight+"px";
-      panelSpaceStatus.hidden=!visiblePanels.length||budgetHeight>=Math.min(180,workspaceHeight);panelSpaceStatus.textContent=panelSpaceStatus.hidden?'':'Small view: collapse panels or use Focus view for more drawing space.';
+      panelSpaceStatus.hidden=!visiblePanels.length||budgetHeight>=180;panelSpaceStatus.textContent=panelSpaceStatus.hidden?'':'Small view: enlarge this pane or use Focus view for comfortable panel access.';
       $("commentsPane").hidden=commentsSidebar.hidden;
     }
     function showNavigator(open=true){sidebarState.navigator=open;if(open)activeSidebar="navigator";layoutSidebars();}
@@ -530,7 +531,7 @@
         if(!destination||(destination==="issue"||destination==="discussion")&&(!Number.isSafeInteger(number)||number<=0))throw new Error(`Choose a valid ${providerName} issue or discussion number.`);
         const result=await request(provider==='gitlab'?"comment-publish":"github-publish-comment",{comment:note,destination,repository:options.pullRepository||repository,...(publication?.title?{title:publication.title}:{}),...(provider==='gitlab'&&note.threadType==='discussion'?{discussion:true}:{}),...(number?{number}:{}),...(destination==="new-discussion"?{categoryId:publication?.category||$("discussionCategory").value}:{})});
         const refs=[...(note.remoteRefs||[])];if(!refs.some(ref=>ref.url===result.remoteRef.url))refs.push(result.remoteRef);
-        await request("comment-save",{comment:KiCadReviewComments.validateComment({...note,remoteRefs:refs,...(result.attachments?.length?{attachments:result.attachments}:{}),updatedAt:new Date(Math.max(Date.now(),Date.parse(note.updatedAt||note.createdAt)+1)).toISOString()}),expectedUpdatedAt:note.updatedAt||note.createdAt});await refreshComments();options.onCommentsChanged?.();commentStatus(`Posted to ${providerName} ${result.remoteRef.kind} #${result.remoteRef.number}. The linked conversation is saved below.`);return true;
+        await request("comment-save",{comment:KiCadReviewComments.validateComment({...note,remoteRefs:refs,...(result.attachments?.length?{attachments:result.attachments}:{}),updatedAt:new Date(Math.max(Date.now(),Date.parse(note.updatedAt||note.createdAt)+1)).toISOString()}),expectedUpdatedAt:note.updatedAt||note.createdAt});await refreshComments();options.onCommentsChanged?.();$("githubCommentType").value=provider==="gitlab"?(note.threadType||"issue"):result.remoteRef.kind;chooseCommentType();$("commentDestination").value=provider==="gitlab"||result.remoteRef.kind==="issue"?"existing-issue":"existing-discussion";$("threadNumber").value=String(result.remoteRef.number);destinationChanged();commentStatus(`Posted to ${providerName} ${result.remoteRef.kind} #${result.remoteRef.number}. The linked conversation is saved below.`);return true;
       }catch(error){commentStatus(error.message+` Your draft remains saved. If ${providerName} accepted the post but local saving failed, retry Publish to recover its link.`,true);return false;}finally{action.disabled=false;}
     }
     function renderComments() {
@@ -542,10 +543,13 @@
         card.append(make("strong",`${(note.severity||"info").toUpperCase()} · ${!remoteAvailable?'Local review':note.threadType==='discussion'?'Discussion':note.threadType==='issue'?'Issue':'Unassigned type'} · ${unread?"Unread":"Read"}`),make("small",anchorLabel(note.anchor)),make("p",note.text),
           make("small",`Created ${new Date(note.createdAt).toLocaleString()} · Updated ${new Date(note.updatedAt||note.createdAt).toLocaleString()} · ${note.github?`${providerName} ${note.github.source} #${note.github.number} · ${note.github.state} · ${note.github.author||""}`:"local"}`));
         if(note.mentions?.length)card.append(make("small",`Mentions: ${note.mentions.map(login=>"@"+login).join(", ")}`));
+        if(note.github?.createdAt)card.append(make('small',`GitHub posted ${new Date(note.github.createdAt).toLocaleString()}${note.github.updatedAt?` · edited ${new Date(note.github.updatedAt).toLocaleString()}`:''}`));
         const actions=make("div");actions.className="inspector-actions";
         actions.append(button("Locate",()=>{if(note.anchor.file!==currentFile())openSheet(note.anchor.file,note.anchor.position);else if(note.anchor.position)focus(note.anchor.position);inspector("comments","view");}),
           button(unread?"Mark read":"Mark unread",()=>markRead(note,unread)));
-        if(note.github){const link=make("a",`Open ${providerName} thread`);link.href=note.github.url;link.target="_blank";link.rel="noopener noreferrer";actions.append(link);}
+        if(note.github){const link=make("a",`Open ${providerName} thread`);link.href=note.github.url;link.target="_blank";link.rel="noopener noreferrer";actions.append(link);
+          if(remoteAvailable)actions.append(button('Reply',()=>{const type=provider==='gitlab'||note.github.source.startsWith('discussion')?'discussion':'issue';editComment({id:crypto.randomUUID(),createdAt:new Date().toISOString(),text:'',severity:'info',state:'open',threadType:type,anchor:{...note.anchor}});$("editorDestination").value=provider==='gitlab'||type==='issue'?'existing-issue':'existing-discussion';$("editorThreadNumber").value=String(note.github.number);editorDestinationChanged();commentStatus(`Reply draft for ${providerName} ${type} #${note.github.number}. Enter your text, then Post.`);}));
+        }
         else {const draft=button(`Open ${providerName} composer`,async()=>{try{await request("open-comment-draft",draftOptions(note));commentStatus("GitHub composer opened with the annotation and severity. Review and submit it there.");}catch(error){commentStatus(error.message,true);}});draft.className="github-draft-action";draft.hidden=!remoteAvailable||provider==='gitlab';actions.append(button("Edit",()=>editComment(note)),draft,
           button("Delete",async()=>{try{await request("comment-delete",{...scope(note.anchor.file),id:note.id});await refreshComments();options.onCommentsChanged?.();commentStatus("Local comment deleted.");}catch(error){commentStatus(error.message,true);}}));
         }
@@ -567,7 +571,7 @@
     async function loadGitHub() {
       const run=++remoteLoad,target=scope();$("refreshGitHub").disabled=true;
       try{const result=await request(provider==='gitlab'?"comment-remote-list":"github-annotations",{...target,includeDiscussions:$("commentDestination").value.includes("discussion"),...(options.pullNumber?{pullNumber:options.pullNumber,pullRepository:options.pullRepository}:{}),
-          ...($("commentDestination").value==="existing-issue"&&Number.isSafeInteger(Number($("threadNumber").value))&&Number($("threadNumber").value)>0?{issueNumber:Number($("threadNumber").value)}:{})});
+          ...(['existing-issue','existing-discussion'].includes($("commentDestination").value)&&Number.isSafeInteger(Number($("threadNumber").value))&&Number($("threadNumber").value)>0?{[$("commentDestination").value==='existing-discussion'?'discussionNumber':'issueNumber']:Number($("threadNumber").value)}:{})});
         if(run!==remoteLoad||target.file!==scope().file)return;remoteNotes=result.notes;renderComments();draw();commentStatus(`Loaded ${remoteNotes.length} ${providerName} annotations. ${result.warnings.join(" ")}`);
       }catch(error){if(run===remoteLoad)commentStatus(error.message,true);}finally{if(run===remoteLoad)$("refreshGitHub").disabled=false;}
     }

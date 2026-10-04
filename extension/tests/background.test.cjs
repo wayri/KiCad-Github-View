@@ -362,6 +362,7 @@ test('public issue reader matches fork-anchored notes and constructs only GitHub
     if (url.includes('/issues/7/comments')) return json([
       { id: 55, body: markdown, user: { login: 'reviewer' }, html_url: 'https://evil.example/forged' }
     ]);
+    if(url.endsWith('/issues/7'))return json({number:7,state:'closed',pull_request:{},body:markdown,user:{login:'bob'},created_at:'2026-10-04T00:00:00Z',updated_at:'2026-10-04T01:00:00Z'});
     throw new Error(`Unexpected GitHub read ${url}`);
   };
   const reply = await message({ type: 'github-annotations', repository: 'fork/board',
@@ -370,7 +371,8 @@ test('public issue reader matches fork-anchored notes and constructs only GitHub
   assert.equal(reply.ok, true);
   assert.equal(reply.result.notes.length, 2);
   assert.equal(reply.result.notes[0].severity, 'critical');
-  assert.equal(reply.result.notes[0].github.url, 'https://github.com/base/board/issues/11');
+  assert.equal(reply.result.notes[0].github.url, 'https://github.com/base/board/pull/7');
+  assert.equal(reply.result.notes[0].github.createdAt,'2026-10-04T00:00:00Z');
   assert.equal(reply.result.notes[1].github.url, 'https://github.com/base/board/pull/7#issuecomment-55');
   assert.equal(reply.result.notes[1].github.source, 'pull-request');
   assert.ok(reply.result.warnings.some((warning) => /Discussion readback/.test(warning)));
@@ -394,11 +396,15 @@ test('public issue reader surfaces rate limits and bounded scan warnings', async
     if (url.includes('/comments?')) return json(Array.from({ length: 100 }, (_, index) => ({ id: index + 1, body: '' })));
     return json(Array.from({ length: 100 }, (_, index) => ({ number: index + 1, body: '' })));
   };
-  const result = await message({ type: 'github-annotations', ...scope, issueNumber: 1 });
+  const result = await message({ type: 'github-annotations', ...scope });
   assert.equal(result.ok, true);
-  assert.equal(urls.length, 3, 'at most two issue pages and one selected-thread comment page');
+  assert.equal(urls.length, 2, 'repository scan reads at most two issue pages');
   assert.ok(result.result.warnings.some((warning) => /200 recent/.test(warning)));
-  assert.ok(result.result.warnings.some((warning) => /100 comments/.test(warning)));
+  urls.length=0;
+  global.fetch=async url=>{urls.push(url);if(url.includes('/comments?'))return json(Array.from({length:100},(_,index)=>({id:index+1,body:''})));return json({number:1,state:'open',body:''});};
+  const selected=await message({type:'github-annotations',...scope,issueNumber:1});
+  assert.equal(selected.ok,true);assert.equal(urls.length,6,'selected thread reads its body and five comment pages');
+  assert.ok(selected.result.warnings.some(warning=>/500 comments/.test(warning)));
 });
 
 test('toolbar action focuses the inline blob, navigates a PR, and ignores other hosts', async () => {
@@ -416,6 +422,21 @@ test('toolbar action focuses the inline blob, navigates a PR, and ignores other 
   assert.equal(calls.created.length, 0);
   assert.equal(calls.messages.length, 2);
   assert.equal(typeof actionListener, 'function');
+});
+
+test('private annotation readback uses the connected account and loads comments beyond the first page',async t=>{
+ const token='github_pat_'+ 'p'.repeat(60),before=global.fetch;
+ t.after(async()=>{global.fetch=before;await global.KiCadGitHubReviewApi.clearToken();});
+ await global.KiCadGitHubReviewApi.setToken(token);
+ const note=sampleComment(),body=global.KiCadReviewComments.toMarkdown(note),calls=[];
+ global.fetch=async(url,init)=>{calls.push(url);assert.equal(init.headers.Authorization,'Bearer '+token);assert.equal(init.redirect,'error');assert.equal(init.credentials,'omit');
+  if(url.endsWith('/issues/23'))return json({number:23,state:'open',body:'',user:{login:'owner'}});
+  if(url.endsWith('page=1'))return json(Array.from({length:100},(_,i)=>({id:i+1,body:''})));
+  if(url.endsWith('page=2'))return json([{id:101,body,user:{login:'reviewer'},created_at:'2026-10-04T08:00:00Z',updated_at:'2026-10-04T09:00:00Z',html_url:'https://evil.example'}]);
+  throw new Error('Unexpected annotation path');};
+ const reply=await message({type:'github-annotations',...note.anchor,issueNumber:23});
+ assert.equal(reply.ok,true);assert.equal(reply.result.notes.length,1);assert.equal(calls.length,3);
+ assert.equal(reply.result.notes[0].github.url,'https://github.com/owner/board/issues/23#issuecomment-101');assert.equal(reply.result.notes[0].github.author,'reviewer');assert.equal(reply.result.notes[0].github.updatedAt,'2026-10-04T09:00:00Z');
 });
 
 test('token settings are options-only and never disclose the credential', async () => {

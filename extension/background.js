@@ -577,47 +577,23 @@ async function acknowledgeCommentDraft(sender) {
   return { acknowledged: true };
 }
 
-async function annotationJson(url) {
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 30000);
-  try {
-    const response = await fetch(url, {
-      headers: { Accept: "application/vnd.github+json", "X-GitHub-Api-Version": "2022-11-28" },
-      credentials: "omit", cache: "no-store", signal: controller.signal
-    });
-    if (response.status === 403 || response.status === 429) {
-      const limited = response.headers.get("x-ratelimit-remaining") === "0" || response.status === 429;
-      throw new Error(limited ? "GitHub's public API rate limit was reached; retry after it resets." :
-        "GitHub denied public annotation access (HTTP 403)." );
-    }
-    if (response.status === 404) throw new Error("Public GitHub issue or repository was not found.");
-    if (!response.ok) throw new Error(`GitHub returned HTTP ${response.status} while reading annotations.`);
-    if (Number(response.headers.get("content-length")) > 4 * 1024 * 1024) {
-      throw new Error("GitHub annotation response exceeds 4 MiB.");
-    }
-    const text = await response.text();
-    if (new TextEncoder().encode(text).length > 4 * 1024 * 1024) {
-      throw new Error("GitHub annotation response exceeds 4 MiB.");
-    }
-    return JSON.parse(text);
-  } catch (error) {
-    if (error.name === "AbortError") throw new Error("GitHub annotation request timed out.");
-    throw error;
-  } finally { clearTimeout(timeout); }
-}
-
 async function githubAnnotations(request) {
   const scope = KiCadReviewComments.normalizeScope(request);
-  const { pullRepository, pullNumber, issueNumber } = request;
+  if(scope.provider==='gitlab')throw new Error('GitHub annotation lookup requires a GitHub drawing.');
+  const { pullRepository, pullNumber, issueNumber, discussionNumber } = request;
   if (pullRepository !== undefined && !validRepository(pullRepository)) throw new Error("Invalid annotation repository.");
   if (pullNumber !== undefined && !validNumber(pullNumber)) throw new Error("Invalid pull request number.");
   if (issueNumber !== undefined && !validNumber(issueNumber)) throw new Error("Invalid issue number.");
+  if (discussionNumber !== undefined && !validNumber(discussionNumber)) throw new Error("Invalid discussion number.");
+  if(discussionNumber!==undefined&&issueNumber!==undefined)throw new Error('Choose one Issue or Discussion for annotation lookup.');
   if (pullNumber && !pullRepository) throw new Error("Pull request repository is required for annotation lookup.");
   const repository = pullRepository || scope.repository;
-  const endpoint = `https://api.github.com/repos/${repository}/issues`;
+  if(discussionNumber!==undefined)return KiCadGitHubReviewApi.readDiscussionAnnotations({repository,number:discussionNumber,scope});
+  const endpoint = `/repos/${repository}/issues`;
+  const annotationJson=await KiCadGitHubReviewApi.createAnnotationReader();
   const notes = [], warnings = [], seen = new Set();
   const selectedNumber = issueNumber || pullNumber;
-  const matching = (note) => note.anchor.repository.toLowerCase() === scope.repository.toLowerCase() &&
+  const matching = (note) => note.anchor.provider!=='gitlab'&&note.anchor.repository.toLowerCase() === scope.repository.toLowerCase() &&
     note.anchor.ref === scope.ref && note.anchor.file === scope.file;
   const add = (body, meta) => {
     if (typeof body !== "string") return;
@@ -637,6 +613,7 @@ async function githubAnnotations(request) {
     }
   };
   const author = (item) => /^[A-Za-z0-9-]{1,39}$/.test(item?.user?.login || "") ? item.user.login : "unknown";
+  const times=item=>{const values={};for(const [source,key]of [['created_at','createdAt'],['updated_at','updatedAt']])if(typeof item?.[source]==='string'&&/^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d(?:\.\d{1,3})?Z$/.test(item[source])&&Number.isFinite(Date.parse(item[source])))values[key]=item[source];return values;};
   const issueMeta = new Map();
   const readIssue = (item) => {
     const number = item?.number;
@@ -645,9 +622,9 @@ async function githubAnnotations(request) {
     const state = item.state === "open" || item.state === "closed" ? item.state : "unknown";
     issueMeta.set(number, { source, state });
     add(item.body, { url: `https://github.com/${repository}/${source === "pull-request" ? "pull" : "issues"}/${number}`,
-      number, state, source, author: author(item) });
+      number, state, source, author: author(item),...times(item) });
   };
-  for (let page = 1; page <= 2; page++) {
+  for (let page = 1; !selectedNumber&&page <= 2; page++) {
     const batch = await annotationJson(`${endpoint}?state=all&per_page=100&page=${page}`);
     if (!Array.isArray(batch) || batch.length > 100) throw new Error("Unexpected GitHub issue listing.");
     batch.forEach(readIssue);
@@ -658,17 +635,20 @@ async function githubAnnotations(request) {
     if (!issueMeta.has(selectedNumber)) readIssue(await annotationJson(`${endpoint}/${selectedNumber}`));
     const meta = issueMeta.get(selectedNumber);
     if (!meta) throw new Error("GitHub did not return the selected issue or pull request.");
-    const comments = await annotationJson(`${endpoint}/${selectedNumber}/comments?per_page=100&page=1`);
+    for(let page=1;page<=5;page++){
+    const comments = await annotationJson(`${endpoint}/${selectedNumber}/comments?per_page=100&page=${page}`);
     if (!Array.isArray(comments) || comments.length > 100) throw new Error("Unexpected GitHub comment listing.");
     for (const comment of comments) {
       const id = comment?.id;
       const suffix = validNumber(id) ? `#issuecomment-${id}` : "";
       add(comment?.body, { url: `https://github.com/${repository}/${meta.source === "pull-request" ? "pull" : "issues"}/${selectedNumber}${suffix}`,
-        number: selectedNumber, state: meta.state, source: meta.source, author: author(comment) });
+        number: selectedNumber, state: meta.state, source: meta.source, author: author(comment),...times(comment) });
     }
-    if (comments.length === 100) warnings.push("Comment scan stopped at 100 comments for the selected thread.");
+    if(comments.length<100)break;
+    if(page===5)warnings.push("Comment scan stopped at 500 comments for the selected thread.");
+    }
   }
-  if (request.includeDiscussions) warnings.push("Discussion readback is unavailable through this unauthenticated REST flow; use the GitHub discussion page to review drafts.");
+  if (request.includeDiscussions) warnings.push("Discussion readback requires selecting an existing Discussion and entering its number.");
   return { notes, warnings };
 }
 

@@ -46,6 +46,8 @@
   }
   function status(message, error = false) {
     $("status").textContent = message; $("status").classList.toggle("error", error);
+    $("status").hidden=Boolean(pairedFile)&&!error;
+    $("projectTools").title=pairedFile&&!error?message:"";
   }
   function element(tag, text) {
     const node = document.createElement(tag);

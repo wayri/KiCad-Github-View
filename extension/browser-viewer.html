@@ -17,6 +17,11 @@ footer{padding:7px 15px;border-top:1px solid #354653;color:#a8bac5;font-size:11p
 <style>
 .revision-picker{position:relative;font-size:11px}.revision-picker summary{cursor:pointer;border:1px solid #425866;border-radius:5px;padding:6px 9px}.revision-picker-panel{position:absolute;left:0;right:auto;top:100%;z-index:20;width:min(580px,85vw);background:#16232e;color:#eaf1f6;border:1px solid #425866;border-radius:8px;padding:14px;box-shadow:0 8px 28px #0008;display:grid;gap:10px}.revision-picker-panel p{margin:0;white-space:normal;overflow-wrap:anywhere}.revision-picker-panel label{display:grid;gap:5px}.revision-picker-panel select,.revision-picker-panel input{width:100%;max-width:none!important}.revision-picker-panel>div{display:flex;gap:5px;flex-wrap:wrap}
 @media(max-width:760px){.revision-picker-panel{position:fixed;left:8px;right:8px;top:42px;width:auto;max-height:75vh;overflow:auto}}
+/* Split review shares one compact header; source identity remains on each pane. */
+#comparison.paired{padding:2px;gap:2px}
+#comparison.paired .revision-label{padding:1px 6px;font-size:9px;line-height:14px}
+#reviewHeader[data-compact="true"]{padding:2px 8px;min-height:30px}
+#projectTools button{min-height:24px;padding:3px 6px;font-size:10px}
 </style>
 </head>
 <body>
