@@ -579,3 +579,34 @@ test('explicit panel expansion makes short split comments usable and restores th
  test('category-created issue and discussion drafts publish only to their selected GitHub thread type',async()=>{
  for(const type of ['issue','discussion']){let notes=[];const calls=[];const view=workspaceRuntime(async message=>{calls.push(message);if(message.type==='comment-save'){notes=[message.comment];return message.comment;}if(message.type==='comment-list')return notes;if(message.type==='comment-policy-status')return{allowed:true,mode:'all'};if(message.type==='github-publish-comment')return{remoteRef:{kind:type,repository:'wayri/fixture',number:42,url:`https://github.com/wayri/fixture/${type==='issue'?'issues':'discussions'}/42`,publishedAt:'2026-10-05T00:00:00Z'}};return[];});view.load();await new Promise(resolve=>setImmediate(resolve));view.get(type==='issue'?'commentCategoryIssue':'commentCategoryDiscussion').click();view.get('newComment').click();view.get('commentText').value='Category review';view.get('editorTitle').value='Category review';if(type==='discussion')view.get('editorCategory').value='DIC_review';await view.get('postComment').click();const publication=calls.find(m=>m.type==='github-publish-comment');assert.ok(publication,view.get('commentStatus').textContent);assert.equal(publication.comment.threadType,type);assert.equal(publication.destination,type==='issue'?'new-issue':'new-discussion');assert.equal(view.get('commentEditor').hidden,true);assert.match(view.get('commentList').textContent,/Category review/);}
  });
+
+const groupBoard='(kicad_pcb '+['R1','R2','R3'].map((ref,i)=>`(footprint "Resistor" (layer "F.Cu") (at ${10+i*10} 20) (uuid "fp${i}") (property "Reference" "${ref}") (property "Value" "10k") (pad "1" smd rect (at 0 0) (size 2 2) (layers "F.Cu") (uuid "pad${i}")))`).join(' ')+')';
+test('canvas additive selection highlights the whole group, toggles members and clears its companion',()=>{
+ const selections=[],view=workspaceRuntime(undefined,{source:groupBoard,onSelection:s=>selections.push(s)});view.load();
+ const pick=(uuid,multi)=>view.canvas.dispatchEvent(new CustomEvent('kicad:select',{detail:{item:{uuid},multi}}));
+ pick('fp0',false);pick('fp1',true);assert.match(view.get('highlightSummary').textContent,/2 components/);
+ assert.deepEqual(Array.from(selections.at(-1).items,i=>i.reference),['R1','R2']);assert.ok(view.canvas.netPrimitives.has(view.design.primitives.find(p=>p.ownerUuid==='fp0')));
+ pick('fp2',true);pick('fp1',true);assert.deepEqual(Array.from(selections.at(-1).items,i=>i.reference),['R1','R3']);assert.match(view.get('highlightSummary').textContent,/2 components/);
+ view.get('clearHighlights').click();assert.equal(selections.at(-1).kind,'group');assert.equal(selections.at(-1).items.length,0);assert.equal(view.canvas.netPrimitives.size,0);
+});
+test('multihighlight checkbox and modifier clicks on Parts retain group membership',()=>{
+ const selections=[],view=workspaceRuntime(undefined,{source:groupBoard,onSelection:s=>selections.push(s)});view.load();
+ view.get('objectList').children[0].click();view.get('objectList').children[1].onclick({ctrlKey:true});assert.equal(selections.at(-1).items.length,2);
+ view.get('multiHighlight').checked=true;view.get('objectList').children[2].click();assert.equal(selections.at(-1).items.length,3);
+ assert.ok(view.get('objectList').children.every(row=>row.attributes['aria-pressed']==='true'));
+});
+test('received group highlights all matched footprints without enabling the multihighlight checkbox',()=>{
+ const view=workspaceRuntime(undefined,{source:groupBoard});view.load();const items=['R1','R2'].map(reference=>({kind:'part',reference,path:'root.kicad_sch'}));
+ assert.equal(view.workspace.highlightRelated({kind:'group',items}),true);assert.match(view.get('highlightSummary').textContent,/2 components/);assert.equal(view.get('multiHighlight').checked,false);
+ const uuids=new Set([...view.canvas.netPrimitives].map(p=>p.ownerUuid||p.uuid));assert.ok(uuids.has('fp0'));assert.ok(uuids.has('fp1'));
+ view.workspace.highlightRelated({kind:'group',items:[]});assert.equal(view.canvas.netPrimitives.size,0);
+});
+test('selecting a loaded sheet includes its descendant parts in one cross-highlight group',()=>{
+ const symbol=(ref,uuid)=>`(symbol (lib_id "Device:R") (at 20 20 0) (uuid "${uuid}") (property "Reference" "${ref}") (property "Value" "10k"))`;
+ const files=[{path:'root.kicad_sch',content:'(kicad_sch (sheet (at 0 0) (size 10 10) (uuid "s") (property "Sheetname" "Power") (property "Sheetfile" "child.kicad_sch")))'},
+ {path:'child.kicad_sch',content:'(kicad_sch '+symbol('R1','r1')+' (sheet (at 0 0) (size 10 10) (uuid "t") (property "Sheetfile" "leaf.kicad_sch")))'},
+ {path:'leaf.kicad_sch',content:'(kicad_sch '+symbol('R2','r2')+')'}];
+ const selections=[],view=workspaceRuntime(undefined,{pcb:false,files,onSelection:s=>selections.push(s)});view.load();view.get('navSheets').click();
+ const tree=view.get('sheetList').children.find(node=>node.classList.contains('sheet-tree'));tree.children[1].children.find(node=>node.classList.contains('sheet-open')).click();
+ assert.deepEqual(Array.from(selections.at(-1).items,i=>i.reference),['R1','R2']);assert.match(view.get('reviewNotice').textContent,/2 loaded sheets/);
+});

@@ -428,6 +428,23 @@ test("paired relay accepts loaded hierarchy selections and targets only explicit
   assert.deepEqual(plain(reverse[0].event.selection),net);b.disposed=true;
   assert.equal((await send(h,a,5,{type:"pair-selection",selection})).result.delivered,0);
 });
+test("paired group relay checks every hierarchy path and preserves qualified net names and empty clears",async()=> {
+ const h=harness(),root=h.write("design.kicad_sch",'(kicad_sch (sheet (property "Sheetfile" "child.kicad_sch")))'),pcb=h.write("design.kicad_pcb","(kicad_pcb)");h.write("child.kicad_sch");
+ const a=await existingSession(h,root),b=await existingSession(h,pcb,"c".repeat(48)),delivered=[];
+ b.post=(event)=>{delivered.push(event);return true;};
+ h.api.activate(h.context);await h.commands.find((c)=>c.name==="kicadVisualReview.openPair").handler(root);
+ const item={kind:"net",path:"child.kicad_sch",netName:"ENABLE",qualifiedNetName:"/Power/ENABLE"};let id=0;
+ for(const selection of [item,{kind:"group",items:[]},{kind:"group",items:[item,{kind:"part",path:"design.kicad_sch",reference:"U1"}]},{kind:"group",items:Array(200).fill(item)}]) {
+  assert.equal((await send(h,a,++id,{type:"pair-selection",selection})).result.delivered,1);
+  assert.deepEqual(plain(delivered.at(-1).event.selection),selection);
+ }
+ const invalid=[{kind:"group",items:Array(201).fill(item)},{kind:"group",items:[{kind:"group",items:[]}]},
+  {kind:"group",items:new Array(1)},{kind:"group",items:[item,{...item,path:"outside.kicad_sch"}]},
+  {kind:"group",items:[{...item,qualifiedNetName:"bad\n"}]},{kind:"group",items:[{...item,path:"../child.kicad_sch"}]},
+  {kind:"group",items:[],extra:true},{kind:"group",items:[null]}];
+ for(const selection of invalid)assert.equal((await send(h,a,++id,{type:"pair-selection",selection})).ok,false);
+ assert.equal(delivered.length,4);
+});
 
 test("re-pairing changes selection recipient and comment refresh stays within sidecar workspace",async()=> {
   const h=harness(),root=h.write("design.kicad_sch"),first=h.write("a.kicad_pcb","(kicad_pcb)"),second=h.write("b.kicad_pcb","(kicad_pcb)");

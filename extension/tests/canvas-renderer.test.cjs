@@ -143,3 +143,9 @@ test('schematic net highlight contrasts with white paper and retains readable su
  test('fit layer uses only its drawable geometry and ignores worksheet, hidden and other layers',()=>{const {canvas}=runtime();canvas.setDocument({layers:['F.Cu','B.Cu'],primitives:[{type:'circle',x:20,y:30,r:1,layer:'F.Cu'},{type:'circle',x:900,y:900,r:2,layer:'B.Cu'},{type:'circle',x:800,y:800,r:2,layer:'F.Cu',hidden:true}]},'board.kicad_pcb');canvas.focusLayer('F.Cu');assert.equal(canvas.fitLayer(),true);near(canvas.viewport.camera.center.x,20);near(canvas.viewport.camera.center.y,30);assert.equal(canvas.paperVisible,false);canvas.focusLayer('B.Cu');canvas.primitives=[];assert.equal(canvas.fitLayer(),false);canvas.setDocument({layers:['F.Cu'],primitives:[]},'next.kicad_pcb');assert.equal(canvas.focusedLayer,null);assert.equal(canvas.layerSnapshot,null);});
 
  test('ruler grid spacing coarsens at low zoom and rejects unsafe pitch values',()=>{const {canvas,operations}=runtime();canvas.grid=true;canvas.gridPitch=.25;canvas.viewport.camera.zoom=40;canvas.draw();const dots=operations.filter(op=>op[0]==='fillRect'&&op[3]===1&&op[4]===1);assert.ok(dots.length>0);assert.ok(dots.length<=20000);for(const pitch of [-1,0,Infinity,NaN]){canvas.gridPitch=pitch;assert.doesNotThrow(()=>canvas.draw());}});
+
+test('canvas click forwards Ctrl, Shift and Command additive-selection intent',()=>{
+ const {canvas,listeners}=runtime();canvas.setDocument({primitives:[],layers:['F.Cu']},'board.kicad_pcb');let detail;canvas.addEventListener('kicad:select',event=>detail=event.detail);
+ for(const modifier of ['ctrlKey','shiftKey','metaKey']){listeners.get('click')({clientX:10,clientY:20,[modifier]:true});assert.equal(detail.multi,true);}
+ listeners.get('click')({clientX:10,clientY:20});assert.equal(detail.multi,false);
+});

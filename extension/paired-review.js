@@ -8,6 +8,11 @@
   const value=text(path?.[1]);return typeof value==='string'&&value.length<=2000?value.split('/').filter(Boolean).at(-1)||null:null;
  }
  function validSelection(value){
+  if(value?.kind==='group'){
+   if(Object.keys(value).some(k=>!['kind','items'].includes(k))||!Array.isArray(value.items)||value.items.length>200)return false;
+   for(const item of value.items)if(!item||item.kind==='group'||!validSelection(item))return false;
+   return true;
+  }
   if(!value||typeof value!=='object'||!['part','net'].includes(value.kind))return false;
   const bounded=(v,n)=>typeof v==='string'&&v.length>0&&v.length<=n&&!/[\x00-\x1f\x7f]/.test(v);
   if(!bounded(value.path,1000)||!/^.+\.kicad_(?:sch|pcb)$/i.test(value.path)||value.path.startsWith('/')||value.path.split('/').some(p=>!p||p==='.'||p==='..'||/[\\:]/.test(p)))return false;
@@ -65,6 +70,21 @@
   if(!qualified.length&&currentPath){const local=matches.filter(n=>n.path===currentPath);if(local.length===1)matches=local;}
   return matches.length===1?{net:matches[0]}:{error:matches.length?'The related net is ambiguous across sheets or saved instances. Choose its sheet explicitly.':'No matching saved net in the paired drawing.'};
  }
- root.KiCadPairedReview={validSelection,relatedPart,symbolUuid,sheetPrefix,qualifiedNetName,relatedNet};
+ function relatedGroup(objects,nets,selection,currentFile){
+  const result={objects:[],nets:[],errors:[]};
+  if(!validSelection(selection)||selection.kind!=='group'){result.errors.push('Invalid cross-highlight group.');return result;}
+  const matchedObjects=new Set(),matchedNets=new Set(),errors=new Set();
+  for(const item of selection.items){
+   // A group spans sheets: the currently displayed sheet must not resolve an
+   // otherwise ambiguous local name on behalf of the whole selection.
+   const match=item.kind==='part'?relatedPart(objects,item):relatedNet(nets,objects,item);
+   if(match.object)matchedObjects.add(match.object);
+   if(match.net)matchedNets.add(match.net);
+   if(match.error)errors.add(match.error);
+  }
+  result.objects=[...matchedObjects];result.nets=[...matchedNets];result.errors=[...errors];
+  return result;
+ }
+ root.KiCadPairedReview={validSelection,relatedPart,symbolUuid,sheetPrefix,qualifiedNetName,relatedNet,relatedGroup};
  if(typeof module==='object'&&module.exports)module.exports=root.KiCadPairedReview;
 })(globalThis);

@@ -270,15 +270,21 @@ function createSession(uri,project,context,token=secret()) {
   liveSessions.add(session);return session;
 }
 function validPairSelection(value) {
+  if(value?.kind==="group") {
+    if(Object.keys(value).some((key)=>!["kind","items"].includes(key)) || !Array.isArray(value.items) || value.items.length>200)return false;
+    for(const item of value.items)if(!item || item.kind==="group" || !validPairSelection(item))return false;
+    return true;
+  }
   const bounded=(item,limit)=>typeof item==="string" && item.length>0 && item.length<=limit && !/[\x00-\x1f\x7f]/.test(item);
   if(!value || typeof value!=="object" || Array.isArray(value) || !["part","net"].includes(value.kind) || !bounded(value.path,1000))return false;
-  const fields=value.kind==="part"?["kind","path","reference","uuid","symbolUuid"]:["kind","path","netName"];
+  if(!/^.+\.kicad_(?:sch|pcb)$/i.test(value.path) || value.path.startsWith("/") || value.path.split("/").some((part)=>!part || part==="." || part===".." || /[\\:]/.test(part)))return false;
+  const fields=value.kind==="part"?["kind","path","reference","uuid","symbolUuid"]:["kind","path","netName","qualifiedNetName"];
   if(Object.keys(value).some((key)=>!fields.includes(key)))return false;
-  return value.kind==="net" ? bounded(value.netName,500) : bounded(value.reference,200) &&
+  return value.kind==="net" ? bounded(value.netName,500) && (value.qualifiedNetName===undefined || bounded(value.qualifiedNetName,500)) : bounded(value.reference,200) &&
     ["uuid","symbolUuid"].every((key)=>value[key]===undefined || bounded(value[key],200));
 }
 async function relaySelection(value,session) {
-  if(!validPairSelection(value) || !session.paths.has(value.path))throw new Error("Invalid or out-of-project paired selection.");
+  if(!validPairSelection(value) || !(value.kind==="group"?value.items:[value]).every((item)=>session.paths.has(item.path)))throw new Error("Invalid or out-of-project paired selection.");
   const target=pairTargets.get(session.uri.toString());if(!target)return {delivered:0};
   let delivered=0;
   for(const other of liveSessions) {

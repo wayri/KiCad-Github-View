@@ -53,3 +53,25 @@ test("incoming related and refresh events reject wrong sender, malformed data an
   event(2,{type:"comments-refresh"});assert.equal(h.dispatched[1].type,"kicad-review:comments-refresh");assert.equal(h.dispatched[1].detail,undefined);
   const request=h.sandbox.chrome.runtime.sendMessage({type:"project"});h.respond(h.outgoing[0]);await request;assert.equal(h.timers.size,0);
 });
+test("group and qualified net selection roundtrip retains authenticated sender and bounded item validation",async()=> {
+ const h=harness(),item={kind:"net",path:"child.kicad_sch",netName:"ENABLE",qualifiedNetName:"/Power/ENABLE"};
+ const groups=[{kind:"group",items:[]},{kind:"group",items:[item,{kind:"part",path:"root.kicad_sch",reference:"U1",uuid:"saved-symbol"}]},{kind:"group",items:Array(200).fill(item)}];
+ let eventId=0;
+ for(const selection of [item,...groups]) {
+  const promise=h.sandbox.KiCadVSCodeBridge.selection(selection),message=h.outgoing.at(-1);
+  assert.deepEqual(message.request.selection,selection);h.respond(message);await promise;
+  h.events.message({source:{},origin:h.sandbox.location.origin,data:{channel:message.channel,token:h.token,eventId:eventId+1,event:{type:"related",selection}}});
+  assert.equal(h.dispatched.length,eventId);
+  h.events.message({source:h.host,origin:h.sandbox.location.origin,data:{channel:message.channel,token:h.token,eventId:++eventId,event:{type:"related",selection}}});
+  assert.deepEqual(h.dispatched.at(-1).detail,selection);
+ }
+ const invalid=[{kind:"group",items:Array(201).fill(item)},{kind:"group",items:[{kind:"group",items:[]}]},
+  {kind:"group",items:new Array(1)},{kind:"group",items:[{...item,qualifiedNetName:"bad\n"}]},
+  {kind:"group",items:[{...item,path:"../child.kicad_sch"}]},{kind:"group",items:[{...item,extra:true}]},
+  {kind:"group",items:[],extra:true},{kind:"group",items:[null]}];
+ for(const selection of invalid) {
+  await h.sandbox.KiCadVSCodeBridge.selection(selection);
+  h.events.message({source:h.host,origin:h.sandbox.location.origin,data:{channel:"kicad-vscode:v1",token:h.token,eventId:eventId+1,event:{type:"related",selection}}});
+ }
+ assert.equal(h.outgoing.length,4);assert.equal(h.dispatched.length,4);assert.equal(h.timers.size,0);
+});

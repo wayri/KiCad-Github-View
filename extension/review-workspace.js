@@ -129,6 +129,7 @@
     let variant = "default", selected = null, lastFile = null, notes = [], remoteNotes = [], remoteLoad = 0, loadId = 0, editor = null;
     let receiptUser = "local-profile", unreadCursor = -1, policyStatus = null;
     const analyticsCache=new Map(); let dnpHighlight=false;
+    let programmaticPick=false;
     let navigation=null,highlightObjects=[],pinnedNets=new Map(),pinnedClasses=new Map(),connectionCursor=-1,activeConnection=null,classConfig=null;
     let netModel={nets:[],warnings:[]}, selectedNet=null, netFilterObject=null, navigatorTab="parts", netSource=null;
     const netBuilder=root.KiCadNetModel?.createBuilder?.();
@@ -348,66 +349,95 @@
       const parts=[...highlightObjects.filter(o=>o.path===path),...dnp],ids=new Set(parts.map(o=>o.uuid).filter(Boolean)),primitives=(canvas?.primitives||[]).filter(p=>ids.has(p.uuid)||ids.has(p.ownerUuid));
       const groups=[...nets,...(primitives.length?[{primitives}]:[])],mode=$('highlightStyle').value||'dim';
       if(canvas?.setNetHighlights)canvas.setNetHighlights(groups,{mode});else canvas?.setNetHighlight(groups[0]||null,{isolate:mode==='isolate'});
-      $('highlightSummary').textContent=`${nets.length} nets · ${parts.length} components/objects highlighted${pinnedNets.size>nets.length?' · other sheets retained':''}`;
+      $('highlightSummary').textContent=`${nets.length} nets · ${parts.length} components/objects highlighted${pinnedNets.size>nets.length||highlightObjects.some(o=>o.path!==path)?' · other sheets retained':''}`;
       $('fitHighlights').disabled=!groups.length;canvas?.draw();
     }
-    function clearHighlights(){dnpHighlight=false;$("highlightDnp").checked=false;pinnedNets.clear();pinnedClasses.clear();highlightObjects=[];selectedNet=null;connectionCursor=-1;activeConnection=null;getCanvas()?.setNetHighlight(null);renderNets();properties();updateHighlights();navigation?.renderSearch();}
+    function partSelection(object){
+      if(!object||!['symbol','footprint','pad'].includes(object.kind)||!object.reference)return null;
+      const source=object.kind==='pad'?objects.find(item=>item.id===object.parentId&&item.kind==='footprint')||object:object;
+      const symbolUuid=root.KiCadPairedReview?.symbolUuid?.(source)||symbolUuidFromPath(source);
+      return {kind:'part',reference:source.reference,path:source.path,...(source.uuid?{uuid:source.uuid}:{}),...(symbolUuid?{symbolUuid}:{})};
+    }
+    function emitHighlightGroup(){
+      const items=new Map();for(const object of highlightObjects){const item=partSelection(object);if(item&&root.KiCadPairedReview?.validSelection(item))items.set(JSON.stringify(item),item);}
+      for(const net of highlightedNets()){const qualifiedNetName=root.KiCadPairedReview?.qualifiedNetName?.(net,objects);const item={kind:'net',netName:net.name,path:net.path,...(qualifiedNetName?{qualifiedNetName}:{})};if(root.KiCadPairedReview?.validSelection(item))items.set(JSON.stringify(item),item);}
+      options.onSelection?.({kind:'group',items:[...items.values()].slice(0,200)});
+    }
+    function highlightSheet(path,sheetObject=null,multi=$('multiHighlight').checked){
+      const loaded=new Set(files.filter(f=>/\.kicad_sch$/i.test(f.path)).map(f=>f.path)),paths=new Set();const pending=[path];
+      while(pending.length&&paths.size<200){const next=pending.shift();if(!loaded.has(next)||paths.has(next))continue;paths.add(next);for(const link of objects)if(link.kind==='sheet'&&link.path===next){const target=sheetTarget(link);if(target&&!paths.has(target))pending.push(target);}}
+      if(!paths.size){notice('This sheet file is not loaded. Open the project hierarchy before highlighting it.');return;}
+      const members=objects.filter(o=>paths.has(o.path)).sort((a,b)=>Number(!['symbol','footprint'].includes(a.kind))-Number(!['symbol','footprint'].includes(b.kind)));if(sheetObject)members.unshift(sheetObject);
+      if(!multi){pinnedNets.clear();pinnedClasses.clear();selectedNet=null;highlightObjects=[];}
+      const unique=new Map(highlightObjects.map(o=>[o.id,o]));for(const object of members)if(unique.size<200)unique.set(object.id,object);highlightObjects=[...unique.values()];
+      updateHighlights();renderObjects();navigation?.renderSearch();emitHighlightGroup();notice(`Sheet group: ${paths.size} loaded sheets, ${highlightObjects.length} objects${members.length>200?' (200-object limit)':''}. Reused sheets share a saved file view.`);
+    }
+    function clearHighlights(){options.onSelection?.({kind:'group',items:[]});dnpHighlight=false;$("highlightDnp").checked=false;pinnedNets.clear();pinnedClasses.clear();highlightObjects=[];selectedNet=null;connectionCursor=-1;activeConnection=null;getCanvas()?.setNetHighlight(null);renderNets();properties();updateHighlights();navigation?.renderSearch();}
     function highlightSearchObjects(items,multi){
       const local=items.filter(o=>o.path===currentFile()).slice(0,200),derived=local.filter(o=>['net','netclass'].includes(o.kind)),parts=local.filter(o=>!['net','netclass'].includes(o.kind));if(!multi){highlightObjects=local[0]&&!['net','netclass'].includes(local[0].kind)?[local[0]]:[];pinnedNets.clear();pinnedClasses.clear();selectedNet=null;}else{const map=new Map(highlightObjects.map(o=>[o.id,o]));for(const o of parts)map.set(o.id,o);highlightObjects=[...map.values()].slice(0,200);}
       for(const item of multi?derived:derived.filter(o=>o===local[0])){if(item.kind==='net'){const net=netModel.nets.find(n=>n.path===currentFile()&&n.name===item.netName);if(net&&pinnedNets.size<200)pinnedNets.set(net.id,net);}else if(pinnedClasses.size<64)pinnedClasses.set(JSON.stringify([item.path,item.className]),{path:item.path,name:item.className});}
       if(!local.length)notice('No matches on the active drawing. Open a result before highlighting it.');else notice(`${highlightedNets().length} nets and ${highlightObjects.length} objects highlighted on this drawing${items.length>200?' (200-object limit)':''}.`);
-      updateHighlights();navigation?.renderSearch();
+      updateHighlights();emitHighlightGroup();navigation?.renderSearch();
     }
-    function selectSearchObject(object,multi){
+    function selectSearchObject(object,multi,event,move=true){
+      multi=Boolean(multi||event?.ctrlKey||event?.metaKey||event?.shiftKey);
+      if(object.kind==='sheet'){selectObject(object,true,true,false,multi,true);highlightSheet(sheetTarget(object),object,multi);return;}
       if(/\.kicad_pcb$/i.test(object.path)!==pcb){request(root.KiCadVSCodeContext?'open-project-drawing':'open-viewer-window',{repository,ref,file:object.path}).catch(error=>notice(error.message));notice(`Opening ${object.path} in another viewer; this result belongs to the other drawing type.`);return;}
       if(['net','netclass'].includes(object.kind)){
         if(object.path!==currentFile())openSheet(object.path);
-        if(object.kind==='net'){const matches=netModel.nets.filter(n=>n.path===currentFile()&&n.name===object.netName);if(matches.length===1)selectNet(matches[0],true);else notice('The saved network is missing or ambiguous on this drawing.');}
-        else{const key=JSON.stringify([object.path,object.className]),existed=pinnedClasses.has(key);if(!multi){pinnedNets.clear();pinnedClasses.clear();highlightObjects=[];selectedNet=null;}if(existed)pinnedClasses.delete(key);else pinnedClasses.set(key,{path:object.path,name:object.className});updateHighlights();renderNets();renderNetClasses();}
+        if(object.kind==='net'){const matches=netModel.nets.filter(n=>n.path===currentFile()&&n.name===object.netName);if(matches.length===1)selectNet(matches[0],true,true,multi);else notice('The saved network is missing or ambiguous on this drawing.');}
+        else{const key=JSON.stringify([object.path,object.className]),existed=pinnedClasses.has(key);if(!multi){pinnedNets.clear();pinnedClasses.clear();highlightObjects=[];selectedNet=null;}if(existed)pinnedClasses.delete(key);else pinnedClasses.set(key,{path:object.path,name:object.className});updateHighlights();renderNets();renderNetClasses();emitHighlightGroup();}
         navigation?.renderSearch();return;
       }
-      if(multi){const at=highlightObjects.findIndex(o=>o.id===object.id);if(at>=0)highlightObjects.splice(at,1);else if(highlightObjects.length<200)highlightObjects.push(object);}
+      let removed=false;if(multi){if(!highlightObjects.length&&selected&&selected.id!==object.id)highlightObjects.push(selected);const at=highlightObjects.findIndex(o=>o.id===object.id);if(at>=0){highlightObjects.splice(at,1);removed=true;}else if(highlightObjects.length<200)highlightObjects.push(object);}
       else{highlightObjects=[object];pinnedNets.clear();pinnedClasses.clear();}
-      selectObject(object,false,true);if(!multi)highlightObjects=[object];updateHighlights();navigation?.renderSearch();
+      selectObject(object,false,move,false,true,true);if(!multi)highlightObjects=[object];if(removed){selected=null;properties();}updateHighlights();renderObjects();emitHighlightGroup();navigation?.renderSearch();
     }
     function cycleConnection(step){const nets=highlightedNets();const seen=new Set(),members=nets.flatMap(n=>n.members).filter(m=>m.position&&['pin','pad'].includes(m.kind)&&!seen.has(JSON.stringify([m.uuid,m.position]))&&seen.add(JSON.stringify([m.uuid,m.position])));if(!members.length){notice('Select a net or class to navigate its connections.');return;}connectionCursor=connectionCursor<0?(step<0?members.length-1:0):(connectionCursor+step+members.length)%members.length;const member=members[connectionCursor];activeConnection=member;focus(member.position);$('selectionStatus').textContent=`Connection ${connectionCursor+1}/${members.length}: ${member.reference||''} ${member.pin||member.pad||''}`;}
     function renderNetClasses(){const value=$('netClassSelect').value;$('netClassSelect').replaceChildren();const names=new Set();if(classConfig)for(const net of netModel.nets)if(net.path===currentFile())for(const name of root.KiCadProjectSearch.netClasses(net.name,classConfig))names.add(name);for(const name of [...names].sort()){const option=make('option',name);option.value=name;$('netClassSelect').append(option);}if(names.has(value))$('netClassSelect').value=value;$('highlightNetClass').disabled=!names.size;$('highlightNetClass').setAttribute('aria-pressed',String(pinnedClasses.has(JSON.stringify([currentFile(),$('netClassSelect').value]))));$('netClassStatus').textContent=classConfig?'Highlighted classes: '+([...pinnedClasses.values()].filter(c=>c.path===currentFile()).map(c=>c.name).join(', ')||'none')+'. '+(classConfig.warnings||[]).join(' '):'Import .kicad_pro in Project search to use saved net classes.';}
-    function selectNet(net,move=false,toggle=true){
-      if(net&&$('multiHighlight').checked){if(toggle&&pinnedNets.has(net.id)){pinnedNets.delete(net.id);selectedNet=null;}else{if(pinnedNets.size>=200){notice('At most 200 networks can be highlighted.');return;}pinnedNets.set(net.id,net);selectedNet=net;}}
+    function selectNet(net,move=false,toggle=true,multi=$('multiHighlight').checked){
+      if(net&&multi){if(toggle&&pinnedNets.has(net.id)){pinnedNets.delete(net.id);selectedNet=null;}else{if(pinnedNets.size>=200){notice('At most 200 networks can be highlighted.');return;}pinnedNets.set(net.id,net);selectedNet=net;}}
       else{pinnedNets.clear();pinnedClasses.clear();highlightObjects=[];selectedNet=net;}
-      selected=null;nativePick=null;connectionCursor=-1;activeConnection=null;updateHighlights();$('selectionStatus').textContent=selectedNet?`${selectedNet.name} · ${selectedNet.kind==='pcb'?'PCB net '+selectedNet.code:'sheet network'}`:'Net highlight cleared';properties();renderNets();renderObjects();if(selectedNet){inspector('properties');if(move)focusNet(selectedNet);const qualifiedNetName=root.KiCadPairedReview?.qualifiedNetName?.(selectedNet,objects);options.onSelection?.({kind:'net',netName:selectedNet.name,path:selectedNet.path,...(qualifiedNetName?{qualifiedNetName}:{})});}getCanvas()?.draw();
+      selected=null;nativePick=null;connectionCursor=-1;activeConnection=null;updateHighlights();$('selectionStatus').textContent=selectedNet?`${selectedNet.name} · ${selectedNet.kind==='pcb'?'PCB net '+selectedNet.code:'sheet network'}`:'Net highlight cleared';properties();renderNets();renderObjects();if(selectedNet){inspector('properties');if(move)focusNet(selectedNet);const qualifiedNetName=root.KiCadPairedReview?.qualifiedNetName?.(selectedNet,objects);if(!multi)options.onSelection?.({kind:'net',netName:selectedNet.name,path:selectedNet.path,...(qualifiedNetName?{qualifiedNetName}:{})});}if(multi)emitHighlightGroup();getCanvas()?.draw();
     }
     function refreshNets(){const source=getCanvas()?.design;if(!source||source===netSource)return;netSource=source;const designs=options.getDesigns?.()||new Map([[currentFile(),source]]);netModel=netBuilder?netBuilder.build(files,designs):root.KiCadNetModel?root.KiCadNetModel.build(files,designs):{nets:[],warnings:[]};selectedNet=null;activeConnection=null;getCanvas()?.setNetHighlight(null);renderNets();renderNetClasses();updateHighlights();}
     function navigate(tab){navigatorTab=tab;for(const name of ["parts","sheets","nets","layers","search","rules","bom"]){$(name+"Pane").hidden=name!==tab;$("nav"+name[0].toUpperCase()+name.slice(1)).setAttribute("aria-selected",String(name===tab));}if(tab==="bom")renderBom();if(tab==="search")navigation?.renderSearch();if(tab==="rules")navigation?.renderRules();if(tab==="sheets")renderSheets();if(tab==="nets"){renderNets();$("netHelp").textContent=pcb?"Select a net to highlight its copper and inspect connections.":"Sheet-local wires, pins and explicit power symbols. Cross-sheet hierarchy and buses are not resolved.";}showNavigator(true);}
-    function selectObject(object, native = false, move = false, fromScene = false) {
-      selectedNet=null;activeConnection=null;if(!$("multiHighlight").checked){pinnedNets.clear();pinnedClasses.clear();highlightObjects=[];}getCanvas()?.setNetHighlight(null);renderNets();
+    function selectObject(object, native = false, move = false, fromScene = false, retainHighlights = false, silent = false) {
+      selectedNet=null;activeConnection=null;if(!retainHighlights&&!$("multiHighlight").checked){pinnedNets.clear();pinnedClasses.clear();highlightObjects=[];}getCanvas()?.setNetHighlight(null);renderNets();
       selected = object; nativePick = native ? null : nativePick;
-      if (!object) { $("selectionStatus").textContent = "Select a part to inspect its properties."; properties(); renderObjects(); draw(); return; }
-      if (["symbol","footprint","pad"].includes(object.kind) && object.reference) {
-        const source=object.kind==="pad"?objects.find(item=>item.id===object.parentId&&item.kind==="footprint")||object:object;
-        const symbolUuid=root.KiCadPairedReview?.symbolUuid?.(source)||symbolUuidFromPath(source);
-        options.onSelection?.({kind:"part",reference:source.reference,path:source.path,...(typeof source.uuid==="string"&&source.uuid?{uuid:source.uuid}:{}),...(symbolUuid?{symbolUuid}:{})});
-      }
+      if (!object) { $("selectionStatus").textContent = "Select a part to inspect its properties."; properties(); renderObjects();updateHighlights();if(!silent&&!retainHighlights&&!$("multiHighlight").checked)options.onSelection?.({kind:"group",items:[]}); draw(); return; }
+      const part=partSelection(object);if(part&&!silent)options.onSelection?.(part);
       $("selectionStatus").textContent = `${object.label} · ${object.kind}${object.populated === false ? " · DNP" : ""}`;
       properties(); inspector("properties"); renderObjects();
       if (object.path !== currentFile()) {
-        openSheet(object.path, object.position); return;
+        openSheet(object.path, object.position);if(object.kind==='sheet'&&!silent)highlightSheet(sheetTarget(object),object); return;
       }
       if (scene && object.reference) { if (!fromScene) scene.selectReference(object.reference); }
       else {
         const canvas = getCanvas();
         if (native && object.position && canvas?.layers?.query_point) {
           const hit = canvas.layers.query_point(object.position).find((entry) => resolveObject(objects, object.path, entry.bbox?.context)?.id === object.id);
-          if (hit?.bbox) canvas.select(hit.bbox);
+          if (hit?.bbox) {programmaticPick=true;try{canvas.select(hit.bbox);}finally{programmaticPick=false;}}
         }
         if (move && object.position) {
           const geometry=(canvas?.primitives||canvas?.design?.primitives||[]).filter(p=>p.uuid===object.uuid||p.ownerUuid===object.uuid),box=root.KiCadOwnedCanvas?.bounds(geometry);
           if(box&&box.w&&box.h){canvas.resize();const margin=Math.max(3,Math.max(box.w,box.h)*.15);canvas.viewport.camera.bbox={x:box.x-margin,y:box.y-margin,w:box.w+margin*2,h:box.h+margin*2};canvas.draw();}else focus(object.position);
         }
       }
-      updateHighlights();draw();
+      if(object.kind==='sheet'&&!silent)highlightSheet(sheetTarget(object),object);else updateHighlights();draw();
     }
     function highlightRelated(selection) {
+      if(selection?.kind==='group'){
+        if(!root.KiCadPairedReview?.validSelection(selection))return false;
+        const result=root.KiCadPairedReview?.relatedGroup?.(objects,netModel.nets,selection,currentFile()||rootFile);
+        if(!result)return false;
+        const matched=[...result.objects,...result.nets],path=matched.some(o=>o.path===currentFile())?currentFile():matched[0]?.path;
+        if(path&&path!==currentFile())openSheet(path);
+        pinnedClasses.clear();pinnedNets.clear();selectedNet=null;highlightObjects=result.objects.slice(0,200);for(const net of result.nets)pinnedNets.set(net.id,net);
+        selected=highlightObjects.find(o=>o.path===currentFile())||null;activeConnection=null;connectionCursor=-1;
+        updateHighlights();renderObjects();renderNets();properties();navigation?.renderSearch();
+        notice(result.errors.length?`${matched.length} related objects/networks highlighted; ${result.errors.length} mapping warnings (missing or ambiguous selections).`:'');return true;
+      }
       if (selection?.kind === "net") {
         const result=root.KiCadPairedReview?.relatedNet?.(netModel.nets,objects,selection,currentFile()||rootFile);
         if(!result?.net){notice(result?.error||'The related net could not be found unambiguously.');return false;}
@@ -428,8 +458,8 @@
         matchesSearch(item,query,netsForObject(item).map(n=>n.name)));
       $("objectCount").textContent = `${visible.length} object${visible.length === 1 ? "" : "s"}${visible.length > 500 ? " · first 500 shown; narrow your search" : ""}`;
       for (const item of visible.slice(0,500)) {
-        const row = button("", () => $("multiHighlight").checked?selectSearchObject(item,true):selectObject(item, true, true)); row.className = `object-row${item.populated === false ? " dnp" : ""}${selected?.id === item.id ? " selected" : ""}`;
-        row.setAttribute("aria-pressed", String(selected?.id === item.id));
+        const grouped=highlightObjects.some(o=>o.id===item.id),row = button("", event => $("multiHighlight").checked||event?.ctrlKey||event?.metaKey||event?.shiftKey?selectSearchObject(item,true):selectObject(item, true, true)); row.className = `object-row${item.populated === false ? " dnp" : ""}${selected?.id === item.id||grouped ? " selected" : ""}`;
+        row.setAttribute("aria-pressed", String(selected?.id === item.id||grouped));
         const symbol=make("span");symbol.className="row-icon";if(root.KiCadUIIcons)symbol.append(root.KiCadUIIcons.icon(iconFor(item.kind)));const copy=make("span");copy.className="row-copy";copy.append(make("strong",item.label),make("small",`${item.properties.Value||item.kind}${$("allSheets").checked?` · ${item.path}`:""}`));row.append(symbol,copy);list.append(row);
       }
       if (!visible.length) list.append(make("p", "No objects match this search."));
@@ -464,7 +494,7 @@
         const toggle=button(hasChildren?(collapsedSheets.has(sheet.path)&&!query?'▸':'▾'):'',()=>{if(collapsedSheets.has(sheet.path))collapsedSheets.delete(sheet.path);else collapsedSheets.add(sheet.path);renderSheets().get(sheet.path)?.focus();});
         toggle.className='sheet-toggle';toggle.disabled=!hasChildren||Boolean(query);toggle.title=hasChildren?`${collapsedSheets.has(sheet.path)?'Expand':'Collapse'} ${sheet.label||sheet.path.split('/').pop()}`:'';
         if(hasChildren)toggle.setAttribute('aria-expanded',String(!collapsedSheets.has(sheet.path)||Boolean(query)));toggles.set(sheet.path,toggle);
-        const active=sheet.path===currentFile(),open=button('',()=>openSheet(sheet.path));open.className='sheet-open'+(active?' selected':'');open.setAttribute('aria-current',active?'page':'false');open.title=sheet.path;
+        const active=sheet.path===currentFile(),open=button('',()=>{openSheet(sheet.path);highlightSheet(sheet.path);});open.className='sheet-open'+(active?' selected':'');open.setAttribute('aria-current',active?'page':'false');open.title=sheet.path;
         const icon=make('span');icon.className='sheet-icon';if(root.KiCadUIIcons)icon.append(root.KiCadUIIcons.icon('sheet'));else icon.textContent='▤';
         const name=make('span',sheet.label||sheet.path.split('/').pop());name.className='sheet-name';open.append(icon,name);row.append(toggle,open);
         const source=make('a','↗');source.className='sheet-source';source.title=`Open source: ${sheet.path}`;source.setAttribute('aria-label',source.title);source.href=(provider==='gitlab'?`${host}/${repository}/-/blob/`:`https://github.com/${repository}/blob/`)+encodeURIComponent(ref)+'/'+sheet.path.split('/').map(encodeURIComponent).join('/');source.target='_blank';source.rel='noopener noreferrer';
@@ -474,7 +504,7 @@
       }
       if(!entries.length)rows.append(make('p','No matching sheets.'));
       $("sheetCount").textContent=query?`${entries.filter(entry=>!entry.unavailable).length} matching sheets and ancestors`:`${sheets.length} loaded sheets`;
-      $("sheetHelp").textContent='Select to open · ◎ locate in parent';$("sheetHelp").title=sheets.length===1?'Only one schematic is loaded. Parent discovery is limited to the same repository directory.':'Reused sheets share a file view; instance-specific connectivity is not resolved.';
+      $("sheetHelp").textContent='Select to open and highlight sheet group · ◎ locate in parent';$("sheetHelp").title=sheets.length===1?'Only one schematic is loaded. Parent discovery is limited to the same repository directory.':'Reused sheets share a file view; instance-specific connectivity is not resolved.';
       return toggles;
     }
     function boardAnalytics(){
@@ -746,7 +776,7 @@
     function attachCanvas(canvas) {
       if (attach?.canvas === canvas) return;
       attach?.dispose();
-      const selection = (event) => {nativePick=event.detail?.item;if(navigatorTab==="nets"){const primitive=canvas.selected,net=netModel.nets.find(n=>n.path===currentFile()&&n.primitives.includes(primitive));if(net){selectNet(net);return;}}const object=resolveObject(objects,currentFile(),nativePick);selectObject(object);};
+      const selection = (event) => {if(programmaticPick)return;nativePick=event.detail?.item;if(navigatorTab==="nets"){const primitive=canvas.selected,net=netModel.nets.find(n=>n.path===currentFile()&&n.primitives.includes(primitive));if(net){selectNet(net);return;}}const object=resolveObject(objects,currentFile(),nativePick);if(object&&($("multiHighlight").checked||event.detail?.multi))selectSearchObject(object,true,undefined,false);else selectObject(object);};
       const pick = (event) => {
         if(ignoreClick){ignoreClick=false;event.preventDefault();event.stopImmediatePropagation();return;}
         if(commentMode==='point'){event.preventDefault();event.stopImmediatePropagation();const at=point(event);if(at){setCommentMode(null);editComment(null,anchor(at,null));}return;}
@@ -905,7 +935,7 @@
     if(root.KiCadReviewNavigation&&root.KiCadProjectSearch&&root.KiCadRuleReports)navigation=root.KiCadReviewNavigation.mount({
       repository,ref,rootFile,request,getFiles:()=>files,getObjects:()=>objects,getNets:()=>netModel.nets,currentFile,
       is3D:()=>Boolean(scene),redraw:draw,showRules:()=>navigate('rules'),selectSearchObject,highlightSearchObjects,
-      isHighlighted:o=>o.kind==='net'?highlightedNets().some(n=>n.path===o.path&&n.name===o.netName):o.kind==='netclass'?pinnedClasses.has(JSON.stringify([o.path,o.className])):highlightObjects.some(item=>item.id===o.id),setMultiHighlight:on=>{if(!on){const keep=selectedNet||highlightedNets()[0];pinnedNets.clear();pinnedClasses.clear();selectedNet=keep||null;highlightObjects=keep?[]:highlightObjects.slice(0,1);activeConnection=null;connectionCursor=-1;updateHighlights();renderNets();renderNetClasses();navigation?.renderSearch();}},
+      isHighlighted:o=>o.kind==='net'?highlightedNets().some(n=>n.path===o.path&&n.name===o.netName):o.kind==='netclass'?pinnedClasses.has(JSON.stringify([o.path,o.className])):highlightObjects.some(item=>item.id===o.id),setMultiHighlight:on=>{if(!on){const keep=selectedNet||highlightedNets()[0];pinnedNets.clear();pinnedClasses.clear();selectedNet=keep||null;highlightObjects=keep?[]:highlightObjects.slice(0,1);activeConnection=null;connectionCursor=-1;updateHighlights();renderObjects();emitHighlightGroup();renderNets();renderNetClasses();navigation?.renderSearch();}},
       setNetClasses:config=>{classConfig=config;pinnedClasses.clear();renderNetClasses();updateHighlights();},
       addSearchFiles:incoming=>{for(const file of incoming){const previous=files.find(f=>f.path===file.path);if(previous&&previous.content!==file.content)throw new Error("Loaded drawing differs from the search snapshot; refresh before navigating results.");}for(const file of incoming){if(/\.kicad_pcb$/i.test(file.path)!==pcb)continue;const existing=files.find(f=>f.path===file.path);if(existing&&existing.content!==file.content)throw new Error('Loaded drawing differs from the search snapshot; refresh before navigating results.');if(!existing)files.push(file);}model=KiCadDesignModel.buildProject(files,config);objects=KiCadDesignModel.applyVariant(model,variant);renderObjects();renderSheets();},
       locateRule:target=>{if(!files.some(f=>f.path===target.file)){notice('The report item drawing is not loaded. Index the project first.');return;}if(/\.kicad_pcb$/i.test(target.file)!==pcb){notice('Open the matching drawing viewer to navigate this report item.');return;}if(scene){notice('Rule arrows are available in 2D.');return;}if(target.file!==currentFile())openSheet(target.file,target.position);else focus(target.position);}
@@ -916,7 +946,7 @@
     $('netClassSelect').onchange=renderNetClasses;
     if(!remoteAvailable){if(commentHelp)commentHelp.textContent=provider==='gitlab'?'Notes are saved in your workspace review file. Export them to share with your team. Read status belongs to this browser user.':'Notes are saved in your workspace review file. GitHub account integration is available in the browser extension.';for(const id of ['reviewSettings','refreshCommentPolicy','refreshGitHub','loadCategories','discussionCategoryLabel','threadNumberLabel'])$(id).hidden=true;$('commentDestination').parentElement.hidden=true;}
     $('sheetBack').onclick=()=>historySheet(-1);$('sheetForward').onclick=()=>historySheet(1);$('sheetUp').onclick=parentSheet;$('sheetHome').onclick=homeSheet;
-    $('highlightNetClass').onclick=()=>{const name=$('netClassSelect').value;if(!classConfig||!name)return;const key=JSON.stringify([currentFile(),name]),existed=pinnedClasses.has(key);if(!$('multiHighlight').checked){pinnedNets.clear();pinnedClasses.clear();highlightObjects=[];selectedNet=null;}if(existed)pinnedClasses.delete(key);else if(pinnedClasses.size<64)pinnedClasses.set(key,{path:currentFile(),name});activeConnection=null;connectionCursor=-1;updateHighlights();renderNets();renderNetClasses();};
+    $('highlightNetClass').onclick=()=>{const name=$('netClassSelect').value;if(!classConfig||!name)return;const key=JSON.stringify([currentFile(),name]),existed=pinnedClasses.has(key);if(!$('multiHighlight').checked){pinnedNets.clear();pinnedClasses.clear();highlightObjects=[];selectedNet=null;}if(existed)pinnedClasses.delete(key);else if(pinnedClasses.size<64)pinnedClasses.set(key,{path:currentFile(),name});activeConnection=null;connectionCursor=-1;updateHighlights();renderNets();renderNetClasses();emitHighlightGroup();};
     root.KiCadUIIcons?.decorate();$("schematicLayersHint").hidden=pcb;showNavigator(false);variants();
     if(chrome.storage?.local)chrome.storage.local.get(variantKey).then((saved)=>{if(saved[variantKey])installConfig(saved[variantKey]);}).catch((error)=>notice(error.message));
     refreshCommentPolicy();

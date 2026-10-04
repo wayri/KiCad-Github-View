@@ -1,5 +1,5 @@
 const test=require('node:test'),assert=require('node:assert/strict');
-const {validSelection,relatedPart,symbolUuid,qualifiedNetName,relatedNet}=require('../paired-review.js');
+const {validSelection,relatedPart,symbolUuid,qualifiedNetName,relatedNet,relatedGroup}=require('../paired-review.js');
 const part=(kind,ref,uuid,path='root.kicad_sch',linked)=>({kind,reference:ref,uuid,path,saved:{tree:[kind,...(linked?[["path",{quoted:'/root/'+linked}]]:[])]}});
 test('cross-probing prefers saved PCB schematic identity over renamed reference',()=>{
  const fp=part('footprint','R9','fp','board.kicad_pcb','sym');
@@ -46,4 +46,41 @@ test('reference-only fallback rejects repeated sheet identities and conflicting 
 test('cross selection is bounded and rejects malformed or control-bearing messages',()=>{
  assert.equal(validSelection({kind:'net',netName:'VCC',path:'root.kicad_sch'}),true);
  for(const value of [null,{kind:'net',netName:'VCC'},{kind:'net',netName:'a'.repeat(501),path:'root.kicad_sch'},{kind:'part',reference:'R1\n',path:'root.kicad_sch'},{kind:'unknown',path:'root.kicad_sch'}])assert.equal(validSelection(value),false);
+});
+test('group selection accepts clear and bounded valid items, rejects nested or malformed messages',()=>{
+ const item={kind:'part',reference:'R1',path:'root.kicad_sch',uuid:'sym'};
+ assert.equal(validSelection({kind:'group',items:[]}),true);
+ assert.equal(validSelection({kind:'group',items:Array(200).fill(item)}),true);
+ for(const value of [{kind:'group',items:Array(201).fill(item)},{kind:'group',items:[{kind:'group',items:[]}]},
+  {kind:'group',items:[{...item,path:'../root.kicad_sch'}]},{kind:'group',items:[{...item,extra:'unsafe'}]},
+  {kind:'group',items:new Array(1)},{kind:'group',items:[null]},{kind:'group',items:'bad'},
+  {kind:'group',items:[],extra:true}])assert.equal(validSelection(value),false);
+ assert.deepEqual(relatedGroup([],[],{kind:'group',items:[]}),{objects:[],nets:[],errors:[]});
+ assert.deepEqual(relatedGroup([],[],item),{objects:[],nets:[],errors:['Invalid cross-highlight group.']});
+});
+test('group cross-highlight maps saved parts and qualified nets across multiple sheets and deduplicates',()=>{
+ const a=part('symbol','R1','a','design/one.kicad_sch'),b=part('symbol','R2','b','design/two.kicad_sch');
+ const objects=[a,b,...['one','two'].map(name=>({kind:'sheet',path:'design/root.kicad_sch',properties:{Sheetname:name,Sheetfile:name+'.kicad_sch'}}))];
+ const nets=['one','two'].map(name=>({kind:'schematic',path:'design/'+name+'.kicad_sch',name:'ENABLE'}));
+ const items=[{kind:'part',reference:'Renamed1',path:'design/board.kicad_pcb',symbolUuid:'a'},
+  {kind:'part',reference:'Renamed2',path:'design/board.kicad_pcb',symbolUuid:'b'},
+  ...['one','two'].map(name=>({kind:'net',path:'design/board.kicad_pcb',netName:'/'+name+'/ENABLE'}))];
+ assert.deepEqual(relatedGroup(objects,nets,{kind:'group',items:[...items,...items]},'design/one.kicad_sch'),{objects:[a,b],nets,errors:[]});
+ const footprints=[part('footprint','R1','fp1','design/board.kicad_pcb','a'),part('footprint','R2','fp2','design/board.kicad_pcb','b')];
+ const boardNets=['one','two'].map(name=>({kind:'pcb',path:'design/board.kicad_pcb',name:'/'+name+'/ENABLE'}));
+ assert.deepEqual(relatedGroup(footprints,boardNets,{kind:'group',items:[
+  {kind:'part',reference:'R1',path:a.path,uuid:'a'},{kind:'part',reference:'R2',path:b.path,uuid:'b'},
+  ...nets.map(net=>({kind:'net',path:net.path,netName:net.name,qualifiedNetName:qualifiedNetName(net,objects)}))
+ ]}),{objects:footprints,nets:boardNets,errors:[]});
+});
+test('group mapping keeps safe matches but never guesses repeated parts or local nets using the active sheet',()=>{
+ const a=part('symbol','R1','a','one.kicad_sch'),b=part('symbol','R1','b','two.kicad_sch'),safe=part('symbol','R2','c');
+ const nets=['one','two'].map(name=>({kind:'schematic',path:name+'.kicad_sch',name:'ENABLE'}));
+ const result=relatedGroup([a,b,safe],nets,{kind:'group',items:[
+  {kind:'part',reference:'R1',path:'board.kicad_pcb'},
+  {kind:'net',netName:'ENABLE',path:'board.kicad_pcb'},
+  {kind:'part',reference:'R2',path:'board.kicad_pcb',symbolUuid:'c'}
+ ]},'one.kicad_sch');
+ assert.deepEqual(result.objects,[safe]);assert.deepEqual(result.nets,[]);assert.equal(result.errors.length,2);
+ assert.ok(result.errors.every(error=>/ambiguous/.test(error)));
 });

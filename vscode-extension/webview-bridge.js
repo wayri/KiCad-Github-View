@@ -5,11 +5,17 @@
   if(!context || !/^[a-f0-9]{48}$/.test(context.token))throw new Error("Missing private viewer session.");
   let next=0,hostSource,lastEventId=0,closed=false;
   const validSelection=(value)=> {
+    if(value?.kind==="group") {
+      if(Object.keys(value).some((key)=>!["kind","items"].includes(key)) || !Array.isArray(value.items) || value.items.length>200)return false;
+      for(const item of value.items)if(!item || item.kind==="group" || !validSelection(item))return false;
+      return true;
+    }
     const bounded=(item,n)=>typeof item==="string" && item.length>0 && item.length<=n && !/[\x00-\x1f\x7f]/.test(item);
     if(!value || typeof value!=="object" || Array.isArray(value) || !["part","net"].includes(value.kind) || !bounded(value.path,1000))return false;
-    const fields=value.kind==="part"?["kind","path","reference","uuid","symbolUuid"]:["kind","path","netName"];
+    if(!/^.+\.kicad_(?:sch|pcb)$/i.test(value.path) || value.path.startsWith("/") || value.path.split("/").some((part)=>!part || part==="." || part===".." || /[\\:]/.test(part)))return false;
+    const fields=value.kind==="part"?["kind","path","reference","uuid","symbolUuid"]:["kind","path","netName","qualifiedNetName"];
     if(Object.keys(value).some((key)=>!fields.includes(key)))return false;
-    return value.kind==="net"?bounded(value.netName,500):bounded(value.reference,200)&&["uuid","symbolUuid"].every((key)=>value[key]===undefined||bounded(value[key],200));
+    return value.kind==="net"?bounded(value.netName,500)&&(value.qualifiedNetName===undefined||bounded(value.qualifiedNetName,500)):bounded(value.reference,200)&&["uuid","symbolUuid"].every((key)=>value[key]===undefined||bounded(value[key],200));
   };
   const request=(message)=>new Promise((resolve,reject)=> {
     if(closed){reject(new Error("Drawing closed."));return;}

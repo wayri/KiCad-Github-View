@@ -17,3 +17,10 @@ Review interaction lives separately in `design-model.js` and `review-workspace.j
 Net analysis is in `net-model.js`, separate from drawing geometry. PCB identity is `(source path, saved numeric code)`; lengths count native source tracks/arcs once. Schematic identity remains per file: exact endpoint/junction connectivity, label aliases and explicit version-aware power symbols. Unmarked interior crossings stay separate. A spatial index bounds connectivity work and reports limits rather than inventing a complete circuit netlist. Hierarchy, bus expansion and implicit power pins need additional resolution. Native netlist comparison could not run in the current sandbox because KiCad startup registry access failed; no registry settings were changed.
 
 `ui-icons.js` supplies original, local SVG icons. `review-workspace.js` owns the explorer/inspector and annotation interaction. VS Code reuses these sources through a private webview bridge and workspace URI loader; it does not need KiCad or a rendering server at runtime.
+## Group selection and sheet highlighting
+
+Ctrl/Shift/Command-click drawing objects or Parts rows to add/remove group members, or enable Multihighlight under Review tools. Fit highlights fits visible members; Clear or Esc clears the group. Additive canvas clicks preserve the camera.
+
+Selecting a sheet in the navigator highlights its loaded subtree; selecting a sheet symbol highlights that symbol and the subtree without leaving the parent. Groups retain other loaded-sheet members as you navigate. Groups are bounded to 200 objects. Reused hierarchy instances share their saved file view; missing files and ambiguous cross-highlight matches are reported rather than guessed.
+
+Linked schematic/layout viewers propagate groups of saved part identities and unambiguous saved nets. Each drawing shows its own geometry, and groups spanning schematic sheets remain available when those sheets are opened. This does not edit or route the design.
