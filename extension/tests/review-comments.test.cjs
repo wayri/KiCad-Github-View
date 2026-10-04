@@ -100,3 +100,10 @@ test('GitLab scopes preserve provider and subgroups while separating review rece
  assert.equal(comments.parseSidecar(comments.serializeSidecar([github,gitlab])).length,2);
  assert.throws(()=>comments.normalizeScope({...gitlab.anchor,provider:'unknown'}));
 });
+
+
+test('Issue and Discussion types survive sidecar, export and GitHub marker round trips; legacy notes remain valid',()=>{
+ const note={id:'typed',text:'Review connection',createdAt:'2026-10-04T00:00:00Z',anchor:{repository:'wayri/board',ref:'main',file:'board.kicad_pcb'}};
+ for(const threadType of ['issue','discussion']){const value={...note,threadType};assert.equal(comments.parseSidecar(comments.serializeSidecar([value]))[0].threadType,threadType);assert.equal(comments.parseComments(comments.exportComments([value]))[0].threadType,threadType);assert.equal(comments.fromMarkdown(comments.toMarkdown(value))[0].threadType,threadType);}
+ assert.equal(comments.validateComment(note).threadType,undefined);assert.throws(()=>comments.validateComment({...note,threadType:'pull-request'}),/thread type/);
+});

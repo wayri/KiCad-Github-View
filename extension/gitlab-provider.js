@@ -8,7 +8,7 @@
   function endpoint(repository){if(!validRepository(repository))throw new Error('Invalid GitLab repository.');return 'https://gitlab.com/api/v4/projects/'+encodeURIComponent(repository)+'/repository';}
   async function response(url,limit=4*MIB){
     if(!url.startsWith('https://gitlab.com/api/v4/projects/'))throw new Error('Invalid GitLab API endpoint.');
-    const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),30000);
+    const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),60000);
     try{const result=await fetch(url,{credentials:'omit',cache:'no-store',redirect:'error',signal:controller.signal});
       if(result.status===404)return null;
       if(!result.ok)throw new Error(`GitLab returned HTTP ${result.status}; only publicly accessible repositories are supported.`);
@@ -20,7 +20,7 @@
     }catch(error){if(error.name==='AbortError')throw new Error('GitLab retrieval timed out.');throw error;}finally{clearTimeout(timer);}
   }
   async function json(url){const result=await response(url);if(!result)throw new Error('Public GitLab resource was not found.');return {...result,value:JSON.parse(new TextDecoder().decode(result.bytes))};}
-  async function file(repository,ref,path){scope(repository,ref,path);const result=await response(`${endpoint(repository)}/files/${encodeURIComponent(path)}/raw?ref=${encodeURIComponent(ref)}`,8*MIB);return result?new TextDecoder().decode(result.bytes):null;}
+  async function file(repository,ref,path){scope(repository,ref,path);const result=await response(`${endpoint(repository)}/files/${encodeURIComponent(path)}/raw?ref=${encodeURIComponent(ref)}`,root.KiCadBrowserData.fileByteLimit(path));return result?new TextDecoder().decode(result.bytes):null;}
   async function resolve(repository,ref,path){scope(repository,ref,path);const {value}=await json(`${endpoint(repository)}/commits/${encodeURIComponent(ref)}`);if(!SHA.test(value?.id))throw new Error('GitLab did not resolve an immutable revision.');return {repository,ref,sha:value.id};}
   async function tree(repository,ref,directory='',recursive=true){
     if(directory&&!validPath(directory))throw new Error('Invalid GitLab directory.');
@@ -37,7 +37,7 @@
   async function inventory(repository,ref,path){scope(repository,ref,path);const snapshot=await resolve(repository,ref,path),listing=await tree(repository,snapshot.sha);return {files:listing.entries.filter(item=>root.KiCadGitHub.filePath(item.path)).sort((a,b)=>a.path.localeCompare(b.path)).map(item=>({path:item.path,size:0})),snapshotRef:snapshot.sha,warnings:listing.warnings};}
   async function projectFile(repository,ref,path){scope(repository,ref,path);if(!root.KiCadGitHub.filePath(path))throw new Error('Unsupported project file.');const content=await file(repository,ref,path);if(content===null)throw new Error('Project file unavailable at this revision.');return {path,content};}
   async function search(repository,ref,path){const listing=await inventory(repository,ref,path),warnings=[...listing.warnings];const drawings=listing.files.filter(item=>root.KiCadBrowserData.validPath(item.path)).sort((a,b)=>(b.path===path?1:0)-(a.path===path?1:0)),settings=listing.files.filter(item=>/\.kicad_pro$/i.test(item.path));const files=[],saved=[];let total=0;
-    for(const item of drawings.slice(0,32)){try{const content=await file(repository,listing.snapshotRef,item.path);if(content===null){warnings.push(`${item.path}: unavailable.`);continue;}const bytes=new TextEncoder().encode(content).length;if(total+bytes>24*MIB){warnings.push('Project search reached its 24 MiB source limit.');break;}total+=bytes;files.push({path:item.path,content});}catch(error){warnings.push(`${item.path}: ${error.message}`);}}
+    for(const item of drawings.slice(0,32)){try{const content=await file(repository,listing.snapshotRef,item.path);if(content===null){warnings.push(`${item.path}: unavailable.`);continue;}const bytes=new TextEncoder().encode(content).length;if(total+bytes>root.KiCadBrowserData.PROJECT_MAX_BYTES){warnings.push('Project search reached its 96 MiB source limit.');break;}total+=bytes;files.push({path:item.path,content});}catch(error){warnings.push(`${item.path}: ${error.message}`);}}
     for(const item of settings.slice(0,8)){try{const content=await file(repository,listing.snapshotRef,item.path);if(content!==null&&new TextEncoder().encode(content).length<=MIB)saved.push({path:item.path,content});else warnings.push(`${item.path}: settings unavailable or exceed 1 MiB.`);}catch(error){warnings.push(`${item.path}: ${error.message}`);}}
     if(drawings.length>32)warnings.push('Project search loads at most 32 drawings.');if(settings.length>8)warnings.push('Only the first eight project settings files were retrieved.');return {files,settings:saved,warnings,snapshotRef:listing.snapshotRef,totalDrawings:drawings.length};
   }

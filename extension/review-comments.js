@@ -65,6 +65,8 @@ const KiCadReviewComments = (() => {
     }
     const severity = comment.severity ?? "info";
     if (!SEVERITIES.has(severity)) throw new Error("Invalid comment severity.");
+    const threadType=comment.threadType;
+    if(threadType!==undefined&&!["issue","discussion"].includes(threadType))throw new Error("Invalid review thread type.");
     const state=comment.state??"open";
     if (!STATES.has(state)) throw new Error("Invalid annotation state.");
     const tags=comment.tags??[];
@@ -96,7 +98,7 @@ const KiCadReviewComments = (() => {
     let capture;
     if(comment.capture!==undefined){const c=comment.capture;if(!c||c.mime!=='image/png'||typeof c.dataUrl!=='string'||c.dataUrl.length>262144||!/^data:image\/png;base64,iVBORw0KGgo[A-Za-z0-9+/]*={0,2}$/.test(c.dataUrl)||![c.width,c.height].every(n=>Number.isSafeInteger(n)&&n>=1&&n<=1024))throw new Error('Invalid annotation screenshot.');capture={mime:c.mime,dataUrl:c.dataUrl,width:c.width,height:c.height};}
     if(comment.anchor?.provider==='gitlab'&&refs.length)throw new Error('GitHub thread references cannot be attached to GitLab notes.');
-    return { id: comment.id, text: comment.text.trim(), createdAt: comment.createdAt, updatedAt, severity, state, tags:[...new Set(tags.map(tag=>tag.trim()))],mentions,remoteRefs:refs,...(capture?{capture}:{}),
+    return { ...(threadType?{threadType}:{}), id: comment.id, text: comment.text.trim(), createdAt: comment.createdAt, updatedAt, severity, state, tags:[...new Set(tags.map(tag=>tag.trim()))],mentions,remoteRefs:refs,...(capture?{capture}:{}),
       anchor: normalizeAnchor(comment.anchor) };
   }
   const escaped = (value) => String(value).replace(/[\\`*_{}\[\]()#+.!|<>]/g, "\\$&").replace(/\r?\n/g, " ");
@@ -116,6 +118,7 @@ const KiCadReviewComments = (() => {
   function toMarkdown(value) {
     const note = validateComment(value), anchor = note.anchor;
     const lines = ["### KiCad visual review note", "", `- Severity: ${note.severity[0].toUpperCase()}${note.severity.slice(1)}`,
+      ...(note.threadType?[`- Thread type: ${note.threadType==='discussion'?'Discussion':'Issue'}`]:[]),
       `- State: ${escaped(note.state)}`,
       `- Tags: ${note.tags.map(escaped).join(", ") || "none"}`,
       `- Mentions: ${note.mentions.map((login) => `@${escaped(login)}`).join(", ") || "none"}`,

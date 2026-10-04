@@ -118,3 +118,10 @@ test('nested GitLab namespaces remain provider scoped in project discovery', asy
     async () => '(kicad_sch)', null, 'gitlab');
   assert.equal(result.length, 1);
 });
+
+
+test('PCB discovery permits large bounded boards without scanning them as schematic hierarchy', async () => {
+  const board = '(kicad_pcb ' + ' '.repeat(9 * 1024 * 1024) + ')';
+  const files = await data.loadProject('owner/board', 'main', 'large.kicad_pcb', async () => board);
+  assert.equal(files.length, 1); assert.equal(files[0].content, board);
+});

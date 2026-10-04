@@ -47,6 +47,7 @@ function workspaceRuntime(respond=async()=>[], hooks={}){
     KiCadReviewTools:require('../review-tools.js'),KiCadDesignModel:require('../design-model.js'),KiCadNetModel:require('../net-model.js'),KiCadReviewComments:require('../review-comments.js'),KiCadBrowserData:require('../browser-data.js'),KiCadOwnedCanvas:require('../owned-canvas.js'),
     KiCadPairedReview:require('../paired-review.js'),KiCadBomAnalytics:require('../bom-analytics.js'),
     chrome:{runtime:{sendMessage:async message=>({ok:true,result:await respond(message)})}},setTimeout,URL,Blob};
+  if(hooks.vscode)context.KiCadVSCodeContext={};
   if(hooks.navigation){Object.assign(context,{KiCadProjectSearch:require('../project-search.js'),KiCadRuleReports:require('../rule-reports.js'),KiCadDesignDiff:diff,KiCadPCBRenderer:require('../pcb-renderer.js'),KiCadSchematicRenderer:require('../schematic-renderer.js')});vm.runInNewContext(fs.readFileSync(path.join(__dirname,'../review-navigation.js'),'utf8'),context);get('ruleSeverity').value='all';get('showRuleMarkers').checked=true;}
   canvas.setNetHighlights=(nets,options)=>{canvas.highlightNets=nets;canvas.netHighlight=nets[0]||null;canvas.netPrimitives=new Set(nets.flatMap(n=>n.primitives||[]));canvas.highlightMode=options.mode;};
   vm.runInNewContext(fs.readFileSync(path.join(__dirname,'../review-workspace.js'),'utf8'),context);
@@ -310,4 +311,45 @@ test('GitLab viewer isolates local anchors and hides GitHub account/publication 
  view.get('newComment').click();view.get('commentText').value='Check layout';await view.get('saveComment').click();
  const saved=calls.find(message=>message.type==='comment-save');assert.equal(saved.provider,'gitlab');assert.equal(saved.comment.anchor.provider,'gitlab');assert.equal(saved.comment.anchor.repository,'group/sub/design');
  assert.equal(calls.some(message=>message.type.startsWith('github-')||message.type==='comment-policy-status'),false);
+});
+
+
+test('GitHub collaboration is a separate pane and type controls preserve supported destinations without posting',async()=>{
+ const calls=[];const view=workspaceRuntime(async m=>{calls.push(m);if(m.type==='comment-policy-status')return{allowed:true,mode:'everyone'};return[];},{pullNumber:42,pullRepository:'wayri/reviews'});view.load();await new Promise(resolve=>setImmediate(resolve));
+ view.get('showGitHub').click();assert.equal(view.get('githubPane').hidden,false);assert.equal(view.get('commentsPane').hidden,true);assert.equal(view.get('propertiesPane').hidden,true);assert.equal(view.get('showGitHub').attributes['aria-pressed'],'true');
+ assert.equal(view.get('repositoryIssues').href,'https://github.com/wayri/reviews/issues');assert.equal(view.get('commentDestination').value,'pull-request');assert.equal(view.get('githubCommentType').value,'issue');
+ view.get('githubCommentType').value='discussion';view.get('githubCommentType').onchange();assert.deepEqual(Array.from(view.get('commentDestination').children,e=>e.value),['discussion','existing-discussion']);assert.equal(view.get('discussionCategoryLabel').hidden,false);
+ view.get('commentDestination').value='existing-discussion';view.get('commentDestination').onchange();assert.equal(view.get('threadNumberLabel').hidden,false);assert.equal(view.get('discussionCategoryLabel').hidden,true);assert.equal(view.get('threadNumber').placeholder,'Discussion number');
+ view.get('githubCommentType').value='issue';view.get('githubCommentType').onchange();assert.deepEqual(Array.from(view.get('commentDestination').children,e=>e.value),['issue','existing-issue','pull-request']);
+ view.get('showComments').click();assert.equal(view.get('githubPane').hidden,true);assert.equal(view.get('commentsPane').hidden,false);assert.equal(calls.some(m=>m.type==='github-publish-comment'),false);
+});
+test('standalone viewer never offers current PR and GitLab or VS Code collaboration is explicitly unavailable',async()=>{
+ const github=workspaceRuntime();assert.deepEqual(Array.from(github.get('commentDestination').children,e=>e.value),['issue','existing-issue']);
+ for(const hooks of [{provider:'gitlab',repository:'group/sub/project'},{vscode:true}]){
+  const calls=[];const view=workspaceRuntime(async m=>{calls.push(m);return[];},hooks);view.load();await new Promise(resolve=>setImmediate(resolve));view.get('showGitHub').click();
+  assert.equal(view.get('githubPane').hidden,false);assert.equal(view.get('githubAvailableControls').hidden,true);assert.match(view.get('githubAvailability').textContent,hooks.vscode?/VS Code viewer/:/GitLab remote collaboration is not available/);
+  assert.equal(calls.some(m=>m.type.startsWith('github-')||m.type==='comment-policy-status'),false);
+ }
+});
+test('new discussion publication requires the selected category and saved notes expose linked conversations',async()=>{
+ const calls=[];let notes=[];const remoteRef={kind:'discussion',repository:'wayri/fixture',number:8,url:'https://github.com/wayri/fixture/discussions/8',publishedAt:'2026-10-04T00:00:00.000Z'};
+ const view=workspaceRuntime(async m=>{calls.push(m);if(m.type==='comment-list')return notes;if(m.type==='comment-save'){notes=[m.comment];return m.comment;}if(m.type==='github-discussion-categories')return[{id:'category-1',name:'Design review'}];if(m.type==='github-publish-comment')return{remoteRef};return[];});view.load();await new Promise(resolve=>setImmediate(resolve));
+ view.get('githubCommentType').value='discussion';view.get('githubCommentType').onchange();view.get('newComment').click();view.get('commentText').value='Question about the board';await view.get('saveComment').click();await view.get('loadCategories').click();assert.equal(view.get('discussionCategory').children[0].textContent,'Design review');view.get('discussionCategory').value='category-1';
+ const actions=view.get('commentList').children[0].children.at(-1);await actions.children.find(e=>e.textContent==='Publish to GitHub').click();const publish=calls.find(m=>m.type==='github-publish-comment');assert.equal(publish.destination,'new-discussion');assert.equal(publish.categoryId,'category-1');assert.match(view.get('githubThreadList').textContent,/discussion #8/);assert.equal(view.get('githubThreadList').children[0].children[0].href,remoteRef.url);
+});
+
+test('saved annotation type survives editing and rejects accidental publication to the other thread type',async()=>{
+ let notes=[];const calls=[];const view=workspaceRuntime(async m=>{calls.push(m);if(m.type==='comment-list')return notes;if(m.type==='comment-save'){notes=[m.comment];return m.comment;}return[];});view.load();await new Promise(resolve=>setImmediate(resolve));
+ view.get('newComment').click();view.get('commentText').value='Fix this issue';await view.get('saveComment').click();assert.equal(notes[0].threadType,'issue');assert.match(view.get('commentList').textContent,/Issue/);
+ view.get('githubCommentType').value='discussion';view.get('githubCommentType').onchange();let actions=view.get('commentList').children[0].children.at(-1);await actions.children.find(e=>e.textContent==='Publish to GitHub').click();assert.equal(calls.some(m=>m.type==='github-publish-comment'),false);assert.match(view.get('commentStatus').textContent,/Choose a matching destination/);
+ actions.children.find(e=>e.textContent==='Edit').click();assert.equal(view.get('githubCommentType').value,'issue');
+ view.get('githubCommentType').value='discussion';view.get('githubCommentType').onchange();await view.get('saveComment').click();assert.equal(notes[0].threadType,'discussion');
+});
+
+test('all shared viewers contain exactly one collaboration control and a distinct GitHub pane',()=>{
+ for(const file of ['pcb-viewer.html','schematic-viewer.html','revision-viewer.html']){
+  const html=fs.readFileSync(path.join(__dirname,'..',file),'utf8');
+  for(const id of ['showGitHub','githubPane','githubCommentType','commentDestination','reviewSettings','refreshCommentPolicy','refreshGitHub','severityFilter'])assert.equal((html.match(new RegExp(`id="${id}"`,'g'))||[]).length,1,`${file}: ${id}`);
+  assert.match(html,/<section id="githubPane" hidden>/);assert.match(html,/Comment type <select id="githubCommentType">/);assert.match(html,/Screenshots must be attached manually/);assert.match(html,/Full conversation history/);
+ }
 });

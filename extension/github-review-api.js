@@ -368,6 +368,7 @@ const KiCadGitHubReviewApi = (() => {
     if (message.title !== undefined && (typeof message.title !== "string" || !message.title.trim() || message.title.length > 200)) {
       throw fail("Invalid GitHub thread title.", true);
     }
+    if(note.threadType&&note.threadType!==(destination.includes("discussion")?"discussion":"issue"))throw fail("The destination does not match this note's Issue or Discussion type.",true);
     return { note, destination, repository, number, categoryId: message.categoryId,
       title: message.title?.trim() || `[${note.severity[0].toUpperCase()}${note.severity.slice(1)}] KiCad review: ${note.anchor.file}` };
   }

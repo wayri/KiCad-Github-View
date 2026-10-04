@@ -85,10 +85,10 @@ test('global search discloses truncated discovery and enforces source-count and 
   let reads=0;
   withFetch(t,async url=>{
     if(url.includes('/commits/'))return json({sha:sha('a'),commit:{tree:{sha:sha('b')}}});
-    if(url.includes('/git/trees/'))return json({truncated:true,tree:Array.from({length:40},(_,i)=>({path:`p${String(i).padStart(2,'0')}.kicad_pcb`,type:'blob',mode:'100644',size:i===0?9*1024*1024:12}))});
+    if(url.includes('/git/trees/'))return json({truncated:true,tree:Array.from({length:40},(_,i)=>({path:`p${String(i).padStart(2,'0')}.kicad_pcb`,type:'blob',mode:'100644',size:i===0?65*1024*1024:12}))});
     reads++;return new Response('(kicad_pcb)');
   });
-  const reply=await message({type:'project-search-files',repository:'wayri/board',ref:'main',file:'p00.kicad_pcb'});assert.equal(reply.ok,true);assert.equal(reads,31);assert.equal(reply.result.files.length,31);assert.match(reply.result.warnings.join(' '),/truncated.*8 MiB.*at most 32/s);
+  const reply=await message({type:'project-search-files',repository:'wayri/board',ref:'main',file:'p00.kicad_pcb'});assert.equal(reply.ok,true);assert.equal(reads,31);assert.equal(reply.result.files.length,31);assert.match(reply.result.warnings.join(' '),/truncated.*64 MiB.*at most 32/s);
 });
 
 test('saved report reads stay on repository revision and reject traversal and non-viewer callers',async t=>{
@@ -789,4 +789,49 @@ test('project inventory and raw JSON settings use safe immutable repository path
  const inventory=await message({type:'project-inventory',repository:'owner/board',ref:'main',file:'board.kicad_pro'},sender);assert.equal(inventory.ok,true);assert.deepEqual(inventory.result.files.map(f=>f.path),['board.kicad_pro','layers/top.gbr']);assert.equal(inventory.result.snapshotRef,sha('a'));assert.match(inventory.result.warnings.join(' '),/truncated/);
  const settings=await message({type:'project-file',repository:'owner/board',ref:sha('a'),file:'board.kicad_pro'},sender);assert.equal(settings.ok,true);assert.equal(JSON.parse(settings.result.content).board.design_settings.rules.min_clearance,0.2);assert.match(urls.at(-1),new RegExp('ref='+sha('a')));
  const before=urls.length;assert.equal((await message({type:'project-file',repository:'owner/board',ref:'main',file:'../escape.gbr'},sender)).ok,false);assert.equal((await message({type:'project-file',repository:'owner/board',ref:'main',file:'board.kicad_pro'},githubTab(4,'/owner/board'))).ok,false);assert.equal(urls.length,before);
+});
+
+
+test('large PCB uses bounded raw Contents media and excludes credentials and redirects', async t => {
+  const board = '(kicad_pcb ' + ' '.repeat(9 * 1024 * 1024) + ')';
+  withFetch(t, async (url, options) => {
+    assert.equal(url, 'https://api.github.com/repos/owner/board/contents/design/large.kicad_pcb?ref=main');
+    assert.equal(options.headers.Accept, 'application/vnd.github.raw+json');
+    assert.equal(options.credentials, 'omit'); assert.equal(options.redirect, 'error');
+    assert.equal(options.headers.Authorization, undefined);
+    return new Response(board, {headers: {'content-type': 'application/vnd.github.raw+json'}});
+  });
+  assert.equal(await background.githubFile('owner/board', 'main', 'design/large.kicad_pcb'), board);
+});
+
+test('PCB raw byte cap rejects oversized headers; schematics retain their smaller stream cap', async t => {
+  withFetch(t, async () => new Response('tiny', {headers: {'content-length': String(64 * 1024 * 1024 + 1)}}));
+  await assert.rejects(background.githubFile('owner/board', 'main', 'large.kicad_pcb'), /size limit/);
+  global.fetch = async () => new Response('x'.repeat(8 * 1024 * 1024 + 1));
+  await assert.rejects(background.githubFile('owner/board', 'main', 'large.kicad_sch'), /size limit/);
+  let calls = 0; global.fetch = async () => {calls++; return new Response('');};
+  await assert.rejects(background.githubFile('owner/board', 'main', '../large.kicad_pcb'), /Invalid/);
+  assert.equal(calls, 0);
+});
+
+
+test('drawing and project reads use the configured account only on the exact GitHub API host', async t => {
+  sessionStore.clear(); const token='test-credential-'.repeat(3);sessionStore.set('github-review-token',token);t.after(()=>sessionStore.clear());
+  withFetch(t,async (url,init)=>{assert.equal(new URL(url).origin,'https://api.github.com');assert.equal(init.headers.Authorization,`Bearer ${token}`);assert.equal(init.redirect,'error');return url.includes('/contents/')?new Response('(kicad_pcb)'):json({sha:sha('a')});});
+  assert.equal(await background.githubFile('wayri/board','main','board.kicad_pcb'),'(kicad_pcb)');
+  assert.equal((await background.revisionResolve('wayri/board','main','board.kicad_pcb')).sha,sha('a'));
+});
+test('rate-limited API file reads recover through anonymous bounded raw content without leaking a token',async t=>{
+  sessionStore.clear();sessionStore.set('github-review-token','test-credential-'.repeat(3));t.after(()=>sessionStore.clear());const calls=[];
+  withFetch(t,async(url,init)=>{calls.push(url);if(url.startsWith('https://api.github.com/'))return new Response(null,{status:403,headers:{'x-ratelimit-remaining':'0'}});assert.equal(url,'https://raw.githubusercontent.com/wayri/board/feature%2Ftest/folder/board.kicad_pcb');assert.equal(init.headers,undefined);assert.equal(init.credentials,'omit');assert.equal(init.redirect,'error');return new Response('(kicad_pcb)');});
+  assert.equal(await background.githubFile('wayri/board','feature/test','folder/board.kicad_pcb'),'(kicad_pcb)');assert.equal(calls.length,2);
+});
+test('denied access is not treated as a rate limit and credential errors are sanitized',async t=>{
+  sessionStore.clear();let calls=0;withFetch(t,async()=>{calls++;return new Response('SECRET',{status:403});});
+  await assert.rejects(background.githubFile('wayri/board','main','board.kicad_pcb'),/denied.*permissions/);assert.equal(calls,1);
+  global.fetch=async()=>new Response('SECRET',{status:401});await assert.rejects(background.githubFile('wayri/board','main','board.kicad_pcb'),/authentication failed/);
+});
+test('failed raw fallback retains the rate limit reset guidance without retrying API requests',async t=>{
+  sessionStore.clear();let calls=0;withFetch(t,async()=>++calls===1?new Response(null,{status:403,headers:{'x-ratelimit-remaining':'0','x-ratelimit-reset':'2000000000'}}):new Response(null,{status:404}));
+  await assert.rejects(background.githubFile('wayri/board','main','board.kicad_pcb'),/rate limit reached.*2033.*Connect your GitHub account/);assert.equal(calls,2);
 });

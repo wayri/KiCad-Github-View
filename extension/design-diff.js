@@ -2,7 +2,7 @@
 ((root) => {
   "use strict";
   const MAX_FILE = 8 * 1024 * 1024;
-  const MAX_PROJECT = 24 * 1024 * 1024;
+  const MAX_PROJECT = 96 * 1024 * 1024;
   const MAX_FILES = 32;
   const MAX_DEPTH = 96;
   const MAX_NODES = 1000000;
@@ -17,10 +17,13 @@
 
   function parse(source) {
     if (typeof source !== "string") throw new TypeError("KiCad source must be a string.");
+    const board = /^\s*\(kicad_pcb(?:\s|\))/.test(source);
+    if (new TextEncoder().encode(source).length > (board ? 64 * 1024 * 1024 : MAX_FILE)) throw new Error("KiCad file exceeds browser parser size limits.");
+    const nodeLimit = board ? 6000000 : MAX_NODES;
     const stack = [], roots = [];
     let i = 0, nodes = 0;
     const append = (item) => {
-      if (++nodes > MAX_NODES) throw new Error("KiCad file has too many S-expression nodes.");
+      if (++nodes > nodeLimit) throw new Error("KiCad file has too many S-expression nodes.");
       (stack.at(-1) || roots).push(item);
     };
     while (i < source.length) {
@@ -93,6 +96,10 @@
     const entries = [];
     for (const field of children(form, "property")) {
       if (field.length >= 3) entries.push([String(value(field[1])), String(value(field[2]))]);
+    }
+    if(kind==="footprint")for(const [role,name]of [["reference","Reference"],["value","Value"]]){
+      const legacy=children(form,"fp_text").find(field=>value(field[1])===role);
+      if(legacy&&legacy.length>=3&&!entries.some(([key])=>key===name))entries.push([name,String(value(legacy[2]))]);
     }
     for (const key of ["lib_id", "layer", "width", "drill", "size", "unit"]) {
       const found = child(form, key);
@@ -199,7 +206,7 @@
       paths.add(file.path);
       const size = new TextEncoder().encode(file.content).length;
       total += size;
-      if (size > MAX_FILE || total > MAX_PROJECT) throw new Error("KiCad project exceeds browser comparison size limits.");
+      if (size > (/\.kicad_pcb$/i.test(file.path) ? 64 * 1024 * 1024 : MAX_FILE) || total > MAX_PROJECT) throw new Error("KiCad project exceeds browser comparison size limits.");
       for (const object of collect(file.path, file.content)) objects.push(object);
     }
     return objects;

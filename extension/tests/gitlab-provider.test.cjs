@@ -25,3 +25,11 @@ test('GitLab commits and compare use immutable refs with direct comparison warni
  const history=await api.commits('group/board','main','new.kicad_pcb');assert.equal(history.commits[0].sha,sha);
  const comparison=await api.compare('group/board','main','feature/pcb','new.kicad_pcb');assert.equal(comparison.files.length,1);assert.equal(comparison.files[0].status,'renamed');assert.match(comparison.warnings.join(' '),/incomplete/);
 });
+
+
+test('GitLab permits larger PCB source but retains schematic and other-file byte caps', async t => {
+  const previous = global.fetch; t.after(() => {global.fetch = previous;});
+  global.fetch = async () => new Response('x'.repeat(9 * 1024 * 1024));
+  assert.equal((await api.file('group/board', 'main', 'large.kicad_pcb')).length, 9 * 1024 * 1024);
+  await assert.rejects(api.file('group/board', 'main', 'large.kicad_sch'), /size limit/);
+});

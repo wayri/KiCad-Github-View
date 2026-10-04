@@ -122,7 +122,7 @@ function validateComment(note,session=null) {
     !["info","minor","major","critical"].includes(note.severity || "info") ||
     !validTimestamp(note.createdAt))
     throw new Error("Invalid local review annotation.");
-  const allowed=new Set(["id","text","severity","createdAt","updatedAt","anchor","tags","state","remoteRefs","capture","mentions"]);
+  const allowed=new Set(["id","text","severity","createdAt","updatedAt","anchor","tags","state","remoteRefs","capture","mentions","threadType"]);
   if(Object.keys(note).some((key)=>!allowed.has(key)))throw new Error("Annotation has unsupported fields; preserve it in the sidecar before upgrading.");
   if(!note.anchor || typeof note.anchor.repository!=="string" || !/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(note.anchor.repository) ||
     note.anchor.repository.split("/").some((p)=>[".",".."].includes(p)) || typeof note.anchor.ref!=="string" ||
@@ -162,6 +162,7 @@ function validateComment(note,session=null) {
     !Array.isArray(tags) || tags.length>20 || tags.some((tag)=>typeof tag!=="string" || !tag.trim() || tag.length>40 || /[\x00-\x1f\x7f]/.test(tag)) ||
     !Array.isArray(remoteRefs) || remoteRefs.length>20)throw new Error("Invalid annotation state, timestamps, tags or remote references.");
   if(Date.parse(updatedAt)<Date.parse(note.createdAt))throw new Error("Annotation update time precedes creation time.");
+  const threadType=note.threadType;if(threadType!==undefined&&!["issue","discussion"].includes(threadType))throw new Error("Invalid annotation thread type.");
   const inputMentions=note.mentions??[],mentions=[],mentionKeys=new Set();
   if(!Array.isArray(inputMentions) || inputMentions.length>20)throw new Error("Invalid annotation mentions.");
   for(const raw of inputMentions) {
@@ -182,7 +183,7 @@ function validateComment(note,session=null) {
     return clone(remote);
   });
   return {id:note.id,text:note.text.trim(),createdAt:note.createdAt,updatedAt,severity:note.severity || "info",anchor,
-    tags:[...new Set(tags.map((tag)=>tag.trim()))],state,mentions,remoteRefs:refs,...(capture ? {capture} : {})};
+    tags:[...new Set(tags.map((tag)=>tag.trim()))],state,mentions,...(threadType?{threadType}:{}),remoteRefs:refs,...(capture ? {capture} : {})};
 }
 function pngSignature(payload) {
   const alphabet="ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/",bytes=[];let bits=0,count=0;

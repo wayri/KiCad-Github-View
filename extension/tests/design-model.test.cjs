@@ -218,3 +218,11 @@ test("repeated placed units share one immutable embedded library snapshot", () =
   assert.equal(parts[0].saved.library, parts[1].saved.library);
   assert.equal(Object.isFrozen(parts[0].saved.library.tree), true);
 });
+
+
+test('KiCad 6 footprint reference/value fields drive parts, BOM and search despite sheet metadata',()=>{
+ const source='(kicad_pcb (footprint "CERN:CAPC" (layer "F.Cu") (at 10 20) (tstamp "legacy") (property "Sheetname" "Power") (fp_text reference "C43") (fp_text value "100nF")))';
+ const model=buildProject([file('board.kicad_pcb',source)]),part=model.objects.find(x=>x.kind==='footprint');
+ assert.equal(part.reference,'C43');assert.equal(part.label,'C43');assert.equal(part.properties.Value,'100nF');assert.equal(part.properties.Sheetname,'Power');
+ const modern=buildProject([file('board.kicad_pcb',source.replace('(property "Sheetname" "Power")','(property "Reference" "C99") (property "Value" "1uF")'))]).objects.find(x=>x.kind==='footprint');assert.equal(modern.reference,'C99');assert.equal(modern.properties.Value,'1uF');
+});

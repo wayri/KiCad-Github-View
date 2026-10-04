@@ -214,9 +214,8 @@ export function mountBoard3D(container, source, options = {}) {
   function showModelDiagnostics() {
     const resolved = loadedModelIndexes.size;
     const problems = modelDiagnostics.length;
-    notice.textContent = resolved || problems
-      ? `${resolved} footprint${resolved === 1 ? "" : "s"} with repository model geometry · ${problems} model issue${problems === 1 ? "" : "s"}: ${modelDiagnostics.slice(0, 3).join(" | ")}${problems > 3 ? ` | +${problems - 3} more` : ""}`
-      : "SPIKE 3D · footprint boxes remain where linked model geometry is unavailable.";
+    notice.textContent = `Real model geometry: ${resolved}/${board.components.length} footprints · ${board.components.length-resolved} without linked geometry (procedural proxies)`
+      + (problems ? ` · ${problems} diagnostic samples: ${modelDiagnostics.slice(0, 3).join(" | ")}${problems>3?` | +${problems-3} more`:""}` : "");
     notice.title = modelDiagnostics.join("\n");
   }
   function glbIsSelfContained(bytes) {
@@ -255,6 +254,7 @@ export function mountBoard3D(container, source, options = {}) {
     try { inventory = globalThis.KiCadRepoModels.collect(source, options.boardPath); }
     catch (error) { modelDiagnostics.push(`Cannot read model references: ${error.message}`); showModelDiagnostics(); return; }
     modelDiagnostics.push(...inventory.diagnostics);
+    showModelDiagnostics();
     const cache = new Map();
     let totalBytes = 0, cursor = 0;
     async function one(entry) {
@@ -305,6 +305,7 @@ export function mountBoard3D(container, source, options = {}) {
     await Promise.all(Array.from({ length: Math.min(3, inventory.models.length) }, async () => {
       while (cursor < inventory.models.length && active) await one(inventory.models[cursor++]);
     }));
+    if(active)showModelDiagnostics();
   }
 
   function fit(topView = false) {

@@ -3,6 +3,8 @@
   "use strict";
   const repositoryPattern = /^[A-Za-z0-9_.-]+(?:\/[A-Za-z0-9_.-]+)+$/;
   const filePattern = /\.kicad_(?:sch|pcb)$/i;
+  const PROJECT_MAX_BYTES = 96 * 1024 * 1024;
+  const fileByteLimit = (path) => (/\.kicad_pcb$/i.test(path) ? 64 : 8) * 1024 * 1024;
 
   function validRepository(value, provider = "github") {
     return typeof value === 'string' && value.length <= 500 && repositoryPattern.test(value) &&
@@ -77,7 +79,7 @@
       if (content !== null && typeof content !== "string") throw new Error("GitHub returned invalid KiCad file contents.");
       if (content !== null) {
         const size = encoder.encode(content).length;
-        if (size > 8 * 1024 * 1024 || totalBytes + size > 24 * 1024 * 1024) {
+        if (size > fileByteLimit(path) || totalBytes + size > PROJECT_MAX_BYTES) {
           throw new Error("Project discovery exceeds the browser preview size limit.");
         }
         totalBytes += size;
@@ -140,7 +142,7 @@
       if (content === null) continue;
       files.push({ path, content });
       if (!/\.kicad_sch$/i.test(path)) continue;
-      for (const name of sheetFiles(content)) {
+      for (const name of /\.kicad_sch$/i.test(path) ? sheetFiles(content) : []) {
         const child = childPath(path, name);
       if (child && !seen.has(child)) queue.push(child);
       }
@@ -149,6 +151,6 @@
     return files;
   }
 
-  root.KiCadBrowserData = { validRepository, validRef, validPath, childPath, sheetFiles, loadProject };
+  root.KiCadBrowserData = { validRepository, validRef, validPath, childPath, sheetFiles, loadProject, fileByteLimit, PROJECT_MAX_BYTES };
   if (typeof module === "object" && module.exports) module.exports = root.KiCadBrowserData;
 })(typeof globalThis === "object" ? globalThis : this);

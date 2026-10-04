@@ -10,16 +10,37 @@ function validRepository(value) {
     value.split("/").every((part) => part !== "." && part !== "..");
 }
 
+async function githubReadHeaders(headers = {}) {
+  const result = { "X-GitHub-Api-Version": "2022-11-28", ...headers };
+  if ((await KiCadGitHubReviewApi.tokenStatus()).configured) {
+    const token = (await chrome.storage.session.get('github-review-token'))['github-review-token'];
+    if (token) result.Authorization = `Bearer ${token}`;
+  }
+  return result;
+}
+function githubReadError(response) {
+  const remaining = response.headers.get('x-ratelimit-remaining');
+  const retry = response.headers.get('retry-after');
+  if ((response.status === 403 || response.status === 429) && (remaining === '0' || retry || response.status === 429)) {
+    const reset = Number(response.headers.get('x-ratelimit-reset'));
+    const when = retry ? ` Retry after ${retry} seconds.` : Number.isFinite(reset) && reset > 0 ? ` Retry after ${new Date(reset * 1000).toISOString()}.` : ' Wait before retrying.';
+    return new Error('GitHub API rate limit reached.' + when + ' Connect your GitHub account in extension settings for authenticated reads.');
+  }
+  if (response.status === 401) return new Error('GitHub authentication failed (HTTP 401). Reconnect your account in extension settings.');
+  if (response.status === 403) return new Error('GitHub denied this request (HTTP 403). Check repository access and your account permissions in extension settings.');
+  return new Error(`GitHub returned HTTP ${response.status}.`);
+}
+
 async function githubResponse(url, headers = {}) {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 30000);
   try {
     const response = await fetch(url, {
-      headers: { "X-GitHub-Api-Version": "2022-11-28", ...headers },
-      credentials: "omit", cache: "no-store", signal: controller.signal
+      headers: await githubReadHeaders(headers),
+      credentials: "omit", cache: "no-store", redirect: "error", signal: controller.signal
     });
     if (response.status === 404) return null;
-    if (!response.ok) throw new Error(`GitHub returned HTTP ${response.status}.`);
+    if (!response.ok) throw githubReadError(response);
     return response;
   } catch (error) {
     if (error.name === "AbortError") throw new Error("GitHub file retrieval timed out.");
@@ -34,23 +55,52 @@ async function githubJson(url) {
 }
 
 async function githubFile(repository, ref, path) {
+  if (!KiCadBrowserData.validRepository(repository) || !KiCadBrowserData.validRef(ref) ||
+      typeof path !== "string" || !path || path.startsWith("/") || path.split("/").some(part => !part || part === "." || part === ".." || /[\\:\x00-\x1f\x7f]/.test(part))) throw new Error("Invalid GitHub file location.");
+  const limit = KiCadBrowserData.fileByteLimit(path);
   const encoded = path.split("/").map(encodeURIComponent).join("/");
   const url = `https://api.github.com/repos/${repository}/contents/${encoded}?ref=${encodeURIComponent(ref)}`;
-  const response = await githubResponse(url, { Accept: "application/vnd.github.raw+json" });
-  if (!response) return null;
-  const length = Number(response.headers.get("content-length"));
-  if (length > 8 * 1024 * 1024) throw new Error("KiCad file exceeds the browser preview size limit.");
-  const body = await response.text();
-  if (body.length > 11 * 1024 * 1024) throw new Error("KiCad file exceeds the browser preview size limit.");
-  if (!response.headers.get("content-type")?.includes("json")) return body;
-  let data;
-  try { data = JSON.parse(body); } catch { return body; }
-  if(data && typeof data==='object' && !Object.prototype.hasOwnProperty.call(data,'encoding') && !Object.prototype.hasOwnProperty.call(data,'content'))return body;
-  if (typeof data.content !== "string" || data.encoding !== "base64") {
-    throw new Error("GitHub did not return KiCad file contents.");
-  }
-  const binary = atob(data.content.replace(/\s/g, ""));
-  return new TextDecoder().decode(Uint8Array.from(binary, (ch) => ch.charCodeAt(0)));
+  const controller = new AbortController(), timeout = setTimeout(() => controller.abort(), 60000);
+  try {
+    let response = await fetch(url, { headers: await githubReadHeaders({ Accept: "application/vnd.github.raw+json" }), credentials: "omit", cache: "no-store", redirect: "error", signal: controller.signal });
+    // Public raw content is a separate, anonymous transport. Never send a token
+    // to the asset host or follow a redirect with authorization attached.
+    if ((response.status === 403 && response.headers.get('x-ratelimit-remaining') === '0') || response.status === 429) {
+      const apiError = githubReadError(response);
+      response = await fetch(`https://raw.githubusercontent.com/${repository}/${encodeURIComponent(ref)}/${encoded}`, { credentials: "omit", cache: "no-store", redirect: "error", signal: controller.signal });
+      if (!response.ok) throw apiError;
+    }
+    if (response.status === 404) return null;
+    if (!response.ok) throw githubReadError(response);
+    // Raw media avoids the Contents JSON endpoint's empty content above 1 MiB.
+    // Still accept bounded base64 envelopes from compatible mocks/proxies.
+    const json = response.headers.get("content-type")?.includes("json");
+    const responseLimit = json ? Math.ceil(limit * 4 / 3) + 65536 : limit;
+    if (Number(response.headers.get("content-length")) > responseLimit) throw new Error("KiCad file exceeds the browser preview size limit.");
+    const reader = response.body.getReader(), chunks = []; let count = 0;
+    while (true) {
+      const { done, value } = await reader.read(); if (done) break;
+      count += value.byteLength;
+      if (count > responseLimit) { await reader.cancel(); throw new Error("KiCad file exceeds the browser preview size limit."); }
+      chunks.push(value);
+    }
+    const bytes = new Uint8Array(count); let offset = 0;
+    for (const chunk of chunks) { bytes.set(chunk, offset); offset += chunk.byteLength; }
+    const body = new TextDecoder().decode(bytes);
+    let data;
+    if (json) { try { data = JSON.parse(body); } catch {} }
+    if (data && typeof data === "object" && (Object.hasOwn(data, "encoding") || Object.hasOwn(data, "content"))) {
+      if (typeof data.content !== "string" || data.encoding !== "base64" || !/^[A-Za-z0-9+/=\r\n]*$/.test(data.content)) throw new Error("GitHub did not return KiCad file contents.");
+      const binary = atob(data.content.replace(/\s/g, ""));
+      if (binary.length > limit) throw new Error("KiCad file exceeds the browser preview size limit.");
+      return new TextDecoder().decode(Uint8Array.from(binary, ch => ch.charCodeAt(0)));
+    }
+    if (count > limit) throw new Error("KiCad file exceeds the browser preview size limit.");
+    return body;
+  } catch (error) {
+    if (error.name === "AbortError") throw new Error("GitHub file retrieval timed out.");
+    throw error;
+  } finally { clearTimeout(timeout); }
 }
 
 async function githubDirectory(repository, ref, directory, includeBoards = false) {
@@ -129,10 +179,10 @@ async function projectSearchFiles(repository, ref, file) {
   candidates.sort((a,b)=>(b.path===file?1:0)-(a.path===file?1:0));
   const files=[];let total=0;
   for(const item of candidates.slice(0,32)) {
-    if(Number(item.size)>8*1024*1024){warnings.push(`${item.path}: exceeds the 8 MiB drawing limit.`);continue;}
-    if(total+Number(item.size||0)>24*1024*1024){warnings.push("Project search reached its 24 MiB source limit.");break;}
+    if(Number(item.size)>KiCadBrowserData.fileByteLimit(item.path)){warnings.push(`${item.path}: exceeds the ${KiCadBrowserData.fileByteLimit(item.path)/1024/1024} MiB drawing limit.`);continue;}
+    if(total+Number(item.size||0)>KiCadBrowserData.PROJECT_MAX_BYTES){warnings.push("Project search reached its 96 MiB source limit.");break;}
     try {const content=await githubFile(repository,commit.sha,item.path);if(content===null){warnings.push(`${item.path}: source unavailable.`);continue;}
-      const bytes=new TextEncoder().encode(content).byteLength;if(bytes>8*1024*1024||total+bytes>24*1024*1024){warnings.push(`${item.path}: source size limit reached.`);continue;}
+      const bytes=new TextEncoder().encode(content).byteLength;if(bytes>KiCadBrowserData.fileByteLimit(item.path)||total+bytes>KiCadBrowserData.PROJECT_MAX_BYTES){warnings.push(`${item.path}: source size limit reached.`);continue;}
       total+=bytes;files.push({path:item.path,content});
     }catch(error){warnings.push(`${item.path}: ${error.message}`);}
   }
@@ -156,7 +206,7 @@ async function projectInventory(repository,ref,file){
 }
 async function projectFile(repository,ref,file){
   if(!KiCadBrowserData.validRepository(repository)||!KiCadBrowserData.validRef(ref)||!KiCadGitHub.filePath(file))throw new Error('Invalid project file.');
-  const content=await githubFile(repository,ref,file);if(content===null)throw new Error('Project file unavailable.');if(new TextEncoder().encode(content).byteLength>8*1024*1024)throw new Error('Project file exceeds 8 MiB.');return {path:file,content};
+  const content=await githubFile(repository,ref,file);if(content===null)throw new Error('Project file unavailable.');if(new TextEncoder().encode(content).byteLength>KiCadBrowserData.fileByteLimit(file))throw new Error('Project file exceeds its size limit.');return {path:file,content};
 }
 async function openProjectWindow(repository,ref,file){
   if(!KiCadBrowserData.validRepository(repository)||!KiCadBrowserData.validRef(ref)||!KiCadGitHub.filePath(file))throw new Error('Invalid project location.');
@@ -790,7 +840,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 });
 
 if (typeof module === "object" && module.exports) {
-  module.exports = { githubPull, githubFiles, githubDirectory, drawingFiles, openViewerWindow,
+  module.exports = { githubFile, githubPull, githubFiles, githubDirectory, drawingFiles, openViewerWindow,
     githubAsset, designChanges, senderAllowed, viewerSender, optionsSender, openFromAction,
     commentList, commentSave, commentDelete, openCommentDraft, claimCommentDraft,
     acknowledgeCommentDraft, githubAnnotations, revisionBranches,revisionCommits,revisionResolve };
