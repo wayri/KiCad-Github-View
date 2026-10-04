@@ -110,11 +110,11 @@ test('short split views preserve the drawing budget and switch panels instead of
  view.get('partsButton').click();view.get('propertiesButton').click();view.get('commentsButton').click();
  assert.equal(view.get('designInspector').hidden,true);assert.equal(view.get('designNavigator').hidden,true);assert.equal(view.get('commentsSidebar').hidden,false);
  const area=1600*440-parseFloat(view.get('commentsSidebar').style.width)*parseFloat(view.get('commentsSidebar').style.height);
- assert.ok(area/(1600*500)>=.86-1e-6,'unobscured drawing is at least 86% of the full frame');
+ assert.ok(area/(1600*500)>=.80-1e-6,'short frames retain the user requested 80% while keeping the header accessible');assert.ok(parseFloat(view.get('commentsSidebar').style.height)>=40);
  view.get('propertiesButton').click();assert.equal(view.get('designInspector').hidden,false);assert.equal(view.get('commentsSidebar').hidden,true);
  view.resize(350);
  const smallArea=350*440-Math.min(318,parseFloat(view.get('designInspector').style.width))*parseFloat(view.get('designInspector').style.height);
- assert.ok(smallArea/(350*500)>=.86-1e-6,'no minimum panel height silently breaks the budget');
+ assert.ok(smallArea/(350*500)>=.80-1e-6,'the accessible header preserves at least 80% in this short frame');
 });
 test('switching comment subtabs and collapsing a sidebar preserve an unsaved draft and never publish',async()=>{
  const calls=[];const view=workspaceRuntime(async message=>{calls.push(message);return[];},{width:1600});view.load();view.get('newComment').click();view.get('commentText').value='Unsaved review';
@@ -532,4 +532,12 @@ test('sidebar height resize supports keyboard, pointer cancellation and resize c
  key('Home');assert.equal(panel.style.height,'180px');key('ArrowDown');assert.equal(panel.style.height,'190px');key('End');assert.ok(parseFloat(panel.style.height)>190);assert.equal(handle.attributes['aria-orientation'],'horizontal');
  const pointer=(type,y)=>{const event=new Event(type);Object.assign(event,{button:0,pointerId:2,clientY:y});handle.dispatchEvent(event);};pointer('pointerdown',600);pointer('pointermove',300);assert.equal(panel.style.height,'300px');pointer('pointercancel',300);pointer('pointermove',100);assert.equal(panel.style.height,'300px');
  view.resize(350);assert.ok(parseFloat(panel.style.width)*parseFloat(panel.style.height)<=350*600*.14+.1);assert.equal(handle.attributes['aria-valuenow'],String(Math.round(parseFloat(panel.style.height))));
+});
+
+test('explicit panel expansion makes short split comments usable and restores the drawing budget without losing drafts',()=>{
+ const view=workspaceRuntime(undefined,{width:600,frameHeight:500,workspaceHeight:434});view.get('commentsButton').click();view.get('addCommentTab').click();view.get('newComment').click();view.get('commentText').value='Review draft survives';
+ const panel=view.get('commentsSidebar'),before=parseFloat(panel.style.height);assert.ok(before<180);assert.equal(panel.classList.contains('compact-sidebar'),true);view.get('expandComments').click();assert.equal(panel.classList.contains('compact-sidebar'),false);assert.equal(panel.style.height,'434px');assert.equal(view.get('expandComments').attributes['aria-pressed'],'true');assert.equal(view.get('commentText').value,'Review draft survives');
+ view.get('closeComments').click();view.get('commentsButton').click();assert.equal(panel.style.height,'434px');assert.equal(view.get('commentText').value,'Review draft survives');view.resize(1600);view.get('propertiesButton').click();assert.equal(panel.hidden,true);assert.equal(view.get('designInspector').hidden,false);view.get('commentsButton').click();assert.equal(panel.hidden,false);assert.equal(panel.style.height,'434px');view.resize(600);
+ view.get('expandComments').click();assert.ok(Math.abs(parseFloat(panel.style.height)-before)<.01);assert.equal(view.get('expandComments').attributes['aria-pressed'],'false');assert.match(view.get('panelSpaceStatus').title,/temporarily reduces drawing space/);
+ const area=600*434-parseFloat(panel.style.width)*parseFloat(panel.style.height);assert.ok(area/(600*500)>=.80-1e-6);assert.ok(parseFloat(panel.style.height)>=40);
 });

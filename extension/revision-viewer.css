@@ -144,3 +144,11 @@ body .object-row.selected{background:var(--selected);color:var(--text);border:1p
 .publication-recovery{display:grid;gap:8px;width:100%;padding:10px;border:1px solid var(--line);border-radius:6px;background:var(--panel)}.publication-recovery label{display:grid;gap:4px}.publication-recovery input{width:100%;min-width:0;padding:6px;border:1px solid var(--line);border-radius:4px;background:var(--surface)}.publication-recovery small{white-space:normal}
 
 .sidebar-height-resizer{position:absolute;left:0;right:0;bottom:-4px;height:8px;cursor:ns-resize;touch-action:none;z-index:11}.sidebar-height-resizer:hover,.sidebar-height-resizer:focus-visible,.sidebar-height-resizer.resizing{background:var(--accent);opacity:.7;outline:none}.sidebar-height-resizer:focus-visible{box-shadow:0 0 0 2px var(--panel)}
+
+.expanded-sidebar{box-shadow:0 5px 22px #0008!important}.sidebar-heading h2{flex:1;min-width:0}.sidebar-heading{gap:4px;padding-left:8px;padding-right:8px}.sidebar-heading button{padding-left:4px;padding-right:4px}
+
+.review-footer #panelSpaceStatus{min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:9px}.sidebar-heading h2{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}#designNavigator>.panel-heading{height:40px;min-height:40px;flex-shrink:0}
+
+@media(max-width:1000px){#frameControls{scrollbar-width:none}#frameControls::-webkit-scrollbar{display:none;height:0}}
+
+.compact-sidebar>:not(.sidebar-heading):not(.panel-heading):not(.sidebar-resizer):not(.sidebar-height-resizer){display:none!important}

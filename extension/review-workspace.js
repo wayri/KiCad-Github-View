@@ -151,7 +151,7 @@
     // This also applies to project, paired and VS Code viewers without copied markup.
     const workspaceElement=$("reviewWorkspace"), sidebarState={properties:false,comments:false,navigator:false};
     const sidebarWidths={properties:300,comments:340,navigator:260};let activeSidebar="properties",commentTab="view";
-    const sectionState=new Map(),resizeCleanups=[],sidebarHeights={properties:null,comments:null,navigator:null},tallSidebars=new Map();
+    const sectionState=new Map(),resizeCleanups=[],sidebarHeights={properties:null,comments:null,navigator:null},tallSidebars=new Map(),expandedSidebars=new Set();
     function collapsible(title,nodes,open=true,key=title){
       const details=make("details");details.className="sidebar-section";details.open=sectionState.has(key)?sectionState.get(key):open;
       details.append(make("summary",title),...nodes.filter(Boolean));details.addEventListener("toggle",()=>sectionState.set(key,details.open));return details;
@@ -190,11 +190,11 @@
       const width=workspaceElement.getBoundingClientRect().width||root.innerWidth||800;
       const required=Object.keys(sidebarState).reduce((sum,name)=>sum+(sidebarState[name]?sidebarWidths[name]:0),480);
       const workspaceHeight=workspaceElement.getBoundingClientRect().height||600,frameHeight=document.body?.getBoundingClientRect().height||root.innerHeight||workspaceHeight;
-      // Reserve 86% of the entire viewer for unobscured drawing, including chrome.
+      // Target 86% of the entire viewer; retain a usable header in short panes.
       const totalArea=width*frameHeight,panelBudget=Math.max(0,Math.min(totalArea*.14,width*workspaceHeight-totalArea*.86));
       const requestedWidth=Object.keys(sidebarState).reduce((sum,name)=>sum+(sidebarState[name]?Math.min(sidebarWidths[name],Math.max(0,width-32)):0),0);
       // Switch panels rather than squeezing several into unusably short strips.
-      const overlay=tallSidebars.has(activeSidebar)||width<required||(requestedWidth>0&&panelBudget/requestedWidth<180);workspaceElement.classList.toggle("sidebar-overlays",overlay);
+      const overlay=Object.keys(sidebarState).some(name=>sidebarState[name]&&expandedSidebars.has(name))||tallSidebars.has(activeSidebar)||width<required||(requestedWidth>0&&panelBudget/requestedWidth<180);workspaceElement.classList.toggle("sidebar-overlays",overlay);
       workspaceElement.classList.toggle("two-sidebars",!overlay&&sidebarState.properties&&sidebarState.comments);workspaceElement.style.setProperty("--comments-sidebar-width",sidebarWidths.comments+"px");
       const visiblePanels=[];
       for(const [name,id,buttonId]of [["properties","designInspector","propertiesButton"],["comments","commentsSidebar","commentsButton"],["navigator","designNavigator","partsButton"]]){
@@ -202,12 +202,13 @@
         if(visible)visiblePanels.push({name,panel:$(id)});
       }
       const visibleWidth=visiblePanels.reduce((sum,item)=>sum+Math.min(sidebarWidths[item.name],Math.max(0,width-32)),0);
-      const budgetHeight=visibleWidth?panelBudget/visibleWidth:workspaceHeight,panelHeight=Math.min(workspaceHeight,Math.max(0,budgetHeight));
+      const budgetHeight=visibleWidth?panelBudget/visibleWidth:workspaceHeight,panelHeight=Math.min(workspaceHeight,Math.max(40,budgetHeight));
       for(const {name,panel}of visiblePanels){
-        const height=sidebarHeights[name]===null?panelHeight:Math.min(panelHeight,Math.max(Math.min(180,panelHeight),sidebarHeights[name]));panel.style.height=height+'px';
-        const handle=panel.querySelector('.sidebar-height-resizer');if(handle){handle.setAttribute('aria-valuemin',String(Math.round(Math.min(180,panelHeight))));handle.setAttribute('aria-valuemax',String(Math.round(panelHeight)));handle.setAttribute('aria-valuenow',String(Math.round(height)));}
+        const expanded=expandedSidebars.has(name),maxHeight=expanded?workspaceHeight:panelHeight;
+        const height=sidebarHeights[name]===null||expanded?maxHeight:Math.min(maxHeight,Math.max(Math.min(180,maxHeight),sidebarHeights[name]));panel.style.height=height+'px';panel.classList.toggle('expanded-sidebar',expanded);panel.classList.toggle('compact-sidebar',height<180&&!expanded);
+        const handle=panel.querySelector('.sidebar-height-resizer');if(handle){handle.setAttribute('aria-valuemin',String(Math.round(Math.min(180,maxHeight))));handle.setAttribute('aria-valuemax',String(Math.round(maxHeight)));handle.setAttribute('aria-valuenow',String(Math.round(height)));}
       }
-      panelSpaceStatus.hidden=!visiblePanels.length||budgetHeight>=180;panelSpaceStatus.textContent=panelSpaceStatus.hidden?'':'Small view: enlarge this pane or use Focus view for comfortable panel access.';
+      panelSpaceStatus.hidden=!visiblePanels.length||budgetHeight>=180||expandedSidebars.has(activeSidebar);panelSpaceStatus.title='Small view: use Tall for more reading height, or Expand for a full-height panel. Expand temporarily reduces drawing space.';panelSpaceStatus.textContent=panelSpaceStatus.hidden?'':'Panel access: Tall or Expand.';
       $("commentsPane").hidden=commentsSidebar.hidden;
     }
     function showNavigator(open=true){sidebarState.navigator=open;if(open)activeSidebar="navigator";layoutSidebars();}
@@ -225,11 +226,13 @@
     }
     resizeSidebar("properties",propertiesSidebar,"left");resizeSidebar("comments",commentsSidebar,"left");resizeSidebar("navigator",$("designNavigator"),"right");
     function addPanelSizing(name,panel,header){
+      const expand=button('Expand',()=>{if(expandedSidebars.has(name))expandedSidebars.delete(name);else{expandedSidebars.add(name);activeSidebar=name;}expand.textContent=expandedSidebars.has(name)?'Restore':'Expand';expand.setAttribute('aria-pressed',String(expandedSidebars.has(name)));layoutSidebars();});
+      expand.id='expand'+name[0].toUpperCase()+name.slice(1);expand.title='Use full panel height for reading; Restore returns to the drawing-area budget';expand.setAttribute('aria-label',`Toggle expanded ${name} sidebar`);expand.setAttribute('aria-pressed','false');header?.insertBefore(expand,header.children[header.children.length-1]);
       const tall=button('Tall',()=>{if(tallSidebars.has(name)){sidebarWidths[name]=tallSidebars.get(name);tallSidebars.delete(name);}else{tallSidebars.set(name,sidebarWidths[name]);sidebarWidths[name]=220;sidebarHeights[name]=null;activeSidebar=name;}
         panel.style.width=panel.style.flexBasis=sidebarWidths[name]+'px';const widthHandle=panel.querySelector('.sidebar-resizer');widthHandle?.setAttribute('aria-valuenow',String(sidebarWidths[name]));tall.textContent=tallSidebars.has(name)?'Wide':'Tall';tall.setAttribute('aria-pressed',String(tallSidebars.has(name)));layoutSidebars();});
       tall.id='tall'+name[0].toUpperCase()+name.slice(1);tall.title='Use a narrow, taller panel while retaining drawing area';tall.setAttribute('aria-label',`Toggle tall ${name} sidebar`);tall.setAttribute('aria-pressed','false');header?.insertBefore(tall,header.children[header.children.length-1]);
       const handle=make('div');handle.className='sidebar-height-resizer';handle.tabIndex=0;handle.setAttribute('role','separator');handle.setAttribute('aria-orientation','horizontal');handle.setAttribute('aria-label',`Resize ${name} sidebar height`);panel.append(handle);let drag=null;
-      const setHeight=value=>{sidebarHeights[name]=value;layoutSidebars();};
+      const setHeight=value=>{if(expandedSidebars.has(name)){expandedSidebars.delete(name);expand.textContent='Expand';expand.setAttribute('aria-pressed','false');}sidebarHeights[name]=value;layoutSidebars();};
       handle.addEventListener('pointerdown',event=>{if(event.button!==0)return;event.preventDefault();drag={y:event.clientY,height:parseFloat(panel.style.height)||180,id:event.pointerId};handle.setPointerCapture?.(event.pointerId);handle.classList.toggle('resizing',true);});
       handle.addEventListener('pointermove',event=>{if(drag&&event.pointerId===drag.id)setHeight(drag.height+event.clientY-drag.y);});
       const stop=()=>{drag=null;handle.classList.toggle('resizing',false);};for(const type of ['pointerup','pointercancel','lostpointercapture'])handle.addEventListener(type,stop);
