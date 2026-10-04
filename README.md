@@ -1,5 +1,14 @@
 # KiCad GitHub View
 
+[![CI](https://github.com/wayri/KiCad-Github-View/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/wayri/KiCad-Github-View/actions/workflows/ci.yml)
+[![Latest release, including previews](https://img.shields.io/github/v/release/wayri/KiCad-Github-View?include_prereleases&label=release&color=0078d4)](https://github.com/wayri/KiCad-Github-View/releases)
+[![Release downloads](https://img.shields.io/github/downloads/wayri/KiCad-Github-View/total?color=2ea44f)](https://github.com/wayri/KiCad-Github-View/releases)
+[![Status: preview](https://img.shields.io/badge/status-preview-orange)](#what-you-can-do)
+[![Chromium: Manifest V3](https://img.shields.io/badge/Chromium-Manifest%20V3-4285f4?logo=googlechrome&logoColor=white)](docs/INSTALL.md)
+[![VS Code: VSIX](https://img.shields.io/badge/VS%20Code-VSIX-007acc)](docs/INSTALL.md)
+[![GitHub and GitLab: public repositories](https://img.shields.io/badge/GitHub%20%2B%20GitLab-public%20repositories-6f42c1)](docs/GIT-HOSTS.md)
+[![Design access: read only](https://img.shields.io/badge/design%20access-read--only-2ea44f)](#what-you-can-do)
+
 **Interactive KiCad review inside GitHub and public GitLab.com file pages.** Open schematics and PCB layouts as drawings, inspect saved parts and nets, compare revisions, and anchor review notes to the design. The viewer runs in the browser with our own schematic/PCB engine and the owner-authorized SPIKE 3D adapter. No KiCad installation, local companion process or rendering server is needed for the browser extension.
 
 [Download v0.11.5](https://github.com/wayri/KiCad-Github-View/releases/tag/v0.11.5) · [Install](docs/INSTALL.md) · [Comment integration](docs/COMMENTS.md) · [Git services](docs/GIT-HOSTS.md) · [Release notes](docs/releases/v0.11.5.md)
