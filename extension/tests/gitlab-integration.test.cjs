@@ -63,6 +63,22 @@ test('self-hosted limited comparison recovers drawings through the authorized wo
  assert.ok(h.calls.every(c=>new URL(c.url).origin===HOST&&c.init.headers.Authorization==='Bearer '+TOKEN&&c.init.redirect==='error'&&(!c.init.method||c.init.method==='GET')));
  assert.equal(JSON.stringify(result).includes(TOKEN),false);
 });
+
+test('GitLab merge-request host routes bind the page and isolate private fork reads',async()=>{
+ const head='b'.repeat(40),h=harness(url=>{
+  const p=new URL(url);
+  if(p.pathname.endsWith('/merge_requests/7'))return new Response(JSON.stringify({iid:7,source_project_id:42,target_project_id:21,diff_refs:{base_sha:SHA,head_sha:head,start_sha:SHA}}));
+  if(p.pathname.endsWith('/projects/42'))return new Response(JSON.stringify({id:42,path_with_namespace:'fork/private'}));
+  if(p.pathname.endsWith('/tree'))return new Response(JSON.stringify([{path:'board.kicad_pcb',mode:'100644',type:'blob',id:p.searchParams.get('ref')===SHA?'1'.repeat(40):'2'.repeat(40)}]));
+ });
+ await h.add();await h.send({provider:'gitlab',host:HOST,type:'gitlab-auth-set',token:TOKEN},h.options);h.calls.length=0;
+ const request={type:'gitlab-merge-request',provider:'gitlab',host:HOST,repository:'group/private',number:7};
+ const page={id:'test',url:HOST+'/group/private/-/merge_requests/7/diffs'};
+ const result=await h.send(request,page);assert.equal(result.ok,true,result.error);assert.equal(result.result.headRepository,'fork/private');
+ assert.ok(h.calls.every(c=>new URL(c.url).origin===HOST&&c.init.headers.Authorization==='Bearer '+TOKEN&&c.init.redirect==='error'));
+ const count=h.calls.length;assert.equal((await h.send({...request,number:8},page)).ok,false);assert.equal((await h.send({...request,repository:'other/private'},page)).ok,false);assert.equal(h.calls.length,count);
+ assert.equal(JSON.stringify(result).includes(TOKEN),false);
+});
 test('issue publishing routes through GitLab policy and removing a host purges registration and credentials',async()=>{
  const h=harness();await h.add();await h.send({provider:'gitlab',host:HOST,type:'gitlab-auth-set',token:TOKEN},h.options);
  const comment={id:'private-note',text:'Review U1 clearance',createdAt:'2026-10-04T01:00:00Z',threadType:'issue',anchor:{provider:'gitlab',host:HOST,repository:'group/private',ref:SHA,file:'board.kicad_pcb'}};

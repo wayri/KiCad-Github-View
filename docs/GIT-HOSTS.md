@@ -7,7 +7,7 @@ The browser extension embeds read-only viewers in supported repository file page
 | Schematic and PCB selection, properties and hierarchy | Public and authorized private file reads | Public and authorized private project reads, including subgroup namespaces | Saved local files |
 | Project setup and supported repository-linked models | Yes | Yes, credentials bound to the selected server | Yes |
 | Branch/commit visual comparison | Yes | Yes | Not yet |
-| Inline PR / merge-request file cards | Public and authorized private GitHub pull requests | Merge-request cards not implemented | Not applicable |
+| Inline PR / merge-request review | Public and authorized private GitHub pull-request file cards | Current merge-request Changes page selector (development after v0.12.9) | Not applicable |
 | Local annotations and review JSON export | Yes | Yes, isolated by provider and server | Git-tracked sidecar |
 | Account and remote review publication | Issues, PR comments and GitHub Discussions | New issues, comments and discussion threads within existing issues | Local sidecar only |
 | Annotation marker readback | Public and authorized private Issue/PR markers; selected Discussion bodies/comments/replies | Markers on a selected issue, with authorized private access | Sidecar reads |
@@ -26,6 +26,14 @@ Credentials are AES-256-GCM encrypted with keys only in background memory, bound
 Open a `.kicad_sch`, `.kicad_pcb` or supported project file under the repository **Files** page. Repository/ref/file metadata disambiguates branches containing slashes. Missing metadata leaves the normal source page intact. Requests use the selected server's REST API, never GitHub credentials; redirects with credentials are rejected. References resolve to commit SHAs before project loading. Pagination, file/model byte limits and time limits apply, and incomplete discovery is reported. A private-project 404 can mean denied access as well as a missing file.
 
 Since v0.12.9: when GitLab reports a timed-out or size-limited comparison, the extension recovers changed drawings by comparing blob identities in both immutable commit trees. This fallback requires complete tree discovery (at most 1,000 entries per revision); incomplete discovery stops the comparison rather than inferring missing or deleted files. Unique byte-identical moves are shown as renames. Edited or ambiguous moves appear as additions/removals, with a visible explanation. Ordinary large/collapsed text diffs still use the saved drawing files for rendering. Automated provider and authorized self-hosted worker fixtures cover this fallback; installed-server acceptance remains pending.
+
+## Merge-request comparison
+
+Development after v0.12.9: open a current GitLab merge request's **Changes** page (`/-/merge_requests/NUMBER/diffs`). A KiCad selector appears above the normal diff. Select a drawing to compare the target merge base and the source head inside the page; only one drawing preview is mounted at a time. **Refresh revisions** captures a fresh comparison. GitLab's source diff remains visible. The existing viewer supports saved-object comparison, linked cameras, layers, sheet navigation and review notes. Notes still publish through the existing Issue / issue-discussion destinations; merge-request comment publication is not supplied.
+
+Fork reads use the source project's namespace at its immutable head commit, while the base uses the target project. Requests remain on the selected, permission-granted GitLab server with that server's credential. The extension rechecks merge-request revisions after discovery and rejects a moving comparison. Metadata that is not ready, missing fork access or incomplete tree discovery produces an explicit error. At most 1,000 tree entries per side are discovered. Byte-identical unique moves are recognized as renames; edited or ambiguous moves appear as added/removed with a warning. Historical `diff_id`/revision-comparison URLs are left untouched instead of silently displaying the latest commits. This uses [GitLab's documented merge-request revision identities](https://docs.gitlab.com/api/merge_requests/).
+
+Provider, authenticated self-hosted worker and SPA navigation tests pass. A local browser fixture renders PCB revision pairs and switches to schematics with simulated GitLab transport; installed GitLab UI acceptance remains pending.
 
 ## GitLab review comments
 

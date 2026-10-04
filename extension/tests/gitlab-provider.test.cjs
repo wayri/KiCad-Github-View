@@ -85,3 +85,27 @@ test('GitLab same immutable revision avoids comparison and tree requests',async 
  let count=0;transport(t,async url=>{assert.match(url,/\/commits\//);count++;return json({id:sha});});
  assert.deepEqual(await api.compare('group/board','main','alias','board.kicad_pcb'),{files:[],base:sha,head:sha,warnings:[]});assert.equal(count,2);
 });
+
+test('GitLab merge requests pin merge base and fork head, and reject moving revisions',async t=>{
+ const host='https://gitlab.example.org',provider=api.forHost(host),head='b'.repeat(40),start='c'.repeat(40),calls=[];let reads=0,moving=false;
+ transport(t,async(url,options)=>{calls.push(url);assert.equal(new URL(url).origin,host);assert.equal(options.redirect,'error');
+  if(url.endsWith('/merge_requests/7')){reads++;return json({iid:7,source_project_id:42,target_project_id:21,diff_refs:{base_sha:sha,head_sha:moving&&reads%2===0?'d'.repeat(40):head,start_sha:start}});}
+  if(url.endsWith('/projects/42'))return json({id:42,path_with_namespace:'fork/sub/board'});
+  const query=new URL(url).searchParams;
+  if(url.includes('target%2Fsub%2Fboard')){assert.equal(query.get('ref'),sha);return json([{type:'blob',mode:'100644',path:'old.kicad_sch',id:'1'.repeat(40)}]);}
+  assert.ok(url.includes('fork%2Fsub%2Fboard'));assert.equal(query.get('ref'),head);return json([{type:'blob',mode:'100644',path:'sub/new.kicad_sch',id:'1'.repeat(40)}]);
+ });
+ const result=await provider.mergeRequest('target/sub/board',7);assert.equal(result.base,sha);assert.equal(result.head,head);assert.equal(result.headRepository,'fork/sub/board');assert.equal(result.files[0].status,'renamed');assert.equal(reads,2);
+ moving=true;await assert.rejects(provider.mergeRequest('target/sub/board',7),/changed during discovery/);
+ const count=calls.length;await assert.rejects(provider.mergeRequest('target/sub/board',0),/Invalid/);assert.equal(calls.length,count);
+});
+
+test('GitLab merge requests fail visibly before diff preparation and on truncated trees',async t=>{
+ let prepared=false;transport(t,async url=>{
+  if(url.includes('/merge_requests/'))return json({iid:1,source_project_id:2,target_project_id:1,diff_refs:prepared?{base_sha:sha,head_sha:'b'.repeat(40),start_sha:sha}:{}});
+  if(url.endsWith('/projects/2'))return json({id:2,path_with_namespace:'fork/board'});
+  return json([] ,{'x-next-page':'2'});
+ });
+ await assert.rejects(api.mergeRequest('group/board',1),/wait for diff preparation/);prepared=true;
+ await assert.rejects(api.mergeRequest('group/board',1),/discovery is incomplete/);
+});

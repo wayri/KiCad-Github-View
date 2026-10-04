@@ -66,7 +66,9 @@ test('GitLab nested namespaces use authoritative blob data for slash refs', () =
   assert.equal(blobRequest(parsed, {repository:'wrong/board',head:'feature/power',file:'design/root.kicad_sch'}), null);
   assert.equal(blobRequest(parsed, {repository:'group/subgroup/board',head:'main',file:'design/root.kicad_sch'}), null);
   assert.equal(route('https://gitlab.example.com/group/board/-/blob/main/root.kicad_sch'), null);
-  assert.equal(route('https://gitlab.com/group/board/-/merge_requests/1/diffs'), null);
+  assert.deepEqual(route('https://gitlab.com/group/board/-/merge_requests/1/diffs'), {kind:'merge',provider:'gitlab',host:'https://gitlab.com',repository:'group/board',number:1});
+  assert.equal(route('https://gitlab.com/group/board/-/merge_requests/1'), null);
+  assert.equal(route('https://gitlab.com/group/board/-/merge_requests/1/diffs?diff_id=2'), null);
   assert.equal(route('https://gitlab.com/group/%2Fboard/-/blob/main/root.kicad_sch'), null);
 });
 

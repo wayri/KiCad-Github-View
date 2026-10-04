@@ -11,8 +11,15 @@
     if (parsed.protocol === "https:" && !parsed.username && !parsed.password && (parsed.origin === "https://gitlab.com" || parsed.origin !== "https://github.com" && gitlabHosts.includes(parsed.origin))) {
       const parts = parsed.pathname.split("/").filter(Boolean);
       const delimiter = parts.indexOf("-");
-      if (delimiter < 2 || parts[delimiter + 1] !== "blob") return null;
+      if (delimiter < 2) return null;
       const namespace = parts.slice(0, delimiter).map(decodeSegment);
+      if (!namespace.every((part) => part && ownerPattern.test(part))) return null;
+      if(parts[delimiter+1]==='merge_requests'&&/^[1-9][0-9]*$/.test(parts[delimiter+2])&&parts[delimiter+3]==='diffs'&&parts.length===delimiter+4){
+        if(['diff_id','start_sha','end_sha','diff1','diff2'].some(key=>parsed.searchParams.has(key)))return null;
+        const number=Number(parts[delimiter+2]);
+        return Number.isSafeInteger(number)?{kind:'merge',provider:'gitlab',host:parsed.origin,repository:namespace.join('/'),number}:null;
+      }
+      if(parts[delimiter+1]!=='blob')return null;
       const tail = parts.slice(delimiter + 2).map(decodeSegment);
       if (!namespace.every((part) => part && ownerPattern.test(part)) || tail.length < 2 ||
           !tail.every(Boolean) || !filePattern.test(tail.at(-1))) return null;

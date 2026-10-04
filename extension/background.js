@@ -728,9 +728,16 @@ async function gitlabDispatch(message, sender) {
     if(message.type==='gitlab-client-set')return auth.setClientId(host,message.clientId);
     return auth.startOAuth(host);
   }
-  if (!viewerSender(sender) && message.type !== 'project') throw new Error('Only extension viewers can use GitLab repository tools.');
+  if (!viewerSender(sender) && !['project','gitlab-merge-request'].includes(message.type)) throw new Error('Only extension viewers can use GitLab repository tools.');
   if (optionsSender(sender)) throw new Error('Options cannot load GitLab projects.');
   switch(message.type) {
+    case 'gitlab-merge-request': {
+      if(!viewerSender(sender)){
+        const route=KiCadGitHub.route(sender.url,{gitlabHosts:[host]});
+        if(route?.kind!=='merge'||route.repository!==repository||route.number!==message.number)throw new Error('Merge-request context does not match the host page.');
+      }
+      return api.mergeRequest(repository,message.number);
+    }
     case 'project': {
       const snapshot=await api.resolve(repository,ref,file);
       return KiCadBrowserData.loadProject(repository,snapshot.sha,file,api.file,api.directory,'gitlab');

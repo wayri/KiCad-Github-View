@@ -45,10 +45,10 @@
   }
   async function branches(repository,ref,path){scope(repository,ref,path);const {value,next,link}=await json(`${endpoint(repository)}/branches?per_page=100&page=1`);if(!Array.isArray(value)||value.length>100)throw new Error('Invalid GitLab branch listing.');return {repository,branches:value.filter(item=>root.KiCadBrowserData.validRef(item?.name)&&SHA.test(item?.commit?.id)).map(item=>({name:item.name,sha:item.commit.id})),warnings:next||/rel="next"/.test(link)||value.length===100?['At most 100 branches shown; enter another branch manually.']:[]};}
   async function commits(repository,ref,path){const snapshot=await resolve(repository,ref,path),query=new URLSearchParams({ref_name:snapshot.sha,path,per_page:'50',page:'1'});const {value,next,link}=await json(`${endpoint(repository)}/commits?${query}`);if(!Array.isArray(value)||value.length>50)throw new Error('Invalid GitLab commit listing.');const clean=value=>typeof value==='string'?value.replace(/[\x00-\x1f\x7f]/g,' ').slice(0,300):'';return {repository,file:path,snapshotRef:snapshot.sha,commits:value.filter(item=>SHA.test(item?.id)).map(item=>({sha:item.id,message:clean(item.title),author:clean(item.author_name),date:clean(item.authored_date)})),warnings:next||/rel="next"/.test(link)||value.length===50?['At most 50 commits shown; enter an older SHA manually.']:[]};}
-  async function compareTrees(repository,base,head){
+  async function compareTrees(repository,base,head,headRepository=repository){
     // A truncated tree cannot establish absence: never infer deletions from it.
-    const listings=await Promise.all([tree(repository,base),tree(repository,head)]);
-    if(listings.some(listing=>listing.warnings.length))throw new Error('GitLab comparison exceeded server limits and repository discovery is incomplete. Compare a smaller project or individual drawing revisions.');
+    const listings=await Promise.all([tree(repository,base),tree(headRepository,head)]);
+    if(listings.some(listing=>listing.warnings.length))throw new Error('GitLab repository discovery is incomplete; a complete drawing comparison cannot be established. Compare a smaller project or individual drawing revisions.');
     const indexes=listings.map(listing=>{
       const index=new Map();
       for(const item of listing.entries){
@@ -92,7 +92,27 @@
     });
     return {files,base:from.sha,head:to.sha,warnings:[]};
   }
-  return {validRepository,validPath,file,resolve,directory,inventory,projectFile,search,branches,commits,compare,response,endpoint};
+  async function mergeRequest(repository,number){
+    if(!validRepository(repository)||!Number.isSafeInteger(number)||number<1)throw new Error('Invalid GitLab merge request.');
+    const project=endpoint(repository).replace(/\/repository$/,''),url=`${project}/merge_requests/${number}`;
+    const read=async()=>{const {value}=await json(url);const refs=value?.diff_refs;
+      if(value?.iid!==number||![value.source_project_id,value.target_project_id].every(id=>Number.isSafeInteger(id)&&id>0)||
+        !refs||![refs.base_sha,refs.head_sha,refs.start_sha].every(id=>SHA.test(id)))throw new Error('GitLab merge request revisions are unavailable; wait for diff preparation and refresh.');
+      return value;
+    };
+    const value=await read(),refs=value.diff_refs;
+    const {value:source}=await json(`${host}/api/v4/projects/${value.source_project_id}`);
+    if(source?.id!==value.source_project_id||!validRepository(source.path_with_namespace))throw new Error('GitLab did not identify the source project.');
+    const headRepository=source.path_with_namespace;
+    // File identities avoid server text-diff size limits and pin both fork sides.
+    const files=await compareTrees(repository,refs.base_sha,refs.head_sha,headRepository);
+    const current=await read();
+    if(current.source_project_id!==value.source_project_id||current.target_project_id!==value.target_project_id||
+      ['base_sha','head_sha','start_sha'].some(key=>current.diff_refs[key]!==refs[key]))throw new Error('The GitLab merge request changed during discovery; refresh to compare its latest revision.');
+    return {base:refs.base_sha,head:refs.head_sha,baseTip:refs.start_sha,headRepository,files,
+      warnings:['Changed drawings are identified from complete commit trees. Only unique byte-identical moves are recognized as renames; edited or ambiguous moves appear as added/removed.']};
+  }
+  return {validRepository,validPath,file,resolve,directory,inventory,projectFile,search,branches,commits,compare,mergeRequest,response,endpoint};
   }
   root.KiCadGitLabProvider={...forHost(),forHost};
   if(typeof module==='object'&&module.exports)module.exports=root.KiCadGitLabProvider;

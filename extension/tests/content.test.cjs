@@ -115,6 +115,7 @@ function fixture(url, { pull = false, initialHidden = false, delayedCard = false
       id: 'extension-id', getURL: (name) => `chrome-extension://extension-id/${name}`,
       sendMessage: async (message) => {
         messages.push(message);
+        if (message.type === 'gitlab-merge-request') return {ok:true,result:{base:'a'.repeat(40),head:'b'.repeat(40),headRepository:'fork/sub/board',files:[{file:'design/root.kicad_sch',oldFile:'old.kicad_sch',status:'renamed'}],warnings:[]}};
         if (message.type === 'githubPull') return { ok: true, result: {
           base: 'a'.repeat(40), baseTip:'c'.repeat(40), head: 'b'.repeat(40), headRepository, changedFiles: 1, private:privatePull
         } };
@@ -468,4 +469,25 @@ test('GitLab blob preview mounts at the native source and preserves namespace/re
 test('GitLab blob URL without matching authoritative metadata never guesses a ref', () => {
   const ui = fixture('https://gitlab.com/group/board/-/blob/feature/power/root.kicad_sch');
   assert.equal(find(ui.body,node=>node.tag==='iframe'),undefined);
+});
+
+
+test('GitLab merge-request preview preserves normal diffs and pins fork viewer context',async()=>{
+ const ui=fixture('https://gitlab.example.org/group/sub/board/-/merge_requests/7/diffs',{pull:true});
+ await new Promise(resolve=>setTimeout(resolve,5));
+ const launch=find(ui.body,node=>node.tag==='button'&&node.textContent==='design/root.kicad_sch');assert.ok(launch);launch.click();
+ const frame=find(ui.body,node=>node.tag==='iframe');assert.ok(frame);frame.dispatch('load');
+ const params=new URL(frame.src).searchParams;
+ assert.equal(params.get('provider'),'gitlab');assert.equal(params.get('host'),'https://gitlab.example.org');assert.equal(params.get('repository'),'group/sub/board');assert.equal(params.get('headRepository'),'fork/sub/board');assert.equal(params.get('oldFile'),'old.kicad_sch');assert.equal(params.get('base'),'a'.repeat(40));assert.equal(params.get('head'),'b'.repeat(40));
+ assert.equal(ui.source.hidden,false);ui.tick();assert.equal(ui.messages.length,1);
+ const refresh=find(ui.body,node=>node.tag==='button'&&node.textContent==='Refresh revisions');refresh.click();
+ await new Promise(resolve=>setTimeout(resolve,5));assert.equal(frame.isConnected,false);assert.equal(ui.messages.length,2);
+ const renewed=find(ui.body,node=>node.tag==='button'&&node.textContent==='design/root.kicad_sch');assert.ok(renewed);
+ ui.location.href='https://gitlab.example.org/group/sub/board/-/merge_requests/8/diffs';ui.tick();renewed.click();assert.equal(find(ui.body,node=>node.tag==='iframe'),undefined);
+});
+
+test('GitLab historical diff routes stay unchanged rather than silently using latest commits',()=>{
+ const url='https://gitlab.com/group/sub/board/-/merge_requests/7/diffs';
+ assert.equal(parse.route(url).kind,'merge');assert.equal(parse.route(url+'?diff_id=42'),null);assert.equal(parse.route(url+'?start_sha=old'),null);
+ assert.equal(parse.route('https://gitlab.example.org/group/sub/board/-/merge_requests/7/diffs'),null);
 });

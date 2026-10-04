@@ -162,6 +162,32 @@
       focusPending = false;
     }
   }
+  async function activateMerge(route,token){
+    const pageUrl=location.href.split('#')[0],target=document.querySelector('main');if(!target)return;
+    const top=mountBefore(target),owner={kind:'merge',host:top.host,panels:[]};mount=owner;
+    const status=element('div','status','Loading KiCad merge-request revisions…'),list=element('div','list'),slot=element('div');
+    const heading=element('div','top');heading.append(element('div','title','KiCad merge-request visual review'),button('Refresh revisions','action',()=>{
+      if(mount!==owner||location.href.split('#')[0]!==pageUrl)return;
+      clearMount();activateMerge(route,sequence);
+    }));
+    top.box.append(heading,status,list,slot);
+    try{
+      const comparison=await request('gitlab-merge-request',{provider:'gitlab',host:route.host,repository:route.repository,number:route.number});
+      if(token!==sequence||mount!==owner||location.href.split('#')[0]!==pageUrl)return;
+      if(!comparison.base||!comparison.head||!Array.isArray(comparison.files))throw new Error('Invalid GitLab merge-request comparison.');
+      setStatus(status,`${comparison.files.length} changed KiCad drawings · ${comparison.base.slice(0,12)} → ${comparison.head.slice(0,12)}. ${(comparison.warnings||[]).join(' ')}`);
+      for(const item of comparison.files){
+        const path=parse.filePath(item.file),oldFile=parse.filePath(item.oldFile);if(!path||!oldFile)continue;
+        list.append(button(path,'action',()=>{
+          if(token!==sequence||mount!==owner||location.href.split('#')[0]!==pageUrl)return;
+          for(const panel of [...owner.panels])disposePanel(panel,owner);
+          owner.panels.push(panelFor({provider:'gitlab',host:route.host,repository:route.repository,
+            headRepository:comparison.headRepository||route.repository,base:comparison.base,head:comparison.head,
+            file:path,oldFile,status:item.status},null,path,true,slot));
+        }));
+      }
+    }catch(error){if(token===sequence&&mount===owner)setStatus(status,error.message,true);}
+  }
   async function activatePull(route, token) {
     const pageUrl = location.href.split("#")[0];
     const target = document.querySelector("main"); if (!target) return;
@@ -276,7 +302,7 @@
   function check() {
     maybeClaimCommentDraft();
     const url = location.href.split("#")[0];
-    const route = parse.route(url);
+    const route = parse.route(url,{gitlabHosts:location.origin!=='https://github.com'?[location.origin||new URL(url).origin]:[]});
     if (url !== currentUrl) { clearMount(); currentUrl = url; if (route?.kind !== "blob") focusPending = false; }
     if (mount?.kind === "pull" && route?.kind === "pull") {
       if (!mount.host.isConnected) {
@@ -284,6 +310,10 @@
         if (main?.parentNode) main.parentNode.insertBefore(mount.host, main);
       }
       reconcilePullCards(mount);
+      return;
+    }
+    if(mount?.kind==='merge'&&route?.kind==='merge'){
+      if(!mount.host.isConnected){const main=document.querySelector('main');if(main?.parentNode)main.parentNode.insertBefore(mount.host,main);}
       return;
     }
     if (mount?.kind === "blob" && route?.kind === "blob") {
@@ -297,7 +327,8 @@
     }
     if (!route || mount) return;
     const token = sequence;
-    if (route.kind === "blob") activateBlob(route, token);
+    if (route.kind === "merge") activateMerge(route,token);
+    else if (route.kind === "blob") activateBlob(route, token);
     else activatePull(route, token);
   }
   const observer = new MutationObserver(() => {
