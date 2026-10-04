@@ -304,12 +304,10 @@
       throw new Error("Project contains an unsafe or unsupported KiCad path.");
     }
     const config = normalizeConfig(variantConfig);
-    const raw = diff.projectObjects(files);
     const warnings = [...config.warnings];
     const sheets = [], labels = new Map(), paths = new Set(files.map((file) => file.path));
     const definitionsByPath = new Map();
-    for (const file of files) {
-      const parsed = diff.parse(file.content);
+    const raw = diff.projectObjects(files, (file, parsed) => {
       const kind = kindOf(parsed) === "kicad_sch" ? "schematic" : "board";
       sheets.push({ path: file.path, label: file.path.split("/").at(-1), kind });
       if (kind === "schematic") {
@@ -321,7 +319,7 @@
         definitionsByPath.set(file.path, definitions);
       }
       if (hasNativeVariant(parsed)) warnings.push(`${file.path}: saved native KiCad variant data is present but is not interpreted by this review overlay.`);
-    }
+    });
     for (const item of raw) if (item.kind === "sheet") {
       const target = childPath(item.path, item.metadata.properties.Sheetfile ?? item.metadata.properties['Sheet file']);
       if (target && paths.has(target)) labels.set(target, item.metadata.properties.Sheetname || item.metadata.properties['Sheet name'] || target.split("/").at(-1));

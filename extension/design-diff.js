@@ -168,8 +168,9 @@
     return { key, scope: key, signature, metadata: {
       uuid: identityValue.uuid, position, properties: props }, path, kind, label, form };
   }
-  function collect(path, content) {
+  function collect(path, content, onParsed = null) {
     const rootForm = parse(content);
+    onParsed?.(rootForm);
     const rootKind = kindOf(rootForm);
     if (rootKind !== "kicad_sch" && rootKind !== "kicad_pcb") throw new Error("Expected a KiCad schematic or board.");
     const types = rootKind === "kicad_sch" ? SCHEMATIC : BOARD;
@@ -194,7 +195,7 @@
     }
     return objects;
   }
-  function projectObjects(files) {
+  function projectObjects(files, onParsed = null) {
     if (!Array.isArray(files) || files.length > MAX_FILES) throw new Error("Too many KiCad files to compare.");
     const paths = new Set(), objects = [];
     let total = 0;
@@ -207,7 +208,7 @@
       const size = new TextEncoder().encode(file.content).length;
       total += size;
       if (size > (/\.kicad_pcb$/i.test(file.path) ? 64 * 1024 * 1024 : MAX_FILE) || total > MAX_PROJECT) throw new Error("KiCad project exceeds browser comparison size limits.");
-      for (const object of collect(file.path, file.content)) objects.push(object);
+      for (const object of collect(file.path, file.content, ast => onParsed?.(file, ast))) objects.push(object);
     }
     return objects;
   }

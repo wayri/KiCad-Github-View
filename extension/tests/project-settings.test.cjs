@@ -63,6 +63,27 @@ test('custom rules keep conditions inert, units and unknown constraints visible'
  assert.ok(result.sections.flatMap(s=>s.entries).some(e=>e.value==='0.2mm'));assert.equal(result.rules[0].constraints[1].type,'future_rule');
  assert.match(result.warnings[0],/not evaluated/);
 });
+test('selective board parsing matches full AST filtering including escaped strings and unknown forms',()=>{
+ const full=require('../design-diff.js').parse;
+ const source='(kicad_pcb ; comment (setup bogus)\n (segment (note "escaped \\" (setup fake) ; \\\\")) (setup (future "a\\nb\\q")) (gr_future (x 1)) (future (segment 7)) ("via" (x 2)) (general (thickness 1.2)))';
+ const expected=full(source).map((v,i)=>i&&Array.isArray(v)&&(['segment','via'].includes(typeof v[0]==='object'?v[0].quoted:v[0])||String(v[0]).startsWith('gr_'))?null:v);
+ assert.deepEqual(JSON.parse(JSON.stringify(parse(source,{file:'x.kicad_pcb'}).tree)),expected);
+});
+test('omitted board forms still reject malformed strings, structure, numbers and excessive depth',()=>{
+ for(const source of ['(kicad_pcb (segment "unterminated))','(kicad_pcb (segment "escape\\','(kicad_pcb (segment 1e999))','(kicad_pcb (segment)) )','(kicad_pcb (segment)']){
+  assert.throws(()=>parse(source,{file:'x.kicad_pcb'}));
+ }
+ assert.throws(()=>parse('(kicad_pcb (segment '+'('.repeat(96)+'x'+')'.repeat(96)+'))',{file:'x.kicad_pcb'}),/too deep/);
+ assert.throws(()=>parse('(kicad_pcb (setup '+'('.repeat(65)+'x'+')'.repeat(65)+'))',{file:'x.kicad_pcb'}),/nesting/);
+ assert.throws(()=>parse('(kicad_pcb (setup '+'x '.repeat(100001)+'))',{file:'x.kicad_pcb'}),/too many values/);
+ assert.throws(()=>parse('(kicad_pcb (segment '+'x '.repeat(6000000)+'))',{file:'x.kicad_pcb'}),/too many S-expression nodes/);
+});
+test('board input accepts the PCB parser size cap while other settings retain 8 MiB',()=>{
+ const source='(kicad_pcb (segment "'+'x'.repeat(LIMITS.bytes)+'") (setup (future 1)))';
+ assert.equal(parse(source,{file:'x.kicad_pcb'}).tree[1],null);
+ assert.throws(()=>parse(source,{file:'x.kicad_wks'}),/8 MiB/);
+ assert.throws(()=>parse(' '.repeat(64*1024*1024+1),{file:'x.kicad_pcb'}),/64 MiB/);
+});
 test('worksheet saved elements and library URIs are inert auxiliary data',()=>{
  const worksheet=parse('(kicad_wks (version 20231120) (setup (textsize 1.5 1.5)) (tbtext "${TITLE}" (pos 10 5)))',{file:'draw.kicad_wks'});
  assert.equal(worksheet.kind,'worksheet');assert.ok(worksheet.sections.flatMap(s=>s.entries).some(e=>e.value==='${TITLE}'));

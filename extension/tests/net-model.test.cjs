@@ -201,7 +201,7 @@ test("saved parent sheet pins join wires and exact child hierarchical labels onl
 
 function cachedHarness() {
   const fs=require('node:fs'),vm=require('node:vm'),counts={parse:0,objects:0};
-  const context={TextEncoder,Map,Set,WeakMap,KiCadDesignDiff:{...diff,parse(source){counts.parse++;return diff.parse(source);},projectObjects(files){counts.objects++;return diff.projectObjects(files);}}};
+  const context={TextEncoder,Map,Set,WeakMap,KiCadDesignDiff:{...diff,parse(source){counts.parse++;return diff.parse(source);},projectObjects(files,onParsed){counts.objects++;return diff.projectObjects(files,(file,ast)=>{counts.parse++;onParsed?.(file,ast);});}}};
   vm.runInNewContext(fs.readFileSync(require.resolve('../net-model.js'),'utf8'),context);
   return {builder:context.KiCadNetModel.createBuilder(),counts};
 }
@@ -281,4 +281,26 @@ test("connected aliases are retained and native name priority prefers global the
   assert.match(result.warnings.join(" "),/multiple labels/);
   const powerOverLocal=powerSource(placedPower("p",0,0,"Z_POWER")+wire("a",[0,0],[10,0])+label("local","A_LOCAL",10,0));
   assert.equal(build([powerOverLocal],schRendered([powerOverLocal])).nets[0].name,"Z_POWER");
+});
+
+test('repeated sheet descendants and cycles stay excluded while duplicate identical links are allowed',()=>{
+  const net=(path,id,pins=[],names=[])=>({path,id,kind:'schematic',sheetPins:pins,hierarchicalNames:names,globalNames:[]});
+  const nets=[net('a','a',[{sheetId:'ab',name:'S'}]),net('b','b',[{sheetId:'bc',name:'S'}],['S']),net('c','c',[],['S']),net('x','x')];
+  const links=[{path:'a',target:'b',sheetId:'ab'},{path:'b',target:'c',sheetId:'bc'}];
+  assert.deepEqual(relatedSchematicNets(nets,'a',[...links,{...links[0]}]).paths,['a','b','c']);
+  const repeated=[...links,{path:'x',target:'b',sheetId:'xb'}];
+  assert.deepEqual(relatedSchematicNets(nets,'b',repeated).paths,['b']);
+  assert.deepEqual(relatedSchematicNets(nets,'c',repeated).paths,['c']);
+  assert.deepEqual(relatedSchematicNets(nets,'a',[...links,{path:'c',target:'a',sheetId:'ca'}]).paths,['a']);
+  // Public inputs are mutable; each call must use current saved link evidence.
+  links[0].sheetId='wrong';assert.deepEqual(relatedSchematicNets(nets,'a',links).paths,['a']);
+  links[0].sheetId='ab';nets[1].hierarchicalNames[0]='different';
+  assert.deepEqual(relatedSchematicNets(nets,'a',links).paths,['a']);
+});
+
+test('global name expansion retains transitive alias closure and exact case',()=>{
+  const nets=Array.from({length:1000},(_,i)=>({id:String(i),path:'sheet'+i,kind:'schematic',globalNames:['COMMON']}));
+  nets[50].globalNames.push('ALIAS');nets.push({id:'alias',path:'z',kind:'schematic',globalNames:['ALIAS']},{id:'case',path:'zz',kind:'schematic',globalNames:['common']});
+  const result=relatedSchematicNets(nets,'0');assert.equal(result.matches.length,1001);
+  assert.ok(result.matches.some(n=>n.id==='alias'));assert.ok(!result.matches.some(n=>n.id==='case'));
 });

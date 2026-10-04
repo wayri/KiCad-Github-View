@@ -9,6 +9,8 @@
   const provider=params.get('provider')||'github',providerContext=provider==='gitlab'?{provider,host:params.get('host')||'https://gitlab.com'}:{};const send=message=>chrome.runtime.sendMessage({...message,...providerContext});
   const status=document.getElementById('status'),pcb=/\.kicad_pcb$/i.test(rootFile||'');
 
+  const loading=globalThis.KiCadLoading?.indicator(document.body);
+  const loadController=typeof AbortController==='function'?new AbortController():null;
   let dark=pcb,workspace=null,canvas=null,scene=null,modelAssetCache=null,disposed=false,applying=false,crossApplying=false,lastView='',lastFile='';
 
   const own=new URL(chrome.runtime.getURL('browser-viewer.html')),ownOrigin=`${own.protocol}//${own.host}`;
@@ -28,6 +30,7 @@
     const kind=document.body.dataset.viewer;if(kind&&kind!=='auto'&&kind!==(pcb?'pcb':'schematic'))throw new Error('This file belongs in the other dedicated viewer.');
 
     if(provider==='gitlab'&&!/^[a-f0-9]{40}$/i.test(ref)){const resolved=await send({type:'revision-resolve',repository,ref,file:rootFile});if(!resolved?.ok||!/^[a-f0-9]{40}$/i.test(resolved.result?.sha||''))throw new Error(resolved?.error||'GitLab revision could not be resolved.');ref=resolved.result.sha;}
+    loading?.show('Fetching drawing files and discovering sheets…');
     const reply=await send({type:'project',repository,ref,file:rootFile});
 
     if(!reply?.ok)throw new Error(reply?.error||'Could not retrieve the KiCad project.');
@@ -44,11 +47,15 @@
 
     // buildProject enforces source/file/project limits before the geometry parser runs.
 
-    KiCadDesignModel.buildProject(files);
+    loading?.show('Preparing saved objects and drawing geometry…');
+    const prepare=()=>({model:KiCadDesignModel.buildProject(files)});
+    const prepared=globalThis.KiCadLoading?await KiCadLoading.run('drawing',{files,rootFile,pcb},prepare,{signal:loadController?.signal,onStage:stage=>loading.show(stage)}):prepare();
+    if(disposed)return;
+    if(prepared.rules)Object.defineProperty(prepared.model,'_rules',{value:new Map(prepared.rules)});
 
     if($('refBadge')){$('refBadge').textContent=ref.length>20?ref.slice(0,17)+'…':ref;$('refBadge').title=ref;}
 
-    const designs=new Map(),host=$('drawingHost');globalThis.KiCadUIIcons?.decorate();$('frameControls').hidden=false;
+    const designs=new Map(prepared.design?[[rootFile,prepared.design]]:[]),host=$('drawingHost');globalThis.KiCadUIIcons?.decorate();$('frameControls').hidden=false;
 
     canvas=KiCadOwnedCanvas.mount(host,{dark,pcb,acceleration:preferences.acceleration});status.remove();
 
@@ -141,14 +148,17 @@
 
     }
 
-    workspace=KiCadReviewWorkspace.mount({files,repository,provider,host:providerContext.host,ref,rootFile,pcb,pairedFile:params.get('pairedFile')||undefined,getCanvas:()=>canvas,currentFile,focus,openSheet,getRulerUnits:()=>preferences.rulerUnits,
+    loading?.show('Displaying drawing…');
+    await globalThis.KiCadLoading?.paint();
+    if(disposed)return;
+    workspace=KiCadReviewWorkspace.mount({initialModel:prepared.model,initialDesign:prepared.design,initialNetModel:prepared.nets,files,repository,provider,host:providerContext.host,ref,rootFile,pcb,pairedFile:params.get('pairedFile')||undefined,getCanvas:()=>canvas,currentFile,focus,openSheet,getRulerUnits:()=>preferences.rulerUnits,
 
       getDesigns:()=>designs,updateDiagnostics,
       onHierarchy(hierarchy){if(!disposed)parent.postMessage({type:'kicad-review:hierarchy',repository,ref,hierarchy},ownOrigin);},
       onSelection(selection){if(crossApplying||!globalThis.KiCadPairedReview?.validSelection(selection))return;if(globalThis.KiCadVSCodeBridge?.selection)globalThis.KiCadVSCodeBridge.selection(selection);else parent.postMessage({type:'kicad-review:selection',selection},ownOrigin);},
       onCommentsChanged(){if(globalThis.KiCadVSCodeBridge?.onCommentsChanged)globalThis.KiCadVSCodeBridge.onCommentsChanged();else parent.postMessage({type:'kicad-review:comments-changed'},ownOrigin);},pullNumber:Number(params.get('pullNumber'))||null,pullRepository:params.get('pullRepository')||repository});
 
-    workspace.attachCanvas(canvas);openSheet(rootFile);
+    workspace.attachCanvas(canvas);openSheet(rootFile);loading?.hide();
 
     $('frameControls').hidden=false;label('fitDrawing',pcb?'Fit board':'Fit drawing');
 
@@ -249,8 +259,8 @@
 
   }
 
-  addEventListener('pagehide',()=>{disposed=true;modelAssetCache?.clear();workspace?.dispose();scene?.dispose();canvas?.dispose();});
+  addEventListener('pagehide',()=>{disposed=true;loadController?.abort();loading?.dispose();modelAssetCache?.clear();workspace?.dispose();scene?.dispose();canvas?.dispose();});
 
-  start().catch(error=>{status.textContent=error.message;status.classList.add('error');if(!status.isConnected)$('drawingHost').append(status);});
+  start().catch(error=>{loading?.hide();if(disposed)return;status.textContent=error.message;status.classList.add('error');if(!status.isConnected)$('drawingHost').append(status);});
 
 })();

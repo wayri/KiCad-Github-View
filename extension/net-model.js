@@ -250,13 +250,16 @@
   }
   function build(files, designs=new Map()) {
     if (!diff?.projectObjects || !diff?.parse) throw new Error("KiCadDesignDiff is required for net extraction.");
-    const rawRecords=diff.projectObjects(files), counts=new Map();
+    const parsedFiles=new Map(),rawRecords=diff.projectObjects(files,(file,ast)=>parsedFiles.set(file.path,ast)), counts=new Map(), recordsByPath=new Map();
     // Keep duplicate saved object IDs aligned with the design-model convention.
-    for (const record of rawRecords) {const count=(counts.get(record.key)||0)+1;counts.set(record.key,count);record.id=count===1 ? record.key : `${record.key}#${count}`;}
+    for (const record of rawRecords) {
+      if(!recordsByPath.has(record.path))recordsByPath.set(record.path,[]);
+      recordsByPath.get(record.path).push(record);
+      const count=(counts.get(record.key)||0)+1;counts.set(record.key,count);record.id=count===1 ? record.key : `${record.key}#${count}`;}
     const nets=[], warnings=[], seenWarnings=new Set();
     const warn=(message)=> {if(warnings.length<1000 && !seenWarnings.has(message)){seenWarnings.add(message);warnings.push(message);}};
     for (const file of files) {
-      const ast=diff.parse(file.content), records=rawRecords.filter((r)=>r.path===file.path);
+      const ast=parsedFiles.get(file.path), records=recordsByPath.get(file.path) || [];
       const design=designs instanceof Map ? designs.get(file.path) : designs?.[file.path];
       const primitives=Array.isArray(design?.primitives) ? design.primitives : [];
       if (primitives.length>250000) throw new Error("Too many render primitives for net selection.");
@@ -273,37 +276,49 @@
       "Only unambiguous resolved sheet links are searched; cyclic hierarchy, repeated sheet instances, implicit hidden power pins and buses are not resolved; this is not a KiCad netlist."];
     const selected=nets.find((net)=>net.id===selectedId && net.kind==="schematic");
     if (!selected) return {matches:[],paths:[],limits};
-    const byName=new Map();
-    for (const net of nets) if(net.kind==="schematic") for(const name of net.globalNames || []) {
-      if(!byName.has(name))byName.set(name,[]);
-      byName.get(name).push(net);
+    if(!hierarchy.length && !selected.globalNames?.length)return {matches:[selected],paths:[selected.path],limits};
+    const byName=new Map(), parentPins=new Map(), childNames=new Map();
+    const append=(map,key,item)=>{if(!map.has(key))map.set(key,[]);map.get(key).push(item);};
+    const key=(...parts)=>JSON.stringify(parts);
+    for (const net of nets) if(net.kind==="schematic") {
+      for(const name of net.globalNames || [])append(byName,name,net);
+      for(const pin of hierarchy.length ? net.sheetPins || [] : [])append(parentPins,key(net.path,pin.sheetId),{net,name:pin.name});
+      for(const name of hierarchy.length ? net.hierarchicalNames || [] : [])append(childNames,key(net.path,name),net);
     }
-    const links=[...new Map(hierarchy.map((link)=>[JSON.stringify([link.path,link.target,link.sheetId]),link])).values()];
-    const targetCounts=new Map();
-    for(const link of links)targetCounts.set(link.target,(targetCounts.get(link.target)||0)+1);
+    const links=[...new Map(hierarchy.map((link)=>[key(link.path,link.target,link.sheetId),link])).values()];
+    const targetCounts=new Map(), outgoing=new Map();
+    for(const link of links) {
+      targetCounts.set(link.target,(targetCounts.get(link.target)||0)+1);
+      append(outgoing,link.path,link.target);
+    }
     const adjacent=new Map(),connect=(a,b)=> {
-      if(!adjacent.has(a.id))adjacent.set(a.id,[]);adjacent.get(a.id).push(b);
-      if(!adjacent.has(b.id))adjacent.set(b.id,[]);adjacent.get(b.id).push(a);
+      append(adjacent,a.id,b);append(adjacent,b.id,a);
     };
-    const reaches=(start,end)=> {
+    // Index edges once; memoize descendant queries instead of repeatedly
+    // scanning every hierarchy link for every visited sheet.
+    const descendants=new Map();
+    const reachable=(start)=> {
+      if(descendants.has(start))return descendants.get(start);
       const pending=[start],seen=new Set();
       for(let i=0;i<pending.length;i++) {
-        if(pending[i]===end)return true;
-        if(seen.has(pending[i]))continue;seen.add(pending[i]);
-        for(const link of links)if(link.path===pending[i])pending.push(link.target);
+        const path=pending[i];if(seen.has(path))continue;seen.add(path);
+        for(const target of outgoing.get(path)||[])pending.push(target);
       }
-      return false;
+      descendants.set(start,seen);return seen;
     };
-    const repeated=[...targetCounts].filter(([,count])=>count>1).map(([path])=>path);
-    for(const link of links) if(targetCounts.get(link.target)===1 && !repeated.some((path)=>reaches(path,link.path)) && !reaches(link.target,link.path)) {
-      for(const parentNet of nets.filter((net)=>net.kind==="schematic" && net.path===link.path))
-        for(const pin of parentNet.sheetPins || []) if(pin.sheetId===link.sheetId)
-          for(const childNet of nets.filter((net)=>net.kind==="schematic" && net.path===link.target && (net.hierarchicalNames || []).includes(pin.name)))connect(parentNet,childNet);
+    const ambiguous=new Set();
+    for(const [path,count] of targetCounts)if(count>1)
+      for(const descendant of reachable(path))ambiguous.add(descendant);
+    for(const link of links) if(targetCounts.get(link.target)===1 && !ambiguous.has(link.path) && !reachable(link.target).has(link.path)) {
+      for(const parent of parentPins.get(key(link.path,link.sheetId)) || [])
+        for(const childNet of childNames.get(key(link.target,parent.name)) || [])connect(parent.net,childNet);
     }
-    const found=new Map([[selected.id,selected]]),queue=[selected];
+    const found=new Map([[selected.id,selected]]),queue=[selected],expandedNames=new Set();
     for(let i=0;i<queue.length;i++) {
       const candidates=[...(adjacent.get(queue[i].id)||[])];
-      for(const name of queue[i].globalNames || [])candidates.push(...(byName.get(name)||[]));
+      for(const name of queue[i].globalNames || [])if(!expandedNames.has(name)) {
+        expandedNames.add(name);candidates.push(...(byName.get(name)||[]));
+      }
       for(const net of candidates)if(!found.has(net.id)){found.set(net.id,net);queue.push(net);}
     }
     const matches=[...found.values()].sort((a,b)=>a.path.localeCompare(b.path)||a.id.localeCompare(b.id));

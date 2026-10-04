@@ -9,9 +9,9 @@
   const children=(n,t)=>(n||[]).filter(v=>Array.isArray(v)&&tag(v)===t);
   const child=(n,t)=>children(n,t)[0];
   const field=(n,t)=>scalar(child(n,t)?.[1])??null;
-  function validateSize(text){
+  function validateSize(text,maxBytes=LIMITS.bytes){
     if(typeof text!=='string')throw new TypeError('KiCad settings source must be text.');
-    if(text.length>LIMITS.bytes||new TextEncoder().encode(text).byteLength>LIMITS.bytes)throw new Error('Settings file exceeds 8 MiB.');
+    if(text.length>maxBytes||new TextEncoder().encode(text).byteLength>maxBytes)throw new Error('Settings file exceeds '+maxBytes/(1024*1024)+' MiB.');
   }
   function copyTree(input){
     let nodes=0;
@@ -53,7 +53,60 @@
   }
   const GEOMETRY=new Set(['footprint','segment','arc','via','zone','net','group','target','dimension','image','embedded_files']);
   const isGeometry=form=>GEOMETRY.has(tag(form))||tag(form).startsWith('gr_');
+  // Validate every token, but allocate only saved settings. Skipped drawing
+  // forms still consume parser depth/node budgets and preserve their root slot.
+  function boardSettingsTree(source){
+    const stack=[],roots=[],number=/^[-+]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][-+]?\d+)?$/;
+    let i=0,nodes=0;
+    function append(value){
+      if(++nodes>6000000)throw new Error('KiCad file has too many S-expression nodes.');
+      const frame=stack.at(-1);
+      if(!frame){roots.push(value);return;}
+      if(frame.keep){
+        if(stack.length===2&&frame.tree.length===0&&isGeometry([value])){
+          frame.keep=false;frame.parent[frame.index]=null;frame.tree=null;
+        }else frame.tree.push(value);
+      }
+    }
+    while(i<source.length){
+      const ch=source[i];
+      if(/\s/.test(ch)){i++;continue;}
+      if(ch===';'){while(i<source.length&&source[i]!=='\n')i++;continue;}
+      if(ch==='('){
+        if(stack.length>=96)throw new Error('KiCad S-expression is too deep.');
+        const parent=stack.at(-1),keep=!parent||parent.keep;
+        const tree=keep?[]:null,index=parent?.tree?.length;
+        append(tree);stack.push({tree,keep,parent:parent?.tree,index});i++;continue;
+      }
+      if(ch===')'){
+        if(!stack.length)throw new Error('Unexpected closing parenthesis in KiCad file.');
+        stack.pop();i++;continue;
+      }
+      if(!stack.length)throw new Error('Expected a KiCad S-expression.');
+      if(ch==='"'){
+        const keep=stack.at(-1).keep;let value='',closed=false;i++;
+        while(i<source.length){
+          const next=source[i++];if(next==='"'){closed=true;break;}
+          if(next==='\\'){
+            if(i>=source.length)throw new Error('Unterminated KiCad escape sequence.');
+            const escaped=source[i++];
+            if(keep){const decoded=({n:'\n',r:'\r',t:'\t','"':'"','\\':'\\'})[escaped];value+=decoded===undefined?'\\'+escaped:decoded;}
+          }else if(keep)value+=next;
+        }
+        if(!closed)throw new Error('Unterminated quoted KiCad string.');
+        append(keep?{quoted:value}:null);continue;
+      }
+      const start=i;while(i<source.length&&!/[\s();"]/.test(source[i]))i++;
+      if(start===i)throw new Error('Unexpected KiCad source character.');
+      const token=source.slice(start,i);let value=token;
+      if(number.test(token)){value=Number(token);if(!Number.isFinite(value))throw new Error('Invalid numeric KiCad value.');}
+      append(value);
+    }
+    if(stack.length||roots.length!==1||!Array.isArray(roots[0]))throw new Error('Incomplete KiCad S-expression.');
+    return copyTree(roots[0]);
+  }
   function sexpr(text,multiple=false,boardSettings=false){
+    if(boardSettings)return boardSettingsTree(text);
     const parser=root.KiCadDesignDiff||(typeof require==='function'?require('./design-diff.js'):null);
     if(!parser?.parse)throw new Error('KiCad S-expression parser is unavailable.');
     // .kicad_dru uses # comments. Keep hashes inside conditions/quoted names intact.
@@ -93,8 +146,8 @@
     return {sections,stackup,layers:layerRows,boardThicknessMm:typeof thickness==='number'?thickness:null};
   }
   function parse(text,options={}){
-    validateSize(text);
     const file=String(options.file||'project.kicad_pro'),basename=file.split(/[\\/]/).at(-1).toLowerCase(),extension=['fp-lib-table','sym-lib-table'].includes(basename)?basename:file.split('.').at(-1).toLowerCase();
+    validateSize(text,extension==='kicad_pcb'?64*1024*1024:LIMITS.bytes);
     const kind=({kicad_pro:'project',kicad_prl:'local-settings',kicad_pcb:'board-settings',kicad_dru:'custom-rules',kicad_wks:'worksheet','fp-lib-table':'footprint-libraries','sym-lib-table':'symbol-libraries'})[extension];
     if(!kind)throw new Error('Unsupported KiCad settings file type.');
     const warnings=['Read-only saved settings. Missing fields are not inferred; custom rules are not evaluated.'];
