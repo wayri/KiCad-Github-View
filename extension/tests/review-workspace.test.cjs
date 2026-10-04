@@ -519,3 +519,17 @@ test('uncertain posting exposes a read-only recovery control and saves its confi
  const row=view.get('postComment').parentElement.querySelector('.publication-recovery');assert.ok(row);assert.match(row.textContent,/never creates another post/);row.querySelector('input').value='19';await row.querySelector('button').click();
  const recovery=calls.find(m=>m.type==='github-recover-publication');assert.equal(recovery.recoveryNumber,19);assert.equal(recovery.destination,'new-issue');assert.equal(calls.filter(m=>m.type==='github-publish-comment').length,1);assert.equal(notes[0].remoteRefs[0].url,ref.url);assert.match(view.get('commentStatus').textContent,/Recovered link to/);assert.equal(view.get('postComment').parentElement.querySelector('.publication-recovery'),null);
 });
+
+test('tall sidebar maximizes reading height without exceeding the obscured-area budget or losing other panel state',()=>{
+ const view=workspaceRuntime(undefined,{width:1600});view.get('propertiesButton').click();view.get('commentsButton').click();view.get('addCommentTab').click();view.get('newComment').click();view.get('commentText').value='Keep this draft';
+ const comments=view.get('commentsSidebar'),before=parseFloat(comments.style.height);view.get('tallComments').click();
+ assert.equal(view.get('designInspector').hidden,true);assert.equal(comments.hidden,false);assert.ok(parseFloat(comments.style.height)>before);assert.ok(parseFloat(comments.style.width)*parseFloat(comments.style.height)<=1600*600*.14+.1);assert.equal(view.get('commentText').value,'Keep this draft');assert.equal(view.get('tallComments').attributes['aria-pressed'],'true');
+ view.get('tallComments').click();assert.equal(view.get('designInspector').hidden,false);assert.equal(comments.hidden,false);assert.equal(comments.style.width,'340px');assert.equal(view.get('commentText').value,'Keep this draft');
+});
+test('sidebar height resize supports keyboard, pointer cancellation and resize clamping without changing drafts',()=>{
+ const view=workspaceRuntime(undefined,{width:1600});view.get('commentsButton').click();view.get('tallComments').click();const panel=view.get('commentsSidebar'),handle=panel.querySelector('.sidebar-height-resizer');
+ const key=value=>{const event=new Event('keydown');Object.defineProperty(event,'key',{value});handle.dispatchEvent(event);};
+ key('Home');assert.equal(panel.style.height,'180px');key('ArrowDown');assert.equal(panel.style.height,'190px');key('End');assert.ok(parseFloat(panel.style.height)>190);assert.equal(handle.attributes['aria-orientation'],'horizontal');
+ const pointer=(type,y)=>{const event=new Event(type);Object.assign(event,{button:0,pointerId:2,clientY:y});handle.dispatchEvent(event);};pointer('pointerdown',600);pointer('pointermove',300);assert.equal(panel.style.height,'300px');pointer('pointercancel',300);pointer('pointermove',100);assert.equal(panel.style.height,'300px');
+ view.resize(350);assert.ok(parseFloat(panel.style.width)*parseFloat(panel.style.height)<=350*600*.14+.1);assert.equal(handle.attributes['aria-valuenow'],String(Math.round(parseFloat(panel.style.height))));
+});

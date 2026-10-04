@@ -142,3 +142,5 @@ body .object-row.selected{background:var(--selected);color:var(--text);border:1p
 @media(max-width:1000px){#frameControls .drawing-title{display:none}.frame-actions{min-width:0;flex-shrink:0;overflow:visible}}
 
 .publication-recovery{display:grid;gap:8px;width:100%;padding:10px;border:1px solid var(--line);border-radius:6px;background:var(--panel)}.publication-recovery label{display:grid;gap:4px}.publication-recovery input{width:100%;min-width:0;padding:6px;border:1px solid var(--line);border-radius:4px;background:var(--surface)}.publication-recovery small{white-space:normal}
+
+.sidebar-height-resizer{position:absolute;left:0;right:0;bottom:-4px;height:8px;cursor:ns-resize;touch-action:none;z-index:11}.sidebar-height-resizer:hover,.sidebar-height-resizer:focus-visible,.sidebar-height-resizer.resizing{background:var(--accent);opacity:.7;outline:none}.sidebar-height-resizer:focus-visible{box-shadow:0 0 0 2px var(--panel)}

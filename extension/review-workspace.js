@@ -151,7 +151,7 @@
     // This also applies to project, paired and VS Code viewers without copied markup.
     const workspaceElement=$("reviewWorkspace"), sidebarState={properties:false,comments:false,navigator:false};
     const sidebarWidths={properties:300,comments:340,navigator:260};let activeSidebar="properties",commentTab="view";
-    const sectionState=new Map(),resizeCleanups=[];
+    const sectionState=new Map(),resizeCleanups=[],sidebarHeights={properties:null,comments:null,navigator:null},tallSidebars=new Map();
     function collapsible(title,nodes,open=true,key=title){
       const details=make("details");details.className="sidebar-section";details.open=sectionState.has(key)?sectionState.get(key):open;
       details.append(make("summary",title),...nodes.filter(Boolean));details.addEventListener("toggle",()=>sectionState.set(key,details.open));return details;
@@ -194,7 +194,7 @@
       const totalArea=width*frameHeight,panelBudget=Math.max(0,Math.min(totalArea*.14,width*workspaceHeight-totalArea*.86));
       const requestedWidth=Object.keys(sidebarState).reduce((sum,name)=>sum+(sidebarState[name]?Math.min(sidebarWidths[name],Math.max(0,width-32)):0),0);
       // Switch panels rather than squeezing several into unusably short strips.
-      const overlay=width<required||(requestedWidth>0&&panelBudget/requestedWidth<180);workspaceElement.classList.toggle("sidebar-overlays",overlay);
+      const overlay=tallSidebars.has(activeSidebar)||width<required||(requestedWidth>0&&panelBudget/requestedWidth<180);workspaceElement.classList.toggle("sidebar-overlays",overlay);
       workspaceElement.classList.toggle("two-sidebars",!overlay&&sidebarState.properties&&sidebarState.comments);workspaceElement.style.setProperty("--comments-sidebar-width",sidebarWidths.comments+"px");
       const visiblePanels=[];
       for(const [name,id,buttonId]of [["properties","designInspector","propertiesButton"],["comments","commentsSidebar","commentsButton"],["navigator","designNavigator","partsButton"]]){
@@ -203,7 +203,10 @@
       }
       const visibleWidth=visiblePanels.reduce((sum,item)=>sum+Math.min(sidebarWidths[item.name],Math.max(0,width-32)),0);
       const budgetHeight=visibleWidth?panelBudget/visibleWidth:workspaceHeight,panelHeight=Math.min(workspaceHeight,Math.max(0,budgetHeight));
-      for(const {panel}of visiblePanels)panel.style.height=panelHeight+"px";
+      for(const {name,panel}of visiblePanels){
+        const height=sidebarHeights[name]===null?panelHeight:Math.min(panelHeight,Math.max(Math.min(180,panelHeight),sidebarHeights[name]));panel.style.height=height+'px';
+        const handle=panel.querySelector('.sidebar-height-resizer');if(handle){handle.setAttribute('aria-valuemin',String(Math.round(Math.min(180,panelHeight))));handle.setAttribute('aria-valuemax',String(Math.round(panelHeight)));handle.setAttribute('aria-valuenow',String(Math.round(height)));}
+      }
       panelSpaceStatus.hidden=!visiblePanels.length||budgetHeight>=180;panelSpaceStatus.textContent=panelSpaceStatus.hidden?'':'Small view: enlarge this pane or use Focus view for comfortable panel access.';
       $("commentsPane").hidden=commentsSidebar.hidden;
     }
@@ -218,9 +221,21 @@
       handle.addEventListener("pointerdown",event=>{if(event.button!==0)return;event.preventDefault();drag={x:event.clientX,width:sidebarWidths[name],id:event.pointerId};handle.setPointerCapture?.(event.pointerId);handle.classList.toggle("resizing",true);});
       handle.addEventListener("pointermove",event=>{if(drag&&event.pointerId===drag.id)setWidth(drag.width+(event.clientX-drag.x)*(edge==="left"?-1:1));});
       const stop=()=>{drag=null;handle.classList.toggle("resizing",false);};for(const type of ["pointerup","pointercancel","lostpointercapture"])handle.addEventListener(type,stop);
-      handle.addEventListener("keydown",event=>{if(!['ArrowLeft','ArrowRight','Home','End'].includes(event.key))return;event.preventDefault();setWidth(event.key==="Home"?220:event.key==="End"?560:sidebarWidths[name]+(event.key==="ArrowLeft"?-1:1)*(edge==="left"?-1:1)*(event.shiftKey?40:10));});resizeCleanups.push(stop);
+      handle.addEventListener("keydown",event=>{if(!['ArrowLeft','ArrowRight','Home','End'].includes(event.key))return;event.preventDefault();event.stopPropagation();setWidth(event.key==="Home"?220:event.key==="End"?560:sidebarWidths[name]+(event.key==="ArrowLeft"?-1:1)*(edge==="left"?-1:1)*(event.shiftKey?40:10));});resizeCleanups.push(stop);
     }
     resizeSidebar("properties",propertiesSidebar,"left");resizeSidebar("comments",commentsSidebar,"left");resizeSidebar("navigator",$("designNavigator"),"right");
+    function addPanelSizing(name,panel,header){
+      const tall=button('Tall',()=>{if(tallSidebars.has(name)){sidebarWidths[name]=tallSidebars.get(name);tallSidebars.delete(name);}else{tallSidebars.set(name,sidebarWidths[name]);sidebarWidths[name]=220;sidebarHeights[name]=null;activeSidebar=name;}
+        panel.style.width=panel.style.flexBasis=sidebarWidths[name]+'px';const widthHandle=panel.querySelector('.sidebar-resizer');widthHandle?.setAttribute('aria-valuenow',String(sidebarWidths[name]));tall.textContent=tallSidebars.has(name)?'Wide':'Tall';tall.setAttribute('aria-pressed',String(tallSidebars.has(name)));layoutSidebars();});
+      tall.id='tall'+name[0].toUpperCase()+name.slice(1);tall.title='Use a narrow, taller panel while retaining drawing area';tall.setAttribute('aria-label',`Toggle tall ${name} sidebar`);tall.setAttribute('aria-pressed','false');header?.insertBefore(tall,header.children[header.children.length-1]);
+      const handle=make('div');handle.className='sidebar-height-resizer';handle.tabIndex=0;handle.setAttribute('role','separator');handle.setAttribute('aria-orientation','horizontal');handle.setAttribute('aria-label',`Resize ${name} sidebar height`);panel.append(handle);let drag=null;
+      const setHeight=value=>{sidebarHeights[name]=value;layoutSidebars();};
+      handle.addEventListener('pointerdown',event=>{if(event.button!==0)return;event.preventDefault();drag={y:event.clientY,height:parseFloat(panel.style.height)||180,id:event.pointerId};handle.setPointerCapture?.(event.pointerId);handle.classList.toggle('resizing',true);});
+      handle.addEventListener('pointermove',event=>{if(drag&&event.pointerId===drag.id)setHeight(drag.height+event.clientY-drag.y);});
+      const stop=()=>{drag=null;handle.classList.toggle('resizing',false);};for(const type of ['pointerup','pointercancel','lostpointercapture'])handle.addEventListener(type,stop);
+      handle.addEventListener('keydown',event=>{if(!['ArrowUp','ArrowDown','Home','End'].includes(event.key))return;event.preventDefault();event.stopPropagation();setHeight(event.key==='End'?null:event.key==='Home'?180:(parseFloat(panel.style.height)||180)+(event.key==='ArrowUp'?-1:1)*(event.shiftKey?40:10));});resizeCleanups.push(stop);
+    }
+    addPanelSizing('properties',propertiesSidebar,propertiesSidebar.querySelector('.sidebar-heading'));addPanelSizing('comments',commentsSidebar,commentsSidebar.querySelector('.sidebar-heading'));addPanelSizing('navigator',$('designNavigator'),$('designNavigator').querySelector('.panel-heading'));
     const sidebarObserver=root.ResizeObserver?new root.ResizeObserver(layoutSidebars):null;sidebarObserver?.observe(workspaceElement);root.addEventListener?.("resize",layoutSidebars);
     function propertySection(title,entries,collapsed=false){
       const values=Object.entries(entries).filter(([,value])=>value!==undefined&&value!==null);if(!values.length)return;
