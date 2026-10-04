@@ -1,6 +1,6 @@
 # GitHub sign-in setup
 
-Users should choose repository access and press **Sign in with GitHub**. They approve a device code on GitHub and return to the viewer. Account credentials stay in extension session storage; **Sign out** removes them. Public access requests `public_repo`; private access requests the broader `repo` scope. Organization approval or SSO may also be required. Advanced settings offer a fine-grained manual token for narrower repository access.
+Users should choose repository access and press **Sign in with GitHub**. They approve a device code on GitHub and return to the viewer. Account tokens are encrypted in extension session storage with a non-extractable key held only in background memory. **Sign out** removes credentials and pending login; **Reset GitHub connection** also clears a custom client ID. Background restart requires sign-in again, including normal worker suspension. Sessions last at most eight hours. Public access requests `public_repo`; private access requests the broader `repo` scope. Organization approval or SSO may also be required. Advanced settings offer a fine-grained manual token for narrower repository access.
 
 ## One-time publisher registration
 
@@ -19,3 +19,5 @@ A developer can enter their own client ID under **Advanced connection settings**
 GitHub website cookies do not authenticate extension API requests. For private schematic, PCB, project and model reads, authorize private access through the configured App, or use a fine-grained token with the target repository selected and **Contents: read** permission (with normal metadata access). Add Issues/Discussions permissions only when needed for publication. An inaccessible private file may appear as HTTP 404; check the exact branch/path and token repository access.
 
 Private pull-request comparison and private annotation readback remain unsupported. Publication to an authorized private repository requires identity verification and authenticated Contents read access to verify its review policy. Ordinary file viewing does not imply those capabilities. GitLab account connection is not implemented.
+
+See [authentication security and cleanup](../SECURITY.md) for encryption boundaries, uninstall behavior and remote revocation.

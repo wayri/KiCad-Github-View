@@ -12,10 +12,7 @@ function validRepository(value) {
 
 async function githubReadHeaders(headers = {}) {
   const result = { "X-GitHub-Api-Version": "2022-11-28", ...headers };
-  if ((await KiCadGitHubReviewApi.tokenStatus()).configured) {
-    const token = (await chrome.storage.session.get('github-review-token'))['github-review-token'];
-    if (token) result.Authorization = `Bearer ${token}`;
-  }
+  Object.assign(result, await KiCadGitHubReviewApi.authorizationHeaders());
   return result;
 }
 function githubReadError(response) {
@@ -130,9 +127,7 @@ async function drawingFiles(repository, ref, file) {
 
 // Read-only history discovery. Resolve moving refs before listing file history.
 async function revisionJson(url){
-  const configured=(await KiCadGitHubReviewApi.tokenStatus()).configured;
-  const token=configured?(await chrome.storage.session.get('github-review-token'))['github-review-token']:null;
-  const response=await githubResponse(url,{Accept:'application/vnd.github+json',...(token?{Authorization:`Bearer ${token}`}:{})});
+  const response=await githubResponse(url,await githubReadHeaders({Accept:'application/vnd.github+json'}));
   if(!response)throw new Error('GitHub revision was not found (HTTP 404), or your extension account lacks private repository access. Check the exact revision and sign in with private repository access in extension settings.');
   if(Number(response.headers.get('content-length'))>1024*1024)throw new Error('Revision response exceeds 1 MiB.');
   const text=await response.text();if(new TextEncoder().encode(text).byteLength>1024*1024)throw new Error('Revision response exceeds 1 MiB.');
@@ -742,6 +737,9 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       case "github-auth-clear":
         if (!optionsSender(sender)) throw new Error("Only extension options can clear a GitHub token.");
         return KiCadGitHubReviewApi.clearToken();
+      case "github-auth-reset":
+        if (!optionsSender(sender)) throw new Error("Only extension options can reset GitHub authentication.");
+        return KiCadGitHubReviewApi.resetAuth();
       case "github-device-status":
         if (!optionsSender(sender)) throw new Error("Only extension options can inspect GitHub sign-in.");
         return KiCadGitHubReviewApi.deviceStatus();

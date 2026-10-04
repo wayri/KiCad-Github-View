@@ -74,7 +74,7 @@ const manifest=JSON.parse(fs.readFileSync('manifest.json'));let listener;
 function storage(){const values={};return {values,get:async key=>({[key]:values[key]}),set:async data=>Object.assign(values,data),remove:async keys=>{for(const key of [].concat(keys))delete values[key];}};}
 const session=storage(),local=storage();
 const browser={runtime:{id:'addon',getURL:name=>'moz-extension://addon/'+name,onMessage:{addListener:fn=>listener=fn}},storage:{session,local},action:{onClicked:{addListener(){}}}};
-const context=vm.createContext({browser,URL,URLSearchParams,TextEncoder,TextDecoder,AbortController,setTimeout,clearTimeout,console});
+const context=vm.createContext({crypto:require('node:crypto').webcrypto,browser,URL,URLSearchParams,TextEncoder,TextDecoder,AbortController,setTimeout,clearTimeout,console});
 for(const name of manifest.background.scripts)vm.runInContext(fs.readFileSync(name,'utf8'),context,{filename:name});
 assert.equal(context.chrome,browser);
 const options={id:'addon',url:'moz-extension://addon/options.html'};
@@ -85,7 +85,7 @@ async function send(message,sender){return new Promise(resolve=>{assert.equal(li
  assert.equal(Object.keys(session.values).length,0);
  const saved=await send({type:'github-auth-set',token:'fixture-token-0123456789012345'},options);assert.equal(saved.ok,true);
  const status=await send({type:'github-auth-status'},options);assert.equal(status.result.configured,true);
- assert.equal(session.values['github-review-token'],'fixture-token-0123456789012345');assert.equal(Object.keys(local.values).length,0);
+ assert.equal(typeof session.values['github-review-token'],'object');assert.equal(JSON.stringify(session.values).includes('fixture-token-0123456789012345'),false);assert.equal(Object.keys(local.values).length,0);
  const cleared=await send({type:'github-auth-clear'},options);assert.equal(cleared.ok,true);assert.equal(Object.keys(session.values).length,0);
 })().catch(error=>{console.error(error);process.exitCode=1;});
 ''', encoding='utf-8')

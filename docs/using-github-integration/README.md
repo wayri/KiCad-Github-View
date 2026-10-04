@@ -35,7 +35,7 @@ The publisher must configure a registered GitHub OAuth App client ID with Device
 - A custom registered OAuth App client ID with Device Flow enabled. Sign-in requests `public_repo` or `repo` according to the access selector.
 - A GitHub personal access token with access to the repositories you review. Issue and pull-request posts need Issues write permission. Discussions need permission to use Discussions through GraphQL.
 
-The token stays in browser session storage and is not written to note exports, the Git sidecar, or GitHub page scripts. It clears when the browser session ends; **Sign out** clears it sooner. A custom client ID is saved in extension settings. A configured account can still be blocked by GitHub permissions or the repository's optional `.kicad-review-policy.json`; use **Check comment policy** to see the current result.
+Tokens are encrypted with a temporary background-memory key and excluded from exports, the sidecar and host page scripts. Background restart requires sign-in again; sessions last at most eight hours. **Sign out** purges credentials and cancels pending login. **Reset GitHub connection** also clears the custom public client ID. Uninstall removes local credentials; revoke GitHub authorization separately if needed. See [security boundaries](../../SECURITY.md). Repository permissions and review policy still apply.
 
 ![Advanced GitHub settings reference showing device-flow client ID and blank manual-token fields](../images/integration/github-account-settings.jpg)
 

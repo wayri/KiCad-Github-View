@@ -37,13 +37,13 @@ class PackageVSCodeTests(unittest.TestCase):
                 manifest = json.loads(archive.read('extension/package.json'))
                 self.assertEqual(manifest['main'], manifest['browser'])
                 self.assertTrue(manifest['capabilities']['virtualWorkspaces'])
-                self.assertEqual(manifest['version'], '0.11.8')
+                self.assertEqual(manifest['version'], json.loads((ROOT / 'vscode-extension/package.json').read_text(encoding='utf-8'))['version'])
                 self.assertEqual(manifest['contributes']['customEditors'][0]['priority'], 'default')
                 self.assertEqual({s['filenamePattern'] for s in manifest['contributes']['customEditors'][0]['selector']},
                                  {'*.kicad_sch', '*.kicad_pcb', '*.kicad_pro', '*.kicad_prl', '*.kicad_dru', '*.kicad_wks', '*.gbr', '*.ger', '*.gerber', '*.gtl', '*.gbl', '*.gts', '*.gbs', '*.gto', '*.gbo', '*.gtp', '*.gbp', '*.gko', '*.gm1', '*.drl', '*.xln', 'fp-lib-table', 'sym-lib-table', '*.gm[0-9]*', '*.g[0-9]*'})
                 document = ET.fromstring(archive.read('extension.vsixmanifest'))
                 ns = {'v': 'http://schemas.microsoft.com/developer/vsx-schema/2011'}
-                self.assertEqual(document.find('v:Metadata/v:Identity', ns).attrib['Version'], '0.11.8')
+                self.assertEqual(document.find('v:Metadata/v:Identity', ns).attrib['Version'], manifest['version'])
                 for asset in document.findall('v:Assets/v:Asset', ns):
                     self.assertIn(asset.attrib['Path'], archive.namelist())
                 ET.fromstring(archive.read('[Content_Types].xml'))

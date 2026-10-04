@@ -6,7 +6,7 @@ const path = require('node:path');
 
 function optionsHarness(respond) {
   const elements = new Map();
-  for (const id of ['token', 'tokenStatus', 'saveToken', 'clearToken', 'clientId',
+  for (const id of ['token', 'tokenStatus', 'saveToken', 'clearToken', 'resetAuth', 'clientId',
     'connectGitHub', 'cancelGitHub', 'deviceInstructions', 'deviceCode', 'verificationLink', 'deviceStatus', 'githubAccess', 'scopeHelp', 'signinAvailability']) {
     elements.set(id, { value: '', textContent: '', disabled: false, hidden: false, href: '', listeners: new Map(),
       addEventListener(type, fn) { this.listeners.set(type, fn); } });
@@ -40,6 +40,17 @@ test('options sends a token only on explicit save and clears the password field'
   assert.equal(elements.get('tokenStatus').textContent.includes('github_pat_secret'), false);
   await elements.get('clearToken').listeners.get('click')();
   assert.equal(requests.at(-2).type, 'github-auth-clear');
+});
+
+test('reset clears credential fields and requests privileged cleanup', async () => {
+  const { elements, requests } = optionsHarness();
+  await new Promise(resolve => setImmediate(resolve));
+  elements.get('token').value = 'temporary-secret';
+  elements.get('clientId').value = 'custom-client';
+  await elements.get('resetAuth').listeners.get('click')();
+  assert.equal(elements.get('token').value, '');
+  assert.equal(elements.get('clientId').value, '');
+  assert.ok(requests.some(r => r.type === 'github-auth-reset'));
 });
 
 test('Connect shows only a verification code and polls after the worker interval', async () => {

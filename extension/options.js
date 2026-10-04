@@ -23,13 +23,13 @@ async function request(type, extras = {}) {
 }
 async function refresh() {
   const result = await request("github-auth-status");
-  statusElement.textContent = result.configured ? "GitHub access is available for this browser session." :
+  statusElement.textContent = result.configured ? "GitHub connected. Encrypted credentials expire within eight hours; background restart requires sign-in again." :
     "You are signed out. Public previews and local comments work without signing in.";
 }
 function showScope() {
   scopeHelp.textContent = accessInput.value === "repo" ?
     "Private access requests GitHub's repo scope, which grants broad read and write access to public and private repositories. Approve it only if you need private repository access; organization approval or SSO may also be required." :
-    "Public access requests GitHub's public_repo scope. Tokens stay in this browser session.";
+    "Public access requests GitHub's public_repo scope. Credentials are encrypted with a temporary background-memory key.";
 }
 accessInput.addEventListener("change", showScope);
 function stopTimer() {
@@ -112,7 +112,7 @@ buttonSave.addEventListener("click", async () => {
     tokenInput.value = "";
     await refresh();
   } catch (error) { statusElement.textContent = error.message; }
-  finally { buttonSave.disabled = false; }
+  finally { tokenInput.value = ""; buttonSave.disabled = false; }
 });
 buttonClear.addEventListener("click", async () => {
   buttonClear.disabled = true;
@@ -136,3 +136,14 @@ Promise.all([refresh(), request("github-device-status")]).then(([, state]) => {
   else if (state.expired) deviceStatus.textContent = "The previous GitHub code expired. Start sign-in again.";
 }).catch((error) => { deviceStatus.textContent = error.message; });
 window.addEventListener("pagehide", stopTimer);
+document.getElementById("resetAuth").addEventListener("click", async () => {
+  stopTimer();
+  tokenInput.value = "";
+  try {
+    await request("github-auth-reset");
+    showDevice(null);
+    clientInput.value = "";
+    deviceStatus.textContent = "GitHub connection reset. Local review notes are preserved.";
+    await refresh();
+  } catch (error) { statusElement.textContent = error.message; }
+});

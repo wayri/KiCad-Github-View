@@ -11,7 +11,7 @@
 
 **Interactive KiCad review inside GitHub and public GitLab.com file pages.** Open schematics and PCB layouts as drawings, inspect saved parts and nets, compare revisions, and anchor review notes to the design. The viewer runs in the browser with our own schematic/PCB engine and the owner-authorized SPIKE 3D adapter. No KiCad installation, local companion process or rendering server is needed for the browser extension.
 
-[Download v0.11.8](https://github.com/wayri/KiCad-Github-View/releases/tag/v0.11.8) · [Install](docs/INSTALL.md) · [Comment integration](docs/COMMENTS.md) · [Git services](docs/GIT-HOSTS.md) · [Release notes](docs/releases/v0.11.8.md)
+[Download v0.11.9](https://github.com/wayri/KiCad-Github-View/releases/tag/v0.11.9) · [Install](docs/INSTALL.md) · [Comment integration](docs/COMMENTS.md) · [Git services](docs/GIT-HOSTS.md) · [Release notes](docs/releases/v0.11.9.md)
 
 Illustrated walkthroughs: [Using GitHub integration](docs/using-github-integration/README.md) · [Using GitLab integration](docs/using-gitlab-integration/README.md). Browser packages: [Firefox](docs/FIREFOX.md) · [Safari](docs/SAFARI.md).
 
@@ -69,7 +69,7 @@ Properties and analytics come from the saved source revision. Missing settings a
 
 ## Install in Chrome or Edge
 
-1. Download **`kicad-visual-review-extension-0.11.8.zip`** from [Releases](https://github.com/wayri/KiCad-Github-View/releases/tag/v0.11.8). The GitHub **Source code** archives are not the prepared extension package.
+1. Download **`kicad-visual-review-extension-0.11.9.zip`** from [Releases](https://github.com/wayri/KiCad-Github-View/releases/tag/v0.11.9). The GitHub **Source code** archives are not the prepared extension package.
 2. Extract the ZIP into a permanent folder. Select the folder containing `manifest.json`, not the ZIP itself.
 3. Open `chrome://extensions` in Chrome/Chromium or `edge://extensions` in Edge.
 4. Enable **Developer mode**, select **Load unpacked**, and choose that folder.
@@ -153,10 +153,10 @@ Read [the complete comment guide](docs/COMMENTS.md) for authentication, permissi
 
 ## VS Code installation
 
-Download **`kicad-visual-review-vscode-0.11.8.vsix`** from Releases. In VS Code run **Extensions: Install from VSIX**, select the file and run **Developer: Reload Window**. Open a KiCad project folder and use **KiCad: Open Visual Viewer** or **Reopen Editor With → KiCad Visual Review**. The **KiCad Review** explorer lists saved drawings and review sidecars.
+Download **`kicad-visual-review-vscode-0.11.9.vsix`** from Releases. In VS Code run **Extensions: Install from VSIX**, select the file and run **Developer: Reload Window**. Open a KiCad project folder and use **KiCad: Open Visual Viewer** or **Reopen Editor With → KiCad Visual Review**. The **KiCad Review** explorer lists saved drawings and review sidecars.
 
 ```sh
-code --install-extension kicad-visual-review-vscode-0.11.8.vsix --force
+code --install-extension kicad-visual-review-vscode-0.11.9.vsix --force
 ```
 
 Local notes use `.kicad-review.json` in the workspace root (or drawing directory outside a workspace). Filesystem-provider permissions still apply. The VSIX is not currently published in Visual Studio Marketplace. See [the VS Code guide](vscode-extension/README.md).
@@ -226,3 +226,5 @@ Authentication, repository permissions and service availability remain subject t
 - Berkeley Lab's Marble and the White Rabbit collaboration's Switch V4 repositories provide public real-design inspection cases. Their authors retain their respective design rights; these designs are not bundled with the extension and test results do not imply endorsement.
 
 See [third-party notices](THIRD-PARTY-NOTICES.md) for distributed dependencies and [licensing status](LICENSING.md) for owner code.
+
+Authentication protection, encryption limits and cleanup behavior are documented in [SECURITY.md](SECURITY.md). Background restarts require sign-in again; uninstall does not revoke GitHub authorization.

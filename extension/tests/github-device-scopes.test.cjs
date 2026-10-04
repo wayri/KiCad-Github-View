@@ -2,7 +2,7 @@ const test=require('node:test'),assert=require('node:assert/strict'),fs=require(
 function harness({releaseClientId='',grantedScope='repo'}={}){
  const session=new Map(),local=new Map(),requests=[];
  const area=map=>({get:async key=>({[key]:map.get(key)}),set:async values=>{for(const [key,value]of Object.entries(values))map.set(key,value);},remove:async keys=>{for(const key of [].concat(keys))map.delete(key);}});
- const context=vm.createContext({URLSearchParams,AbortController,setTimeout,clearTimeout,crypto:require('node:crypto').webcrypto,
+ const context=vm.createContext({TextEncoder,TextDecoder,URLSearchParams,AbortController,setTimeout,clearTimeout,crypto:require('node:crypto').webcrypto,
  chrome:{storage:{session:area(session),local:area(local)}},fetch:async(url,init)=>{
   requests.push({url,init});return{ok:true,text:async()=>JSON.stringify(url.endsWith('/login/device/code')?
    {device_code:'d'.repeat(40),user_code:'TEST-CODE',verification_uri:'https://github.com/login/device',expires_in:900,interval:5}:

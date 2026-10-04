@@ -28,6 +28,7 @@
     <p id="scopeHelp">Public access requests GitHub's <code>public_repo</code> scope. Tokens stay in this browser session.</p>
     <button id="connectGitHub" type="button">Sign in with GitHub</button>
     <button id="clearToken" type="button">Sign out</button>
+    <button id="resetAuth" type="button">Reset GitHub connection</button>
     <button id="cancelGitHub" type="button" hidden>Cancel sign-in</button>
     <p id="signinAvailability" role="status"></p>
     <div id="deviceInstructions" hidden>
@@ -36,6 +37,8 @@
     </div>
     <p id="deviceStatus" role="status" aria-live="polite"></p>
     <p id="tokenStatus" role="status" aria-live="polite"></p>
+    <p>Tokens are encrypted with a temporary key held only in background memory. Sign out clears credentials and pending sign-in. A background restart, extension reload or browser restart requires sign-in again. Removing the extension clears its browser storage; it does not revoke GitHub authorization.</p>
+    <p><a href="https://github.com/settings/applications" target="_blank" rel="noopener noreferrer">Manage or revoke GitHub app access</a> · <a href="https://github.com/settings/tokens" target="_blank" rel="noopener noreferrer">Manage manual tokens</a></p>
     <details id="advancedAuth"><summary>Advanced connection settings</summary>
     <p>Developers can use their own registered OAuth App. Most users should use the sign-in button above once the publisher has configured this build.</p>
     <label for="clientId">Custom OAuth App client ID</label>

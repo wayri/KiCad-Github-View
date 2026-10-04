@@ -20,35 +20,120 @@ const KiCadGitHubReviewApi = (() => {
   const validId = (value) => typeof value === "string" && /^[A-Za-z0-9_+\/=.-]{1,200}$/.test(value);
   const fail = (message, definitive = false) => Object.assign(new Error(message), { definitive });
 
-  async function tokenStatus() {
-    const token = (await chrome.storage.session.get(TOKEN_KEY))[TOKEN_KEY];
-    const expiry = (await chrome.storage.session.get(TOKEN_EXPIRY_KEY))[TOKEN_EXPIRY_KEY];
-    if (Number.isFinite(expiry) && Date.now() >= expiry) {
-      await chrome.storage.session.remove([TOKEN_KEY, TOKEN_EXPIRY_KEY]);
-      return { configured: false, expired: true };
+  // No persistent key: copied session records cannot unlock another worker.
+  // Worker suspension/restart deliberately requires authentication again.
+  let vaultKey = null, deviceSecret = null, authEpoch = 0, authQueue = Promise.resolve(), initialized = false;
+  const SESSION_LIMIT = 8 * 60 * 60 * 1000;
+  function authOperation(operation) {
+    if (!initialized) {
+      initialized = true;
+      authQueue = authQueue.then(async () => {
+        await chrome.storage.session.remove([TOKEN_KEY, TOKEN_EXPIRY_KEY, DEVICE_KEY]);
+        await chrome.storage.local.remove([TOKEN_KEY, TOKEN_EXPIRY_KEY, DEVICE_KEY]);
+      });
     }
-    return { configured: typeof token === "string" && token.length > 0,
-      ...(Number.isFinite(expiry) ? { expiresAt: expiry } : {}) };
+    const result = authQueue.then(operation);
+    authQueue = result.catch(() => {});
+    return result;
   }
-  async function setToken(value) {
+  async function readCredential() {
+    const record = (await chrome.storage.session.get(TOKEN_KEY))[TOKEN_KEY];
+    if (!record) return null;
+    try {
+      if (!vaultKey || record.version !== 1 || !Number.isFinite(record.expiresAt) ||
+          record.expiresAt <= Date.now() || !Array.isArray(record.iv) || record.iv.length !== 12 ||
+          !Array.isArray(record.ciphertext) || record.ciphertext.length > 1024 ||
+          ![...record.iv, ...record.ciphertext].every(n => Number.isInteger(n) && n >= 0 && n <= 255)) throw new Error("locked");
+      const bytes = await crypto.subtle.decrypt({ name: "AES-GCM", iv: new Uint8Array(record.iv),
+        additionalData: new TextEncoder().encode(`github-token:v1:${record.expiresAt}`) }, vaultKey,
+        new Uint8Array(record.ciphertext));
+      const token = new TextDecoder().decode(bytes);
+      new Uint8Array(bytes).fill(0);
+      return { token, expiresAt: record.expiresAt };
+    } catch {
+      vaultKey = null;
+      await chrome.storage.session.remove([TOKEN_KEY, TOKEN_EXPIRY_KEY]);
+      return null;
+    }
+  }
+  async function tokenStatus() {
+    return authOperation(async () => {
+      const credential = await readCredential();
+      return credential ? { configured: true, expiresAt: credential.expiresAt } : { configured: false };
+    });
+  }
+  async function setToken(value, lifetime = SESSION_LIMIT, expectedEpoch) {
     if (typeof value !== "string" || value.length < 20 || value.length > 500 || /[^\x21-\x7e]/.test(value)) {
       throw fail("Enter a valid GitHub access token (20–500 printable characters, no spaces).", true);
     }
-    if (chrome.storage.session.setAccessLevel) {
-      await chrome.storage.session.setAccessLevel({ accessLevel: "TRUSTED_CONTEXTS" });
-    }
-    await chrome.storage.session.set({ [TOKEN_KEY]: value });
-    await chrome.storage.session.remove(TOKEN_EXPIRY_KEY);
-    return { configured: true };
+    const manual = expectedEpoch === undefined;
+    if (manual) expectedEpoch = ++authEpoch;
+    return authOperation(async () => {
+      if (expectedEpoch !== authEpoch) throw fail("Sign-in was cancelled. Start again.", true);
+      if (manual) {
+        deviceSecret = null;
+        await chrome.storage.session.remove(DEVICE_KEY);
+      }
+      if (chrome.storage.session.setAccessLevel) {
+        await chrome.storage.session.setAccessLevel({ accessLevel: "TRUSTED_CONTEXTS" });
+      }
+      const key = await crypto.subtle.generateKey({ name: "AES-GCM", length: 256 }, false, ["encrypt", "decrypt"]);
+      const iv = crypto.getRandomValues(new Uint8Array(12));
+      const expiresAt = Date.now() + Math.min(SESSION_LIMIT, Number.isFinite(lifetime) && lifetime > 0 ? lifetime : SESSION_LIMIT);
+      const bytes = new TextEncoder().encode(value);
+      let ciphertext;
+      try { ciphertext = await crypto.subtle.encrypt({ name: "AES-GCM", iv,
+        additionalData: new TextEncoder().encode(`github-token:v1:${expiresAt}`) }, key, bytes); }
+      finally { bytes.fill(0); }
+      if (expectedEpoch !== authEpoch) throw fail("Sign-in was cancelled. Start again.", true);
+      vaultKey = key;
+      await chrome.storage.session.set({ [TOKEN_KEY]: { version: 1, iv: Array.from(iv),
+        ciphertext: Array.from(new Uint8Array(ciphertext)), expiresAt } });
+      await chrome.storage.session.remove(TOKEN_EXPIRY_KEY);
+      if (expectedEpoch !== authEpoch) {
+        vaultKey = null;
+        await chrome.storage.session.remove([TOKEN_KEY, TOKEN_EXPIRY_KEY]);
+        throw fail("Sign-in was cancelled. Start again.", true);
+      }
+      return { configured: true, expiresAt };
+    });
   }
-  async function clearToken() {
-    await chrome.storage.session.remove([TOKEN_KEY, TOKEN_EXPIRY_KEY]);
-    return { configured: false };
+  async function clearToken(reset = false) {
+    authEpoch++;
+    return authOperation(async () => {
+      vaultKey = null;
+      deviceSecret = null;
+      await chrome.storage.session.remove([TOKEN_KEY, TOKEN_EXPIRY_KEY, DEVICE_KEY]);
+      if (reset) await chrome.storage.local.remove(CLIENT_ID_KEY);
+      return { configured: false };
+    });
   }
   async function getToken() {
-    if (!(await tokenStatus()).configured) throw fail("Set a GitHub token in extension options first.", true);
-    const token = (await chrome.storage.session.get(TOKEN_KEY))[TOKEN_KEY];
-    return token;
+    return authOperation(async () => {
+      const credential = await readCredential();
+      if (!credential) throw fail("GitHub session is locked or expired. Sign in again in extension settings.", true);
+      return credential.token;
+    });
+  }
+  async function resetAuth() { return clearToken(true); }
+  async function finishDevice(pending, epoch) {
+    return authOperation(async () => {
+      const current = (await chrome.storage.session.get(DEVICE_KEY))[DEVICE_KEY];
+      if (epoch !== authEpoch || current?.nonce !== pending.nonce) return false;
+      deviceSecret = null;
+      await chrome.storage.session.remove(DEVICE_KEY);
+      return true;
+    });
+  }
+  async function assertCurrentToken(token, epoch = authEpoch) {
+    const current = await getToken();
+    if (epoch !== authEpoch || current !== token) throw fail("GitHub account changed or signed out. Try again after signing in.", true);
+  }
+  async function authorizationHeaders() {
+    return authOperation(async () => {
+      const credential = await readCredential();
+      return credential ? { Authorization: `Bearer ${credential.token}` } : {};
+    });
   }
 
   async function deviceHttp(path, fields) {
@@ -76,17 +161,20 @@ const KiCadGitHubReviewApi = (() => {
     retryAfterMs: Math.max(0, pending.nextPollAt - Date.now()), intervalSeconds: pending.intervalSeconds,
     scope: pending.scope || "public_repo" });
   async function deviceStatus() {
+    await authOperation(async () => {});
+    const epoch = authEpoch;
     const customClientId = (await chrome.storage.local.get(CLIENT_ID_KEY))[CLIENT_ID_KEY] || "";
     const clientId = customClientId || RELEASE_OAUTH_CLIENT_ID;
     const configuration = { clientId, customClientId, releaseConfigured: Boolean(RELEASE_OAUTH_CLIENT_ID) };
     const pending = (await chrome.storage.session.get(DEVICE_KEY))[DEVICE_KEY];
     if (pending && Date.now() >= pending.expiresAt) {
-      await chrome.storage.session.remove(DEVICE_KEY);
+      await finishDevice(pending, epoch);
       return { ...configuration, active: false, expired: true };
     }
     return { ...configuration, active: Boolean(pending), ...(pending ? safeFlow(pending) : {}) };
   }
   async function startDevice(value = "", scope = "public_repo") {
+    const epoch = authEpoch;
     if (!DEVICE_SCOPES.has(scope)) throw fail("Choose public repositories or public and private repositories.", true);
     if (typeof value !== "string") throw fail("Invalid GitHub OAuth App configuration.", true);
     value = value.trim() || RELEASE_OAUTH_CLIENT_ID;
@@ -104,19 +192,29 @@ const KiCadGitHubReviewApi = (() => {
       throw fail("GitHub returned an invalid device authorization response.", true);
     }
     const now = Date.now();
-    const pending = { clientId: value, scope, deviceCode: data.device_code, userCode: data.user_code,
+    const pending = { clientId: value, scope, userCode: data.user_code,
       expiresAt: now + data.expires_in * 1000, intervalSeconds: Math.max(5, data.interval),
       nextPollAt: now + Math.max(5, data.interval) * 1000,
       nonce: crypto.randomUUID() };
     if (chrome.storage.session.setAccessLevel) {
       await chrome.storage.session.setAccessLevel({ accessLevel: "TRUSTED_CONTEXTS" });
     }
-    await chrome.storage.local.set({ [CLIENT_ID_KEY]: value });
-    await chrome.storage.session.set({ [DEVICE_KEY]: pending });
+    if (epoch !== authEpoch) return { state: "cancelled" };
+    await authOperation(async () => {
+      if (epoch !== authEpoch) throw fail("Sign-in was cancelled. Start again.", true);
+      if ((await chrome.storage.session.get(DEVICE_KEY))[DEVICE_KEY]) throw fail("A GitHub sign-in is already in progress.", true);
+      await chrome.storage.local.set({ [CLIENT_ID_KEY]: value });
+      deviceSecret = data.device_code;
+      await chrome.storage.session.set({ [DEVICE_KEY]: pending });
+    });
     return { state: "pending", ...safeFlow(pending) };
   }
   async function cancelDevice() {
-    await chrome.storage.session.remove(DEVICE_KEY);
+    authEpoch++;
+    await authOperation(async () => {
+      deviceSecret = null;
+      await chrome.storage.session.remove(DEVICE_KEY);
+    });
     return { state: "cancelled" };
   }
   let pollLock = null;
@@ -126,22 +224,28 @@ const KiCadGitHubReviewApi = (() => {
     try { return await pollLock; } finally { pollLock = null; }
   }
   async function pollDeviceOnce() {
+    await authOperation(async () => {});
+    const epoch = authEpoch;
     const pending = (await chrome.storage.session.get(DEVICE_KEY))[DEVICE_KEY];
-    if (!pending) throw fail("No GitHub sign-in is in progress.", true);
+    const secret = deviceSecret;
+    if (!pending || !secret) throw fail("No GitHub sign-in is in progress.", true);
     const now = Date.now();
     if (now >= pending.expiresAt) {
-      await chrome.storage.session.remove(DEVICE_KEY);
+      await finishDevice(pending, epoch);
       return { state: "expired" };
     }
     if (now < pending.nextPollAt) return { state: "pending", ...safeFlow(pending) };
     pending.nextPollAt = now + pending.intervalSeconds * 1000;
-    await chrome.storage.session.set({ [DEVICE_KEY]: pending });
+    await authOperation(async () => {
+      if (epoch === authEpoch) await chrome.storage.session.set({ [DEVICE_KEY]: pending });
+    });
+    if (epoch !== authEpoch) return { state: "cancelled" };
     const data = await deviceHttp("/login/oauth/access_token", { client_id: pending.clientId,
-      device_code: pending.deviceCode, grant_type: "urn:ietf:params:oauth:grant-type:device_code" });
+      device_code: secret, grant_type: "urn:ietf:params:oauth:grant-type:device_code" });
     const current = (await chrome.storage.session.get(DEVICE_KEY))[DEVICE_KEY];
-    if (current?.nonce !== pending.nonce) return { state: "cancelled" };
+    if (epoch !== authEpoch || current?.nonce !== pending.nonce) return { state: "cancelled" };
     if (Date.now() >= current.expiresAt) {
-      await chrome.storage.session.remove(DEVICE_KEY);
+      await finishDevice(pending, epoch);
       return { state: "expired" };
     }
     if (data.access_token) {
@@ -149,14 +253,12 @@ const KiCadGitHubReviewApi = (() => {
       const requested = pending.scope || "public_repo";
       if (data.token_type?.toLowerCase() !== "bearer" ||
           !(requested === "repo" ? granted.includes("repo") : granted.includes("public_repo") || granted.includes("repo"))) {
-        await chrome.storage.session.remove(DEVICE_KEY);
+        await finishDevice(pending, epoch);
         throw fail(`GitHub did not grant ${requested === "repo" ? "private" : "public"} repository access. Start sign-in again and approve that scope.`, true);
       }
-      await setToken(data.access_token);
-      if (Number.isInteger(data.expires_in) && data.expires_in > 0) {
-        await chrome.storage.session.set({ [TOKEN_EXPIRY_KEY]: Date.now() + data.expires_in * 1000 });
-      }
-      await chrome.storage.session.remove(DEVICE_KEY);
+      await setToken(data.access_token, Number.isInteger(data.expires_in) && data.expires_in > 0 ?
+        data.expires_in * 1000 : SESSION_LIMIT, epoch);
+      if (!(await finishDevice(pending, epoch))) return { state: "cancelled" };
       return { state: "connected" };
     }
     if (data.error === "authorization_pending") return { state: "pending", ...safeFlow(current) };
@@ -164,19 +266,22 @@ const KiCadGitHubReviewApi = (() => {
       current.intervalSeconds = Math.min(300, Math.max(current.intervalSeconds + 5,
         Number.isInteger(data.interval) ? data.interval : 0));
       current.nextPollAt = Date.now() + current.intervalSeconds * 1000;
-      await chrome.storage.session.set({ [DEVICE_KEY]: current });
+      await authOperation(async () => {
+        if (epoch === authEpoch) await chrome.storage.session.set({ [DEVICE_KEY]: current });
+      });
       return { state: "pending", ...safeFlow(current), slowedDown: true };
     }
-    await chrome.storage.session.remove(DEVICE_KEY);
+    await finishDevice(pending, epoch);
     if (data.error === "access_denied") return { state: "denied" };
     if (data.error === "expired_token") return { state: "expired" };
     throw fail(data.error === "device_flow_disabled" ? "Enable Device Flow in the registered OAuth App settings." :
       "GitHub sign-in failed. Check the OAuth App client ID and start again.", true);
   }
 
-  async function request(path, token, body) {
+  async function request(path, token, body, epoch = authEpoch) {
     if (typeof path !== "string" || !path.startsWith("/repos/") && path !== "/graphql" ||
         path.includes("//") || path.includes("..")) throw fail("Invalid GitHub API path.", true);
+    await assertCurrentToken(token, epoch);
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 30000);
     let response;
@@ -210,7 +315,7 @@ const KiCadGitHubReviewApi = (() => {
       throw fail("GitHub returned an unreadable response; inspect the thread before retrying.");
     }
   }
-  const graphql = (token, query, variables) => request("/graphql", token, { query, variables });
+  const graphql = (token, query, variables, epoch = authEpoch) => request("/graphql", token, { query, variables }, epoch);
   function repoParts(repository) {
     if (!validRepository(repository)) throw fail("Invalid target GitHub repository.", true);
     return repository.split("/");
@@ -244,6 +349,7 @@ const KiCadGitHubReviewApi = (() => {
     return { mode: value.commenting.mode, allowlist: [...new Set(list.map((login) => login.toLowerCase()))] };
   }
   async function policyGet(path, token, maxBytes = 1024 * 1024, accept = "application/vnd.github+json") {
+    if (token) await assertCurrentToken(token);
     if (typeof path !== "string" || !(path === "/user" || path.startsWith("/repos/")) ||
         path.includes("//") || path.includes("..")) throw fail("Invalid GitHub policy request.", true);
     const controller = new AbortController();
@@ -412,6 +518,7 @@ const KiCadGitHubReviewApi = (() => {
     try { return await work; } finally { if (locks.get(key) === work) locks.delete(key); }
   }
   async function publishLocked(args, key) {
+    const publicationEpoch = authEpoch;
     const saved = (await chrome.storage.local.get(key))[key];
     if (saved?.status === "done" && saved.remoteRef) return { remoteRef: saved.remoteRef, duplicate: true };
     if (saved?.status === "pending") {
@@ -432,18 +539,19 @@ const KiCadGitHubReviewApi = (() => {
     }
     const policy = await commentPolicyStatus(repository);
     if (!policy.allowed) throw fail(`Repository comment policy blocked publication: ${policy.reason}`, true);
+    if (publicationEpoch !== authEpoch) throw fail("GitHub account changed or signed out. Review and publish again.", true);
     await chrome.storage.local.set({ [key]: { status: "pending", startedAt: new Date().toISOString() } });
     let remoteRef;
     try {
       const path = `/repos/${owner}/${name}/issues`;
       if (destination === "new-issue") {
-        const result = await request(path, token, { title: args.title, body });
+        const result = await request(path, token, { title: args.title, body }, publicationEpoch);
         if (!NUMBER(result.number)) throw fail("GitHub did not confirm the new issue number.");
         remoteRef = { kind: "issue", repository, number: result.number,
           url: `https://github.com/${repository}/issues/${result.number}`,
           publishedAt: new Date().toISOString(), ...(validId(result.node_id) ? { nodeId: result.node_id } : {}) };
       } else if (destination === "issue") {
-        const result = await request(`${path}/${number}/comments`, token, { body });
+        const result = await request(`${path}/${number}/comments`, token, { body }, publicationEpoch);
         if (!NUMBER(result.id)) throw fail("GitHub did not confirm the new comment.");
         remoteRef = { kind: "issue", repository, number,
           url: `https://github.com/${repository}/issues/${number}#issuecomment-${result.id}`,
@@ -451,7 +559,7 @@ const KiCadGitHubReviewApi = (() => {
       } else if (destination === "new-discussion") {
         const data = await graphql(token, `mutation($input:CreateDiscussionInput!){createDiscussion(input:$input){discussion{id number}}}`, {
           input: { repositoryId: preflight.repositoryId, categoryId: args.categoryId, title: args.title, body }
-        });
+        }, publicationEpoch);
         const result = data.data?.createDiscussion?.discussion;
         if (!NUMBER(result?.number) || !validId(result.id)) throw fail("GitHub did not confirm the new discussion.");
         remoteRef = { kind: "discussion", repository, number: result.number, nodeId: result.id,
@@ -459,7 +567,7 @@ const KiCadGitHubReviewApi = (() => {
       } else {
         const data = await graphql(token, `mutation($input:AddDiscussionCommentInput!){addDiscussionComment(input:$input){comment{id databaseId}}}`, {
           input: { discussionId: preflight.id, body }
-        });
+        }, publicationEpoch);
         const result = data.data?.addDiscussionComment?.comment;
         if (!validId(result?.id)) throw fail("GitHub did not confirm the new discussion comment.");
         remoteRef = { kind: "discussion", repository, number, nodeId: result.id,
@@ -473,7 +581,7 @@ const KiCadGitHubReviewApi = (() => {
       throw error;
     }
   }
-  return { tokenStatus, setToken, clearToken, deviceStatus, startDevice, pollDevice, cancelDevice,
+  return { tokenStatus, setToken, clearToken, resetAuth, authorizationHeaders, deviceStatus, startDevice, pollDevice, cancelDevice,
     commentPolicyStatus, validatePolicy, categories, publish, publishArgs, validRepository };
 })();
 

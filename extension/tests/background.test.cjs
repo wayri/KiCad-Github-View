@@ -363,10 +363,11 @@ test('token settings are options-only and never disclose the credential', async 
   sessionStore.clear();
   const token = 'github_pat_' + 'a'.repeat(60);
   assert.match((await message({ type: 'github-auth-set', token })).error, /Only extension options/);
+  assert.match((await message({ type: 'github-auth-reset' })).error, /Only extension options/);
   assert.match((await message({ type: 'github-auth-set', token }, githubTab(5, '/owner/board'))).error,
     /Only extension options/);
   assert.equal((await message({ type: 'github-auth-set', token }, options)).result.configured, true);
-  assert.deepEqual((await message({ type: 'github-auth-status' })).result, { configured: true });
+  assert.equal((await message({ type: 'github-auth-status' })).result.configured, true);
   assert.equal(JSON.stringify((await message({ type: 'github-auth-status' })).result).includes(token), false);
   assert.equal((await message({ type: 'github-auth-status' }, githubTab(5, '/owner/board'))).ok, false);
   assert.equal((await message({ type: 'open-options' })).result.opened, true);
@@ -391,6 +392,7 @@ test('device sign-in requests public_repo and respects pending and slow_down int
   assert.equal(started.result.state, 'pending');
   assert.equal(started.result.userCode, 'ABCD-EFGH');
   assert.equal(JSON.stringify(started.result).includes('d'.repeat(40)), false, 'device code is not disclosed');
+  assert.equal(JSON.stringify([...sessionStore]).includes('d'.repeat(40)), false, 'device secret stays only in background memory');
   assert.equal(urls[0].url, 'https://github.com/login/device/code');
   assert.equal(new URLSearchParams(urls[0].init.body).get('scope'), 'public_repo');
   assert.equal((await message({ type: 'github-device-poll' }, options)).result.state, 'pending');
@@ -410,13 +412,14 @@ test('device sign-in requests public_repo and respects pending and slow_down int
   pending.nextPollAt = Date.now() - 1;
   const connected = await message({ type: 'github-device-poll' }, options);
   assert.deepEqual(connected.result, { state: 'connected' });
-  assert.equal(sessionStore.get('github-review-token'), token);
+  assert.equal(typeof sessionStore.get('github-review-token'), 'object');
+  assert.equal(JSON.stringify(sessionStore.get('github-review-token')).includes(token), false);
   assert.equal(sessionStore.has('github-device-pending'), false);
   assert.equal(JSON.stringify(connected).includes(token), false, 'token never returns to options');
   assert.equal((await message({ type: 'github-device-status' }, options)).result.clientId,
     'Ov23liExampleClient');
-  sessionStore.set('github-review-token-expiry', Date.now() - 1);
-  assert.equal((await message({ type: 'github-auth-status' }, options)).result.expired, true);
+  sessionStore.get('github-review-token').expiresAt = Date.now() - 1;
+  assert.equal((await message({ type: 'github-auth-status' }, options)).result.configured, false);
   assert.equal(sessionStore.has('github-review-token'), false);
 });
 
@@ -774,7 +777,7 @@ test('file commit listing pins moving branch to SHA and remains in requested for
  assert.match(urls[0],/repos\/fork\/board\/commits\/feature%2Fboard$/);const query=new URL(urls[1]).searchParams;assert.equal(query.get('sha'),sha('a'));assert.equal(query.get('path'),'pcb/board name.kicad_pcb');assert.equal(query.get('per_page'),'50');assert.equal(urls.length,2);
 });
 test('branch listing bounds pagination and authenticates only in trusted worker',async(t)=>{
- const token='test-credential-'.repeat(3);sessionStore.set('github-review-token',token);sessionStore.delete('github-review-token-expiry');t.after(()=>sessionStore.delete('github-review-token'));
+ const token='test-credential-'.repeat(3);await KiCadGitHubReviewApi.setToken(token);sessionStore.delete('github-review-token-expiry');t.after(()=>sessionStore.delete('github-review-token'));
  withFetch(t,async(url,init)=>{assert.match(url,/branches\?per_page=100&page=1$/);assert.equal(init.headers.Authorization,'Bearer '+token);return new Response(JSON.stringify(Array.from({length:100},(_,i)=>({name:'branch/'+i,commit:{sha:sha('a')}}))),{status:200,headers:{'content-type':'application/json','link':'<https://api.github.com/next>; rel="next"'}});});
  const result=await message({type:'revision-branches',repository:'owner/board',ref:'main',file:'board.kicad_pcb'});assert.equal(result.ok,true);assert.equal(result.result.branches.length,100);assert.match(result.result.warnings.join(' '),/100/);assert.equal(JSON.stringify(result).includes(token),false);
 });
@@ -816,13 +819,13 @@ test('PCB raw byte cap rejects oversized headers; schematics retain their smalle
 
 
 test('drawing and project reads use the configured account only on the exact GitHub API host', async t => {
-  sessionStore.clear(); const token='test-credential-'.repeat(3);sessionStore.set('github-review-token',token);t.after(()=>sessionStore.clear());
+  sessionStore.clear(); const token='test-credential-'.repeat(3);await KiCadGitHubReviewApi.setToken(token);t.after(()=>sessionStore.clear());
   withFetch(t,async (url,init)=>{assert.equal(new URL(url).origin,'https://api.github.com');assert.equal(init.headers.Authorization,`Bearer ${token}`);assert.equal(init.redirect,'error');return url.includes('/contents/')?new Response('(kicad_pcb)'):json({sha:sha('a')});});
   assert.equal(await background.githubFile('wayri/board','main','board.kicad_pcb'),'(kicad_pcb)');
   assert.equal((await background.revisionResolve('wayri/board','main','board.kicad_pcb')).sha,sha('a'));
 });
 test('rate-limited API file reads recover through anonymous bounded raw content without leaking a token',async t=>{
-  sessionStore.clear();sessionStore.set('github-review-token','test-credential-'.repeat(3));t.after(()=>sessionStore.clear());const calls=[];
+  sessionStore.clear();await KiCadGitHubReviewApi.setToken('test-credential-'.repeat(3));t.after(()=>sessionStore.clear());const calls=[];
   withFetch(t,async(url,init)=>{calls.push(url);if(url.startsWith('https://api.github.com/'))return new Response(null,{status:403,headers:{'x-ratelimit-remaining':'0'}});assert.equal(url,'https://raw.githubusercontent.com/wayri/board/feature%2Ftest/folder/board.kicad_pcb');assert.equal(init.headers,undefined);assert.equal(init.credentials,'omit');assert.equal(init.redirect,'error');return new Response('(kicad_pcb)');});
   assert.equal(await background.githubFile('wayri/board','feature/test','folder/board.kicad_pcb'),'(kicad_pcb)');assert.equal(calls.length,2);
 });
@@ -839,7 +842,7 @@ test('failed raw fallback retains the rate limit reset guidance without retrying
 
 test('private Contents and linked 3D assets use the configured token only on the fixed API origin', async t => {
   const token = 'private-test-token-1234567890';
-  sessionStore.set('github-review-token',token);
+  await KiCadGitHubReviewApi.setToken(token);
   sessionStore.delete('github-review-token-expiry');
   t.after(()=>sessionStore.delete('github-review-token'));
   const seen = [];
