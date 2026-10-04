@@ -11,8 +11,8 @@ const KiCadGitHubReviewApi = (() => {
   const DEVICE_KEY = "github-device-pending";
   const CLIENT_ID = /^[A-Za-z0-9_]{10,100}$/;
   // Publisher configuration: the OAuth App's public client ID, never its secret.
-  // Leave blank until wayri registers an OAuth App with Device Flow enabled.
-  const RELEASE_OAUTH_CLIENT_ID = "";
+  // Public client ID for wayri's registered OAuth App; Device Flow is required.
+  const RELEASE_OAUTH_CLIENT_ID = "Ov23li8RsSVZk2dHptN1";
   const DEVICE_SCOPES = new Set(["public_repo", "repo"]);
   const DESTINATIONS = new Set(["new-issue", "issue", "new-discussion", "discussion"]);
   const validRepository = (value) => typeof value === "string" && REPOSITORY.test(value) &&

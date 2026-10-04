@@ -4,7 +4,7 @@ Users should choose repository access and press **Sign in with GitHub**. They ap
 
 ## One-time publisher registration
 
-This development release has no registered publisher OAuth client ID. The sign-in screen explains that prerequisite; it cannot authorize an account until a valid App is configured.
+From v0.11.10, browser packages include the registered publisher OAuth App public Client ID `Ov23li8RsSVZk2dHptN1`. Normal users can press **Sign in with GitHub** without configuring advanced settings. The publisher must keep Device Flow enabled; live authorization is completed on GitHub by each user. The steps below are for maintainers changing or independently registering an App.
 
 1. As `wayri`, open GitHub **Settings → Developer settings → OAuth Apps → New OAuth App**. Follow [GitHub's registration instructions](https://docs.github.com/en/apps/oauth-apps/building-oauth-apps/creating-an-oauth-app).
 2. Use a recognizable application name such as **KiCad GitHub View**, and the project's repository as its homepage. Complete GitHub's required registration fields. This implementation uses device authorization, not a callback exchange.

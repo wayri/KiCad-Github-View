@@ -9,7 +9,7 @@ function harness({releaseClientId='',grantedScope='repo'}={}){
    {access_token:'gho_'+ 't'.repeat(40),token_type:'bearer',scope:grantedScope})};
  }});
  let source=fs.readFileSync(require.resolve('../github-review-api.js'),'utf8');
- source=source.replace('const RELEASE_OAUTH_CLIENT_ID = "";',`const RELEASE_OAUTH_CLIENT_ID = ${JSON.stringify(releaseClientId)};`);
+ if(releaseClientId!==null)source=source.replace(/const RELEASE_OAUTH_CLIENT_ID = "[A-Za-z0-9_]*";/,`const RELEASE_OAUTH_CLIENT_ID = ${JSON.stringify(releaseClientId)};`);
  vm.runInContext(source,context);return{api:context.KiCadGitHubReviewApi,session,local,requests};
 }
 test('release App signs in without a user client ID or secret',async()=>{
@@ -20,6 +20,14 @@ test('release App signs in without a user client ID or secret',async()=>{
  const fields=new URLSearchParams(h.requests[0].init.body);
  assert.equal(fields.get('client_id'),'Ov23liPublisherClient');assert.equal(fields.has('client_secret'),false);
  assert.equal(JSON.stringify(result).includes('d'.repeat(40)),false);
+});
+test('distributed build uses the registered public Client ID without advanced setup',async()=>{
+ const h=harness({releaseClientId:null});
+ const status=await h.api.deviceStatus();
+ assert.equal(status.releaseConfigured,true);assert.equal(status.clientId,'Ov23li8RsSVZk2dHptN1');
+ assert.equal((await h.api.startDevice()).state,'pending');
+ const fields=new URLSearchParams(h.requests[0].init.body);
+ assert.equal(fields.get('client_id'),'Ov23li8RsSVZk2dHptN1');assert.equal(fields.has('client_secret'),false);
 });
 test('blank publisher setup fails honestly without contacting GitHub',async()=>{
  const h=harness();await assert.rejects(h.api.startDevice(),/publisher must register an OAuth App/);

@@ -30,7 +30,7 @@ Open **Review → GitHub → Account and review-file settings**. Choose public a
 
 ![Simplified sign-in screen with collapsed advanced fields](../images/integration/github-sign-in.jpg)
 
-The publisher must configure a registered GitHub OAuth App client ID with Device Flow enabled before device sign-in can start; this release does not arrive with a ready-to-use OAuth client ID. The screenshot shows that prerequisite, not a successful connection. See [publisher sign-in setup](../GITHUB-SIGNIN.md). Advanced connection settings provide these fallbacks:
+From v0.11.10, the registered publisher App public client ID is included. Choose repository access, press **Sign in with GitHub**, and approve the displayed device code on GitHub. The screenshot above was captured before publisher configuration and shows the older prerequisite message; it is not evidence of a successful connection. See [publisher sign-in setup](../GITHUB-SIGNIN.md). Advanced connection settings remain available for these fallbacks:
 
 - A custom registered OAuth App client ID with Device Flow enabled. Sign-in requests `public_repo` or `repo` according to the access selector.
 - A GitHub personal access token with access to the repositories you review. Issue and pull-request posts need Issues write permission. Discussions need permission to use Discussions through GraphQL.
