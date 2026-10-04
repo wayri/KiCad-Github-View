@@ -80,6 +80,29 @@ class PackageVSCodeTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, 'worker bundle is stale'):
                 builder.prepare_media(root)
 
+    def test_step_bundle_survives_checkout_line_endings_without_changing_vendor_bytes(self):
+        spec = importlib.util.spec_from_file_location('worker_builder', ROOT / 'scripts/build_step_worker.py')
+        worker_builder = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(worker_builder)
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            for name in builder.BUILD_INPUTS:
+                target = root / 'extension' / name
+                target.parent.mkdir(parents=True, exist_ok=True)
+                target.write_bytes((ROOT / 'extension' / name).read_bytes())
+            vendor = (root / 'extension/vendor/occt/occt-import-js.js').read_bytes()
+            expected = worker_builder.bundle(root)
+            for name in ('step-decoder.js', 'step-worker.js'):
+                target = root / 'extension' / name
+                text = target.read_bytes().replace(b'\r\n', b'\n')
+                target.write_bytes(text.replace(b'\n', b'\r\n'))
+            self.assertEqual(worker_builder.bundle(root), expected)
+            self.assertIn(vendor, expected)
+            for name in ('step-decoder.js', 'step-worker.js'):
+                target = root / 'extension' / name
+                target.write_bytes(target.read_bytes().replace(b'\r\n', b'\n'))
+            self.assertEqual(worker_builder.bundle(root), expected)
+
 
 if __name__ == '__main__':
     unittest.main()

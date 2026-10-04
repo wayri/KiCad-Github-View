@@ -6,12 +6,12 @@ ROOT = Path(__file__).resolve().parents[1]
 
 def bundle(root: Path = ROOT) -> bytes:
     source = root / 'extension'
-    worker = (source / 'step-worker.js').read_bytes()
+    worker = (source / 'step-worker.js').read_bytes().replace(b'\r\n', b'\n')
     imports = b"importScripts('step-decoder.js','vendor/occt/occt-import-js.js');"
     if worker.count(imports) != 1:
         raise ValueError('STEP worker import contract changed; review the bundle builder.')
     return (b'/* STEP worker bundle; LGPL dependency notices: vendor/occt/NOTICE.md */\n' +
-            (source / 'step-decoder.js').read_bytes() + b'\n' +
+            (source / 'step-decoder.js').read_bytes().replace(b'\r\n', b'\n') + b'\n' +
             (source / 'vendor/occt/occt-import-js.js').read_bytes() + b'\n' +
             worker.replace(imports, b''))
 
