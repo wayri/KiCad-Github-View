@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "KiCad Visual Review for GitHub",
-  "version": "0.11.1",
+  "version": "0.11.2",
   "description": "View KiCad schematics and PCB layouts directly on GitHub, with interactive revision comparisons and SPIKE 3D previews.",
   "host_permissions": [
     "https://github.com/*",

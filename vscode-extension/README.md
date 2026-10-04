@@ -43,3 +43,5 @@ Version 0.10.0 adds a read-only project workspace, settings/constraint inspectio
 Version 0.11.0 adds the shared BOM / Stats and DNP controls, saved board/zone analytics and bounded regex/wildcard global search. HTML files can be selected in Project and opened in a separate static isolated preview; interactive self-contained HTML/iBOM runs in the browser extension. Drawing files stay read-only. Future KiCad generator versions display an explicit forward-preview warning.
 
 Version 0.11.1 shares the refined read-only project setup forms and tables. GitHub release packaging is documented in [the release guide](../docs/RELEASING.md).
+
+Version 0.11.2 opens PCB drawings from the project tree, provides saved layer details when physical stackup is absent, and simplifies project/schematic hierarchy navigation.

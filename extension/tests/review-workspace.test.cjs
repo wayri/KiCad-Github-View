@@ -238,3 +238,53 @@ test('zone analytics navigation selects saved zone UUID and displays square-mill
  const view=workspaceRuntime(undefined,{source});view.load();view.get('navBom').click();view.get('zoneStats').children.find(e=>e.onclick).click();
  assert.match(view.get('propertyList').textContent,/Outline polygon area sum 100.000 mm²/);assert.match(view.get('propertyList').textContent,/Saved fill polygon area sum 64.000 mm²/);assert.match(view.get('propertyList').textContent,/overlaps are counted repeatedly/);assert.ok(view.canvas.netPrimitives.size>0);
 });
+
+const {sheetEntries}=require('../review-workspace.js');
+const hierarchySheets=[
+  {path:'design/root.kicad_sch',label:'Controller'},
+  {path:'design/power.kicad_sch',label:'Power'},
+  {path:'design/regulator.kicad_sch',label:'Regulator'},
+  {path:'design/io.kicad_sch',label:'I/O'}
+];
+const hierarchyLinks=[
+  {path:'design/root.kicad_sch',label:'Power',properties:{Sheetfile:'power.kicad_sch'}},
+  {path:'design/power.kicad_sch',label:'Regulator',properties:{Sheetfile:'regulator.kicad_sch'}},
+  {path:'design/root.kicad_sch',label:'I/O',properties:{Sheetfile:'io.kicad_sch'}},
+  {path:'design/root.kicad_sch',label:'Missing sensor',properties:{Sheetfile:'sensor.kicad_sch'}}
+];
+test('sheet hierarchy collapses descendants without reintroducing them as orphan files',()=>{
+  assert.deepEqual(sheetEntries(hierarchySheets,hierarchyLinks).map(e=>[e.sheet?.label||e.link.label,e.depth]),[['Controller',0],['Power',1],['Regulator',2],['I/O',1],['Missing sensor',1]]);
+  assert.deepEqual(sheetEntries(hierarchySheets,hierarchyLinks,'',new Set(['design/root.kicad_sch'])).map(e=>e.sheet.label),['Controller']);
+  assert.deepEqual(sheetEntries(hierarchySheets,hierarchyLinks,'',new Set(['design/power.kicad_sch'])).filter(e=>e.sheet).map(e=>e.sheet.label),['Controller','Power','I/O']);
+});
+test('sheet filtering reveals matching descendants and their ancestors while preserving collapsed state',()=>{
+  const collapsed=new Set(['design/root.kicad_sch']);
+  assert.deepEqual(sheetEntries(hierarchySheets,hierarchyLinks,'regulator',collapsed).map(e=>e.sheet.label),['Controller','Power','Regulator']);
+  assert.deepEqual(sheetEntries(hierarchySheets,hierarchyLinks,'sensor',collapsed).map(e=>e.sheet?.label||e.link.label),['Controller','Missing sensor']);
+  assert.deepEqual([...collapsed],['design/root.kicad_sch']);
+  assert.equal(sheetEntries(hierarchySheets,hierarchyLinks,'not present').length,0);
+  const renamed=[{...hierarchyLinks[0],label:'Supply block'}];
+  assert.deepEqual(sheetEntries(hierarchySheets,renamed,'Supply block').map(e=>e.sheet.label),['Controller','Power']);
+});
+test('reused files and cyclic sheet links stay bounded and preserve all parent symbol targets',()=>{
+  const links=[...hierarchyLinks,{path:'design/io.kicad_sch',label:'Shared power',properties:{Sheetfile:'power.kicad_sch'}},{path:'design/regulator.kicad_sch',label:'Cycle',properties:{Sheetfile:'root.kicad_sch'}}];
+  const entries=sheetEntries(hierarchySheets,links);
+  assert.equal(entries.filter(e=>e.sheet).length,4);
+  assert.equal(entries.find(e=>e.sheet?.label==='Power').parents.length,2);
+  assert.equal(new Set(entries.filter(e=>e.sheet).map(e=>e.sheet.path)).size,4);
+});
+test('sheet browser renders compact names with source paths in tooltips and opens the selected file',()=>{
+  const files=[{path:'design/root.kicad_sch',content:'(kicad_sch (uuid "root") (sheet (at 10 10) (size 10 10) (uuid "sheet") (property "Sheetname" "Power") (property "Sheetfile" "power.kicad_sch")))'}, {path:'design/power.kicad_sch',content:'(kicad_sch (uuid "power"))'}];
+  let opened;
+  const view=workspaceRuntime(async()=>[],{files,pcb:false,openSheet:path=>opened=path});
+  view.get('navSheets').click();
+  const rows=view.get('sheetList').children[1].children;
+  assert.equal(rows.length,2);
+  const root=rows[0].children[1],child=rows[1].children[1];
+  assert.equal(root.title,'design/root.kicad_sch');
+  assert.ok(!root.textContent.includes('design/'));
+  assert.equal(root.attributes['aria-current'],'page');
+  child.click();assert.equal(opened,'design/power.kicad_sch');
+  assert.match(rows[1].children[2].attributes['aria-label'],/Locate.*design\/root/);
+  rows[0].children[0].click();assert.equal(view.get('sheetList').children[1].children.length,1);
+});

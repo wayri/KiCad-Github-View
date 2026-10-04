@@ -65,3 +65,5 @@ Version 0.10.0 adds a read-only project workspace, settings/constraint inspectio
 Version 0.11.0 adds BOM / Stats, variant-aware DNP highlighting, source-bound board and zone analytics, bounded regex/wildcard global search, isolated HTML previews, and the Git revisions commit/branch comparison picker. See [BOM and analytics](docs/bom-analytics.md), [HTML previews](docs/html-preview.md), [version handling](docs/version-compatibility.md) and [revision comparisons](docs/git-revisions.md).
 
 Version 0.11.1 refines project setup into grouped read-only forms, typed values and net-class/stackup tables. Releases now include verified download packages and tag-driven GitHub publication; see [releasing](../docs/RELEASING.md).
+
+Version 0.11.2 opens PCB drawings from the project tree, provides saved layer details when physical stackup is absent, and simplifies project/schematic hierarchy navigation.

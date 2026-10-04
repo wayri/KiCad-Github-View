@@ -9,3 +9,5 @@
 @media(max-width:760px){.project-tree{flex-basis:130px}.settings-workspace{display:block}.settings-categories{position:static;display:flex;flex-direction:row;flex-wrap:wrap;margin-bottom:10px}.settings-categories button{min-height:26px;font-size:10px}.settings-searchbar{gap:8px}.settings-searchbar>span{white-space:nowrap;font-size:11px}.settings-card{padding:0 9px 9px}.setting-field{grid-template-columns:minmax(90px,1fr) minmax(120px,1fr)}.project-file-heading{width:100%}.stackup-strip{flex-wrap:wrap;gap:3px}.stackup-content table{display:block;overflow:auto}}
 
 body[data-ui-theme=light] .project-warnings{color:#8c551b}
+
+.tree-actions{display:flex;gap:4px;margin:8px 0}.project-tree .tree-actions button{width:auto;font-size:10px;min-height:24px;padding:3px 6px;margin:0}.project-tree details>div{padding-left:10px;border-left:1px solid var(--line);margin-left:5px}

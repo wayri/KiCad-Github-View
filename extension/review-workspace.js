@@ -32,6 +32,59 @@
     const name=item.properties?.Sheetfile;if(typeof name!=='string'||!name||/[\\:]/.test(name)||name.startsWith('/'))return null;
     const parts=item.path.split('/');parts.pop();for(const part of name.split('/')){if(part==='..'){if(!parts.length)return null;parts.pop();}else if(part!=='.'&&part)parts.push(part);}return parts.join('/');
   }
+  // File hierarchy, with query ancestors retained and bounded cycle traversal.
+  function sheetEntries(sheets, links, query = "", collapsed = new Set()) {
+    const byPath = new Map(sheets.map(sheet => [sheet.path, sheet]));
+    const outgoing = new Map(), incoming = new Map();
+    for (const link of links) {
+      const target = sheetTarget(link);
+      if (!target) continue;
+      if (!outgoing.has(link.path)) outgoing.set(link.path, []);
+      outgoing.get(link.path).push({link, target});
+      if (!incoming.has(target)) incoming.set(target, []);
+      incoming.get(target).push(link);
+    }
+    const term = String(query).trim().toLowerCase(), visible = new Set();
+    if (term) {
+      for (const sheet of sheets) {
+        if (`${sheet.path} ${sheet.label}`.toLowerCase().includes(term)) visible.add(sheet.path);
+      }
+      for (const link of links) {
+        if (`${link.label} ${sheetTarget(link)}`.toLowerCase().includes(term)) {
+          visible.add(link.path);
+          if (byPath.has(sheetTarget(link))) visible.add(sheetTarget(link));
+        }
+      }
+      const queue = [...visible];
+      for (let i = 0; i < queue.length; i++) {
+        for (const parent of incoming.get(queue[i]) || []) {
+          if (!visible.has(parent.path)) { visible.add(parent.path); queue.push(parent.path); }
+        }
+      }
+    }
+    const entries = [], emitted = new Set();
+    const visit = (sheet, depth, chain) => {
+      if (emitted.has(sheet.path) || chain.has(sheet.path) || depth > 32) return;
+      emitted.add(sheet.path);
+      const children = outgoing.get(sheet.path) || [];
+      if (!term || visible.has(sheet.path)) entries.push({sheet, depth, parents: incoming.get(sheet.path) || [], hasChildren: children.length > 0});
+      const next = new Set(chain); next.add(sheet.path);
+      for (const {link, target} of children) {
+        const child = byPath.get(target);
+        if (child) {
+          // Mark hidden descendants so the orphan pass cannot re-add collapsed branches.
+          const start = entries.length;
+          visit(child, depth + 1, next);
+          if (!term && collapsed.has(sheet.path)) entries.splice(start);
+        } else if ((!term || `${link.label} ${target}`.toLowerCase().includes(term)) && (term || !collapsed.has(sheet.path))) {
+          entries.push({link, target, depth: depth + 1, unavailable: true});
+        }
+      }
+    };
+    for (const sheet of sheets.filter(sheet => !incoming.has(sheet.path))) visit(sheet, 0, new Set());
+    for (const sheet of sheets) if (!emitted.has(sheet.path)) visit(sheet, 0, new Set());
+    return entries;
+  }
   function symbolUuidFromPath(object) {
     const tree = object?.saved?.tree;
     if (!Array.isArray(tree)) return null;
@@ -57,6 +110,7 @@
     const request = async (type, extra = {}) => { const reply = await chrome.runtime.sendMessage({type, ...extra}); if (!reply?.ok) throw new Error(reply?.error || "The extension could not complete this request."); return reply.result; };
     let config = null, model = KiCadDesignModel.buildProject(files), objects = KiCadDesignModel.applyVariant(model, "default");
     let pointerWorld=null;
+    const collapsedSheets = new Set();
     let variant = "default", selected = null, lastFile = null, notes = [], remoteNotes = [], remoteLoad = 0, loadId = 0, editor = null;
     let receiptUser = "local-profile", unreadCursor = -1, policyStatus = null;
     const analyticsCache=new Map(); let dnpHighlight=false;
@@ -239,15 +293,34 @@
       if (!visible.length) list.append(make("p", "No objects match this search."));
     }
     function renderSheets(){
-      const list=$("sheetList");list.replaceChildren();const query=$("sheetSearch").value.toLowerCase(),sheets=model.sheets.filter(s=>s.kind==='schematic'),links=objects.filter(o=>o.kind==='sheet');
-      const incoming=new Set(links.map(sheetTarget));let count=0;const emitted=new Set();
-      const visit=(sheet,depth,chain)=>{if(emitted.has(sheet.path)||chain.has(sheet.path)||depth>32)return;emitted.add(sheet.path);const children=links.filter(o=>o.path===sheet.path);const matching=`${sheet.path} ${sheet.label}`.toLowerCase().includes(query);
-        if(matching){count++;const row=make('div');row.className='sheet-row';row.style.paddingLeft=Math.min(depth,8)*12+'px';const open=button('',()=>openSheet(sheet.path));open.className='object-row'+(sheet.path===currentFile()?' selected':'');open.setAttribute('aria-current',sheet.path===currentFile()?'page':'false');open.append(make('strong',sheet.label||sheet.path),make('small',sheet.path));row.append(open);
-          const parents=links.filter(o=>sheetTarget(o)===sheet.path);for(const parent of parents){const locate=button('Locate sheet symbol',()=>selectObject(parent,true,true));locate.title=parent.path;row.append(locate);}list.append(row);}
-        const next=new Set(chain);next.add(sheet.path);for(const link of children){const target=sheetTarget(link),child=sheets.find(s=>s.path===target);if(child)visit(child,depth+1,next);else if(!query||`${link.label} ${target}`.toLowerCase().includes(query)){const row=button(`${link.label} - unavailable`,()=>selectObject(link,true,true));row.title='Referenced file was not loaded';list.append(row);}}
-      };
-      for(const sheet of sheets.filter(s=>!incoming.has(s.path)))visit(sheet,0,new Set());for(const sheet of sheets)if(!emitted.has(sheet.path))visit(sheet,0,new Set());
-      $("sheetCount").textContent=`${count} loaded sheet entries`;$("sheetHelp").textContent=sheets.length===1?'Only one schematic is loaded. Parent discovery is limited to the same repository directory.':'Open a sheet or locate its symbol in the parent. Reused sheets share a file view; instance-specific connectivity is not resolved.';
+      const list=$("sheetList");list.replaceChildren();
+      const query=$("sheetSearch").value.trim(),sheets=model.sheets.filter(s=>s.kind==='schematic'),links=objects.filter(o=>o.kind==='sheet');
+      const entries=sheetEntries(sheets,links,query,collapsedSheets),toggles=new Map();
+      const controls=make('div');controls.className='sheet-tree-controls';
+      const expand=button('Expand all',()=>{collapsedSheets.clear();renderSheets();});
+      const collapse=button('Collapse all',()=>{for(const sheet of sheets)collapsedSheets.add(sheet.path);renderSheets();});
+      expand.disabled=collapse.disabled=Boolean(query)||!links.length;controls.append(expand,collapse);list.append(controls);
+      const rows=make('div');rows.className='sheet-tree';rows.setAttribute('role','list');rows.setAttribute('aria-label','Schematic sheet hierarchy');list.append(rows);
+      for(const entry of entries){
+        const row=make('div');row.className='sheet-row';row.style.paddingLeft=Math.min(entry.depth,12)*12+'px';row.setAttribute('role','listitem');
+        if(entry.unavailable){
+          const missing=button(entry.link.label||entry.target.split('/').pop(),()=>selectObject(entry.link,true,true));missing.className='sheet-open sheet-missing';missing.title=`${entry.target} — referenced file was not loaded. Locate its sheet symbol.`;missing.setAttribute('aria-label',`${missing.textContent}, file unavailable. Locate sheet symbol`);
+          const mark=make('span','!');mark.className='sheet-status';const spacer=make('span');spacer.className='sheet-toggle';row.append(spacer,missing,mark);rows.append(row);continue;
+        }
+        const {sheet,parents,hasChildren}=entry;
+        const toggle=button(hasChildren?(collapsedSheets.has(sheet.path)&&!query?'▸':'▾'):'',()=>{if(collapsedSheets.has(sheet.path))collapsedSheets.delete(sheet.path);else collapsedSheets.add(sheet.path);renderSheets().get(sheet.path)?.focus();});
+        toggle.className='sheet-toggle';toggle.disabled=!hasChildren||Boolean(query);toggle.title=hasChildren?`${collapsedSheets.has(sheet.path)?'Expand':'Collapse'} ${sheet.label||sheet.path.split('/').pop()}`:'';
+        if(hasChildren)toggle.setAttribute('aria-expanded',String(!collapsedSheets.has(sheet.path)||Boolean(query)));toggles.set(sheet.path,toggle);
+        const active=sheet.path===currentFile(),open=button('',()=>openSheet(sheet.path));open.className='sheet-open'+(active?' selected':'');open.setAttribute('aria-current',active?'page':'false');open.title=sheet.path;
+        const icon=make('span');icon.className='sheet-icon';if(root.KiCadUIIcons)icon.append(root.KiCadUIIcons.icon('sheet'));else icon.textContent='▤';
+        const name=make('span',sheet.label||sheet.path.split('/').pop());name.className='sheet-name';open.append(icon,name);row.append(toggle,open);
+        for(const parent of parents){const locate=button('◎',()=>selectObject(parent,true,true));locate.className='sheet-locate';locate.title=`Locate ${parent.label||'sheet symbol'} in ${parent.path}`;locate.setAttribute('aria-label',locate.title);row.append(locate);}
+        rows.append(row);
+      }
+      if(!entries.length)rows.append(make('p','No matching sheets.'));
+      $("sheetCount").textContent=query?`${entries.filter(entry=>!entry.unavailable).length} matching sheets and ancestors`:`${sheets.length} loaded sheets`;
+      $("sheetHelp").textContent='Select to open · ◎ locate in parent';$("sheetHelp").title=sheets.length===1?'Only one schematic is loaded. Parent discovery is limited to the same repository directory.':'Reused sheets share a file view; instance-specific connectivity is not resolved.';
+      return toggles;
     }
     function boardAnalytics(){
       if(!pcb||!root.KiCadBomAnalytics)return null;const file=files.find(f=>f.path===currentFile());if(!file)return null;
@@ -616,6 +689,6 @@
       setScene(next){scene=next;$("highlightControls").hidden=Boolean(scene);$("highlightDnp").disabled=Boolean(scene);for(const id of ["measureButton","navNets","navLayers","pointComment","areaComment"])$(id).disabled=Boolean(scene);if(scene&&navigatorTab!=="parts")navigate("parts");if(scene){setCommentMode(null);measureMode=false;measurePoints=[];getCanvas()?.canvas.classList?.toggle("ruler-mode",false);measurePreview=rulerSnap=boardMeasure=null;$("rulerControls").hidden=true;$("measureButton").setAttribute("aria-pressed","false");$("measurementStatus").textContent="";scene.setPopulation(objects.filter((item)=>item.kind==="footprint").map((item)=>({reference:item.reference,populated:item.populated})));}draw();},
       dispose(){loadId++;remoteLoad++;root.removeEventListener?.('keydown',reviewKeydown);narrowPanels.removeEventListener?.("change",keepDrawingVisible);navigation?.dispose();attach?.dispose();}}
   }
-  root.KiCadReviewWorkspace={mount,resolveObject,measurement,matchesSearch,sheetTarget};
+  root.KiCadReviewWorkspace={mount,resolveObject,measurement,matchesSearch,sheetTarget,sheetEntries};
   if(typeof module==="object"&&module.exports)module.exports=root.KiCadReviewWorkspace;
 })(globalThis);
