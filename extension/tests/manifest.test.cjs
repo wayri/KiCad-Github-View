@@ -17,5 +17,5 @@ test('inline shell and each nested drawing page are accessible from GitHub and G
  assert.deepEqual(manifest.optional_host_permissions,['https://*/*']);
  assert.ok(manifest.permissions.includes('scripting'));
  assert.ok(manifest.content_scripts.every(rule=>JSON.stringify([...rule.matches].sort())===JSON.stringify(['https://github.com/*','https://gitlab.com/*'])));
- assert.deepEqual([...manifest.host_permissions].sort(),['https://api.github.com/*','https://github.com/*','https://gitlab.com/*','https://raw.githubusercontent.com/*']);
+ assert.deepEqual([...manifest.host_permissions].sort(),['https://api.github.com/*','https://github.com/*','https://gitlab.com/*','https://raw.githubusercontent.com/*','https://uploads.github.com/*']);
 });

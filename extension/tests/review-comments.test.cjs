@@ -98,6 +98,27 @@ test('GitHub body formats user text and drawing context safely while retaining t
  assert.ok(netBody.includes('| Net | SENSE \\| DATA |'));
  assert.ok(netBody.includes('| Area (mm) | 1, 2; 3 × 4 |')); assert.deepEqual(comments.fromMarkdown(markdown),[comments.validateComment(note)]);
 });
+
+const attachment=()=>({provider:'github',repository:'owner/board',mime:'image/png',url:'https://github.com/user-attachments/assets/01234567-89ab-cdef-0123-456789abcdef',width:200,height:100});
+test('published screenshots render in Markdown and round trip without embedded image bytes',()=>{
+  const note={...sample(),attachments:[attachment()],capture:{mime:'image/png',width:200,height:100,dataUrl:'data:image/png;base64,iVBORw0KGgo='}};
+  const body=comments.toMarkdown(note);
+  assert.match(body,/!\[Captured drawing area/);
+  assert.ok(body.includes(attachment().url));
+  assert.ok(!body.includes('attach it manually'));
+  assert.ok(!body.includes(note.capture.dataUrl));
+  const [read]=comments.fromMarkdown(body);
+  assert.deepEqual(read.attachments,[attachment()]);
+  assert.equal(read.capture,undefined);
+});
+test('attachment metadata rejects external hosts, URL injection and cross-provider records',()=>{
+  for(const url of ['https://evil.example/image.png',attachment().url+'?token=secret',attachment().url+'#x','https://github.com@evil.example/user-attachments/assets/01234567-89ab-cdef-0123-456789abcdef',attachment().url+'/x']){
+    assert.throws(()=>comments.validateComment({...sample(),attachments:[{...attachment(),url}]}),/attachment/);
+  }
+  assert.throws(()=>comments.validateComment({...sample(),attachments:Array(5).fill(attachment())}),/attachment/);
+  assert.throws(()=>comments.validateAttachment({...attachment(),width:1025}),/attachment/);
+  assert.throws(()=>comments.validateComment({...sample(),anchor:{...sample().anchor,provider:'gitlab',host:'https://gitlab.com'},attachments:[attachment()]}),/attachment/);
+});
 test('read receipts are per reader and revision; sorting age and read filters are independent', () => {
   const older = {...sample(),id:'old',createdAt:'2026-10-01T09:20:00.000Z',updatedAt:'2026-10-01T09:20:00.000Z'};
   const newer = {...sample(),id:'new',createdAt:'2026-10-03T09:20:00.000Z',updatedAt:'2026-10-04T09:20:00.000Z',state:'skipped'};

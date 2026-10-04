@@ -531,6 +531,91 @@ const KiCadGitHubReviewApi = (() => {
       args.note.anchor.repository.toLowerCase(), args.note.anchor.ref, args.note.anchor.file, args.note.id])}`;
   }
   const locks = new Map();
+  function checkedAttachment(value, repository, capture) {
+    if (!value || value.provider !== "github" || value.repository !== repository || value.mime !== "image/png" ||
+        value.width !== capture.width || value.height !== capture.height || typeof value.url !== "string" ||
+        !/^https:\/\/github\.com\/user-attachments\/assets\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value.url)) {
+      throw fail("GitHub did not return a valid screenshot attachment URL.", true);
+    }
+    return { provider: "github", repository, url: value.url, mime: "image/png", width: value.width, height: value.height };
+  }
+  function captureBytes(capture) {
+    let bytes;
+    try { bytes = Uint8Array.from(atob(capture.dataUrl.split(",")[1]), character => character.charCodeAt(0)); }
+    catch { throw fail("The screenshot PNG is invalid. Capture the area again.", true); }
+    const signature = [137, 80, 78, 71, 13, 10, 26, 10];
+    if (bytes.length < 33 || bytes.length > 196608 || signature.some((value, index) => bytes[index] !== value) ||
+        bytes[8] !== 0 || bytes[9] !== 0 || bytes[10] !== 0 || bytes[11] !== 13 ||
+        String.fromCharCode(...bytes.subarray(12, 16)) !== "IHDR") {
+      throw fail("The screenshot PNG is invalid or too large. Capture a smaller area again.", true);
+    }
+    const header = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+    if (header.getUint32(16) !== capture.width || header.getUint32(20) !== capture.height) {
+      throw fail("Screenshot dimensions do not match the PNG. Capture the area again.", true);
+    }
+    return bytes;
+  }
+  async function attachmentResponseText(response) {
+    const limit = 16384;
+    if (Number(response.headers.get("content-length")) > limit) throw fail("GitHub attachment response is too large; the review note was not posted.", true);
+    if (!response.body?.getReader) throw fail("GitHub attachment response cannot be read safely; the review note was not posted.", true);
+    const reader = response.body.getReader(), chunks = [];
+    let size = 0;
+    try {
+      for (;;) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        size += value.byteLength;
+        if (size > limit) {
+          await reader.cancel().catch(() => {});
+          throw fail("GitHub attachment response is too large; the review note was not posted.", true);
+        }
+        chunks.push(value);
+      }
+      const bytes = new Uint8Array(size);
+      let offset = 0;
+      for (const chunk of chunks) { bytes.set(chunk, offset); offset += chunk.byteLength; }
+      return new TextDecoder("utf-8", { fatal: true }).decode(bytes);
+    } finally { reader.releaseLock(); }
+  }
+  async function uploadCapture(note, repository, token, epoch) {
+    // GitHub's attachment API supports OAuth and personal tokens, not App tokens.
+    if (!/^(?:gho_|ghp_|github_pat_)/.test(token)) {
+      throw fail("Screenshot uploads require a GitHub OAuth or personal access token. App tokens cannot upload attachments.", true);
+    }
+    const bytes = captureBytes(note.capture);
+    const hash = Array.from(new Uint8Array(await crypto.subtle.digest("SHA-256", bytes)), byte => byte.toString(16).padStart(2, "0")).join("");
+    const receiptKey = `github-attachment:${JSON.stringify([repository.toLowerCase(), note.id, hash])}`;
+    const saved = (await chrome.storage.local.get(receiptKey))[receiptKey];
+    if (saved?.attachment) return checkedAttachment(saved.attachment, repository, note.capture);
+    const metadata = await policyGet(`/repos/${repository}`, token);
+    const repo = metadata && policyJson(metadata);
+    if (!NUMBER(repo?.id) || repo.full_name?.toLowerCase() !== repository.toLowerCase() || repo.permissions?.push !== true) {
+      throw fail("GitHub screenshot attachments require repository write access. Remove the screenshot to publish a text-only note, or connect an account with write access.", true);
+    }
+    await assertCurrentToken(token, epoch);
+    const query = new URLSearchParams({ name: `kicad-review-${hash.slice(0, 20)}.png`, content_type: "image/png", repository_id: String(repo.id) });
+    const controller = new AbortController(), timeout = setTimeout(() => controller.abort(), 30000);
+    try {
+      const response = await fetch(`https://uploads.github.com/user-attachments/assets?${query}`, {
+        method: "POST", headers: { Accept: "application/vnd.github+json", "Content-Type": "application/octet-stream", Authorization: `Bearer ${token}` },
+        body: bytes, credentials: "omit", cache: "no-store", redirect: "error", signal: controller.signal
+      });
+      if (!response.ok) throw fail(`GitHub screenshot upload failed (HTTP ${response.status}). Check repository write access; the review note was not posted.`, true);
+      const text = await attachmentResponseText(response);
+      let value;
+      try { value = JSON.parse(text); } catch { throw fail("GitHub attachment response was unreadable; the review note was not posted.", true); }
+      const attachment = checkedAttachment({ provider: "github", repository, url: value.url, mime: "image/png", width: note.capture.width, height: note.capture.height }, repository, note.capture);
+      // An upload may complete just as sign-out occurs. Persist only its public
+      // reference, then stop before any Issue or Discussion publication.
+      await chrome.storage.local.set({ [receiptKey]: { attachment } });
+      await assertCurrentToken(token, epoch);
+      return attachment;
+    } catch (error) {
+      if (error.definitive) throw error;
+      throw fail("GitHub did not confirm screenshot upload. The review note was not posted; try uploading again.", true);
+    } finally { clearTimeout(timeout); bytes.fill(0); }
+  }
   async function publish(message) {
     const args = publishArgs(message), key = operationKey(args);
     if (locks.has(key)) return locks.get(key);
@@ -541,13 +626,12 @@ const KiCadGitHubReviewApi = (() => {
   async function publishLocked(args, key) {
     const publicationEpoch = authEpoch;
     const saved = (await chrome.storage.local.get(key))[key];
-    if (saved?.status === "done" && saved.remoteRef) return { remoteRef: saved.remoteRef, duplicate: true };
+    if (saved?.status === "done" && saved.remoteRef) return { remoteRef: saved.remoteRef, ...(saved.attachments ? { attachments: saved.attachments } : {}), duplicate: true };
     if (saved?.status === "pending") {
       throw fail("A previous publication has an unconfirmed outcome. Inspect GitHub before creating another note; this extension will not retry it automatically.");
     }
     const { note, destination, repository, number } = args;
     const token = await getToken();
-    const body = KiCadReviewComments.toMarkdown(note);
     const [owner, name] = repoParts(repository);
     let preflight;
     if (destination === "new-discussion") {
@@ -561,6 +645,9 @@ const KiCadGitHubReviewApi = (() => {
     const policy = await commentPolicyStatus(repository);
     if (!policy.allowed) throw fail(`Repository comment policy blocked publication: ${policy.reason}`, true);
     if (publicationEpoch !== authEpoch) throw fail("GitHub account changed or signed out. Review and publish again.", true);
+    const attachments = note.capture ? [await uploadCapture(note, repository, token, publicationEpoch)] : note.attachments;
+    const body = KiCadReviewComments.toMarkdown(attachments ? { ...note, attachments } : note);
+    await assertCurrentToken(token, publicationEpoch);
     await chrome.storage.local.set({ [key]: { status: "pending", startedAt: new Date().toISOString() } });
     let remoteRef;
     try {
@@ -595,8 +682,8 @@ const KiCadGitHubReviewApi = (() => {
           url: `https://github.com/${repository}/discussions/${number}${NUMBER(result.databaseId) ? `#discussioncomment-${result.databaseId}` : ""}`,
           publishedAt: new Date().toISOString() };
       }
-      await chrome.storage.local.set({ [key]: { status: "done", remoteRef } });
-      return { remoteRef };
+      await chrome.storage.local.set({ [key]: { status: "done", remoteRef, ...(attachments ? { attachments } : {}) } });
+      return { remoteRef, ...(attachments ? { attachments } : {}) };
     } catch (error) {
       if (error.definitive) await chrome.storage.local.remove(key);
       throw error;

@@ -1,12 +1,13 @@
 {
   "manifest_version": 3,
   "name": "KiCad Visual Review for GitHub and GitLab",
-  "version": "0.12.4",
+  "version": "0.12.5",
   "description": "Browser-only KiCad schematic and PCB review on GitHub, GitLab.com and configured GitLab servers, with issue comments.",
   "host_permissions": [
     "https://github.com/*",
     "https://gitlab.com/*",
     "https://api.github.com/*",
+    "https://uploads.github.com/*",
     "https://raw.githubusercontent.com/*"
   ],
   "background": {

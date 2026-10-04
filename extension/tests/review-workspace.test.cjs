@@ -421,7 +421,7 @@ test('all shared viewers contain exactly one collaboration control and a distinc
  for(const file of ['pcb-viewer.html','schematic-viewer.html','revision-viewer.html']){
   const html=fs.readFileSync(path.join(__dirname,'..',file),'utf8');
   for(const id of ['showGitHub','githubPane','githubCommentType','commentDestination','reviewSettings','refreshCommentPolicy','refreshGitHub','severityFilter'])assert.equal((html.match(new RegExp(`id="${id}"`,'g'))||[]).length,1,`${file}: ${id}`);
-  assert.match(html,/<section id="githubPane" hidden>/);assert.match(html,/Comment type <select id="githubCommentType">/);assert.match(html,/Screenshots must be attached manually/);assert.match(html,/Full conversation history/);
+  assert.match(html,/<section id="githubPane" hidden>/);assert.match(html,/Comment type <select id="githubCommentType">/);assert.match(html,/Post to GitHub uploads a captured screenshot/);assert.match(html,/Full conversation history/);
  }
 });
 
@@ -438,6 +438,24 @@ test('editor posts formatted Issue and Discussion directly and saves confirmed t
 
 test('editor validates existing thread destinations before saving or posting',async()=>{
  const calls=[];const view=workspaceRuntime(async m=>{calls.push(m);return[];});view.load();await new Promise(resolve=>setImmediate(resolve));view.get('newComment').click();view.get('commentText').value='Review';view.get('editorDestination').value='existing-issue';view.get('editorDestination').onchange();view.get('editorThreadNumber').value='0';await view.get('postComment').click();assert.equal(calls.some(m=>m.type==='comment-save'||m.type==='github-publish-comment'),false);assert.match(view.get('commentStatus').textContent,/positive GitHub thread number/);assert.equal(view.get('commentEditor').hidden,false);
+});
+
+test('confirmed GitHub screenshot URLs persist with the remote thread and display without local PNG bytes',async()=>{
+ let notes=[];
+ const attachment={provider:'github',repository:'wayri/fixture',mime:'image/png',width:200,height:100,url:'https://github.com/user-attachments/assets/01234567-89ab-cdef-0123-456789abcdef'};
+ const remoteRef={kind:'issue',repository:'wayri/fixture',number:12,url:'https://github.com/wayri/fixture/issues/12',publishedAt:'2026-10-04T00:00:00.000Z'};
+ const view=workspaceRuntime(async m=>{if(m.type==='comment-list')return notes;if(m.type==='comment-save'){notes=[m.comment];return m.comment;}if(m.type==='github-publish-comment')return{remoteRef,attachments:[attachment]};return[];});
+ view.load();await new Promise(resolve=>setImmediate(resolve));view.get('newComment').click();view.get('commentText').value='Screenshot context';await view.get('postComment').click();
+ assert.deepEqual(JSON.parse(JSON.stringify(notes[0].attachments)),[attachment]);
+ const findImages=node=>[...(node.tagName==='IMG'?[node]:[]),...node.children.flatMap(findImages)];
+ assert.equal(findImages(view.get('commentList'))[0].src,attachment.url);
+ assert.equal(findImages(view.get('commentList'))[0].referrerPolicy,'no-referrer');
+ const elements=node=>[node,...node.children.flatMap(elements)];
+ elements(view.get('commentList')).find(node=>node.tagName==='BUTTON'&&node.textContent==='Edit').click();
+ assert.equal(view.get('capturePreview').src,attachment.url);assert.equal(view.get('removeCapture').hidden,false);
+ view.get('removeCapture').click();assert.equal(view.get('capturePreview').hidden,true);
+ assert.equal(notes[0].attachments.length,1,'removal is a draft change until saved');
+ await view.get('saveComment').click();assert.equal(notes[0].attachments,undefined);
 });
 
 test('editor routes replies to the selected existing Issue or Discussion number',async()=>{

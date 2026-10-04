@@ -24,6 +24,18 @@ const KiCadReviewComments = (() => {
     if(url.protocol!=='https:'||url.username||url.password||url.search||url.hash||url.pathname!=='/'||/[\s\\]/.test(value))throw new Error('Invalid GitLab host.');
     return url.origin;
   }
+  function validateAttachment(value) {
+    if (!value || value.provider !== 'github' || value.mime !== 'image/png' ||
+        typeof value.repository !== 'string' || !REPOSITORY.test(value.repository) ||
+        value.repository.split('/').some(part => part === '.' || part === '..') ||
+        ![value.width,value.height].every(n => Number.isSafeInteger(n) && n >= 1 && n <= 1024)) {
+      throw new Error('Invalid GitHub screenshot attachment.');
+    }
+    if (typeof value.url !== 'string' || !/^https:\/\/github\.com\/user-attachments\/assets\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value.url)) {
+      throw new Error('Invalid GitHub screenshot attachment URL.');
+    }
+    return {provider:'github', repository:value.repository, mime:'image/png',url:value.url,width:value.width,height:value.height};
+  }
   function normalizeScope(value) {
     if (!value || typeof value !== "object") throw new Error("Invalid comment file scope.");
     const { repository, ref, file } = value;const provider=value.provider||'github';if(!['github','gitlab'].includes(provider))throw new Error('Invalid comment provider.');
@@ -111,7 +123,10 @@ const KiCadReviewComments = (() => {
     });
     let capture;
     if(comment.capture!==undefined){const c=comment.capture;if(!c||c.mime!=='image/png'||typeof c.dataUrl!=='string'||c.dataUrl.length>262144||!/^data:image\/png;base64,iVBORw0KGgo[A-Za-z0-9+/]*={0,2}$/.test(c.dataUrl)||![c.width,c.height].every(n=>Number.isSafeInteger(n)&&n>=1&&n<=1024))throw new Error('Invalid annotation screenshot.');capture={mime:c.mime,dataUrl:c.dataUrl,width:c.width,height:c.height};}
-    return { ...(threadType?{threadType}:{}), id: comment.id, text: comment.text.trim(), createdAt: comment.createdAt, updatedAt, severity, state, tags:[...new Set(tags.map(tag=>tag.trim()))],mentions,remoteRefs:refs,...(capture?{capture}:{}),
+    const attachments=comment.attachments??[];
+    if(!Array.isArray(attachments)||attachments.length>4||attachments.length&&comment.anchor?.provider==='gitlab')throw new Error('Invalid screenshot attachments.');
+    const validatedAttachments=attachments.map(validateAttachment);
+    return { ...(threadType?{threadType}:{}), id: comment.id, text: comment.text.trim(), createdAt: comment.createdAt, updatedAt, severity, state, tags:[...new Set(tags.map(tag=>tag.trim()))],mentions,remoteRefs:refs,...(capture?{capture}:{}),...(validatedAttachments.length?{attachments:validatedAttachments}:{}),
       anchor: normalizeAnchor(comment.anchor) };
   }
   const escaped = (value) => String(value).replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, " ")
@@ -170,7 +185,8 @@ const KiCadReviewComments = (() => {
     const lines = ["## KiCad visual review", "", "### Review comment", "", escapedComment(note.text), "",
       "### Design context", "", "| Detail | Value |", "| --- | --- |",
       ...rows.map(([label, item, rawMarkdown]) => `| ${tableCell(label)} | ${rawMarkdown ? item : tableCell(item)} |`)];
-    if(note.capture)lines.push("", "A drawing screenshot is stored with the local review note. Download it and attach it manually if needed.");
+    if(note.attachments?.length)for(const attachment of note.attachments)lines.push('',`![Captured drawing area (${attachment.width} × ${attachment.height})](${attachment.url})`);
+    else if(note.capture)lines.push("", "A drawing screenshot is stored with the local review note. Download it and attach it manually if needed.");
     const {capture,...metadata}=note;
     lines.push("", `<!-- kicad-review:v1 ${encodeNote(metadata)} -->`);
     return lines.join("\n");
@@ -249,7 +265,7 @@ const KiCadReviewComments = (() => {
         Date.parse(a.createdAt) - Date.parse(b.createdAt);
     });
   }
-  return { normalizeScope, normalizeAnchor, validateComment, toMarkdown, fromMarkdown, parseSidecar, serializeSidecar,
+  return { normalizeScope, normalizeAnchor, validateComment, validateAttachment, toMarkdown, fromMarkdown, parseSidecar, serializeSidecar,
     exportComments, parseComments, receiptKey, isUnread, sortAndFilter };
 })();
 
