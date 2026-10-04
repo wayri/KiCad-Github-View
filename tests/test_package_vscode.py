@@ -17,7 +17,7 @@ class PackageVSCodeTests(unittest.TestCase):
     def test_package_is_explicit_complete_and_reproducible(self):
         with tempfile.TemporaryDirectory() as folder:
             root = Path(folder)
-            for name in builder.ASSETS:
+            for name in (*builder.ASSETS, *builder.BUILD_INPUTS):
                 target = root / 'extension' / name
                 target.parent.mkdir(parents=True, exist_ok=True)
                 target.write_bytes((ROOT / 'extension' / name).read_bytes())
@@ -68,6 +68,17 @@ class PackageVSCodeTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as folder:
             with self.assertRaisesRegex(ValueError, 'Missing shared viewer asset'):
                 builder.prepare_media(Path(folder))
+
+    def test_stale_step_worker_is_rejected(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            for name in (*builder.ASSETS, *builder.BUILD_INPUTS):
+                target = root / 'extension' / name
+                target.parent.mkdir(parents=True, exist_ok=True)
+                target.write_bytes((ROOT / 'extension' / name).read_bytes())
+            (root / 'extension/step-decoder.js').write_bytes(b'/* altered binding */')
+            with self.assertRaisesRegex(ValueError, 'worker bundle is stale'):
+                builder.prepare_media(root)
 
 
 if __name__ == '__main__':

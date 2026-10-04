@@ -10,7 +10,7 @@ const OPERATIONS = new Set(["preview-project-html", "project-inventory", "projec
 let storageQueue=Promise.resolve();
 const safePath = (path) => typeof path === "string" && path.length <= 500 && /\.kicad_(sch|pcb)$/i.test(path) &&
   !path.startsWith("/") && path.split("/").every((p) => p && p !== "." && p !== ".." && !/[\\\x00-\x1f\x7f:]/.test(p));
-const safeAssetPath=(path)=>typeof path==="string" && path.length>0 && path.length<=500 && /\.(?:wrl|vrml|glb)$/i.test(path) &&
+const safeAssetPath=(path)=>typeof path==="string" && path.length>0 && path.length<=500 && /\.(?:wrl|vrml|glb|step|stp)$/i.test(path) &&
   !path.startsWith("/") && path.split("/").every((part)=>part && part!=="." && part!==".." && !/[\\\x00-\x1f\x7f:?#%]/.test(part));
 const clone = (object) => JSON.parse(JSON.stringify(object));
 function escaped(text) { return String(text).replace(/[&<>"']/g, (c) => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"})[c]); }
@@ -23,10 +23,20 @@ function identity(uri) {
   for (const c of uri.toString()) hash = Math.imul(hash ^ c.charCodeAt(0), 16777619);
   return `vscode/workspace-${(hash >>> 0).toString(16)}`;
 }
+function supportedViewerUri(uri) {
+  if(!uri||typeof uri.path!=="string")return false;
+  const path=uri.scheme==="file"?uri.path.replace(/^\/[A-Za-z]:\//,""):uri.path;
+  return projectPaths.filePath(path.replace(/^\//,""));
+}
+function scopePath(uri) {
+  // VS Code's Windows file provider can normalize only the drive letter.
+  // Preserve folder spelling and all virtual-provider URI identities.
+  return uri.scheme==="file"?uri.path.replace(/^\/([A-Za-z]):(?=\/)/,(_,drive)=>"/"+drive.toLowerCase()+":"):uri.path;
+}
 function sameScope(uri, boundary) {
-  const prefix = boundary.path.replace(/\/$/, "") + "/";
+  const prefix = scopePath(boundary).replace(/\/$/, "") + "/";
   return uri.scheme === boundary.scheme && uri.authority === boundary.authority &&
-    uri.query === boundary.query && uri.fragment === boundary.fragment && uri.path.startsWith(prefix);
+    uri.query === boundary.query && uri.fragment === boundary.fragment && scopePath(uri).startsWith(prefix);
 }
 function projectScope(uri) {
   const folder = vscode.workspace.getWorkspaceFolder(uri);
@@ -314,7 +324,7 @@ async function loadRepoAsset(request,session) {
   const bytes=await vscode.workspace.fs.readFile(target);session.assetBytes+=bytes.byteLength;
   if(bytes.byteLength>MAX_FILE)throw new Error("Model asset exceeds the 8 MiB file limit.");
   if(session.assetBytes>32*1024*1024)throw new Error("Model assets exceed the 32 MiB session limit.");
-  return {base64:encodeBase64(bytes),mediaType:/\.glb$/i.test(request.file)?"model/gltf-binary":"model/vrml"};
+  return {base64:encodeBase64(bytes),mediaType:/\.(step|stp)$/i.test(request.file)?"model/step":/\.glb$/i.test(request.file)?"model/gltf-binary":"model/vrml"};
 }
 async function searchProjectFiles(request,session) {
   assertScope(request,session);
@@ -463,9 +473,9 @@ async function htmlFor(webview,context,session) {
   const media=vscode.Uri.joinPath(context.extensionUri,"media"),templateUri=vscode.Uri.joinPath(media,session.overview||!safePath(session.scope.rootFile)?"project-viewer.html":"revision-viewer.html");
   let html=new TextDecoder().decode(await vscode.workspace.fs.readFile(templateUri));
   const nonce=secret(),resource=(name)=>webview.asWebviewUri(vscode.Uri.joinPath(media,...name.split("/"))).toString();
-  const contextData={token:session.token,search:new URLSearchParams({repository:session.scope.repository,ref:session.scope.ref,file:session.scope.rootFile}).toString()};
+  const contextData={token:session.token,stepWorkerUrl:resource("step-worker-vscode.js"),stepWasmUrl:resource("vendor/occt/occt-import-js.wasm"),search:new URLSearchParams({repository:session.scope.repository,ref:session.scope.ref,file:session.scope.rootFile}).toString()};
   const bootstrap=JSON.stringify(contextData).replace(/</g,"\\u003c").replace(/\u2028/g,"\\u2028").replace(/\u2029/g,"\\u2029");
-  const csp=`default-src 'none'; script-src 'nonce-${nonce}' ${webview.cspSource}; style-src ${webview.cspSource} 'unsafe-inline'; img-src ${webview.cspSource} data: blob:; font-src ${webview.cspSource}; connect-src 'none'; worker-src blob:; base-uri ${webview.cspSource}; frame-src 'none';`;
+  const csp=`default-src 'none'; script-src 'nonce-${nonce}' ${webview.cspSource} 'wasm-unsafe-eval'; style-src ${webview.cspSource} 'unsafe-inline'; img-src ${webview.cspSource} data: blob:; font-src ${webview.cspSource}; connect-src ${resource('step-worker-vscode.js')} ${resource('vendor/occt/occt-import-js.wasm')}; worker-src blob:; base-uri ${webview.cspSource}; frame-src 'none';`;
   html=html.replace(/(src|href)="([^"#:]+)"/g,(match,attr,name)=>`${attr}="${escaped(resource(name))}"`);
   html=html.replace("<head>",`<head><meta http-equiv="Content-Security-Policy" content="${escaped(csp)}"><base href="${escaped(resource(""))}/"><script nonce="${nonce}">globalThis.KiCadVSCodeContext=${bootstrap};</script><script nonce="${nonce}" src="${escaped(webview.asWebviewUri(vscode.Uri.joinPath(context.extensionUri,"webview-bridge.js")).toString())}"></script>`);
   html=html.replace(/(<section id="commentsPane"[^>]*>\s*<h2>[^<]*<\/h2>\s*<p class="hint">)[\s\S]*?(<\/p>)/,"$1Annotations are stored in the workspace Git-trackable .kicad-review.json. GitHub publishing and remote annotations are unavailable here; export notes to share them. Read status belongs to this VS Code webview user.$2");
@@ -506,12 +516,12 @@ function activate(context) {
   context.subscriptions.push(vscode.window.registerCustomEditorProvider(VIEW,provider,{supportsMultipleEditorsPerDocument:true,webviewOptions:{retainContextWhenHidden:true}}));
   context.subscriptions.push(vscode.commands.registerCommand("kicadVisualReview.open",async(uri)=> {
     const target=activeUri(uri);
-    if(!target || !projectPaths.filePath(target.path.split("/").slice(1).join("/"))) {vscode.window.showErrorMessage("Select a saved KiCad project, drawing, settings or Gerber file.");return;}
+    if(!supportedViewerUri(target)) {vscode.window.showErrorMessage("Select a saved KiCad project, drawing, settings or Gerber file.");return;}
     await vscode.commands.executeCommand("vscode.openWith",target,VIEW);
   }));
   context.subscriptions.push(vscode.commands.registerCommand("kicadVisualReview.openPair",async(uri)=> {
     const target=activeUri(uri);
-    if(!target || !projectPaths.filePath(target.path.split("/").slice(1).join("/"))){vscode.window.showErrorMessage("Select a saved schematic or PCB to pair.");return;}
+    if(!supportedViewerUri(target)){vscode.window.showErrorMessage("Select a saved schematic or PCB to pair.");return;}
     try {
       const scope=projectScope(target),directory=target.path.slice(0,target.path.lastIndexOf("/")),opposite=/\.kicad_sch$/i.test(target.path)?"pcb":"sch";
       const found=await vscode.workspace.findFiles(`**/*.kicad_${opposite}`,"**/{.git,node_modules,__pycache__}/**",200);

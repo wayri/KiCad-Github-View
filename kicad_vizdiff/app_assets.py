@@ -8,6 +8,6 @@ RENDERER_ASSETS = ('file-compatibility.js', 'design-diff.js', 'owned-canvas.js',
 VENDOR_ASSETS = ('spike-board3d.bundle.js', 'SPIKE-ENGINE-NOTICE.md',
                  'THREE-LICENSE', 'occt/occt-import-js.js', 'occt/occt-import-js.wasm',
                  'occt/license.occt-import-js.txt', 'occt/license.occt.txt', 'occt/NOTICE.md',
-                 'occt/OCCT_LGPL_EXCEPTION.txt')
+                 'occt/OCCT_LGPL_EXCEPTION.txt', 'occt/EMSCRIPTEN-LICENSE.txt')
 PUBLIC_ASSETS = (frozenset(VIEWER_PAGES) | frozenset(RENDERER_ASSETS) |
                  frozenset('vendor/'+name for name in VENDOR_ASSETS))

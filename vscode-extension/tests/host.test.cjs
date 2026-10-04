@@ -166,7 +166,8 @@ test("webview HTML confines resources and points relative SPIKE loads at package
   h.entries.set("file:///extension/media/revision-viewer.html",{bytes:new TextEncoder().encode(template)});
   const webview={cspSource:"https://resources.example",asWebviewUri:(uri)=>({toString:()=>`https://resources.example${uri.path}`})};
   const html=await h.api._test.htmlFor(webview,h.context,s);
-  assert.match(html,/default-src &#39;none&#39;/);assert.match(html,/connect-src &#39;none&#39;/);
+  assert.match(html,/default-src &#39;none&#39;/);assert.match(html,/connect-src https:\/\/resources.example\/extension\/media\/step-worker-vscode.js https:\/\/resources.example\/extension\/media\/vendor\/occt\/occt-import-js.wasm;/);assert.match(html,/worker-src blob:/);assert.match(html,/wasm-unsafe-eval/);assert.doesNotMatch(html,/connect-src [^;]*\*/);assert.doesNotMatch(html,/&#39;unsafe-eval&#39;/);
+  assert.match(html,/"stepWorkerUrl":"https:\/\/resources.example\/extension\/media\/step-worker-vscode.js"/);assert.match(html,/"stepWasmUrl":"https:\/\/resources.example\/extension\/media\/vendor\/occt\/occt-import-js.wasm"/);
   assert.match(html,/base href="https:\/\/resources.example\/extension\/media\/"/);
   assert.match(html,/src="https:\/\/resources.example\/extension\/media\/revision-viewer.js"/);
   assert.match(html,/nonce="[a-f0-9]{48}"/);
@@ -355,7 +356,7 @@ test("repository model assets use virtual workspace URIs and browser-compatible 
 
 test("model assets reject traversal, absolute/provider URLs, unexpected formats and another session scope before reads",async()=> {
   const h=harness(),s=await session(h);h.write("models/model.wrl","#VRML V2.0 utf8");const reads=h.reads.length,stats=h.stats.length;
-  for(const [i,file] of ["../model.wrl","/model.wrl","models/../model.wrl","models/./model.wrl","models//model.wrl","file:///model.wrl","models/model.step","models/model.wrl?secret","models/%2e%2e/model.wrl","models/model.wrl#x","models\\model.wrl"].entries()) {
+  for(const [i,file] of ["../model.wrl","/model.wrl","models/../model.wrl","models/./model.wrl","models//model.wrl","file:///model.wrl","models/model.obj","models/model.wrl?secret","models/%2e%2e/model.wrl","models/model.wrl#x","models\\model.wrl"].entries()) {
     assert.equal((await send(h,s,i+1,assetRequest(s,file))).ok,false);
   }
   assert.equal((await send(h,s,12,{...assetRequest(s,"models/model.wrl"),repository:"wrong/repo"})).ok,false);
@@ -464,4 +465,30 @@ test('project settings and Gerbers use provider-scoped bounded reads and open re
  const before=h.reads.length;assert.equal((await send(h,s,3,{type:'project-file',...s.scope,file:'../secret.kicad_pro'})).ok,false);assert.equal((await send(h,s,4,{type:'project-file',...s.scope,file:'linked.kicad_pro'})).ok,false);assert.equal(h.reads.length,before);
  assert.equal((await send(h,s,5,{type:'open-project-file',...s.scope,file:'fab/top.gbr'})).ok,true);assert.equal(h.commands.at(-1)[0],'vscode.openWith');
  const uri=h.write('new.kicad_pro','{}'),project=await h.api._test.loadProject(uri);assert.equal(project.files[0].path,'new.kicad_pro');
+});
+
+
+test("native STEP asset reads retain workspace scope and return the STEP media type",async()=>{
+ const h=harness(),s=await session(h);h.write("models/part.step","ISO-10303-21; fixture");h.write("models/part.stp","ISO-10303-21; other");
+ for(const [i,file]of ["models/part.step","models/part.stp"].entries()){
+  const reply=await send(h,s,i+1,assetRequest(s,file));assert.equal(reply.ok,true);assert.equal(reply.result.mediaType,"model/step");assert.match(Buffer.from(reply.result.base64,'base64').toString(),/ISO-10303-21/);
+ }
+});
+
+
+test("Windows local file scope tolerates drive-letter normalization without widening provider or folder scope",async()=>{
+ const h=harness(Uri.parse("file:///D:/Project")),root=h.write("root.kicad_sch");
+ const lowerDrive=root.with({path:"/d:/Project/root.kicad_sch"});
+ assert.equal(h.api._test.sameScope(lowerDrive,h.folder),true);assert.equal(h.api._test.projectScope(lowerDrive).rootFile,"root.kicad_sch");assert.equal((await h.api._test.loadProject(lowerDrive)).files.length,1);
+ for(const uri of [lowerDrive.with({path:"/d:/ProjectElse/root.kicad_sch"}),lowerDrive.with({path:"/d:/project/root.kicad_sch"}),lowerDrive.with({authority:"other"}),lowerDrive.with({query:"ref=other"}),lowerDrive.with({fragment:"other"})])assert.equal(h.api._test.sameScope(uri,h.folder),false);
+ assert.equal(h.api._test.sameScope(Uri.parse("vscode-vfs://github/d:/Project/root.kicad_sch"),Uri.parse("vscode-vfs://github/D:/Project")),false);
+});
+
+
+test("Windows Open and Split commands validate the local file after its drive prefix",async()=>{
+ const h=harness(Uri.parse("file:///D:/Project")),root=h.write("design.kicad_sch");h.write("design.kicad_pcb","(kicad_pcb)");h.api.activate(h.context);
+ await h.commands.find(c=>c.name==="kicadVisualReview.open").handler(root);assert.ok(h.commands.some(c=>Array.isArray(c)&&c[0]==="vscode.openWith"&&c[1].path===root.path));
+ await h.commands.find(c=>c.name==="kicadVisualReview.openPair").handler(root);assert.equal(h.commands.filter(c=>Array.isArray(c)&&c[0]==="vscode.openWith").length,3);
+ const count=h.commands.filter(Array.isArray).length;
+ await h.commands.find(c=>c.name==="kicadVisualReview.open").handler(root.with({path:"/D:/Project/../bad.kicad_sch"}));assert.equal(h.commands.filter(Array.isArray).length,count);
 });

@@ -1,12 +1,14 @@
 """Prepare explicit shared media and build a deterministic local VSIX."""
 from pathlib import Path
 import hashlib
+import importlib.util
 import json
 import zipfile
 from xml.sax.saxutils import escape
 
 ROOT = Path(__file__).resolve().parents[1]
-ASSETS = (
+ASSETS = ('step-worker-vscode.js', 'vendor/occt/occt-import-js.wasm', 'vendor/occt/NOTICE.md',
+    'vendor/occt/license.occt-import-js.txt', 'vendor/occt/license.occt.txt', 'vendor/occt/OCCT_LGPL_EXCEPTION.txt', 'vendor/occt/EMSCRIPTEN-LICENSE.txt',
     'bom-analytics.js', 'file-compatibility.js', 'html-preview.js', 'html-sandbox.html', 'html-sandbox.js',
     'parsing.js', 'project-viewer.html', 'project-viewer.css', 'project-viewer.js', 'project-settings.js', 'project-settings-ui.js', 'gerber-renderer.js',
     'revision-viewer.html', 'revision-viewer.css', 'revision-viewer.js',
@@ -15,6 +17,7 @@ ASSETS = (
     'worksheet.js', 'schematic-renderer.js', 'pcb-renderer.js', 'owned-canvas.js',
     'vendor/spike-board3d.bundle.js', 'vendor/SPIKE-ENGINE-NOTICE.md', 'vendor/THREE-LICENSE',
 )
+BUILD_INPUTS = ('step-decoder.js', 'step-worker.js', 'vendor/occt/occt-import-js.js')
 HOST_FILES = ('package.json', 'extension.js', 'webview-bridge.js', 'README.md')
 
 
@@ -26,6 +29,15 @@ def adapt_entry(source: bytes) -> bytes:
 
 
 def prepare_media(root: Path = ROOT) -> dict[str, bytes]:
+    for name in (*ASSETS, *BUILD_INPUTS):
+        if not (root / 'extension' / name).is_file():
+            raise ValueError(f'Missing shared viewer asset: {name}')
+    spec = importlib.util.spec_from_file_location('build_step_worker', Path(__file__).with_name('build_step_worker.py'))
+    worker_builder = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(worker_builder)
+    expected_worker = worker_builder.bundle(root)
+    if (root / 'extension/step-worker-vscode.js').read_bytes() != expected_worker:
+        raise ValueError('STEP worker bundle is stale; run scripts/build_step_worker.py.')
     payload, hashes = {}, {}
     destination = root / 'vscode-extension' / 'media'
     for name in ASSETS:

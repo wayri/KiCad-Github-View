@@ -10,4 +10,7 @@
 extension/vendor/spike-board3d.bundle.js -whitespace
 
 # Preserve upstream STEP dependency bytes and recorded provenance hashes
-extension/vendor/occt/* -text
+extension/vendor/occt/* -text whitespace=cr-at-eol
+
+# Preserve bytes in the generated worker containing the pinned STEP importer
+extension/step-worker-vscode.js -text whitespace=cr-at-eol

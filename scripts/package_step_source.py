@@ -40,6 +40,8 @@ def package(output: Path, cache: Path | None = None) -> Path:
     if output.is_symlink():
         raise ValueError('Source output must not be a symbolic link.')
     data['README.md'] = (ROOT / 'extension/vendor/occt/NOTICE.md').read_bytes()
+    for name in ('scripts/rebuild_step_csp.cmd', 'scripts/build_step_worker.py', 'docs/step-build.md', 'extension/vendor/occt/EMSCRIPTEN-LICENSE.txt'):
+        data[name] = (ROOT / name).read_bytes()
     with zipfile.ZipFile(output, 'w', compression=zipfile.ZIP_STORED) as archive:
         for name, payload in sorted(data.items()):
             info = zipfile.ZipInfo(name, (2020, 1, 1, 0, 0, 0))
