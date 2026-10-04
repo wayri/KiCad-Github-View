@@ -8,3 +8,6 @@
 
 # Generated GLSL strings contain intentional trailing whitespace
 extension/vendor/spike-board3d.bundle.js -whitespace
+
+# Preserve upstream STEP dependency bytes and recorded provenance hashes
+extension/vendor/occt/* -text
