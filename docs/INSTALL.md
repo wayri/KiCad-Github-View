@@ -1,36 +1,100 @@
-# Install KiCad Visual Review v0.11.4
+# Install KiCad GitHub View v0.11.5
 
-## Browser extension: inline on GitHub
+Download packages from [the v0.11.5 release](https://github.com/wayri/KiCad-Github-View/releases/tag/v0.11.5). The browser viewer needs no Python, KiCad installation or rendering server. Use a desktop browser with the required Manifest V3 extension APIs. Repository previews currently retrieve public files only.
 
-1. Download `kicad-visual-review-extension-0.11.4.zip` from this release and extract it into a permanent folder.
-2. Open `chrome://extensions` (or `edge://extensions`), enable Developer mode and choose **Load unpacked**.
-3. Select the extracted folder containing `manifest.json`. Keep that folder in place.
-4. Open a public `.kicad_sch` or `.kicad_pcb` file on GitHub and refresh the page. The visual preview appears inside the file page.
+## Choose a package
 
-When updating an existing unpacked installation, replace its files and click Reload on the extension card, then refresh GitHub. The release ZIP is an unpacked developer installation; it is not a Chrome Web Store listing or a signed CRX installer.
+| Download | Use |
+| --- | --- |
+| `kicad-visual-review-extension-0.11.5.zip` | Inline GitHub/GitLab.com viewer for desktop Chromium browsers |
+| `kicad-visual-review-vscode-0.11.5.vsix` | Read-only KiCad editors inside VS Code |
+| `kicad-visual-review-app-web-0.11.5.zip` | Optional standalone hosted viewer payload |
+| `kicad-visual-review-github-app-0.11.5.zip` | Optional GitHub App service/deployment sources |
+| `SHA256SUMS.txt` and `release-manifest.json` | Package integrity checks and source/version evidence |
+| `COMMENTS.md` and `GIT-HOSTS.md` | Comment workflow and service compatibility |
 
-Open **Git revisions** to load branches and commits touching the drawing, select base/head and choose **Compare revisions**. Revisions resolve to commit SHAs. **Project** exposes the saved file tree, setup, constraints, stackup, fabrication files and HTML previews. **BOM / Stats** exposes assembly counts and saved board statistics. Global search supports `ref:glob:R*` and `type:footprint ref:regex:^R[0-9]+$`.
+GitHub's automatically generated **Source code** ZIP/tarball contains the project sources. It is not the prepared browser package or VSIX. A GitHub release does not install an extension automatically, and no browser-store listing is supplied in this preview.
+
+## Chrome and Chromium
+
+1. Download the **extension ZIP** and extract all files into a permanent folder, such as `KiCad-GitHub-View/extension`.
+2. Open that folder and confirm `manifest.json` is directly inside it. Do not select the ZIP, its parent folder, or a nested source repository root.
+3. Enter `chrome://extensions` in the browser address bar.
+4. Enable **Developer mode**, then select **Load unpacked**.
+5. Choose the folder containing `manifest.json`. The extension card should show **KiCad Visual Review for GitHub and GitLab** and version **0.11.5**.
+6. Open the card's **Details** if needed and allow site access for `github.com` and `gitlab.com`. The background worker also reads GitHub's API through the declared permission.
+7. Open or refresh a public `.kicad_sch` or `.kicad_pcb` file page on a supported website. Use the normal repository file page, not the raw download endpoint.
+8. Pin the extension in the toolbar if desired. Its button or `Alt+Shift+K` focuses the inline preview.
+
+The official [Chrome unpacked-extension guide](https://developer.chrome.com/docs/extensions/get-started/tutorial/hello-world#load-unpacked) explains Developer mode. Keep the extracted folder in place: the browser loads files from it. This is an unpacked developer installation, not a signed CRX or Chrome Web Store installation.
+
+No GitHub account or token is required for public viewing. Authentication is optional for explicit GitHub note publication and does not currently enable private repository previews.
+
+## Microsoft Edge
+
+Use the same extension ZIP. Open `edge://extensions`, enable **Developer mode**, select **Load unpacked**, and choose the extracted folder containing `manifest.json`. Allow the declared websites and refresh the repository page. Follow [Microsoft's sideloading instructions](https://learn.microsoft.com/en-us/microsoft-edge/extensions/getting-started/extension-sideloading) if the controls differ in your version.
+
+Edge uses the Chromium package; there is no separate Edge Add-ons listing yet. Its installed-browser behavior and local review-file picker still require browser-specific validation.
+
+## Brave and other Chromium browsers
+
+Brave is a Chromium candidate for the same package. Open its Extensions manager (usually `brave://extensions` or `chrome://extensions`), enable Developer mode and select **Load unpacked** if available. Permit the supported websites and refresh them. Brave has not been independently verified for this release.
+
+Opera, Vivaldi and other desktop Chromium browsers may support the same workflow through their Extensions manager. The package requires Manifest V3, a service worker, extension frames/storage and the relevant website permissions. The optional connected review sidecar also requires File System Access pickers in the extension Options page. If those pickers are unavailable, keep browser-local notes and export JSON manually. These browsers are compatibility candidates, not verified release targets.
+
+Corporate policies can block developer installations or site access. Use an administrator-approved installation route when Developer mode or Load unpacked is disabled; this project does not provide enterprise deployment policy files.
+
+## Firefox, Safari and mobile
+
+No Firefox XPI or Safari extension is shipped. Firefox requires a background-runtime port and verification of messaging, storage, sandboxed HTML, OAuth and local file access; see [Mozilla's background manifest reference](https://developer.mozilla.org/en-US/docs/Mozilla/Add-ons/WebExtensions/manifest.json/background). Safari additionally needs a platform package/signing and distribution workflow. Mobile browser installation is not supported. Do not rename the Chromium ZIP to an XPI or assume another browser will load it.
+
+The shared rendering engine is browser-side, but this alone does not establish extension compatibility. Future browser ports need their own packaged and installed-browser tests.
+
+## Update or remove the unpacked extension
+
+For an update, extract the new release into the same installation folder, replacing the package files; click **Reload** on the extension card and refresh open repository pages. Confirm the new version. Review any newly declared site permissions. There is no automatic update channel for the unpacked package.
+
+Export browser-local notes before removing the extension or clearing its storage. A connected `.kicad-review.json` in your checkout is a separate file; removing the extension does not stage, commit or push it. File permissions may need renewal after a restart. See [comment storage](COMMENTS.md).
+
+## First review
+
+Use **Explorer** for parts, nets, sheets, layers and search; **Inspect** for saved properties; **Review** for notes; **Project** for the repository file tree and saved setup. **Git revisions** loads bounded branch/file-commit lists: choose base and head, then **Compare revisions**. Source refs resolve to commit SHAs. GitHub PR file cards use PR context; GitLab.com has manual comparison but no merge-request card integration.
+
+Schematics offer Back/Forward/Up/Root controls. **Split schematic + PCB** and **Pop out** support parallel review. Use `F` to fit drawings, `Home` for the sheet, `E` for properties and `M` for a live snapped ruler. The visible keyboard guide lists contextual controls. Routing and source editing are unavailable.
+
+On GitLab.com, public file previews support subgroup namespaces. Notes are local/exportable; GitLab sign-in, private repositories, remote publication, merge-request cards and self-hosted instances are pending. See [Git host compatibility](GIT-HOSTS.md).
 
 ## VS Code
 
-Download `kicad-visual-review-vscode-0.11.4.vsix`, run **Extensions: Install from VSIX**, and select the file. Open a saved KiCad drawing or run **KiCad: Open Visual Viewer**. If needed choose **Reopen Editor With → KiCad Visual Review**. After an update, run **Developer: Reload Window**.
+Download the VSIX. Run **Extensions: Install from VSIX**, choose `kicad-visual-review-vscode-0.11.5.vsix`, then run **Developer: Reload Window**. Open a saved project folder and choose **KiCad: Open Visual Viewer** or **Reopen Editor With → KiCad Visual Review**. The KiCad Review explorer lists saved drawings and sidecars.
 
 ```sh
-code --install-extension kicad-visual-review-vscode-0.11.4.vsix --force
+code --install-extension kicad-visual-review-vscode-0.11.5.vsix --force
 ```
 
-The extension uses the workspace provider and read-only custom editors. GitHub comment publication is currently a browser-extension feature; native notes use the Git-trackable review sidecar. HTML previews in VS Code are static; self-contained interactive iBOM runs in the browser extension. Actual github.dev deployment still needs separate hosted validation.
+The custom editor uses the workspace filesystem provider. Native notes use the Git-trackable `.kicad-review.json` sidecar, without token publication or native revision comparison. HTML previews are static in VS Code. The web entry point exists, but actual github.dev installation and filesystem behavior need separate hosted validation. See [the VS Code guide](../vscode-extension/README.md).
 
-## Optional GitHub App / hosted viewer
+## Optional GitHub App
 
-The `app-web` ZIP is a hosted viewer payload. The `github-app` ZIP contains the service and deployment sources. Neither installs a browser extension or changes GitHub's built-in file renderer. Follow the bundled `docs/github-app.md` to register an App, configure an HTTPS host and install Python extras. No production host, private key or OAuth client ID is supplied by this release.
+The app-web ZIP is a hosted viewer payload; the github-app ZIP contains the service and deployment sources. Neither changes GitHub's built-in renderer or installs a browser extension. Follow [the App guide](github-app.md) to register an App, configure HTTPS hosting and install Python extras. No production host, private key, OAuth client ID or Marketplace listing is supplied.
 
-## Checksums and support
+## Troubleshooting
 
-Compare downloaded files with `SHA256SUMS.txt`. On Linux/macOS, run `sha256sum --check SHA256SUMS.txt` from the download folder (install a SHA-256 utility if unavailable). In PowerShell, use `Get-FileHash -Algorithm SHA256 <file>` and compare the digest. Checksums detect file changes; they are not a publisher signature.
+| Symptom | Check |
+| --- | --- |
+| Load unpacked rejects the folder | Extract the ZIP fully; select the folder directly containing `manifest.json` |
+| No visual preview | Confirm the extension is enabled and allowed on that host; refresh a public supported file page; raw URLs and unsupported hosts are not mounted |
+| Chrome says an embedded page is blocked | Reload the extension after a manifest update, refresh the file page, and record the blocked frame URL/console diagnostic if it persists |
+| HTTP error, missing source or incomplete tree | Public access, API rate limits, file/repository limits and the requested revision; unsupported private access is not fixed by signing in |
+| GitLab source view remains visible | Page repository/ref/file metadata or the preview container may be unavailable; the extension leaves the source intact |
+| Child sheet or 3D model missing | Check the saved relative path and repository asset at that revision; installed KiCad libraries and STEP are not loaded |
+| GitHub publishing unavailable | Configure token/device sign-in in Options, check destination permissions and repository policy; GitLab/VS Code publication is not implemented |
+| Review file cannot save | Renew file permission, inspect visible conflict/validation errors, or export notes before changing stores |
 
-Design files remain read-only. Browser glyphs and some constructs are approximate or unsupported. KiCad 11 is a forward preview, zone statistics are saved polygon sums, STEP models are unsupported, and Gerber macros/curved regions/step-repeat/drill slots have documented limits. Read the release notes before using the viewer for engineering decisions.
+For a report, include browser/version, a public URL or shareable fixture, and the visible error. Do not include credentials or private design files.
 
-## GitLab.com
+## Checksums and limits
 
-After reloading the extension, allow its GitLab.com site access and open a public repository file page. Subgroup namespaces and manual branch/commit comparisons are supported. GitLab notes stay local until exported manually; private repositories, remote issue publication, merge-request cards and self-hosted instances are not included. See [host compatibility](GIT-HOSTS.md).
+Compare downloads with `SHA256SUMS.txt`. On Linux/macOS run `sha256sum --check SHA256SUMS.txt` in the download folder. In PowerShell use `Get-FileHash -Algorithm SHA256 <file>` and compare the digest. SHA-256 detects changed bytes; it is not a publisher signature. `release-manifest.json` binds versions and package hashes to the source commit.
+
+The renderer has documented fidelity limits. KiCad 11 is a forward preview, STEP is unsupported, zone statistics are polygon sums, and several Gerber/drill constructs are incomplete. Read [the project README](../README.md) and release notes. Installed Chrome/GitLab acceptance, browser-store review and every candidate browser/service combination are not established by local automated tests.

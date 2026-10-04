@@ -6,10 +6,10 @@ The browser extension embeds the viewer in supported repository file pages. A Gi
 | --- | --- | --- | --- |
 | Schematic and PCB viewers, selection and properties | Public repositories | Public repositories | Saved local files |
 | Project explorer, hierarchy, setup and repository assets | Yes | Yes, including subgroup namespaces | Yes |
-| Branch/commit visual comparison | Yes | Yes | Git revisions |
+| Branch/commit visual comparison | Yes | Yes | Not yet |
 | Inline pull-request / merge-request file cards | Pull requests | Not yet | Not applicable |
 | Local annotations and review JSON export | Yes | Yes, isolated by provider | Yes |
-| Account connection and issue/discussion publication | GitHub controls | Not yet | GitHub controls |
+| Account connection and issue/discussion publication | GitHub controls | Not yet | Local sidecar only |
 | Private repository browser previews | Not yet | Not yet | Available after a local checkout |
 | Self-hosted hostnames | Not yet | Not yet | Local files are host-independent |
 

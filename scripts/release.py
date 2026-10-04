@@ -126,7 +126,7 @@ def build(output: Path, tag: str | None = None):
     # Refuse any unknown/stale files so the publisher's wildcard cannot upload extras.
     names = {f'kicad-visual-review-extension-{version}.zip', f'kicad-visual-review-vscode-{version}.vsix',
              f'kicad-visual-review-app-web-{version}.zip', f'kicad-visual-review-github-app-{version}.zip',
-             'SHA256SUMS.txt', 'RELEASE-NOTES.md', 'INSTALL.md', 'THIRD-PARTY-NOTICES.md', 'release-manifest.json'}
+             'SHA256SUMS.txt', 'RELEASE-NOTES.md', 'INSTALL.md', 'COMMENTS.md', 'GIT-HOSTS.md', 'THIRD-PARTY-NOTICES.md', 'release-manifest.json'}
     if output.is_symlink():
         raise ValueError('Release output must not be a symbolic link.')
     if output.exists() and any(p.name not in names or not p.is_file() or p.is_symlink() for p in output.iterdir()):
@@ -141,7 +141,7 @@ def build(output: Path, tag: str | None = None):
         normalize_archive(ROOT / '.vizdiff' / f'kicad-visual-review-{kind}.zip',
                           output / f'kicad-visual-review-{kind}-{version}.zip')
     for source, destination in ((f'docs/releases/v{version}.md', 'RELEASE-NOTES.md'),
-                                ('docs/INSTALL.md', 'INSTALL.md'), ('THIRD-PARTY-NOTICES.md', 'THIRD-PARTY-NOTICES.md')):
+                                ('docs/INSTALL.md', 'INSTALL.md'), ('docs/COMMENTS.md', 'COMMENTS.md'), ('docs/GIT-HOSTS.md', 'GIT-HOSTS.md'), ('THIRD-PARTY-NOTICES.md', 'THIRD-PARTY-NOTICES.md')):
         shutil.copyfile(ROOT / source, output / destination)
     assets = sorted(p for p in output.iterdir() if p.name not in {'SHA256SUMS.txt', 'release-manifest.json'})
     digests = {p.name: hashlib.sha256(p.read_bytes()).hexdigest() for p in assets}

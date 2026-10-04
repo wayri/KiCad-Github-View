@@ -1,6 +1,6 @@
 # KiCad Visual Review browser extension
 
-Version 0.8.1 renders public GitHub `.kicad_sch` and `.kicad_pcb` files directly **inside github.com**. It uses our own S-expression parser, schematic geometry builder, PCB geometry builder, Canvas2D renderer, camera and picking code. KiCanvas is not loaded or included in the upload package. SPIKE supplies the owner-authorized, browser-side 3D adapter. No rendering service, companion process or installed KiCad is required at runtime.
+The current preview renders public GitHub `.kicad_sch` and `.kicad_pcb` files directly **inside github.com**. It uses our own S-expression parser, schematic geometry builder, PCB geometry builder, Canvas2D renderer, camera and picking code. KiCanvas is not loaded or included in the upload package. SPIKE supplies the owner-authorized, browser-side 3D adapter. No rendering service, companion process or installed KiCad is required at runtime.
 
 File previews replace the source pane; **Show source** restores it. Pull-request **Files changed** cards retain GitHub’s header and conversation while displaying base/head drawings. Dynamic GitHub navigation and late/replaced file cards are supported. Public forks use the base repository’s PR context while retrieving the fork’s design revision.
 
@@ -30,7 +30,7 @@ The default drawing sheet now uses native template coordinates for borders, page
 2. Enable **Developer mode**, choose **Load unpacked**, and select this repository’s `extension` directory.
 3. Open a public GitHub KiCad file or a PR containing one. The drawing appears inline. The toolbar icon / `Alt+Shift+K` focuses it.
 
-`python scripts/package_extension.py` builds the browser-store ZIP. It is not published in Chrome Web Store or Edge Add-ons. The separate GitHub App supplies PR checks and hosted viewer links; GitHub App installation alone cannot register a replacement file renderer on github.com. Inline previews require this extension installed in each viewer’s browser. GitLab is not implemented yet.
+`python scripts/package_extension.py` builds the browser-store ZIP. It is not published in Chrome Web Store or Edge Add-ons. The separate GitHub App supplies PR checks and hosted viewer links; GitHub App installation alone cannot register a replacement file renderer on github.com. Inline previews require this extension installed in each viewer’s browser. Public GitLab.com file previews are supported; see the host compatibility guide below.
 
 ## Current fidelity and verification limits
 
