@@ -11,7 +11,7 @@
 
 **Interactive KiCad review inside GitHub and public GitLab.com file pages.** Open schematics and PCB layouts as drawings, inspect saved parts and nets, compare revisions, and anchor review notes to the design. The viewer runs in the browser with our own schematic/PCB engine and the owner-authorized SPIKE 3D adapter. No KiCad installation, local companion process or rendering server is needed for the browser extension.
 
-[Download v0.11.7](https://github.com/wayri/KiCad-Github-View/releases/tag/v0.11.7) · [Install](docs/INSTALL.md) · [Comment integration](docs/COMMENTS.md) · [Git services](docs/GIT-HOSTS.md) · [Release notes](docs/releases/v0.11.7.md)
+[Download v0.11.8](https://github.com/wayri/KiCad-Github-View/releases/tag/v0.11.8) · [Install](docs/INSTALL.md) · [Comment integration](docs/COMMENTS.md) · [Git services](docs/GIT-HOSTS.md) · [Release notes](docs/releases/v0.11.8.md)
 
 Illustrated walkthroughs: [Using GitHub integration](docs/using-github-integration/README.md) · [Using GitLab integration](docs/using-gitlab-integration/README.md). Browser packages: [Firefox](docs/FIREFOX.md) · [Safari](docs/SAFARI.md).
 
@@ -69,7 +69,7 @@ Properties and analytics come from the saved source revision. Missing settings a
 
 ## Install in Chrome or Edge
 
-1. Download **`kicad-visual-review-extension-0.11.7.zip`** from [Releases](https://github.com/wayri/KiCad-Github-View/releases/tag/v0.11.7). The GitHub **Source code** archives are not the prepared extension package.
+1. Download **`kicad-visual-review-extension-0.11.8.zip`** from [Releases](https://github.com/wayri/KiCad-Github-View/releases/tag/v0.11.8). The GitHub **Source code** archives are not the prepared extension package.
 2. Extract the ZIP into a permanent folder. Select the folder containing `manifest.json`, not the ZIP itself.
 3. Open `chrome://extensions` in Chrome/Chromium or `edge://extensions` in Edge.
 4. Enable **Developer mode**, select **Load unpacked**, and choose that folder.
@@ -132,13 +132,18 @@ For detailed workflows see [search/highlights](extension/docs/search-and-highlig
 
 ## How comments integrate with Git and GitHub
 
-There are two separate review records: a **Git-trackable local annotation file** and an optional **GitHub thread**. Saving a note does not post to GitHub, create a commit, push a branch or edit a drawing.
+Write a review in the drawing and post it directly to a **GitHub Issue or Discussion**, selected in the comment editor. A successful post creates the selected thread or adds a reply to its thread number, then saves the GitHub link with the annotation.
 
-1. In **Review**, create a part note, click a point or draw an area. Set text, severity, tags, mentions and state. Save the note.
-2. Without a connected file, the browser keeps notes in device storage. In extension settings, connect/create **`.kicad-review.json`** inside a local checkout to use it as the review store. Stage, commit and push that file with normal Git tools. Existing browser notes need explicit export/import when changing stores.
-3. For remote publication, open **Account and review-file settings** and choose **Sign in with GitHub**. Advanced token/client-ID fields are collapsed. The publisher still needs to register and configure the OAuth App before this build's sign-in works; see [sign-in setup](docs/GITHUB-SIGNIN.md). Tokens stay in browser session storage and are excluded from review JSON. Private file reads require an authorized extension account/token; private remote publication and private PR comparison are unavailable.
-4. Choose a new/existing issue, new/existing discussion, or the current PR; for a new discussion, select a category. Click **Publish to GitHub** on the saved note. A successful request records the remote URL in the note. **Open GitHub composer** prepares a manual post without submitting it.
-5. Public issue/PR readback recognizes the extension's validated annotation markers for the matching repository, revision and drawing. Discussion readback and automatic two-way state synchronization are not implemented.
+1. Open **Review → Comments** and create a part, point or area note. Enter your comment, severity, tags, mentions and state.
+2. Under **Post to GitHub**, choose **Issue** or **Discussion**, then **New** or **Existing**. Enter a title for a new thread or its number for a reply. Load and select a category for a new Discussion.
+3. Use **Preview GitHub Markdown** to inspect the formatted review section: comment text followed by a design-context table, exact revision/file link, object or area, severity, state, tags, mentions and timestamps.
+4. Click **Post to GitHub**. This sends the review through GitHub's API using your connected account. Confirmed posts show a linked conversation; denied or ambiguous requests report an error and retain your draft. **Save draft** is available when you want to keep a note without posting.
+
+![Choose Discussion and post directly from the note editor](docs/images/integration/github-direct-discussion.jpg)
+
+This is the actual editor in a local fixture with a mocked category list; no remote post was made for the screenshot. Connect your account through **GitHub account**. The publisher OAuth client registration is still required for the primary sign-in button; [sign-in setup](docs/GITHUB-SIGNIN.md) also explains the advanced token fallback. Public and authorized private repository publication are supported, with GitHub permissions and repository policy checked. Private PR comparison and annotation readback remain unavailable.
+
+The Git-tracked `.kicad-review.json` file is an optional review record, not a prerequisite for posting. Without a connected file, confirmed links and drafts stay in browser storage. Connect/create a sidecar in a checkout to track them with Git; commit/push it with normal Git tools. Opening a drawing or choosing a destination does not post, commit or edit the design. Existing saved notes also retain **Publish to GitHub** and **Open GitHub composer** actions.
 
 Review notes retain repository/ref/file, saved object identity or millimetre position/area, variant, creation/update times and lifecycle metadata. Changing a note to Resolved or Skipped changes review metadata; it does not close a GitHub issue or edit an earlier post. Captured PNGs remain in the local/exported review record: download and attach them manually in GitHub's composer. API publication excludes image attachments. Mentions saved locally do not notify anyone until text is posted remotely, subject to GitHub behavior.
 
@@ -148,10 +153,10 @@ Read [the complete comment guide](docs/COMMENTS.md) for authentication, permissi
 
 ## VS Code installation
 
-Download **`kicad-visual-review-vscode-0.11.7.vsix`** from Releases. In VS Code run **Extensions: Install from VSIX**, select the file and run **Developer: Reload Window**. Open a KiCad project folder and use **KiCad: Open Visual Viewer** or **Reopen Editor With → KiCad Visual Review**. The **KiCad Review** explorer lists saved drawings and review sidecars.
+Download **`kicad-visual-review-vscode-0.11.8.vsix`** from Releases. In VS Code run **Extensions: Install from VSIX**, select the file and run **Developer: Reload Window**. Open a KiCad project folder and use **KiCad: Open Visual Viewer** or **Reopen Editor With → KiCad Visual Review**. The **KiCad Review** explorer lists saved drawings and review sidecars.
 
 ```sh
-code --install-extension kicad-visual-review-vscode-0.11.7.vsix --force
+code --install-extension kicad-visual-review-vscode-0.11.8.vsix --force
 ```
 
 Local notes use `.kicad-review.json` in the workspace root (or drawing directory outside a workspace). Filesystem-provider permissions still apply. The VSIX is not currently published in Visual Studio Marketplace. See [the VS Code guide](vscode-extension/README.md).

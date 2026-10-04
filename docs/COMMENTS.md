@@ -20,7 +20,7 @@ Tokens live in extension session storage, are made available only to the trusted
 
 ## Repository comment policy
 
-Before publishing, the extension checks the target public repository's `.kicad-review-policy.json` on its default branch. If the file is absent, the default policy allows any signed-in account that can publish to the repository. A malformed or unverifiable policy blocks publication. The file format is:
+Before publishing, the extension checks the target repository's `.kicad-review-policy.json` on its default branch. If the file is absent, the default policy allows any signed-in account that can publish to the repository. A malformed or unverifiable policy blocks publication. The file format is:
 
 ```json
 {
@@ -57,3 +57,12 @@ On GitLab.com, notes are local to that browser and anchored to the GitLab projec
 The VS Code extension saves annotations through the workspace file system and can use a Git-tracked `.kicad-review.json` file in the workspace. It does not currently offer GitHub token setup or publication from the VS Code viewer. A note created in VS Code has local/workspace provenance; copying its JSON sidecar does not automatically make it a GitHub-anchored note. Browser and VS Code writes do not share an atomic lock, so avoid editing the same sidecar from both at once.
 
 Automated checks use mocked GitHub responses. They do not create live issues, discussions, or comments, and they do not prove that a particular repository's token permissions or policy will allow publication.
+
+
+## Direct posting from the comment editor
+
+The note editor has a **Post to GitHub** section. Select Issue or Discussion, new or existing thread, a title or thread number, and a category for a new Discussion. **Preview GitHub Markdown** displays the generated section without posting. **Post to GitHub** saves a draft, sends the formatted review through the selected GitHub API, then records its confirmed link. **Save draft** keeps a note without a remote write. Failed posts retain an editable draft; ambiguous results retain the backend's pending-publication protection rather than automatically retrying.
+
+Posted Markdown contains review text and a design-context table with severity/state, Issue/Discussion type, component or net, point/area, repository, revision/file permalink, variant, identifiers, tags, mentions and UTC times. The validated hidden annotation marker remains available for supported readback. PNG data is excluded from the API body.
+
+Authorized private repositories can receive Issue/Discussion posts. The connected account must have the relevant write permission and Contents read permission for policy verification. Private policy requests are authenticated on GitHub's API. A private policy 404 is treated as absence only after a complete authenticated root listing verifies that no policy file exists. Unverifiable access or policy blocks the post. Public policies retain anonymous verification. Private annotation readback and private PR comparison remain unavailable.

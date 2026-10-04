@@ -10,7 +10,7 @@ The browser extension embeds the viewer in supported repository file pages. A Gi
 | Inline pull-request / merge-request file cards | Pull requests | Not yet | Not applicable |
 | Local annotations and review JSON export | Yes | Yes, isolated by provider | Yes |
 | Account connection and issue/discussion publication | GitHub controls | Not yet | Local sidecar only |
-| Private repository browser previews | File/project/model reads with repository access; private PR comparison and annotation readback/publication unavailable | Not yet | Available after a local checkout |
+| Private repository browser previews | File/project/model reads with repository access; authorized Issue/Discussion publication; private PR comparison and annotation readback unavailable | Not yet | Available after a local checkout |
 | Self-hosted hostnames | Not yet | Not yet | Local files are host-independent |
 
 ## GitLab.com installation and behavior

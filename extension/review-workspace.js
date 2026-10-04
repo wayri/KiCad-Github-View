@@ -390,17 +390,19 @@
     }
     function scope(file = currentFile() || rootFile) { return {repository, ref, file,...providerContext}; }
     function anchor(position = null, object = selected) {
-      const value = {...scope(object?.path), variant, ...(object?.uuid ? {uuid:object.uuid} : {}),
+      const net=!object?selectedNet:null;
+      const value = {...scope(object?.path||net?.path), variant, ...(net?{kind:"net",netName:net.name,...(net.id?.length<=200?{objectId:net.id}:{})}:{}), ...(object?.uuid ? {uuid:object.uuid} : {}),
         ...(object?.id && object.id.length <= 200 ? {objectId:object.id} : {}), ...(object?.reference ? {reference:object.reference} : {}),
         ...(object?.kind ? {kind:object.kind} : {}), ...(position || object?.position ? {position:position || object.position} : {})};
       return KiCadReviewComments.normalizeAnchor(value);
     }
-    function anchorLabel(value) { return `${value.reference || value.kind || "Drawing"} · ${value.file}${value.position ? ` · ${value.position.x.toFixed(2)}, ${value.position.y.toFixed(2)} mm` : ""}${value.variant && value.variant !== "default" ? ` · ${value.variant}` : ""}`; }
+    function anchorLabel(value) { return `${value.reference || value.netName || value.kind || "Drawing"} · ${value.file}${value.position ? ` · ${value.position.x.toFixed(2)}, ${value.position.y.toFixed(2)} mm` : ""}${value.variant && value.variant !== "default" ? ` · ${value.variant}` : ""}`; }
     function editComment(note = null, at = null) {
       try { editor = note || {id:crypto.randomUUID(), createdAt:new Date().toISOString(), text:"", severity:"info", threadType:$("githubCommentType").value||"issue", anchor:at || anchor()}; }
       catch (error) { commentStatus(error.message,true); inspector("comments"); return; }
-      if(note?.threadType){$("githubCommentType").value=note.threadType;chooseCommentType();} $("commentEditor").hidden = false; $("commentAnchor").textContent=remoteAvailable?`${$("githubCommentType").value==="discussion"?"Discussion":"Issue"} � ${anchorLabel(editor.anchor)}; choose its type in the GitHub tab.`:`Local review: ${anchorLabel(editor.anchor)}`; $("commentText").value = editor.text; $("commentSeverity").value = editor.severity || "info";$("commentState").value=editor.state||"open";$("commentTags").value=(editor.tags||[]).join(", ");$("commentMentions").value=(editor.mentions||[]).map(login=>"@"+login).join(", ");
+      if(note?.threadType){$("githubCommentType").value=note.threadType;chooseCommentType();} $("commentEditor").hidden = false; $("commentAnchor").textContent=remoteAvailable?`${$("githubCommentType").value==="discussion"?"Discussion":"Issue"} · ${anchorLabel(editor.anchor)}; choose its destination below.`:`Local review: ${anchorLabel(editor.anchor)}`; $("commentText").value = editor.text; $("commentSeverity").value = editor.severity || "info";$("commentState").value=editor.state||"open";$("commentTags").value=(editor.tags||[]).join(", ");$("commentMentions").value=(editor.mentions||[]).map(login=>"@"+login).join(", ");
       inspector("comments"); $("commentText").focus();
+      $("editorThreadType").value=editor.threadType||"issue";$("editorTitle").value="";configureEditorDestination();$("editorMarkdown").hidden=true;
       capturePreview();draw();
     }
     function capturePreview(){const image=$("capturePreview");image.hidden=!editor?.capture;if(editor?.capture)image.src=editor.capture.dataUrl;else image.removeAttribute?.('src');$("removeCapture").hidden=!editor?.capture;$("captureComment").disabled=!editor?.anchor.area;$("captureStatus").textContent=editor?.capture?'Screenshot saved with this note. Download it to attach in a GitHub composer.':editor?.anchor.area?'Capture the visible drawing inside this area.':'Draw an area to attach a screenshot.';}
@@ -449,15 +451,15 @@
       if(destination==="pull-request"&&!options.pullNumber)throw new Error("Open a pull-request file to comment on its PR.");
       return {comment:note,destination,...(destination==="pull-request"?{pullNumber:options.pullNumber,pullRepository:options.pullRepository}:{}),targetRepository};
     }
-    async function publishNote(note,action){
+    async function publishNote(note,action,publication=null){
       action.disabled=true;try{
-        assertNoteDestination(note);const value=$("commentDestination").value,destination={issue:"new-issue",discussion:"new-discussion","existing-issue":"issue","existing-discussion":"discussion","pull-request":"issue"}[value];
-        const number=value==="pull-request"?options.pullNumber:value.startsWith("existing-")?Number($("threadNumber").value):undefined;
+        if(!publication)assertNoteDestination(note);const value=publication?.value||$("commentDestination").value,destination={issue:"new-issue",discussion:"new-discussion","existing-issue":"issue","existing-discussion":"discussion","pull-request":"issue"}[value];
+        const number=value==="pull-request"?options.pullNumber:value.startsWith("existing-")?Number(publication?.number||$("threadNumber").value):undefined;
         if(!destination||(destination==="issue"||destination==="discussion")&&(!Number.isSafeInteger(number)||number<=0))throw new Error("Choose a valid GitHub issue or discussion number.");
-        const result=await request("github-publish-comment",{comment:note,destination,repository:options.pullRepository||repository,...(number?{number}:{}),...(destination==="new-discussion"?{categoryId:$("discussionCategory").value}:{})});
+        const result=await request("github-publish-comment",{comment:note,destination,repository:options.pullRepository||repository,...(publication?.title?{title:publication.title}:{}),...(number?{number}:{}),...(destination==="new-discussion"?{categoryId:publication?.category||$("discussionCategory").value}:{})});
         const refs=[...(note.remoteRefs||[])];if(!refs.some(ref=>ref.url===result.remoteRef.url))refs.push(result.remoteRef);
-        await request("comment-save",{comment:KiCadReviewComments.validateComment({...note,remoteRefs:refs,updatedAt:new Date(Math.max(Date.now(),Date.parse(note.updatedAt||note.createdAt)+1)).toISOString()}),expectedUpdatedAt:note.updatedAt||note.createdAt});await refreshComments();options.onCommentsChanged?.();commentStatus("Published to GitHub and saved its thread link in the annotation.");
-      }catch(error){commentStatus(error.message+" If GitHub accepted the post but local saving failed, retry Publish to recover its link.",true);}finally{action.disabled=false;}
+        await request("comment-save",{comment:KiCadReviewComments.validateComment({...note,remoteRefs:refs,updatedAt:new Date(Math.max(Date.now(),Date.parse(note.updatedAt||note.createdAt)+1)).toISOString()}),expectedUpdatedAt:note.updatedAt||note.createdAt});await refreshComments();options.onCommentsChanged?.();commentStatus(`Posted to GitHub ${result.remoteRef.kind} #${result.remoteRef.number}. The linked conversation is saved below.`);return true;
+      }catch(error){commentStatus(error.message+" Your draft remains saved. If GitHub accepted the post but local saving failed, retry Publish to recover its link.",true);return false;}finally{action.disabled=false;}
     }
     function renderComments() {
       $("commentList").replaceChildren();
@@ -640,7 +642,7 @@
     $("commentSelected").onclick=()=>editComment(null,selectedNet?anchor(selectedNet.members.find(m=>m.position)?.position,{path:selectedNet.path,id:selectedNet.id,kind:"net",reference:selectedNet.name.slice(0,100)}):null);$("newComment").onclick=()=>editComment();
     function destinationChanged(){const value=$("commentDestination").value;$("githubCommentType").value=value.includes("discussion")?"discussion":"issue";$("threadNumberLabel").hidden=!value.startsWith("existing-");for(const id of ["discussionCategoryLabel","loadCategories"])$(id).hidden=value!=="discussion";$("threadNumber").placeholder=value.includes("discussion")?"Discussion number":"Issue number";}
     function chooseCommentType(initial=false){const discussion=$("githubCommentType").value==="discussion", choices=discussion?[["discussion","New discussion"],["existing-discussion","Existing discussion"]]:[["issue","New issue"],["existing-issue","Existing issue"],...(options.pullNumber?[["pull-request",`This pull request #${options.pullNumber}`]]:[])];
-      $("commentDestination").replaceChildren();for(const [value,label]of choices){const item=make("option",label);item.value=value;$("commentDestination").append(item);}$("commentDestination").value=initial&&options.pullNumber?"pull-request":choices[0][0];destinationChanged();if(editor)$("commentAnchor").textContent=remoteAvailable?`${$("githubCommentType").value==="discussion"?"Discussion":"Issue"} � ${anchorLabel(editor.anchor)}; choose its type in the GitHub tab.`:`Local review: ${anchorLabel(editor.anchor)}`;}
+      $("commentDestination").replaceChildren();for(const [value,label]of choices){const item=make("option",label);item.value=value;$("commentDestination").append(item);}$("commentDestination").value=initial&&options.pullNumber?"pull-request":choices[0][0];destinationChanged();if(editor){$("editorThreadType").value=$("githubCommentType").value;configureEditorDestination();}if(editor)$("commentAnchor").textContent=remoteAvailable?`${$("githubCommentType").value==="discussion"?"Discussion":"Issue"} · ${anchorLabel(editor.anchor)}; choose its destination below.`:`Local review: ${anchorLabel(editor.anchor)}`;}
     $("githubCommentType").value="issue";$("githubCommentType").onchange=()=>chooseCommentType();$("commentDestination").onchange=destinationChanged;chooseCommentType(true);
     const targetRepository=options.pullRepository||repository;
     $("repositoryIssues").href=`https://github.com/${targetRepository}/issues`;$("repositoryDiscussions").href=`https://github.com/${targetRepository}/discussions`;
@@ -656,12 +658,29 @@
     $("nextUnread").onclick=nextUnread;
     $("captureComment").onclick=()=>{try{const c=getCanvas();editor.capture=KiCadReviewTools.capture(c.canvas,c.viewport.camera,editor.anchor.area);capturePreview();}catch(error){$("captureStatus").textContent=error.message;}};
     $("removeCapture").onclick=()=>{delete editor.capture;capturePreview();};
-    $("saveComment").onclick=async()=>{
-      if(!editor)return;const saved={...editor,threadType:$("githubCommentType").value||"issue",text:$("commentText").value,severity:$("commentSeverity").value,state:$("commentState").value,tags:$("commentTags").value.split(",").map(tag=>tag.trim()).filter(Boolean),mentions:$("commentMentions").value.split(/[\s,]+/).map(login=>login.trim()).filter(Boolean),updatedAt:new Date(Math.max(Date.now(),Date.parse(editor.updatedAt||editor.createdAt)+1)).toISOString()};
-      $("saveComment").disabled=true;
-      try{await request("comment-save",{comment:KiCadReviewComments.validateComment(saved),...(editor.updatedAt?{expectedUpdatedAt:editor.updatedAt}:{})});$("commentEditor").hidden=true;editor=null;await refreshComments();options.onCommentsChanged?.();commentStatus("Annotation saved in the configured review store.");}
-      catch(error){commentStatus(error.message,true);}finally{$("saveComment").disabled=false;}
-    };
+    function configureEditorDestination(){
+      const discussion=$("editorThreadType").value==="discussion";
+      const choices=discussion?[["discussion","New discussion"],["existing-discussion","Existing discussion"]]:[["issue","New issue"],["existing-issue","Existing issue"],...(options.pullNumber?[["pull-request",`This pull request #${options.pullNumber}`]]:[])];
+      $("editorDestination").replaceChildren();for(const[value,label]of choices){const item=make("option",label);item.value=value;$("editorDestination").append(item);}$("editorDestination").value=choices.some(([value])=>value===$("commentDestination").value)?$("commentDestination").value:choices[0][0];
+      $("editorThreadNumber").value=$("threadNumber").value;editorDestinationChanged();
+    }
+    function editorDestinationChanged(){const value=$("editorDestination").value;$("editorNumberLabel").hidden=!value.startsWith("existing-");$("editorTitleLabel").hidden=value.startsWith("existing-")||value==="pull-request";$("editorCategoryLabel").hidden=$("editorLoadCategories").hidden=value!=="discussion";$("editorThreadNumber").placeholder=value.includes("discussion")?"Discussion number":"Issue number";}
+    function editorNote(){if(!editor)throw new Error("Create or select a note first.");return KiCadReviewComments.validateComment({...editor,threadType:remoteAvailable?$("editorThreadType").value||"issue":editor.threadType,text:$("commentText").value,severity:$("commentSeverity").value,state:$("commentState").value,tags:$("commentTags").value.split(",").map(tag=>tag.trim()).filter(Boolean),mentions:$("commentMentions").value.split(/[\s,]+/).map(login=>login.trim()).filter(Boolean),updatedAt:new Date(Math.max(Date.now(),Date.parse(editor.updatedAt||editor.createdAt)+1)).toISOString()});}
+    async function saveEditor(post=false){
+      if(!editor||$("saveComment").disabled)return;$("saveComment").disabled=$("postComment").disabled=true;
+      try{const saved=editorNote();let publication;
+        if(post){if(!remoteAvailable)throw new Error("GitHub publication is unavailable in this viewer.");const value=$("editorDestination").value,number=Number($("editorThreadNumber").value),category=$("editorCategory").value,title=$("editorTitle").value.trim();
+          if(value.startsWith("existing-")&&(!Number.isSafeInteger(number)||number<=0))throw new Error("Enter a positive GitHub thread number.");if(value==="discussion"&&!category)throw new Error("Load and select a discussion category.");publication={value,number,category,title};}
+        await request("comment-save",{comment:saved,...(editor.updatedAt?{expectedUpdatedAt:editor.updatedAt}:{})});editor=saved;await refreshComments();options.onCommentsChanged?.();
+        if(!post||await publishNote(saved,$("postComment"),publication)){$("commentEditor").hidden=true;editor=null;if(!post)commentStatus(remoteAvailable?"Draft saved. Choose Post to GitHub to share it remotely.":"Annotation saved in the configured review store.");}
+      }catch(error){commentStatus(error.message,true);}finally{$("saveComment").disabled=$("postComment").disabled=false;}
+    }
+    $("commentPublishSettings").hidden=!remoteAvailable;$("saveComment").textContent=remoteAvailable?"Save draft":"Save comment";
+    $("editorThreadType").onchange=()=>{$("githubCommentType").value=$("editorThreadType").value;chooseCommentType();};$("editorDestination").onchange=editorDestinationChanged;
+    $("editorAccount").onclick=$("reviewSettings").onclick;
+    $("editorLoadCategories").onclick=async()=>{try{const categories=await request("github-discussion-categories",{repository:targetRepository});$("editorCategory").replaceChildren();for(const category of categories){const item=make("option",category.name);item.value=category.id;$("editorCategory").append(item);}$("editorCategory").value=categories[0]?.id||"";}catch(error){commentStatus(error.message,true);}};
+    $("editorPreview").onclick=()=>{try{$("editorMarkdown").textContent=KiCadReviewComments.toMarkdown(editorNote()).replace(/<!--[\s\S]*?-->/g,"").trim();$("editorMarkdown").hidden=false;}catch(error){commentStatus(error.message,true);}};
+    $("saveComment").onclick=()=>saveEditor();$("postComment").onclick=()=>saveEditor(true);
     const download=(name,text)=>{const link=make("a");link.download=name;link.href=URL.createObjectURL(new Blob([text],{type:"application/json"}));link.click();setTimeout(()=>URL.revokeObjectURL(link.href),1000);};
     $("exportComments").onclick=()=>{try{download("kicad-review-comments.json",KiCadReviewComments.exportComments(notes));}catch(error){commentStatus(error.message,true);}};
     $("importComments").onclick=()=>$("commentFile").click();

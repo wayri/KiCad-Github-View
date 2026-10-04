@@ -273,7 +273,7 @@ test('discussion and existing issue drafts stay in their GitHub composers until 
   const claim = await message({ type: 'claim-comment-draft' },
     githubTab(discussion.result.tabId, '/base/board/discussions/new'));
   assert.match(claim.result.title, /^\[Major\]/);
-  assert.match(claim.result.body, /Severity: Major/);
+  assert.match(claim.result.body, /\| Severity \| Major \|/);
   assert.equal((await message({ type: 'ack-comment-draft' },
     githubTab(discussion.result.tabId, '/base/board/discussions/new'))).result.acknowledged, true);
   const issue = await message({ type: 'open-comment-draft', comment: note,

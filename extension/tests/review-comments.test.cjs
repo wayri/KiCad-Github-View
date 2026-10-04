@@ -15,7 +15,7 @@ test('comment round trip preserves the validated anchor and text', () => {
   assert.equal(normalized.ignored, undefined);
   assert.equal(normalized.severity, 'info', 'older notes default to informational severity');
   assert.deepEqual(comments.parseComments(comments.exportComments([note])), [normalized]);
-  assert.match(comments.toMarkdown(note), /Position \(mm\): 23.5, -4.25/);
+  assert.match(comments.toMarkdown(note), /\| Position \(mm\) \| 23.5, -4.25 \|/);
 });
 
 test('rejects oversized text, invalid paths, positions, timestamps and imports', () => {
@@ -38,13 +38,13 @@ test('escapes file and object metadata in a GitHub Markdown draft', () => {
   assert.match(markdown, /part\\\]\\\(bad\\\.example\\\)/);
   assert.match(markdown, /U3\\\*\\`\\\[link\\\]/);
   assert.match(markdown, /Check pin 3/);
-  assert.match(markdown, /Severity: Info/);
+  assert.match(markdown, /\| Severity \| Info \|/);
 });
 
 test('GitHub Markdown marker round-trips severity and ignores malformed or unrelated comments', () => {
   const note = { ...sample(), severity: 'critical', text: 'Fix this before release' };
   const markdown = comments.toMarkdown(note);
-  assert.match(markdown, /Severity: Critical/);
+  assert.match(markdown, /\| Severity \| Critical \|/);
   assert.match(markdown, /<!-- kicad-review:v1 [A-Za-z0-9_-]+ -->/);
   assert.deepEqual(comments.fromMarkdown(`Unrelated discussion\n${markdown}\n<!-- kicad-review:v1 bad -->`),
     [comments.validateComment(note)]);
@@ -59,8 +59,8 @@ test('new skip state and mentions round-trip while older lifecycle states remain
   assert.deepEqual(normalized.mentions, ['alice','Bob']);
   assert.equal(normalized.state, 'skipped');
   assert.deepEqual(comments.parseSidecar(comments.serializeSidecar([note])), [normalized]);
-  assert.match(comments.toMarkdown(note), /Mentions: @alice, @Bob/);
-  assert.match(comments.toMarkdown(note), /Updated: 2026-10-04T10:20:00\.000Z/);
+  assert.match(comments.toMarkdown(note), /\| Mentions \| @alice, @Bob \|/);
+  assert.match(comments.toMarkdown(note), /\| Updated \(UTC\) \| 2026-10-04T10:20:00\.000Z \|/);
   assert.deepEqual(comments.fromMarkdown(comments.toMarkdown(note)), [normalized]);
   for (const state of ['open','resolved','wont-fix']) assert.equal(comments.validateComment({...sample(),state}).state,state);
 });
@@ -73,10 +73,31 @@ test('mention validation rejects injection and oversize input without changing s
   assert.throws(() => comments.validateComment({...sample(),state:'closed'}), /state/);
   assert.throws(() => comments.validateComment({...sample(),updatedAt:'2026-10-02T00:00:00Z'}), /precedes/);
   const markdown = comments.toMarkdown({...sample(),mentions:['@alice'],text:'@alice check <script>'});
-  assert.match(markdown, /Mentions: @alice/);
-  assert.equal(markdown.includes('<script>'), true, 'plain user body is not interpreted as trusted HTML here');
+  assert.match(markdown, /\| Mentions \| @alice \|/);
+  assert.equal(markdown.includes('<script>'), false, 'note text is emitted as escaped plain Markdown');
 });
 
+test('GitHub body formats user text and drawing context safely while retaining the revision permalink and marker',()=>{
+ const note={...sample(),threadType:'discussion',severity:'major',state:'resolved',text:'Check **spacing** | fast\n@alice <script>alert(1)</script>',tags:['placement|clearance'],mentions:['alice'],
+  anchor:{...sample().anchor,repository:'owner/repo',ref:'feature/review',file:'design/a (rev)#1.kicad_pcb',kind:'footprint',reference:'J1|A',variant:'prototype'}};
+ const markdown=comments.toMarkdown(note);
+ assert.ok(markdown.startsWith('## KiCad visual review\n\n### Review comment\n\n'));
+ assert.match(markdown, /Check.*\n@alice/s);
+ assert.equal(markdown.includes('<script>'),false);
+ assert.ok(markdown.includes('| Destination type | Discussion |'));
+ assert.ok(markdown.includes('| Component / object | J1\\|A (footprint) |'));
+ assert.ok(markdown.includes('| Review state | resolved |'));
+ assert.ok(markdown.includes('| Tags | placement\\|clearance |'));
+ assert.ok(markdown.includes('| Position (mm) | 23.5, -4.25 |'));
+ assert.ok(markdown.includes('| Revision | feature/review |'));
+ assert.ok(markdown.includes('<https://github.com/owner/repo/blob/feature/review/design/a%20(rev)%231.kicad_pcb>'));
+ assert.ok(markdown.includes('| Mentions | @alice |'));
+ assert.match(markdown,/<!-- kicad-review:v1 [A-Za-z0-9_-]+ -->/);
+ const netNote={...note,id:'net-note',anchor:{...note.anchor,kind:'net',reference:'SENSE | DATA',position:undefined,area:{x:1,y:2,width:3,height:4}}};
+ const netBody=comments.toMarkdown(netNote);
+ assert.ok(netBody.includes('| Net | SENSE \\| DATA |'));
+ assert.ok(netBody.includes('| Area (mm) | 1, 2; 3 × 4 |')); assert.deepEqual(comments.fromMarkdown(markdown),[comments.validateComment(note)]);
+});
 test('read receipts are per reader and revision; sorting age and read filters are independent', () => {
   const older = {...sample(),id:'old',createdAt:'2026-10-01T09:20:00.000Z',updatedAt:'2026-10-01T09:20:00.000Z'};
   const newer = {...sample(),id:'new',createdAt:'2026-10-03T09:20:00.000Z',updatedAt:'2026-10-04T09:20:00.000Z',state:'skipped'};

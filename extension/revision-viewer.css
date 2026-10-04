@@ -83,3 +83,7 @@ body .object-row.selected{background:var(--selected);color:var(--text);border:1p
 
 /* The collaboration pane shares the inspector instead of adding a second toolbar. */
 .collaboration-links{display:flex;gap:12px;margin:10px 0 16px}.collaboration-links a{color:var(--accent);text-decoration:underline}.collaboration-guide{border-top:1px solid var(--line);margin-top:16px;padding-top:12px}.collaboration-guide ol{padding-left:22px}.collaboration-guide li{margin:8px 0;line-height:1.5}#githubPane label{display:grid;gap:6px;margin:10px 0}#githubPane h2{font-size:17px}#githubPane h3{font-size:13px;margin-top:18px}#githubPane .github-comment-controls{display:flex;flex-direction:column;gap:6px}#githubThreadList a{color:var(--accent);overflow-wrap:anywhere}
+.comment-publish-settings{margin:12px 0;padding:12px;border:1px solid var(--line);border-radius:6px;background:var(--panel)}
+.comment-publish-settings h3{margin:0 0 12px}.comment-publish-settings label{display:block;margin:10px 0}
+.comment-markdown{max-height:240px;overflow:auto;white-space:pre-wrap;overflow-wrap:anywhere;padding:10px;background:var(--surface);border:1px solid var(--line);font:11px/1.5 ui-monospace,monospace}
+#postComment{width:100%;background:var(--selected);border-color:var(--accent);color:var(--text);font-weight:600;margin-top:12px}

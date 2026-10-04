@@ -82,7 +82,7 @@ test('saving metadata stays local until explicit publish and records its thread 
  view.get('newComment').click();view.get('commentText').value='Review R1';view.get('commentSeverity').value='major';view.get('commentState').value='resolved';view.get('commentTags').value='assembly, review';view.get('commentMentions').value='@alice, bob';await view.get('saveComment').click();
  assert.equal(messages.some(m=>m.type==='github-publish-comment'),false);assert.equal(notes[0].state,'resolved');assert.deepEqual(Array.from(notes[0].tags),['assembly','review']);assert.deepEqual(Array.from(notes[0].mentions),['alice','bob']);
  const card=view.get('commentList').children[0],actions=card.children.at(-1);await actions.children.find(e=>e.textContent==='Publish to GitHub').click();
- const publish=messages.find(m=>m.type==='github-publish-comment');assert.equal(publish.destination,'new-issue');assert.equal(publish.comment.anchor.repository,'wayri/fixture');assert.equal(notes[0].remoteRefs[0].url,remoteRef.url);assert.match(view.get('commentStatus').textContent,/Published/);
+ const publish=messages.find(m=>m.type==='github-publish-comment');assert.equal(publish.destination,'new-issue');assert.equal(publish.comment.anchor.repository,'wayri/fixture');assert.equal(notes[0].remoteRefs[0].url,remoteRef.url);assert.match(view.get('commentStatus').textContent,/Posted to GitHub issue #7/);
  assert.deepEqual(validator.parseSidecar(validator.serializeSidecar(notes))[0].tags,['assembly','review']);
 });
 test('known repository policy restriction disables direct publish while preserving local comments',async()=>{
@@ -355,4 +355,38 @@ test('all shared viewers contain exactly one collaboration control and a distinc
   for(const id of ['showGitHub','githubPane','githubCommentType','commentDestination','reviewSettings','refreshCommentPolicy','refreshGitHub','severityFilter'])assert.equal((html.match(new RegExp(`id="${id}"`,'g'))||[]).length,1,`${file}: ${id}`);
   assert.match(html,/<section id="githubPane" hidden>/);assert.match(html,/Comment type <select id="githubCommentType">/);assert.match(html,/Screenshots must be attached manually/);assert.match(html,/Full conversation history/);
  }
+});
+
+test('editor posts formatted Issue and Discussion directly and saves confirmed thread links',async()=>{
+ for(const type of ['issue','discussion']){
+  let notes=[];const calls=[];const remoteRef={kind:type,repository:'wayri/fixture',number:12,url:`https://github.com/wayri/fixture/${type==='issue'?'issues':'discussions'}/12`,publishedAt:'2026-10-04T00:00:00.000Z'};
+  const view=workspaceRuntime(async m=>{calls.push(m);if(m.type==='comment-list')return notes;if(m.type==='comment-save'){notes=[m.comment];return m.comment;}if(m.type==='github-discussion-categories')return[{id:'category-1',name:'Design review'}];if(m.type==='github-publish-comment')return{remoteRef};return[];});view.load();await new Promise(resolve=>setImmediate(resolve));
+  view.get('newComment').click();view.get('commentText').value='Check connector clearance';view.get('commentSeverity').value='major';view.get('editorThreadType').value=type;view.get('editorThreadType').onchange();view.get('editorTitle').value='Connector clearance review';
+  if(type==='discussion')await view.get('editorLoadCategories').click();
+  view.get('editorPreview').click();assert.match(view.get('editorMarkdown').textContent,/## KiCad visual review/);assert.doesNotMatch(view.get('editorMarkdown').textContent,/kicad-review:v1/);assert.equal(calls.some(m=>m.type==='github-publish-comment'),false);
+  await view.get('postComment').click();const publication=calls.find(m=>m.type==='github-publish-comment');assert.equal(publication.destination,`new-${type}`);assert.equal(publication.title,'Connector clearance review');assert.equal(publication.comment.threadType,type);if(type==='discussion')assert.equal(publication.categoryId,'category-1');assert.equal(notes[0].remoteRefs[0].url,remoteRef.url);assert.equal(view.get('commentEditor').hidden,true);assert.match(view.get('commentStatus').textContent,/Posted to GitHub/);
+ }
+});
+
+test('editor validates existing thread destinations before saving or posting',async()=>{
+ const calls=[];const view=workspaceRuntime(async m=>{calls.push(m);return[];});view.load();await new Promise(resolve=>setImmediate(resolve));view.get('newComment').click();view.get('commentText').value='Review';view.get('editorDestination').value='existing-issue';view.get('editorDestination').onchange();view.get('editorThreadNumber').value='0';await view.get('postComment').click();assert.equal(calls.some(m=>m.type==='comment-save'||m.type==='github-publish-comment'),false);assert.match(view.get('commentStatus').textContent,/positive GitHub thread number/);assert.equal(view.get('commentEditor').hidden,false);
+});
+
+test('editor routes replies to the selected existing Issue or Discussion number',async()=>{
+ for(const type of ['issue','discussion']){
+  let notes=[];const calls=[];const remoteRef={kind:type,repository:'wayri/fixture',number:42,url:`https://github.com/wayri/fixture/${type==='issue'?'issues':'discussions'}/42`,publishedAt:'2026-10-04T00:00:00.000Z'};
+  const view=workspaceRuntime(async m=>{calls.push(m);if(m.type==='comment-list')return notes;if(m.type==='comment-save'){notes=[m.comment];return m.comment;}if(m.type==='github-publish-comment')return{remoteRef};return[];});view.load();await new Promise(resolve=>setImmediate(resolve));view.get('newComment').click();view.get('commentText').value='Additional clearance evidence';view.get('editorThreadType').value=type;view.get('editorThreadType').onchange();view.get('editorDestination').value=`existing-${type}`;view.get('editorDestination').onchange();view.get('editorThreadNumber').value='42';await view.get('postComment').click();const publication=calls.find(m=>m.type==='github-publish-comment');assert.equal(publication.destination,type);assert.equal(publication.number,42);assert.equal(publication.categoryId,undefined);assert.equal(notes[0].remoteRefs[0].number,42);
+ }
+});
+
+test('failed direct publication preserves a saved editable draft and does not repeat the request',async()=>{
+ let notes=[];const calls=[];const view=workspaceRuntime(async m=>{calls.push(m);if(m.type==='comment-list')return notes;if(m.type==='comment-save'){notes=[m.comment];return m.comment;}if(m.type==='github-publish-comment')throw new Error('Connect GitHub to publish');return[];});view.load();await new Promise(resolve=>setImmediate(resolve));view.get('newComment').click();view.get('commentText').value='Review';await view.get('postComment').click();assert.equal(notes.length,1);assert.equal(notes[0].remoteRefs.length,0);assert.equal(view.get('commentEditor').hidden,false);assert.match(view.get('commentStatus').textContent,/draft remains saved/);assert.equal(calls.filter(m=>m.type==='github-publish-comment').length,1);
+});
+
+test('GitLab cannot dispatch direct publication from the hidden editor controls',async()=>{
+ const calls=[];const view=workspaceRuntime(async m=>{calls.push(m);return[];},{provider:'gitlab',repository:'group/project'});view.load();await new Promise(resolve=>setImmediate(resolve));assert.equal(view.get('commentPublishSettings').hidden,true);view.get('newComment').click();view.get('commentText').value='Local review';await view.get('postComment').click();assert.equal(calls.some(m=>m.type==='github-publish-comment'),false);assert.match(view.get('commentStatus').textContent,/unavailable/);
+});
+
+test('net review drafts preserve the selected saved net name in formatted GitHub context',async()=>{
+ let notes=[];const view=workspaceRuntime(async m=>{if(m.type==='comment-list')return notes;if(m.type==='comment-save'){notes=[m.comment];return m.comment;}return[];});view.load();view.get('netList').children[0].click();view.get('newComment').click();view.get('commentText').value='Review this net';view.get('editorPreview').click();assert.match(view.get('editorMarkdown').textContent,/\| Net \| SIGNAL \|/);await view.get('saveComment').click();assert.equal(notes[0].anchor.kind,'net');assert.equal(notes[0].anchor.netName,'SIGNAL');
 });

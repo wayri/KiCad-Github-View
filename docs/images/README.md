@@ -39,3 +39,6 @@ Marble hardware is the work of its upstream authors at [BerkeleyLab/Marble](http
 - Linked models include STEP and `${CERN}` library references. The inspected repository tree has no supported WRL/GLB assets for these references. This renderer does not import STEP.
 
 Visual inspection confirms these views loaded in the local harness. It does not establish pixel equivalence to native KiCad or correctness of every saved construct. Native KiCad remains necessary for authoritative design validation.
+
+
+`integration/github-direct-discussion.jpg` and `github-formatted-review.jpg` capture the v0.11.8 editor in the same local synthetic PCB harness on 2026-10-04. They show a selected Discussion destination and Markdown preview with mocked category metadata. No account authorization or remote publication was performed.

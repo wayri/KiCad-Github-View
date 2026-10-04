@@ -37,7 +37,7 @@ const KiCadReviewComments = (() => {
   }
   function normalizeAnchor(anchor) {
     const result = normalizeScope(anchor);
-    for (const [name, limit] of [["uuid", 200], ["objectId", 200], ["reference", 100], ["kind", 80], ["variant", 100]]) {
+    for (const [name, limit] of [["uuid", 200], ["objectId", 200], ["reference", 100], ["netName", 500], ["kind", 80], ["variant", 100]]) {
       const value = optional(anchor[name], name, limit);
       if (value !== undefined) result[name] = value;
     }
@@ -101,7 +101,18 @@ const KiCadReviewComments = (() => {
     return { ...(threadType?{threadType}:{}), id: comment.id, text: comment.text.trim(), createdAt: comment.createdAt, updatedAt, severity, state, tags:[...new Set(tags.map(tag=>tag.trim()))],mentions,remoteRefs:refs,...(capture?{capture}:{}),
       anchor: normalizeAnchor(comment.anchor) };
   }
-  const escaped = (value) => String(value).replace(/[\\`*_{}\[\]()#+.!|<>]/g, "\\$&").replace(/\r?\n/g, " ");
+  const escaped = (value) => String(value).replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, " ")
+    .replace(/[\\`*_{}\[\]()#+.!|<>]/g, "\\$&").replace(/\r\n?|\n/g, " ");
+  const escapedComment = (value) => String(value).split(/\r\n?|\n/).map(escaped).join("  \n");
+  const tableCell = (value) => String(value).replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, " ")
+    .replace(/\\/g, "\\\\").replace(/[|`*_{}\[\]!~]/g, "\\$&").replace(/\r\n?|\n/g, " ")
+    .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  function revisionUrl(anchor) {
+    if ((anchor.provider || "github") !== "github") return null;
+    const ref = anchor.ref.split("/").map(encodeURIComponent).join("/");
+    const file = anchor.file.split("/").map(encodeURIComponent).join("/");
+    return `https://github.com/${anchor.repository}/blob/${ref}/${file}`;
+  }
   function encodeNote(note) {
     const bytes = new TextEncoder().encode(JSON.stringify(note));
     let binary = "";
@@ -117,25 +128,38 @@ const KiCadReviewComments = (() => {
   }
   function toMarkdown(value) {
     const note = validateComment(value), anchor = note.anchor;
-    const lines = ["### KiCad visual review note", "", `- Severity: ${note.severity[0].toUpperCase()}${note.severity.slice(1)}`,
-      ...(note.threadType?[`- Thread type: ${note.threadType==='discussion'?'Discussion':'Issue'}`]:[]),
-      `- State: ${escaped(note.state)}`,
-      `- Tags: ${note.tags.map(escaped).join(", ") || "none"}`,
-      `- Mentions: ${note.mentions.map((login) => `@${escaped(login)}`).join(", ") || "none"}`,
-      `- Created: ${note.createdAt}`,
-      `- Updated: ${note.updatedAt}`,
-      `- Repository: ${escaped(anchor.repository)}`,
-      `- Revision: ${escaped(anchor.ref)}`,
-      `- File: ${escaped(anchor.file)}`];
-    for (const [name, label] of [["uuid", "UUID"], ["objectId", "Object ID"],
-      ["reference", "Reference"], ["kind", "Kind"], ["variant", "Variant"]]) {
-      if (anchor[name]) lines.push(`- ${label}: ${escaped(anchor[name])}`);
+    const fileUrl = revisionUrl(anchor);
+    const fileValue = fileUrl ? `[${escaped(anchor.file)}](<${fileUrl}>)` : escaped(anchor.file);
+    let targetLabel = "Component / object";
+    let targetValue = [anchor.reference, anchor.kind && `(${anchor.kind})`].filter(Boolean).join(" ") || anchor.kind || "Drawing";
+    if (anchor.kind === "net") {
+      targetLabel = "Net";
+      targetValue = anchor.netName || anchor.reference || anchor.objectId || "Unnamed net";
     }
-    if (anchor.position) lines.push(`- Position (mm): ${anchor.position.x}, ${anchor.position.y}`);
-    if(anchor.area)lines.push(`- Area (mm): ${anchor.area.x}, ${anchor.area.y}; ${anchor.area.width} × ${anchor.area.height}`);
-    if(note.capture)lines.push('- Screenshot: stored in the Git review file; attach the downloaded PNG in the GitHub composer.');
+    const rows = [
+      ["Severity", note.severity[0].toUpperCase() + note.severity.slice(1)],
+      ["Review state", note.state],
+      ...(note.threadType ? [["Destination type", note.threadType === "discussion" ? "Discussion" : "Issue"]] : []),
+      [targetLabel, targetValue],
+      ...(anchor.position ? [["Position (mm)", `${anchor.position.x}, ${anchor.position.y}`]] : []),
+      ...(anchor.area ? [["Area (mm)", `${anchor.area.x}, ${anchor.area.y}; ${anchor.area.width} × ${anchor.area.height}`]] : []),
+      ["Repository", anchor.repository],
+      ["Revision", anchor.ref],
+      ["Design file", fileValue, true],
+      ...(anchor.variant ? [["Variant", anchor.variant]] : []),
+      ...(anchor.uuid ? [["KiCad UUID", anchor.uuid]] : []),
+      ...(anchor.objectId ? [["Object ID", anchor.objectId]] : []),
+      ["Tags", note.tags.length ? note.tags.join(", ") : "None"],
+      ["Mentions", note.mentions.length ? note.mentions.map(login => `@${login}`).join(", ") : "None"],
+      ["Created (UTC)", note.createdAt],
+      ["Updated (UTC)", note.updatedAt]
+    ];
+    const lines = ["## KiCad visual review", "", "### Review comment", "", escapedComment(note.text), "",
+      "### Design context", "", "| Detail | Value |", "| --- | --- |",
+      ...rows.map(([label, item, rawMarkdown]) => `| ${tableCell(label)} | ${rawMarkdown ? item : tableCell(item)} |`)];
+    if(note.capture)lines.push("", "A drawing screenshot is stored with the local review note. Download it and attach it manually if needed.");
     const {capture,...metadata}=note;
-    lines.push("", note.text, "", `<!-- kicad-review:v1 ${encodeNote(metadata)} -->`);
+    lines.push("", `<!-- kicad-review:v1 ${encodeNote(metadata)} -->`);
     return lines.join("\n");
   }
   function fromMarkdown(text) {

@@ -271,16 +271,28 @@ const KiCadGitHubReviewApi = (() => {
   async function readPolicy(repository, token) {
     const metadata = await policyGet(`/repos/${repository}`, token);
     const repo = metadata && policyJson(metadata);
-    if (repo?.private !== false || repo.full_name?.toLowerCase() !== repository.toLowerCase() ||
-        typeof repo.default_branch !== "string" || !repo.default_branch || repo.default_branch.length > 200) {
-      throw fail("Target repository is unavailable or is not public.", true);
+    if (typeof repo?.private !== "boolean" || repo.full_name?.toLowerCase() !== repository.toLowerCase() ||
+        typeof repo.default_branch !== "string" || !repo.default_branch || repo.default_branch.length > 200 || /[\x00-\x1f\x7f]/.test(repo.default_branch)) {
+      throw fail("Target repository is unavailable or account access could not be verified.", true);
     }
+    if (repo.private && !token) throw fail("Connect an account with private repository access to verify its comment policy.", true);
     const ref = repo.default_branch;
     // Public policy is read without the token so a fine-grained Issues token lacking
     // Contents permission cannot make an existing policy look like a missing file.
     const raw = await policyGet(`/repos/${repository}/contents/.kicad-review-policy.json?ref=${encodeURIComponent(ref)}`,
-      null, 128 * 1024, "application/vnd.github.raw+json");
-    if (!raw) return { ref, source: "default", policy: { mode: "all", allowlist: [] } };
+      repo.private ? token : null, 128 * 1024, "application/vnd.github.raw+json");
+    if (!raw) {
+      if (repo.private) {
+        // A private Contents 404 can hide missing Contents permission. Verify an
+        // accessible, complete root listing before treating policy as absent.
+        const listing = await policyGet(`/repos/${repository}/contents?ref=${encodeURIComponent(ref)}`, token, 4 * 1024 * 1024);
+        const entries = listing && policyJson(listing);
+        if (!Array.isArray(entries) || entries.length >= 1000 || entries.some(item => !item || typeof item.name !== "string" || typeof item.path !== "string" || item.path !== item.name || item.name.includes("/") || item.name === ".kicad-review-policy.json")) {
+          throw fail("Private repository comment policy could not be verified. Grant Contents read access; publication is blocked.", true);
+        }
+      }
+      return { ref, isPrivate: repo.private, source: "default", policy: { mode: "all", allowlist: [] } };
+    }
     let value = policyJson(raw);
     if (value?.encoding === "base64" && typeof value.content === "string") {
       if (value.content.length > 48 * 1024) throw fail("Repository comment policy is too large.", true);
@@ -290,13 +302,13 @@ const KiCadGitHubReviewApi = (() => {
           Uint8Array.from(binary, (character) => character.charCodeAt(0))));
       } catch { throw fail("Repository comment policy is malformed; publishing is blocked.", true); }
     }
-    return { ref, source: "repository", policy: validatePolicy(value) };
+    return { ref, isPrivate: repo.private, source: "repository", policy: validatePolicy(value) };
   }
   async function commentPolicyStatus(repository) {
     repoParts(repository);
     const configured = (await tokenStatus()).configured;
     const token = configured ? await getToken() : null;
-    const { ref, source, policy } = await readPolicy(repository, token);
+    const { ref, source, policy, isPrivate } = await readPolicy(repository, token);
     const result = { repository, ref, mode: policy.mode, source, allowed: false,
       reason: "Connect GitHub to publish comments." };
     if (!configured) return result;
@@ -306,12 +318,13 @@ const KiCadGitHubReviewApi = (() => {
       const value = profile && policyJson(profile);
       if (LOGIN.test(value?.login || "")) login = value.login;
     } catch (error) {
-      if (policy.mode !== "all") {
+      if (isPrivate || policy.mode !== "all") {
         result.reason = "Could not verify the signed-in GitHub account.";
         return result;
       }
     }
     if (login) result.login = login;
+    if (isPrivate && !login) { result.reason = "Could not verify the signed-in GitHub account."; return result; }
     if (policy.mode === "all") {
       result.allowed = true;
       result.reason = source === "default" ? "No repository comment policy; signed-in users may publish." :
