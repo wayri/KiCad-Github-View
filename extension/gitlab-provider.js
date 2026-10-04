@@ -45,7 +45,53 @@
   }
   async function branches(repository,ref,path){scope(repository,ref,path);const {value,next,link}=await json(`${endpoint(repository)}/branches?per_page=100&page=1`);if(!Array.isArray(value)||value.length>100)throw new Error('Invalid GitLab branch listing.');return {repository,branches:value.filter(item=>root.KiCadBrowserData.validRef(item?.name)&&SHA.test(item?.commit?.id)).map(item=>({name:item.name,sha:item.commit.id})),warnings:next||/rel="next"/.test(link)||value.length===100?['At most 100 branches shown; enter another branch manually.']:[]};}
   async function commits(repository,ref,path){const snapshot=await resolve(repository,ref,path),query=new URLSearchParams({ref_name:snapshot.sha,path,per_page:'50',page:'1'});const {value,next,link}=await json(`${endpoint(repository)}/commits?${query}`);if(!Array.isArray(value)||value.length>50)throw new Error('Invalid GitLab commit listing.');const clean=value=>typeof value==='string'?value.replace(/[\x00-\x1f\x7f]/g,' ').slice(0,300):'';return {repository,file:path,snapshotRef:snapshot.sha,commits:value.filter(item=>SHA.test(item?.id)).map(item=>({sha:item.id,message:clean(item.title),author:clean(item.author_name),date:clean(item.authored_date)})),warnings:next||/rel="next"/.test(link)||value.length===50?['At most 50 commits shown; enter an older SHA manually.']:[]};}
-  async function compare(repository,base,head,path){scope(repository,base,path);scope(repository,head,path);const from=await resolve(repository,base,path),to=await resolve(repository,head,path);const {value}=await json(`${endpoint(repository)}/compare?${new URLSearchParams({from:from.sha,to:to.sha,straight:'true'})}`);if(!Array.isArray(value.diffs)||value.diffs.length>3000)throw new Error('Invalid or oversized GitLab comparison.');const warnings=value.compare_timeout?['GitLab comparison timed out; changed-file discovery may be incomplete.']:[];const files=value.diffs.flatMap(item=>{const old=item.old_path,newPath=item.new_path;if(item.a_mode==='120000'||item.b_mode==='120000')return [];const a=root.KiCadBrowserData.validPath(old),b=root.KiCadBrowserData.validPath(newPath);if(a&&b)return [{file:newPath,oldFile:old,status:item.deleted_file?'removed':item.new_file?'added':item.renamed_file?'renamed':'modified'}];return [...(a?[{file:old,oldFile:old,status:'removed'}]:[]),...(b?[{file:newPath,oldFile:newPath,status:'added'}]:[])];});return {files,base:from.sha,head:to.sha,warnings};}
+  async function compareTrees(repository,base,head){
+    // A truncated tree cannot establish absence: never infer deletions from it.
+    const listings=await Promise.all([tree(repository,base),tree(repository,head)]);
+    if(listings.some(listing=>listing.warnings.length))throw new Error('GitLab comparison exceeded server limits and repository discovery is incomplete. Compare a smaller project or individual drawing revisions.');
+    const indexes=listings.map(listing=>{
+      const index=new Map();
+      for(const item of listing.entries){
+        if(!root.KiCadBrowserData.validPath(item.path))continue;
+        if(!SHA.test(item.id)||index.has(item.path))throw new Error('Invalid GitLab drawing identity in comparison tree.');
+        index.set(item.path,item.id);
+      }
+      return index;
+    });
+    const [before,after]=indexes,files=[],removed=[],added=[];
+    for(const [path,id] of before){
+      if(!after.has(path))removed.push({path,id});
+      else if(after.get(path)!==id)files.push({file:path,oldFile:path,status:'modified'});
+    }
+    for(const [path,id] of after)if(!before.has(path))added.push({path,id});
+    const group=items=>{const result=new Map();for(const item of items){if(!result.has(item.id))result.set(item.id,[]);result.get(item.id).push(item);}return result;};
+    const oldIds=group(removed),newIds=group(added),paired=new Set();
+    // Only unambiguous, byte-identical moves are established by blob identity.
+    for(const [id,old] of oldIds){const next=newIds.get(id);if(old.length===1&&next?.length===1){files.push({file:next[0].path,oldFile:old[0].path,status:'renamed'});paired.add(id);}}
+    for(const item of removed)if(!paired.has(item.id))files.push({file:item.path,oldFile:item.path,status:'removed'});
+    for(const item of added)if(!paired.has(item.id))files.push({file:item.path,oldFile:item.path,status:'added'});
+    files.sort((a,b)=>a.file.localeCompare(b.file)||a.status.localeCompare(b.status));
+    return files;
+  }
+  async function compare(repository,base,head,path){
+    scope(repository,base,path);scope(repository,head,path);
+    const from=await resolve(repository,base,path),to=await resolve(repository,head,path);
+    if(from.sha===to.sha)return {files:[],base:from.sha,head:to.sha,warnings:[]};
+    const {value}=await json(`${endpoint(repository)}/compare?${new URLSearchParams({from:from.sha,to:to.sha,straight:'true'})}`);
+    if(!Array.isArray(value.diffs)||value.diffs.length>3000)throw new Error('Invalid or oversized GitLab comparison.');
+    if(value.compare_timeout){
+      const files=await compareTrees(repository,from.sha,to.sha);
+      return {files,base:from.sha,head:to.sha,warnings:['GitLab exceeded comparison limits; changed drawings were recovered from complete commit trees. Only unique byte-identical moves are recognized as renames; edited or ambiguous moves appear as added/removed.']};
+    }
+    const files=value.diffs.flatMap(item=>{
+      if(!item||typeof item!=='object')throw new Error('Invalid GitLab comparison entry.');
+      const old=item.old_path,newPath=item.new_path;
+      const a=item.a_mode!=='120000'&&validPath(old)&&root.KiCadBrowserData.validPath(old),b=item.b_mode!=='120000'&&validPath(newPath)&&root.KiCadBrowserData.validPath(newPath);
+      if(a&&b)return [{file:newPath,oldFile:old,status:item.deleted_file?'removed':item.new_file?'added':item.renamed_file?'renamed':'modified'}];
+      return [...(a?[{file:old,oldFile:old,status:'removed'}]:[]),...(b?[{file:newPath,oldFile:newPath,status:'added'}]:[])];
+    });
+    return {files,base:from.sha,head:to.sha,warnings:[]};
+  }
   return {validRepository,validPath,file,resolve,directory,inventory,projectFile,search,branches,commits,compare,response,endpoint};
   }
   root.KiCadGitLabProvider={...forHost(),forHost};

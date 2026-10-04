@@ -46,6 +46,23 @@ test('private reads use only their host credential and pages cannot set credenti
  await h.send({type:'project',provider:'gitlab',repository:'group/private',ref:'main',file:'board.kicad_pcb'});
  assert.ok(h.calls.every(c=>new URL(c.url).origin==='https://gitlab.com'&&!c.init.headers?.Authorization));
 });
+
+test('self-hosted limited comparison recovers drawings through the authorized worker',async()=>{
+ const head='b'.repeat(40);
+ const h=harness((url,init)=>{
+  const parsed=new URL(url);
+  if(parsed.pathname.includes('/commits/'))return new Response(JSON.stringify({id:parsed.pathname.endsWith('/main')?SHA:head}));
+  if(parsed.pathname.endsWith('/compare'))return new Response(JSON.stringify({compare_timeout:true,diffs:[]}));
+  if(parsed.pathname.endsWith('/tree'))return new Response(JSON.stringify([{path:'sub/board.kicad_pcb',mode:'100644',type:'blob',id:parsed.searchParams.get('ref')===SHA?'1'.repeat(40):'2'.repeat(40)}]));
+ });
+ await h.add();await h.send({provider:'gitlab',host:HOST,type:'gitlab-auth-set',token:TOKEN},h.options);h.calls.length=0;
+ const result=await h.send({type:'design-changes',provider:'gitlab',host:HOST,repository:'group/private',base:'main',head:'feature',file:'sub/board.kicad_pcb'});
+ assert.equal(result.ok,true,result.error);assert.deepEqual(JSON.parse(JSON.stringify(result.result.files)),[{file:'sub/board.kicad_pcb',oldFile:'sub/board.kicad_pcb',status:'modified'}]);
+ assert.match(result.result.warnings[0],/complete commit trees/);
+ assert.equal(h.calls.filter(c=>new URL(c.url).pathname.endsWith('/tree')).length,2);
+ assert.ok(h.calls.every(c=>new URL(c.url).origin===HOST&&c.init.headers.Authorization==='Bearer '+TOKEN&&c.init.redirect==='error'&&(!c.init.method||c.init.method==='GET')));
+ assert.equal(JSON.stringify(result).includes(TOKEN),false);
+});
 test('issue publishing routes through GitLab policy and removing a host purges registration and credentials',async()=>{
  const h=harness();await h.add();await h.send({provider:'gitlab',host:HOST,type:'gitlab-auth-set',token:TOKEN},h.options);
  const comment={id:'private-note',text:'Review U1 clearance',createdAt:'2026-10-04T01:00:00Z',threadType:'issue',anchor:{provider:'gitlab',host:HOST,repository:'group/private',ref:SHA,file:'board.kicad_pcb'}};
