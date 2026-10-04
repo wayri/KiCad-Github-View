@@ -56,7 +56,7 @@
     function locateFinding(finding,itemIndex=0){
       selectedFinding=finding;selectedItem=itemIndex;const item=finding.items[itemIndex],target=item&&resolveItem(finding,item);
       if(!target?.file||!target.position){$('ruleStatus').textContent='This item has no resolved drawing location. Associate the report sheet or load project drawings to resolve its saved UUID.';options.redraw();renderRules();return;}
-      options.locateRule(target);$('ruleStatus').textContent=`${finding.type} · ${target.file} · ${target.position.x.toFixed(3)}, ${target.position.y.toFixed(3)} mm`;renderRules();options.redraw();
+      if(options.locateRule(target)===false){$('ruleStatus').textContent='Cannot jump: open the matching loaded drawing in 2D. Index the project if its sheet is missing.';options.redraw();renderRules();return;}$('ruleStatus').textContent=`${finding.type} · ${target.file} · ${target.position.x.toFixed(3)}, ${target.position.y.toFixed(3)} mm`;renderRules();options.redraw();
     }
     function renderRules(){
       const list=$('ruleResults');list.replaceChildren();const findings=visibleFindings();$('ruleCount').textContent=`${findings.length} saved findings${findings.length>200?' · first 200 listed':''}`;
@@ -82,7 +82,7 @@
       if(reports.length>=4)throw new Error('At most four reports per review session; clear reports first.');
       const report=KiCadRuleReports.parse(text,{file:$('ruleDrawing').value,reportPath:name,revision:options.ref});reports.push(report);selectedFinding=null;
       $('ruleProvenance').textContent=reports.map(r=>`${r.metadata.source} · ${r.metadata.date||'date unknown'} · KiCad ${r.metadata.kicadVersion||'unknown'} · imported ${r.metadata.reportPath}`).join(' | ')+'. Report revision is unverified; no ERC/DRC is run in the browser.';
-      $('ruleStatus').textContent=report.warnings.join(' ');renderSheetMappings();renderRules();options.redraw();
+      $('ruleStatus').textContent=report.warnings.join(' ');renderSheetMappings();renderRules();options.onRuleReportLoaded?.();options.redraw();
     }
     $('ruleReportFile').onchange=async()=>{const file=$('ruleReportFile').files?.[0];if(!file)return;try{if(file.size>4*1024*1024)throw new Error('Rule report exceeds 4 MiB.');addReport(await file.text(),file.name);}catch(error){$('ruleStatus').textContent=error.message;}finally{$('ruleReportFile').value='';}};
     $('loadRepoReport').onclick=async()=>{const ticket=++reportEpoch;$('loadRepoReport').disabled=true;$('ruleStatus').textContent='Loading saved repository report…';try{const result=await options.request('rule-report',{repository:options.repository,ref:options.ref,file:options.rootFile,reportPath:$('repoReportPath').value.trim()});if(!disposed&&ticket===reportEpoch)addReport(result.content,result.path);}catch(error){$('ruleStatus').textContent=error.message;}finally{$('loadRepoReport').disabled=false;}};

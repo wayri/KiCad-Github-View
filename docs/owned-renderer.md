@@ -24,3 +24,8 @@ Ctrl/Shift/Command-click drawing objects or Parts rows to add/remove group membe
 Selecting a sheet in the navigator highlights its loaded subtree; selecting a sheet symbol highlights that symbol and the subtree without leaving the parent. Groups retain other loaded-sheet members as you navigate. Groups are bounded to 200 objects. Reused hierarchy instances share their saved file view; missing files and ambiguous cross-highlight matches are reported rather than guessed.
 
 Linked schematic/layout viewers propagate groups of saved part identities and unambiguous saved nets. Each drawing shows its own geometry, and groups spanning schematic sheets remain available when those sheets are opened. This does not edit or route the design.
+## Floating check results
+
+Click ERC in a schematic toolbar or DRC in a PCB toolbar to open a floating results window. Load a saved KiCad JSON report from the repository or import a local file. Click a result or affected item to jump to its drawing location and show an arrow; Previous/Next controls navigate the list. Reports with unresolved locations require a drawing/sheet association or project indexing before navigation.
+
+Move the title bar, resize the corner, minimize or close the window. Closing preserves the loaded report and markers; Clear reports removes them. Each split pane has its own window. The browser displays saved native KiCad results and does not run live ERC/DRC; refresh reports using KiCad before using them as design evidence.

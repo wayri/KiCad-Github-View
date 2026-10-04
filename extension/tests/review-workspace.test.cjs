@@ -610,3 +610,35 @@ test('selecting a loaded sheet includes its descendant parts in one cross-highli
  const tree=view.get('sheetList').children.find(node=>node.classList.contains('sheet-tree'));tree.children[1].children.find(node=>node.classList.contains('sheet-open')).click();
  assert.deepEqual(Array.from(selections.at(-1).items,i=>i.reference),['R1','R2']);assert.match(view.get('reviewNotice').textContent,/2 loaded sheets/);
 });
+
+test('toolbar opens an independent movable, minimizable check window and explorer navigation preserves it',()=>{
+ const view=workspaceRuntime(undefined,{navigation:true});view.load();const win=view.get('ruleWindow'),header=view.get('ruleWindowHeader');
+ assert.equal(win.hidden,true);assert.equal(view.get('viewRuleChecks').textContent,'DRC');view.get('viewRuleChecks').click();
+ assert.equal(win.hidden,false);assert.equal(view.get('designNavigator').hidden,true);assert.equal(view.get('rulesPane').parentElement.id,'ruleWindow');assert.equal(win.attributes['aria-modal'],'false');
+ const before=parseFloat(win.style.left);header.dispatchEvent(uiEvent('keydown',{key:'ArrowRight'}));assert.equal(parseFloat(win.style.left),before+10);
+ header.dispatchEvent(uiEvent('pointerdown',{button:0,clientX:50,clientY:50,pointerId:5}));header.dispatchEvent(uiEvent('pointermove',{clientX:90,clientY:70,pointerId:5}));header.dispatchEvent(uiEvent('pointerup',{pointerId:5}));assert.equal(parseFloat(win.style.left),before+50);
+ view.get('minimizeRuleWindow').click();assert.equal(view.get('rulesPane').hidden,true);view.get('minimizeRuleWindow').click();assert.equal(view.get('rulesPane').hidden,false);
+ view.get('navParts').click();assert.equal(win.hidden,false);assert.equal(view.get('rulesPane').hidden,false);
+ view.get('closeRuleWindow').click();assert.equal(win.hidden,true);assert.equal(view.get('viewRuleChecks').attributes['aria-expanded'],'false');assert.equal(view.get('viewRuleChecks').focused,true);
+});
+test('floating DRC result rows jump to the drawing, retain report after closing and leave markers visible',async()=>{
+ const focused=[],view=workspaceRuntime(async()=>[],{navigation:true,focus:p=>focused.push(p)});view.load();view.get('viewRuleChecks').click();
+ const report={source:'board.kicad_pcb',date:'2026-10-05T00:00:00Z',kicad_version:'10.0.0',coordinate_units:'mm',violations:[{type:'clearance',description:'Track clearance',severity:'error',items:[{description:'Track',pos:{x:30,y:40}},{description:'Pad',pos:{x:31,y:40}}]}]};
+ view.get('ruleReportFile').files=[{size:300,name:'board-drc.json',text:async()=>JSON.stringify(report)}];await view.get('ruleReportFile').onchange();assert.equal(view.get('ruleReportSources').open,false);
+ view.get('ruleResults').children[0].children[0].click();assert.deepEqual(focused[0],{x:30,y:40});assert.ok(view.get('reviewOverlay').children.some(n=>n.attributes.d?.includes('L')));
+ view.get('nextRuleItem').click();assert.deepEqual(focused[1],{x:31,y:40});view.get('closeRuleWindow').click();assert.ok(view.get('commentPins').children.some(n=>n.className.includes('rule-marker')));
+ view.get('viewRuleChecks').click();assert.match(view.get('ruleCount').textContent,/1 saved/);view.get('clearRuleReports').click();assert.match(view.get('ruleCount').textContent,/0 saved/);
+});
+test('schematic ERC window jumps to an explicitly associated loaded subsheet and rejects unresolved locations',async()=>{
+ const files=[{path:'root.kicad_sch',content:'(kicad_sch (uuid root))'},{path:'child.kicad_sch',content:'(kicad_sch (uuid child))'}],opened=[];
+ const view=workspaceRuntime(undefined,{navigation:true,pcb:false,files,openSheet:(file,position)=>opened.push({file,position})});view.load();view.get('viewRuleChecks').click();assert.equal(view.get('viewRuleChecks').textContent,'ERC');
+ const report={source:'root.kicad_sch',date:'2026-10-05T00:00:00Z',kicad_version:'9.0.0',coordinate_units:'mm',sheets:[{uuid_path:'/',path:'/',violations:[{type:'pin_not_connected',description:'Unconnected pin',severity:'warning',items:[{description:'Pin',pos:{x:10,y:20}}]}]}]};
+ view.get('ruleDrawing').value='child.kicad_sch';view.get('ruleReportFile').files=[{size:300,name:'erc.json',text:async()=>JSON.stringify(report)}];await view.get('ruleReportFile').onchange();view.get('ruleResults').children[0].children[0].click();assert.equal(opened[0].file,'child.kicad_sch');assert.deepEqual(opened[0].position,{x:10,y:20});
+ view.get('clearRuleReports').click();delete report.sheets[0].violations[0].items[0].pos;view.get('ruleReportFile').files=[{size:300,name:'erc.json',text:async()=>JSON.stringify(report)}];await view.get('ruleReportFile').onchange();view.get('ruleResults').children[0].children[0].click();assert.equal(opened.length,1);assert.match(view.get('ruleStatus').textContent,/no resolved drawing location/);
+});
+
+test('check window reports blocked 3D navigation instead of claiming a successful drawing jump',async()=>{
+ const focused=[],view=workspaceRuntime(undefined,{navigation:true,focus:p=>focused.push(p)});view.load();
+ const report={source:'board.kicad_pcb',date:'2026-10-05T00:00:00Z',kicad_version:'10.0.0',coordinate_units:'mm',violations:[{type:'clearance',description:'Clearance',severity:'error',items:[{description:'Track',pos:{x:30,y:40}}]}]};
+ view.get('ruleReportFile').files=[{size:250,name:'drc.json',text:async()=>JSON.stringify(report)}];await view.get('ruleReportFile').onchange();view.workspace.setScene({setPopulation(){}});view.get('nextRule').click();assert.equal(focused.length,0);assert.match(view.get('ruleStatus').textContent,/Cannot jump.*2D/);
+});
