@@ -4,9 +4,11 @@ import re
 from pathlib import Path
 import tempfile
 import unittest
+from unittest.mock import patch
 
 from kicad_vizdiff.git import VizError, git
 from kicad_vizdiff.render import find_kicad
+from kicad_vizdiff.cli import main
 from scripts.ci import review
 from tests.fixtures import board, schematic
 
@@ -92,6 +94,20 @@ class ActionsReviewTests(unittest.TestCase):
         self.assertEqual(review(head, head, self.output, self.repo, renderer=lambda _: self.fail('Unexpected render')), 0)
         self.assertIn('No changed KiCad drawings', (self.output / 'index.html').read_text(encoding='utf-8'))
 
+    def test_installed_command_reviews_empty_range_without_renderer_and_forwards_options(self):
+        base, head = self.history()
+        with patch('kicad_vizdiff.cli.find_kicad', side_effect=AssertionError('No renderer needed')):
+            self.assertEqual(main(['review', '--repo', str(self.repo), '--base', head,
+                                   '--head', head, '--output', str(self.output)]), 0)
+        self.assertIn('No changed KiCad drawings', (self.output / 'index.html').read_text(encoding='utf-8'))
+        self.calls = []
+        self.assertEqual(review(base, head, self.output, self.repo, renderer=self.capture,
+                                layers='Edge.Cuts', theme='custom', kicad_cli='native-cli'), 0)
+        for args in self.calls:
+            self.assertEqual(args[args.index('--layers') + 1], 'Edge.Cuts')
+            self.assertEqual(args[args.index('--theme') + 1], 'custom')
+            self.assertEqual(args[args.index('--kicad-cli') + 1], 'native-cli')
+
     def test_native_reports_include_deleted_board_and_renamed_schematic(self):
         try:
             find_kicad()
@@ -103,7 +119,8 @@ class ActionsReviewTests(unittest.TestCase):
         (self.repo / 'old.kicad_sch').rename(self.repo / 'new.kicad_sch')
         (self.repo / 'removed.kicad_pcb').unlink()
         head = self.commit('Rename schematic and delete board')
-        self.assertEqual(review(base, head, self.output, self.repo), 0)
+        self.assertEqual(main(['review', '--repo', str(self.repo), '--base', base,
+                               '--head', head, '--output', str(self.output)]), 0)
         self.assertTrue((self.output / 'new.kicad_sch.html').stat().st_size > 10000)
         self.assertTrue((self.output / 'removed.kicad_pcb.html').stat().st_size > 10000)
         source = (self.output / 'new.kicad_sch.html').read_text(encoding='utf-8')

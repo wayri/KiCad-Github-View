@@ -36,6 +36,15 @@ def parser():
         sub.add_argument("--theme", help="Installed KiCad color theme name")
         sub.add_argument("--kicad-cli", help="Path to KiCad 9+ CLI")
         sub.add_argument("--open", action="store_true", help="Open report in the default browser")
+    review = subs.add_parser("review", help="Compare every changed schematic and PCB in a Git revision range")
+    review.add_argument("--repo", default=".", help="Git repository directory")
+    review.add_argument("--base", required=True, help="Base Git revision")
+    review.add_argument("--head", required=True, help="Head Git revision")
+    review.add_argument("--merge-base", action="store_true", help="Compare the merge base to head for PR review")
+    review.add_argument("--output", "-o", default="kicad-review", help="Report directory containing index.html and review.json")
+    review.add_argument("--layers", default=DEFAULT_LAYERS)
+    review.add_argument("--theme", help="Installed KiCad color theme name")
+    review.add_argument("--kicad-cli", help="Path to KiCad 9+ CLI")
     subs.add_parser("doctor", help="Check Git and KiCad CLI availability").add_argument("--kicad-cli")
     return p
 
@@ -43,6 +52,10 @@ def parser():
 def main(argv=None):
     args = parser().parse_args(argv)
     try:
+        if args.command == "review":
+            from .actions import review
+            return review(args.base, args.head, args.output, args.repo, args.merge_base,
+                          layers=args.layers, theme=args.theme, kicad_cli=args.kicad_cli)
         executable = find_kicad(args.kicad_cli)
         version = run([executable, "version"]).decode().strip()
         if int(version.split(".")[0]) < 9:

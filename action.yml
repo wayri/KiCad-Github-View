@@ -1,12 +1,12 @@
 name: KiCad Visual Review
-description: Render a KiCad schematic or PCB file and compare two Git revisions as a portable HTML report.
+description: Compare changed KiCad schematics and PCBs across Git revisions, or render one selected drawing.
 branding:
   icon: eye
   color: green
 inputs:
   file:
-    description: Repository-relative root .kicad_sch or .kicad_pcb path
-    required: true
+    description: Repository-relative drawing path; omit to review all changed schematics and PCBs
+    required: false
   base:
     description: Base Git revision
     required: true
@@ -20,13 +20,21 @@ inputs:
     description: Output HTML report path
     required: false
     default: kicad-review.html
+  output-directory:
+    description: Report directory when file is omitted
+    required: false
+    default: kicad-review
+  merge-base:
+    description: Compare the merge base to head for whole-repository PR review
+    required: false
+    default: 'false'
   layers:
     description: Comma-separated PCB layers
     required: false
     default: F.Cu,B.Cu,F.Silkscreen,B.Silkscreen,Edge.Cuts
 outputs:
   report:
-    description: Generated HTML report path
+    description: Generated HTML report path, or report directory for whole-repository review
     value: ${{ steps.render.outputs.report }}
 runs:
   using: composite
@@ -44,8 +52,28 @@ runs:
         KICAD_OUTPUT: ${{ inputs.output }}
         KICAD_LAYERS: ${{ inputs.layers }}
         KICAD_OLD_FILE: ${{ inputs.old-file }}
+        KICAD_DIRECTORY: ${{ inputs.output-directory }}
+        KICAD_MERGE_BASE: ${{ inputs.merge-base }}
       run: |
-        args=(diff "$KICAD_FILE" --base "$KICAD_BASE" --head "$KICAD_HEAD" --layers "$KICAD_LAYERS" --output "$KICAD_OUTPUT")
-        if [ -n "$KICAD_OLD_FILE" ]; then args+=(--old-file "$KICAD_OLD_FILE"); fi
+        if [[ "$KICAD_OUTPUT$KICAD_DIRECTORY" == *$'\n'* || "$KICAD_OUTPUT$KICAD_DIRECTORY" == *$'\r'* ]]; then
+          echo "Report paths must not contain newlines." >&2; exit 1
+        fi
+        if [ "$KICAD_MERGE_BASE" != true ] && [ "$KICAD_MERGE_BASE" != false ]; then
+          echo "merge-base must be true or false." >&2; exit 1
+        fi
+        if [ -n "$KICAD_FILE" ]; then
+          if [ "$KICAD_MERGE_BASE" = true ]; then
+            echo "merge-base is supported in whole-repository mode; omit file or supply resolved commits." >&2; exit 1
+          fi
+          args=(diff "$KICAD_FILE" --base "$KICAD_BASE" --head "$KICAD_HEAD" --layers "$KICAD_LAYERS" --output "$KICAD_OUTPUT")
+          if [ -n "$KICAD_OLD_FILE" ]; then args+=(--old-file "$KICAD_OLD_FILE"); fi
+          report="$KICAD_OUTPUT"
+        else
+          if [ -n "$KICAD_OLD_FILE" ]; then echo "old-file requires file." >&2; exit 1; fi
+          args=(review --base "$KICAD_BASE" --head "$KICAD_HEAD" --layers "$KICAD_LAYERS" --output "$KICAD_DIRECTORY")
+          if [ "$KICAD_MERGE_BASE" = true ]; then args+=(--merge-base); fi
+          report="$KICAD_DIRECTORY"
+        fi
+        # Keep the artifact path available even if an individual drawing fails.
+        printf 'report=%s\n' "$report" >> "$GITHUB_OUTPUT"
         kicad-vizdiff "${args[@]}"
-        echo "report=$KICAD_OUTPUT" >> "$GITHUB_OUTPUT"

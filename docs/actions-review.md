@@ -4,9 +4,9 @@ The optional runner workflow uses the installed KiCad CLI to export full schemat
 
 ## Review a pull request
 
-Use [the example workflow](../.github/workflows/visual-review.yml) in your hardware repository. It checks out full history, installs Python and KiCad 10, installs this tool, and runs `scripts/ci.py` with the PR base and head commits. The script resolves immutable commit IDs and compares the **merge base** to the PR head, excluding changes made later on the base branch. Full history must include both commits, including the fork head; missing commits fail visibly rather than substituting another revision.
+Use [the example workflow](../.github/workflows/visual-review.yml) in your hardware repository. It checks out full history, installs Python and KiCad 10, installs this tool, and invokes the composite Action in whole-repository mode with the PR base and head commits. The installed command resolves immutable commit IDs and compares the **merge base** to the PR head, excluding changes made later on the base branch. Full history must include both commits, including the fork head; missing commits fail visibly rather than substituting another revision.
 
-The example's `pip install .` assumes this tool's source is present. In a separate hardware repository, install this repository at a reviewed commit or use the composite action below, and supply your copy of `scripts/ci.py` if using its multi-file workflow. The supplied workflow's native tests verify this tool's own source checkout, not your hardware's electrical correctness.
+The example's `pip install .` and local `uses: ./` assume this tool's source is present. In a separate hardware repository, install this repository at a reviewed commit or use the composite action below, with `file` omitted for whole-repository review. The installed `kicad-vizdiff review` command discovers and renders every changed drawing; copying `scripts/ci.py` is no longer required. The supplied workflow's native tests verify this tool's own source checkout, not your hardware's electrical correctness.
 
 Reports include additions, modifications, deletions and detected renames. A renamed drawing uses its previous path at the base revision. Schematic pages with matching saved hierarchy identities remain paired after a filename or sheet-name change. Ambiguous page matches remain separate. Deleted drawings retain the old rendering and an empty new side.
 
@@ -23,8 +23,34 @@ To run the same multi-file comparison locally, install Git, Python and KiCad CLI
 ```sh
 python -m pip install -e .
 # Bash; use equivalent environment assignment in PowerShell.
-BASE_SHA=main HEAD_SHA=feature REVIEW_MERGE_BASE=true python scripts/ci.py
+kicad-vizdiff review --base main --head feature --merge-base --output kicad-review
 ```
+
+## Use the composite action for every changed drawing
+
+Development after v0.12.8: omit `file` to generate a report directory containing `index.html`, `review.json` and each changed schematic/PCB report. Install KiCad on the runner first. Keep both commits available in the checkout and pin the action to a reviewed commit in production:
+
+```yaml
+- uses: actions/checkout@v4
+  with:
+    fetch-depth: 0
+    persist-credentials: false
+- uses: wayri/KiCad-Github-View@main
+  id: review
+  with:
+    base: ${{ github.event.pull_request.base.sha }}
+    head: ${{ github.event.pull_request.head.sha }}
+    merge-base: 'true'
+    output-directory: kicad-review
+- uses: actions/upload-artifact@v4
+  if: ${{ always() && steps.review.outputs.report != '' }}
+  with:
+    name: kicad-visual-review
+    path: ${{ steps.review.outputs.report }}
+    if-no-files-found: ignore
+```
+
+The Action exposes the output directory before rendering so completed reports can be uploaded even when one drawing fails. The job still fails on rendering errors. `merge-base` defaults to `false` for direct branch/commit comparisons; choose `true` for PR changes. In whole-repository mode, use `output-directory`; `output` and `old-file` belong to single-drawing mode. Git discovers renamed paths automatically. A range without changed drawings needs no KiCad process and produces an explicit empty index.
 
 ## Use the composite action for one design
 
@@ -49,4 +75,4 @@ Install KiCad on the runner first, then check out your hardware repository with 
     path: ${{ steps.review.outputs.report }}
 ```
 
-The composite action compares the supplied revisions directly. Resolve the merge base yourself for PR semantics; `scripts/ci.py` does that automatically for the supplied PR workflow. `old-file` preserves the base-side path when a drawing was renamed. Missing drawings on only one side are allowed; a drawing missing on both sides fails.
+The composite action compares the supplied revisions directly. Resolve the merge base yourself for PR semantics; whole-repository mode does that when `merge-base` is true. The legacy `scripts/ci.py` wrapper remains available. `old-file` preserves the base-side path when a drawing was renamed. Missing drawings on only one side are allowed; a drawing missing on both sides fails.
