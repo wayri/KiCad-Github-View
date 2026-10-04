@@ -6,11 +6,10 @@ Download packages from [the v0.12.8 release](https://github.com/wayri/KiCad-Gith
 
 | Download | Use |
 | --- | --- |
-| `kicad-visual-review-extension-0.12.8.zip` | Inline GitHub/GitLab viewer for desktop Chromium browsers |
+| `kicad-visual-review-chrome-edge-brave-opera-vivaldi-chromium-0.12.8.zip` | Chrome, Edge, Brave, Opera, Vivaldi and other desktop Chromium browsers |
 | `kicad-visual-review-firefox-0.12.8.zip` | Unsigned Firefox 128+ development extension |
 | `kicad-visual-review-safari-0.12.8.zip` | Safari 16.4+ macOS development payload and conversion helper |
 | `kicad-visual-review-guides-0.12.8.zip` | Illustrated GitHub and GitLab guides and documentation |
-| `kicad-visual-review-step-source-0.12.8.zip` | Pinned STEP dependency sources, licenses and rebuild recipe |
 | `kicad-visual-review-step-source-0.12.8.zip` | Pinned STEP dependency sources, licenses and rebuild recipe |
 | `kicad-visual-review-vscode-0.12.8.vsix` | Read-only KiCad editors inside VS Code |
 | `kicad-visual-review-app-web-0.12.8.zip` | Optional standalone hosted viewer payload |

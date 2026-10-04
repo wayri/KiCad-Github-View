@@ -69,7 +69,7 @@ Properties and analytics come from the saved source revision. Missing settings a
 
 ## Install in Chrome or Edge
 
-1. Download **`kicad-visual-review-extension-0.12.8.zip`** from [Releases](https://github.com/wayri/KiCad-Github-View/releases/tag/v0.12.8). The GitHub **Source code** archives are not the prepared extension package.
+1. Download **`kicad-visual-review-chrome-edge-brave-opera-vivaldi-chromium-0.12.8.zip`** from [Releases](https://github.com/wayri/KiCad-Github-View/releases/tag/v0.12.8). The GitHub **Source code** archives are not the prepared extension package.
 2. Extract the ZIP into a permanent folder. Select the folder containing `manifest.json`, not the ZIP itself.
 3. Open `chrome://extensions` in Chrome/Chromium or `edge://extensions` in Edge.
 4. Enable **Developer mode**, select **Load unpacked**, and choose that folder.

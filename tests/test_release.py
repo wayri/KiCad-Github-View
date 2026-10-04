@@ -107,7 +107,7 @@ class ReleaseTests(unittest.TestCase):
     def test_release_and_install_notes_are_present_for_current_version(self):
         version = release.versions()
         install = (ROOT / 'docs/INSTALL.md').read_text(encoding='utf-8')
-        self.assertIn(f'extension-{version}.zip', install)
+        self.assertIn(f'chrome-edge-brave-opera-vivaldi-chromium-{version}.zip', install)
         self.assertIn(f'vscode-{version}.vsix', install)
         for name in ('ci.yml', 'release.yml'):
             workflow = (ROOT / '.github/workflows' / name).read_text(encoding='utf-8')

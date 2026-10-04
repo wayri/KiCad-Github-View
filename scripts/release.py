@@ -141,7 +141,7 @@ def build(output: Path, tag: str | None = None):
         raise ValueError("Release output must not follow symbolic links.")
     output = output.resolve()
     # Refuse any unknown/stale files so the publisher's wildcard cannot upload extras.
-    names = {f'kicad-visual-review-extension-{version}.zip', f'kicad-visual-review-vscode-{version}.vsix',
+    names = {f'kicad-visual-review-chrome-edge-brave-opera-vivaldi-chromium-{version}.zip', f'kicad-visual-review-vscode-{version}.vsix',
              f'kicad-visual-review-firefox-{version}.zip', f'kicad-visual-review-safari-{version}.zip',
              f'kicad-visual-review-guides-{version}.zip', 'FIREFOX.md', 'SAFARI.md',
              f'kicad-visual-review-app-web-{version}.zip', f'kicad-visual-review-github-app-{version}.zip',
@@ -151,7 +151,7 @@ def build(output: Path, tag: str | None = None):
     if output.exists() and any(p.name not in names or not p.is_file() or p.is_symlink() for p in output.iterdir()):
         raise ValueError('Release output has unexpected files; use a new empty output directory.')
     output.mkdir(parents=True, exist_ok=True)
-    chrome = module('package_extension').package(output=output / f'kicad-visual-review-extension-{version}.zip')
+    chrome = module('package_extension').package(output=output / f'kicad-visual-review-chrome-edge-brave-opera-vivaldi-chromium-{version}.zip')
     native = module('package_vscode').package(output=output / f'kicad-visual-review-vscode-{version}.vsix')
     evidence = audit_packages(chrome, native)
     module('package_step_source').package(output / f'kicad-visual-review-step-source-{version}.zip')

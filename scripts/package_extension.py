@@ -24,7 +24,7 @@ def package(root: Path = ROOT, output: Path | None = None) -> Path:
         path = source / name
         if not path.is_file() or path.is_symlink() or not path.resolve().is_relative_to(source.resolve()):
             raise ValueError(f'Manifest references an unsafe or missing file: {name}')
-    output = output or root / '.vizdiff' / f"kicad-visual-review-extension-{manifest['version']}.zip"
+    output = output or root / '.vizdiff' / f"kicad-visual-review-chrome-edge-brave-opera-vivaldi-chromium-{manifest['version']}.zip"
     output.parent.mkdir(parents=True, exist_ok=True)
     with zipfile.ZipFile(output, 'w', compression=zipfile.ZIP_DEFLATED, compresslevel=9) as archive:
         for name in sorted(files):
