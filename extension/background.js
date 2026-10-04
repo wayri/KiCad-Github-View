@@ -260,7 +260,7 @@ async function openViewerWindow(repository, ref, file, pairedFile) {
 }
 
 const ASSET_REF = /^[A-Za-z0-9._/-]{1,200}$/;
-const ASSET_SUFFIX = /\.(wrl|vrml|glb)$/i;
+const ASSET_SUFFIX = /\.(wrl|vrml|glb|step|stp)$/i;
 const ASSET_MAX_BYTES = 8 * 1024 * 1024;
 const assetBudgets = new Map();
 function validAssetRef(ref) {
@@ -342,7 +342,7 @@ async function githubAsset(repository, ref, file) {
       throw new Error("3D model exceeds the per-asset or revision retrieval budget.");
     }
     budget.bytes += decodedLength;
-    const mediaType = file.toLowerCase().endsWith(".glb") ? "model/gltf-binary" : "model/vrml";
+    const mediaType = /\.(step|stp)$/i.test(file)?"model/step":file.toLowerCase().endsWith(".glb") ? "model/gltf-binary" : "model/vrml";
     return { base64, mediaType };
   } finally { clearTimeout(timeout); }
 }

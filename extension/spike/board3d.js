@@ -4,6 +4,7 @@ import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 import { VRMLLoader } from "three/addons/loaders/VRMLLoader.js";
 import "../design-diff.js";
 import "../repo-models.js";
+import "../step-decoder.js";
 import { parseKicadBoard } from "@spike/boardParser";
 import { layerThreeColor } from "@spike/layerPalette";
 import { trackCapsuleDimensions } from "@spike/trackGeometry";
@@ -203,6 +204,7 @@ export function mountBoard3D(container, source, options = {}) {
   });
   const hiddenMatrix = new THREE.Matrix4().makeScale(0, 0, 0);
   const modelGroups = new Map(), loadedModelIndexes = new Set();
+  let stepClient=null;
   let population = board.components.map(() => true);
   function updateComponentVisibility() {
     board.components.forEach((_, index) => componentMesh?.setMatrixAt(index,
@@ -238,6 +240,17 @@ export function mountBoard3D(container, source, options = {}) {
     }
     const binary = atob(base64), bytes = Uint8Array.from(binary, char => char.charCodeAt(0));
     if (bytes.byteLength > 8 * 1024 * 1024) throw new Error("model asset exceeds 8 MiB");
+    if (["step","stp"].includes(entry.format)) {
+      stepClient ||=new globalThis.KiCadStepDecoder.Client(new URL("step-worker.js",location.href).href);
+      const meshes=await stepClient.decode(bytes), group=new THREE.Group();
+      for(const mesh of meshes){
+        const geometry=new THREE.BufferGeometry();geometry.setAttribute("position",new THREE.BufferAttribute(mesh.positions,3));geometry.setIndex(new THREE.BufferAttribute(mesh.index,1));
+        if(mesh.normals)geometry.setAttribute("normal",new THREE.BufferAttribute(mesh.normals,3));else geometry.computeVertexNormals();
+        const material=new THREE.MeshStandardMaterial({color:new THREE.Color(...mesh.color),roughness:.65,metalness:.1});
+        group.add(new THREE.Mesh(geometry,material));
+      }
+      return group;
+    }
     if (entry.format === "glb") {
       if (!glbIsSelfContained(bytes)) throw new Error("GLB has an external dependency or invalid header");
       return (await new GLTFLoader().parseAsync(bytes.buffer, "")).scene;
@@ -443,7 +456,7 @@ export function mountBoard3D(container, source, options = {}) {
         if (index != null && !population[index]) clearSelection();
       }
     },
-    dispose() { active = false; cancelAnimationFrame(frame); cancelAnimationFrame(layoutFrame); observer.disconnect(); controls.dispose();
+    dispose() { active = false; stepClient?.dispose(); cancelAnimationFrame(frame); cancelAnimationFrame(layoutFrame); observer.disconnect(); controls.dispose();
     const resources = new Set(); scene.traverse((object) => { if (object.geometry) resources.add(object.geometry);
       const materials = Array.isArray(object.material) ? object.material : object.material ? [object.material] : [];
       materials.forEach((item) => resources.add(item)); }); resources.forEach((item) => item.dispose()); renderer.dispose(); host.remove(); } };

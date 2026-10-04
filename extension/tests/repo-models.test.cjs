@@ -28,12 +28,12 @@ test('resolves only same-repository model references', () => {
 
 test('collects every supported model with per-model transforms and footprint side', () => {
   const { models, diagnostics } = collect(board, 'hardware/board.kicad_pcb');
-  assert.equal(models.length, 3);
-  assert.deepEqual(models.map(item => item.path), ['hardware/models/body.wrl', 'hardware/models/cap.glb', 'shared/back.vrml']);
+  assert.equal(models.length, 4);
+  assert.deepEqual(models.map(item => item.path), ['hardware/models/body.wrl', 'hardware/models/cap.glb', 'hardware/models/case.step', 'shared/back.vrml']);
   assert.deepEqual(models[0], { path: 'hardware/models/body.wrl', format: 'wrl', footprintId: 'part-a', reference: 'R1',
     footprint: { x: 100, y: 80, angle: 90, layer: 'F.Cu' }, offset: [1, 2, 3], scale: [1.5, 2, 1], rotate: [10, 20, 30] });
-  assert.deepEqual(models[2].footprint, { x: 150, y: 85, angle: 180, layer: 'B.Cu' });
-  assert.ok(diagnostics.some(message => message.includes('STEP')));
+  assert.deepEqual(models[3].footprint, { x: 150, y: 85, angle: 180, layer: 'B.Cu' });
+  assert.equal(diagnostics.length,0);assert.equal(modelPose(models[2],0,0,1.6).scale[0],1);
 });
 
 test('model pose follows KiCad millimetre offsets, footprint rotation, and bottom flip', () => {
@@ -45,7 +45,7 @@ test('model pose follows KiCad millimetre offsets, footprint rotation, and botto
   assert.equal(front.footprintAngle, Math.PI / 2);
   assert.deepEqual(front.scale, [3.81, 5.08, 2.54]);
   assert.ok(Math.abs(front.modelRotation[0] + 10 * Math.PI / 180) < 1e-10);
-  const back = modelPose({ ...models[2], offset: [1, 2, 3], rotate: [10, 20, 30] }, 100, 80, 1.6);
+  const back = modelPose({ ...models[3], offset: [1, 2, 3], rotate: [10, 20, 30] }, 100, 80, 1.6);
   assert.ok(Math.abs(back.position[0] - 49) < 1e-10);
   assert.ok(Math.abs(back.position[1] - -3) < 1e-10);
   assert.equal(back.position[2], -3.8);
@@ -58,8 +58,8 @@ test('rejects invalid transforms and hidden models without loading them', () => 
     .replace('(model "${KIPRJMOD}/models/cap.glb" (offset (xyz 0 0 0)))',
       '(model "${KIPRJMOD}/models/cap.glb" (hide yes))');
   const { models, diagnostics } = collect(source, 'hardware/board.kicad_pcb');
-  assert.equal(models.length, 1);
-  assert.equal(models[0].reference, 'U2');
+  assert.equal(models.length, 2);
+  assert.equal(models[1].reference, 'U2');
   assert.ok(diagnostics.some(message => message.includes('transform is invalid')));
 });
 

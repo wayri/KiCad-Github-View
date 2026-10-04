@@ -1,0 +1,1 @@
+Original hand-authored STEP Part 21 BREP fixture for this project: eight points, six oriented planar surfaces with square polygon boundaries, a closed solid shell, and explicit millimetre units define a 300 mm cube. The browser fixture scales it to 6 mm. No third-party CAD geometry is included.

@@ -682,7 +682,7 @@ test('3D model retrieval stays on the same GitHub revision and rejects unsafe pa
   assert.equal(result.result.mediaType, 'model/gltf-binary');
   assert.equal(urls[0].url, `https://api.github.com/repos/owner/board/contents/models/part.glb?ref=${'a'.repeat(40)}`);
   assert.equal(urls[0].init.headers.Accept, 'application/vnd.github.raw+json');
-  for (const file of ['../escape.glb', '/absolute.wrl', 'models/evil.step', 'models/../part.wrl',
+  for (const file of ['../escape.glb', '/absolute.wrl', 'models/evil.obj', 'models/../part.wrl',
     'models\\part.glb', 'https://evil.test/model.glb']) {
     assert.match((await message({ ...request, file })).error, /Invalid repository, revision, or 3D model path/);
   }

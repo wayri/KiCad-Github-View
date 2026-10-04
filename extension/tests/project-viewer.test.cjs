@@ -8,7 +8,7 @@ function runtime(fetchFile,inventoryFiles=null,inventoryError=null){
  KiCadGitHub:require('../parsing.js'),KiCadProjectSettings:require('../project-settings.js'),KiCadProjectSettingsUI:require('../project-settings-ui.js'),KiCadGerberRenderer:require('../gerber-renderer.js'),KiCadUIIcons:{decorate(){}},
  KiCadOwnedCanvas:{mount(host){mounted=new EventTarget();Object.assign(mounted,{canvas:new Element(),viewport:{camera:new(require('../owned-canvas.js').Camera)(800,600)},resize(){},zoom_to_board(){},draw(){this.renderPrimitives?.(this.canvas.getContext(),this.viewport.camera,this);},dispose(){}});mounted.canvas.width=800;mounted.canvas.height=600;return mounted;}},
  chrome:{runtime:{getURL:name=>name,sendMessage:async request=>{requests.push(request);if(request.type==='project-inventory'&&inventoryError)return{ok:false,error:inventoryError};if(request.type==='project-inventory')return{ok:true,result:{snapshotRef:'a'.repeat(40),warnings:[],files:inventoryFiles||[{path:'board.kicad_pro'},{path:'top.gbr'},{path:'bottom.gbr'}]}};try{return{ok:true,result:{path:request.file,content:await fetchFile(request.file)}};}catch(e){return{ok:false,error:e.message};}}}}};
- vm.runInNewContext(fs.readFileSync(path.join(__dirname,'../project-viewer.js'),'utf8'),context);return{get,requests,canvas:()=>mounted,handlers};
+ vm.runInNewContext(fs.readFileSync(path.join(__dirname,'../project-viewer.js'),'utf8'),context);return{get,requests,canvas:()=>mounted,handlers,bodyClasses};
 }
 const gerber='%FSLAX24Y24*%%MOMM*%%ADD10C,1*%D10*X010000Y020000D03*M02*';
 test('project GUI exposes saved settings and mounts the public canvas API for multiple Gerber layers',async()=>{
@@ -37,6 +37,13 @@ test('PCB selection opens one drawing preview; explicit setup retains saved laye
  await view.get('fileTree').children.find(n=>n.textContent==='board.kicad_pcb').onclick();
  assert.equal(view.get('overviewPanel').hidden,false);assert.equal(view.get('drawingPreview').children.filter(n=>n.src).length,1);assert.match(view.get('drawingPreview').children.find(n=>n.src).src,/file=board.kicad_pcb/);
  view.get('openDesign').onclick();await tick();assert.equal(view.get('drawingPreview').children.filter(n=>n.src).length,1);
+ assert.equal(view.bodyClasses.has('focus-drawing'),true);
+ const previewFrame=view.get('drawingPreview').children.find(n=>n.src);
+ const focusControl=view.get('drawingPreview').children[0].children[0];
+ assert.equal(focusControl.textContent,'Show project controls');assert.equal(focusControl.attributes['aria-pressed'],'true');
+ focusControl.onclick();assert.equal(view.bodyClasses.has('focus-drawing'),false);assert.equal(focusControl.textContent,'Focus drawing');assert.equal(focusControl.attributes['aria-pressed'],'false');
+ focusControl.onclick();assert.equal(view.bodyClasses.has('focus-drawing'),true);assert.equal(view.get('drawingPreview').children.find(n=>n.src),previewFrame,'focus toggles preserve drawing and draft state');
+
  view.get('projectTreeToggle').onclick();assert.equal(view.get('projectTreeToggle').attributes['aria-expanded'],'false');view.get('projectTreeToggle').onclick();assert.equal(view.get('projectTreeToggle').attributes['aria-expanded'],'true');
  view.get('drawingPreview').children[0].children.find(n=>n.textContent==='Close preview').onclick();assert.equal(view.get('drawingPreview').children.length,0);
  await view.get('loadBoardSetup').onclick();assert.equal(view.get('stackupPanel').hidden,false);assert.match(view.get('stackupContent').textContent,/1.6 mm/);assert.match(view.get('stackupContent').textContent,/F.Cu/);assert.match(view.get('stackupContent').textContent,/no saved physical stackup/);assert.doesNotMatch(view.get('stackupContent').textContent,/FR4/);

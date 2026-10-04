@@ -39,7 +39,9 @@ def package() -> None:
     for name in PAGES:
         shutil.copy2(SOURCE / name, OUTPUT / name)
     for name in ASSETS:
-        shutil.copy2(VENDOR / name, OUTPUT / "vendor" / name)
+        destination = OUTPUT / "vendor" / name
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(VENDOR / name, destination)
     for name in RENDERERS:
         shutil.copy2(RENDERER / name, OUTPUT / name)
     with zipfile.ZipFile(ARCHIVE, "w", compression=zipfile.ZIP_DEFLATED) as archive:

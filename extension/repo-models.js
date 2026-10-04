@@ -62,7 +62,7 @@
         const path = resolveModelPath(boardPath, rawPath);
         if (!path) { warn(`${ref}: model path is not a repository-relative file: ${String(rawPath).slice(0, 100)}`); continue; }
         const extension = /\.([a-z\d]+)$/i.exec(path)?.[1]?.toLowerCase();
-        if (!["wrl", "vrml", "glb"].includes(extension)) {
+        if (!["wrl", "vrml", "glb", "step", "stp"].includes(extension)) {
           warn(`${ref}: ${extension === "step" || extension === "stp" ? "STEP" : "model format"} is not supported in the browser: ${path}`);
           continue;
         }
@@ -87,7 +87,7 @@
     const angle = entry.footprint.angle * Math.PI / 180;
     const [offsetX, offsetY, offsetZ] = entry.offset;
     const localY = back ? -offsetY : offsetY;
-    const unitScale = entry.format === "glb" ? 1 : 2.54;
+    const unitScale = ["glb","step","stp"].includes(entry.format) ? 1 : 2.54;
     return {
       position: [entry.footprint.x - centerX + offsetX * Math.cos(angle) - localY * Math.sin(angle),
         centerY - entry.footprint.y + offsetX * Math.sin(angle) + localY * Math.cos(angle),

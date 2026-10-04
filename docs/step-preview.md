@@ -1,0 +1,11 @@
+# Repository STEP preview (development)
+
+The browser development build resolves saved relative or mapped STEP/STP links and tessellates them in a dedicated worker with Open CASCADE WebAssembly. Models are fetched through the same authenticated, bounded repository asset route as WRL/GLB, not from arbitrary URLs. Saved footprint translation, rotation, scale, population and board-side transforms apply to the resulting geometry.
+
+Limits: 8 MiB per model, 30 seconds per conversion, 512 meshes and 500,000 vertices/triangles total. The worker can be terminated on timeout or viewer closure; the input/output limits do not establish a strict bound on temporary native tessellation memory. All output coordinates are millimetres. Mesh-level colors are retained; individual face colors are not yet preserved. Missing/unsupported models retain explicitly identified proxies. Local model paths and custom environment variables require repository mappings.
+
+Verification on 2026-10-04: the original hand-authored 300 mm cube fixture produces 12 triangles with 0–300 mm bounds on each axis. The actual browser/SPIKE worker path loads its scaled 6 mm repository model, reports real geometry for 1/1 footprints, and logs no errors under `script-src 'self' 'wasm-unsafe-eval'; worker-src 'self'`. Transport was mocked locally; this does not prove an installed extension/private-host workflow or final visual fidelity. WebGL screenshot capture was unavailable during the earlier check.
+
+Marble's retained repository tree contains no STEP/STP/WRL assets. Its `${CERN}` paths remain unresolved; this decoder does not make those absent libraries available. Native VS Code STEP remains pending; its asset bridge and worker policy do not yet support this path. Firefox/Safari package generation is verified separately from their installed runtime acceptance.
+
+Distribution: unmodified importer 0.0.23, pinned source revisions and binary hashes are recorded in [the dependency notice](../extension/vendor/occt/NOTICE.md). The release builder includes a checksum-verified corresponding-source companion. The upstream rebuild recipe is preserved, but a reproducible independent rebuild remains unverified. This development work has not been published as a new release yet.

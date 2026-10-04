@@ -9,7 +9,7 @@ from kicad_vizdiff.app_assets import RENDERER_ASSETS, VENDOR_ASSETS, VIEWER_PAGE
 names = {'LICENSING.md', 'THIRD-PARTY-NOTICES.md', 'docs/INSTALL.md', 'docs/COMMENTS.md', 'docs/GIT-HOSTS.md', 'README.md', 'pyproject.toml', 'Dockerfile.github-app', '.dockerignore',
          'compose.github-app.yml', '.github/app-manifest.example.json',
          'docs/github-app.md', 'scripts/configure_github_app.py',
-         'scripts/package_app_web.py', 'scripts/package_github_app.py'}
+         'scripts/package_app_web.py', 'scripts/package_github_app.py', 'scripts/package_step_source.py'}
 for file in (root / 'kicad_vizdiff').glob('*.py'):
     if file.is_file() and not file.is_symlink():
         names.add(file.relative_to(root).as_posix())

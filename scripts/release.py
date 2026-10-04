@@ -145,7 +145,7 @@ def build(output: Path, tag: str | None = None):
              f'kicad-visual-review-firefox-{version}.zip', f'kicad-visual-review-safari-{version}.zip',
              f'kicad-visual-review-guides-{version}.zip', 'FIREFOX.md', 'SAFARI.md',
              f'kicad-visual-review-app-web-{version}.zip', f'kicad-visual-review-github-app-{version}.zip',
-             'SHA256SUMS.txt', 'RELEASE-NOTES.md', 'INSTALL.md', 'COMMENTS.md', 'GIT-HOSTS.md', 'THIRD-PARTY-NOTICES.md', 'release-manifest.json'}
+             f'kicad-visual-review-step-source-{version}.zip', 'SHA256SUMS.txt', 'RELEASE-NOTES.md', 'INSTALL.md', 'COMMENTS.md', 'GIT-HOSTS.md', 'THIRD-PARTY-NOTICES.md', 'release-manifest.json'}
     if output.is_symlink():
         raise ValueError('Release output must not be a symbolic link.')
     if output.exists() and any(p.name not in names or not p.is_file() or p.is_symlink() for p in output.iterdir()):
@@ -154,6 +154,7 @@ def build(output: Path, tag: str | None = None):
     chrome = module('package_extension').package(output=output / f'kicad-visual-review-extension-{version}.zip')
     native = module('package_vscode').package(output=output / f'kicad-visual-review-vscode-{version}.vsix')
     evidence = audit_packages(chrome, native)
+    module('package_step_source').package(output / f'kicad-visual-review-step-source-{version}.zip')
     for target in ('firefox', 'safari'):
         builder = module(f'package_{target}')
         path = builder.package(output=output / f'kicad-visual-review-{target}-{version}.zip')
