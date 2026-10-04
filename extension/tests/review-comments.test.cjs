@@ -156,3 +156,11 @@ test('Issue and Discussion types survive sidecar, export and GitHub marker round
  for(const threadType of ['issue','discussion']){const value={...note,threadType};assert.equal(comments.parseSidecar(comments.serializeSidecar([value]))[0].threadType,threadType);assert.equal(comments.parseComments(comments.exportComments([value]))[0].threadType,threadType);assert.equal(comments.fromMarkdown(comments.toMarkdown(value))[0].threadType,threadType);}
  assert.equal(comments.validateComment(note).threadType,undefined);assert.throws(()=>comments.validateComment({...note,threadType:'pull-request'}),/thread type/);
 });
+
+ test('review filters group closed states and sort severity and dates without mutating notes',()=>{
+ const states=['open','resolved','skipped','wont-fix'],severities=['minor','critical','major','info'];const notes=states.map((state,i)=>({...sample(),id:state,state,severity:severities[i],createdAt:`2026-10-0${i+1}T00:00:00Z`,updatedAt:`2026-10-0${4-i}T00:00:00Z`})),before=JSON.stringify(notes);
+ const ids=f=>comments.sortAndFilter(notes,f).map(n=>n.id);
+ assert.deepEqual(ids({state:'closed'}),['resolved','wont-fix']);assert.deepEqual(ids({state:'open'}),['open']);assert.deepEqual(ids({state:'skipped'}),['skipped']);assert.deepEqual(ids({state:'closed',severity:'info'}),['wont-fix']);
+ assert.deepEqual(ids({order:'severity'}),['resolved','skipped','open','wont-fix']);assert.deepEqual(ids({order:'severity-lowest'}),['wont-fix','open','skipped','resolved']);assert.deepEqual(ids({order:'newest'}),['wont-fix','skipped','resolved','open']);assert.deepEqual(ids({order:'oldest'}),['open','resolved','skipped','wont-fix']);assert.deepEqual(ids({order:'updated'}),['open','resolved','skipped','wont-fix']);assert.deepEqual(ids({order:'updated-oldest'}),['wont-fix','skipped','resolved','open']);assert.equal(JSON.stringify(notes),before);
+ assert.deepEqual(ids({state:'closed',read:'read'},()=>undefined),[]);assert.throws(()=>ids({state:'unknown'}),/filter/);
+ });

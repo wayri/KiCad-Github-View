@@ -171,7 +171,11 @@
     const addHelp=make("p","Choose the selected object, a point or an area to add a comment. Your draft stays here when you switch tabs or collapse this sidebar.");addHelp.className="hint";
     addPane.append(addHelp,commentTools,$("commentEditor"));
     const control=id=>$(id).closest?.("label")||$(id);
-    const filterGroup=collapsible("Filters and order",[...['severityFilter','stateFilter','readFilter','commentSort'].map(control),$("commentSearch"),$("nextUnread")],false,"comment-filters");
+    const filterFields=make('div');filterFields.className='comment-filter-fields';filterFields.append(...['stateFilter','severityFilter','readFilter','commentSort'].map(control));
+    const resetFilters=button('Reset filters',()=>{for(const id of ['stateFilter','severityFilter','readFilter'])$(id).value='all';$('commentSort').value='severity';$('commentSearch').value='';unreadCursor=-1;renderComments();draw();});resetFilters.id='resetCommentFilters';
+    const filterActions=make('div');filterActions.className='comment-tools';filterActions.append($('nextUnread'),resetFilters);
+    const filterHelp=make('p','Closed includes Resolved and Won’t fix review notes. GitHub/GitLab thread status is separate.');filterHelp.className='hint';
+    const filterGroup=collapsible('Filter and sort comments',[filterFields,$('commentSearch'),filterActions,filterHelp],true,'comment-filters');filterGroup.id='commentFilters';
     const storageGroup=collapsible("Import and export",[$("exportComments"),$("importComments"),$("commentFile")],false,"comment-storage");
     const collaborationGroup=collapsible(`${providerName} collaboration`,[$("githubPane")],false,"collaboration");collaborationGroup.id="commentCollaboration";$("githubPane").hidden=false;
     const commentHelp=$("commentsPane").querySelector?.("p.hint");

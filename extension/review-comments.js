@@ -256,22 +256,22 @@ const KiCadReviewComments = (() => {
   function sortAndFilter(notes, filters = {}, readAt = () => undefined) {
     const severity = filters.severity || "all", state = filters.state || "all", read = filters.read || "all";
     const order = filters.order || "severity", query = String(filters.query || "").trim().toLowerCase().slice(0, 2000);
-    if (!["all",...SEVERITIES].includes(severity) || !["all",...STATES].includes(state) ||
-      !["all","read","unread"].includes(read) || !["severity","newest","oldest","updated"].includes(order)) {
+    if (!["all",...SEVERITIES].includes(severity) || !["all","closed",...STATES].includes(state) ||
+      !["all","read","unread"].includes(read) || !["severity","severity-lowest","newest","oldest","updated","updated-oldest"].includes(order)) {
       throw new Error("Invalid comment filter.");
     }
     const rank = {critical:0,major:1,minor:2,info:3};
     return [...notes].filter((note) => {
       const unread = isUnread(note, readAt(note));
       return (severity === "all" || (note.severity || "info") === severity) &&
-        (state === "all" || (note.state || "open") === state) &&
+        (state === "all" || (state === "closed" ? ["resolved","wont-fix"].includes(note.state) : (note.state || "open") === state)) &&
         (read === "all" || (read === "unread") === unread) &&
         (!query || [note.text,note.anchor?.reference,...(note.tags || []),...(note.mentions || [])]
           .join(" ").toLowerCase().includes(query));
     }).sort((a,b) => {
-      if (order === "severity") return (rank[a.severity || "info"] ?? 4) - (rank[b.severity || "info"] ?? 4) ||
+      if (order === "severity" || order === "severity-lowest") return (order === "severity" ? 1 : -1) * ((rank[a.severity || "info"] ?? 4) - (rank[b.severity || "info"] ?? 4)) ||
         Date.parse(b.createdAt) - Date.parse(a.createdAt);
-      if (order === "updated") return Date.parse(b.updatedAt || b.createdAt) - Date.parse(a.updatedAt || a.createdAt);
+      if (order === "updated" || order === "updated-oldest") return (order === "updated" ? 1 : -1) * (Date.parse(b.updatedAt || b.createdAt) - Date.parse(a.updatedAt || a.createdAt));
       return order === "newest" ? Date.parse(b.createdAt) - Date.parse(a.createdAt) :
         Date.parse(a.createdAt) - Date.parse(b.createdAt);
     });
