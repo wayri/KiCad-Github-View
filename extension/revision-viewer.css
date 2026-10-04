@@ -156,3 +156,5 @@ body .object-row.selected{background:var(--selected);color:var(--text);border:1p
 .mention-suggestions{display:grid;gap:4px;max-height:210px;overflow:auto}.mention-suggestion{justify-content:flex-start;white-space:normal;text-align:left;font-size:11px}#mentionSource,#mentionQuery{margin:5px 0}
 
 .comment-filter-fields{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:0 8px}.comment-filter-fields select{font-size:11px}#commentFilters .comment-tools{margin:8px 0}
+
+.comment-category-tabs{display:flex;gap:4px;margin-bottom:10px}.comment-category-tabs button{flex:1;min-width:0;font-size:11px;padding:5px 3px;white-space:normal}

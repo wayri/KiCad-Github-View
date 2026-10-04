@@ -253,17 +253,28 @@ const KiCadReviewComments = (() => {
     return typeof receipt !== "string" || !Number.isFinite(Date.parse(receipt)) ||
       Date.parse(receipt) < Date.parse(note.updatedAt || note.createdAt);
   }
+  function commentType(note) {
+    // Remote GitHub readback knows the actual conversation type, including old markers.
+    const source=note?.github?.source;
+    if(note?.anchor?.provider!=='gitlab'&&typeof source==='string'){
+      if(source.startsWith('discussion'))return 'discussion';
+      if(source.startsWith('issue')||source.startsWith('pull'))return 'issue';
+    }
+    if(['issue','discussion'].includes(note?.threadType))return note.threadType;
+    const kinds=[...new Set((note?.remoteRefs||[]).map(ref=>ref.kind).filter(kind=>['issue','discussion'].includes(kind)))];
+    return kinds.length===1?kinds[0]:null;
+  }
   function sortAndFilter(notes, filters = {}, readAt = () => undefined) {
-    const severity = filters.severity || "all", state = filters.state || "all", read = filters.read || "all";
+    const severity = filters.severity || "all", state = filters.state || "all", read = filters.read || "all", threadType=filters.threadType||"all";
     const order = filters.order || "severity", query = String(filters.query || "").trim().toLowerCase().slice(0, 2000);
-    if (!["all",...SEVERITIES].includes(severity) || !["all","closed",...STATES].includes(state) ||
+    if (!["all","issue","discussion"].includes(threadType) || !["all",...SEVERITIES].includes(severity) || !["all","closed",...STATES].includes(state) ||
       !["all","read","unread"].includes(read) || !["severity","severity-lowest","newest","oldest","updated","updated-oldest"].includes(order)) {
       throw new Error("Invalid comment filter.");
     }
     const rank = {critical:0,major:1,minor:2,info:3};
     return [...notes].filter((note) => {
       const unread = isUnread(note, readAt(note));
-      return (severity === "all" || (note.severity || "info") === severity) &&
+      return (threadType === "all" || commentType(note) === threadType) && (severity === "all" || (note.severity || "info") === severity) &&
         (state === "all" || (state === "closed" ? ["resolved","wont-fix"].includes(note.state) : (note.state || "open") === state)) &&
         (read === "all" || (read === "unread") === unread) &&
         (!query || [note.text,note.anchor?.reference,...(note.tags || []),...(note.mentions || [])]
@@ -277,7 +288,7 @@ const KiCadReviewComments = (() => {
     });
   }
   return { normalizeScope, normalizeAnchor, validateComment, validateAttachment, toMarkdown, fromMarkdown, parseSidecar, serializeSidecar,
-    exportComments, parseComments, receiptKey, isUnread, sortAndFilter };
+    exportComments, parseComments, receiptKey, isUnread, commentType, sortAndFilter };
 })();
 
 if (typeof globalThis === "object") globalThis.KiCadReviewComments = KiCadReviewComments;

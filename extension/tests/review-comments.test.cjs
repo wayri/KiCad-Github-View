@@ -164,3 +164,9 @@ test('Issue and Discussion types survive sidecar, export and GitHub marker round
  assert.deepEqual(ids({order:'severity'}),['resolved','skipped','open','wont-fix']);assert.deepEqual(ids({order:'severity-lowest'}),['wont-fix','open','skipped','resolved']);assert.deepEqual(ids({order:'newest'}),['wont-fix','skipped','resolved','open']);assert.deepEqual(ids({order:'oldest'}),['open','resolved','skipped','wont-fix']);assert.deepEqual(ids({order:'updated'}),['open','resolved','skipped','wont-fix']);assert.deepEqual(ids({order:'updated-oldest'}),['wont-fix','skipped','resolved','open']);assert.equal(JSON.stringify(notes),before);
  assert.deepEqual(ids({state:'closed',read:'read'},()=>undefined),[]);assert.throws(()=>ids({state:'unknown'}),/filter/);
  });
+
+ test('issue and discussion categories map remote conversations and retain unassigned legacy notes only in all',()=>{
+ const notes=[{...sample(),id:'issue',threadType:'issue',state:'resolved'},{...sample(),id:'discussion',threadType:'discussion',state:'open'},{...sample(),id:'legacy'},{...sample(),id:'old-discussion',github:{source:'discussion-comment'}},{...sample(),id:'old-issue',remoteRefs:[{kind:'issue'}]}];
+ assert.equal(comments.commentType(notes[2]),null);assert.equal(comments.commentType(notes[3]),'discussion');assert.equal(comments.commentType({...notes[0],github:{source:'discussion-comment'}}),'discussion');assert.equal(comments.commentType({remoteRefs:[{kind:'issue'},{kind:'discussion'}]}),null);
+ assert.deepEqual(comments.sortAndFilter(notes,{threadType:'issue'}).map(n=>n.id),['issue','old-issue']);assert.deepEqual(comments.sortAndFilter(notes,{threadType:'discussion'}).map(n=>n.id),['discussion','old-discussion']);assert.deepEqual(comments.sortAndFilter(notes,{threadType:'issue',state:'closed'}).map(n=>n.id),['issue']);assert.equal(comments.sortAndFilter(notes,{threadType:'all'}).length,5);assert.throws(()=>comments.sortAndFilter(notes,{threadType:'chat'}),/filter/);
+ });

@@ -118,3 +118,10 @@ In the comment editor, expand **Mention people**. Use **Contributors and assigne
 ![Comment editor with contributor picker and a selected mention](../images/integration/comment-mention-picker.png)
 
 This image uses the real viewer with mocked account suggestions; it is not a live GitHub publication. Comment actions automatically restore controls from Focus view and expand short panes so the editor remains accessible.
+
+## Issue and Discussion categories
+
+Open **Comments** and select **Issues** for actionable tasks or **Discussions** for design conversations. Each category has **Add comment** and **View comments** tabs. New notes inherit the selected category, and the editor offers the matching new/existing GitHub destination. New Discussions also require a GitHub discussion category. **All** includes both and older unassigned notes. State, severity and date filters apply within the selected category; linked conversations and drawing pins follow it as well. Browsing categories does not change an existing draft’s type or publish anything. Use the editor’s **Thread type** selector to explicitly change its category, then save or post it.
+![Issue and Discussion categories with a new Discussion draft](../../images/integration/comment-categories.png)
+
+The screenshot uses synthetic local review notes and mocked repository transport; it demonstrates the UI, not a live GitHub post.

@@ -150,7 +150,7 @@
     // Move the shared template's existing controls, retaining their IDs and handlers.
     // This also applies to project, paired and VS Code viewers without copied markup.
     const workspaceElement=$("reviewWorkspace"), sidebarState={properties:false,comments:false,navigator:false};
-    const sidebarWidths={properties:300,comments:340,navigator:260};let activeSidebar="properties",commentTab="view";
+    const sidebarWidths={properties:300,comments:340,navigator:260};let activeSidebar="properties",commentTab="view",commentCategory="all";
     const sectionState=new Map(),resizeCleanups=[],sidebarHeights={properties:null,comments:null,navigator:null},tallSidebars=new Map(),expandedSidebars=new Set();
     function collapsible(title,nodes,open=true,key=title){
       const details=make("details");details.className="sidebar-section";details.open=sectionState.has(key)?sectionState.get(key):open;
@@ -163,6 +163,17 @@
     $("closeInspector").setAttribute("aria-label","Collapse properties sidebar");
     $("propertiesPane").hidden=false;
     const legacyControls=make("div");legacyControls.hidden=true;legacyControls.append($("showProperties"),$("showComments"),$("showGitHub"));
+    const categoryTabs=make('nav');categoryTabs.id='commentCategoryTabs';categoryTabs.className='comment-category-tabs';categoryTabs.setAttribute('role','tablist');categoryTabs.setAttribute('aria-label','Issue and discussion comment categories');
+    const categoryContent=make('section');categoryContent.id='commentCategoryContent';categoryContent.setAttribute('role','tabpanel');categoryContent.setAttribute('aria-labelledby','commentCategoryAll');
+    const categoryButtons=new Map();
+    for(const [type,label]of [['issue','Issues'],['discussion','Discussions'],['all','All']]){const node=button(label,()=>setCommentCategory(type));node.id='commentCategory'+type[0].toUpperCase()+type.slice(1);node.setAttribute('role','tab');node.setAttribute('aria-controls',categoryContent.id);node.setAttribute('aria-selected',String(type==='all'));node.tabIndex=type==='all'?0:-1;categoryButtons.set(type,node);categoryTabs.append(node);}
+    function setCommentCategory(type,syncDefault=true){if(!categoryButtons.has(type))return;commentCategory=type;unreadCursor=-1;
+      for(const [name,node]of categoryButtons){node.setAttribute('aria-selected',String(name===type));node.tabIndex=name===type?0:-1;}categoryContent.setAttribute('aria-labelledby',categoryButtons.get(type).id);
+      // Browsing another category must never silently change an existing draft.
+      if(syncDefault&&type!=='all'&&!editor){$('githubCommentType').value=type;chooseCommentType();}
+      renderComments();draw();
+    }
+    categoryTabs.addEventListener('keydown',event=>{if(!['ArrowLeft','ArrowRight','Home','End'].includes(event.key))return;event.preventDefault();event.stopPropagation();const types=[...categoryButtons.keys()],at=types.indexOf(commentCategory),type=event.key==='Home'?types[0]:event.key==='End'?types.at(-1):types[(at+(event.key==='ArrowLeft'?-1:1)+types.length)%types.length];setCommentCategory(type);categoryButtons.get(type).focus();});
     const commentTabs=make("div");commentTabs.className="comment-subtabs";commentTabs.setAttribute("role","tablist");commentTabs.setAttribute("aria-label","Comments");
     const addTab=button("Add comment",()=>showCommentTab("add")),viewTab=button("View comments",()=>showCommentTab("view"));
     const addPane=make("section"),viewPane=make("section");addPane.id="addCommentPane";viewPane.id="viewCommentsPane";
@@ -180,7 +191,7 @@
     const collaborationGroup=collapsible(`${providerName} collaboration`,[$("githubPane")],false,"collaboration");collaborationGroup.id="commentCollaboration";$("githubPane").hidden=false;
     const commentHelp=$("commentsPane").querySelector?.("p.hint");
     viewPane.append(...[commentHelp,filterGroup,$("commentList"),storageGroup,collaborationGroup].filter(Boolean));
-    $("commentsPane").replaceChildren(commentTabs,addPane,viewPane,$("commentStatus"));
+    categoryContent.append(commentTabs,addPane,viewPane,$("commentStatus"));$("commentsPane").replaceChildren(categoryTabs,categoryContent);
     commentsSidebar.append(heading("Comments",closeComments),$("commentsPane"),legacyControls);workspaceElement.append(commentsSidebar);
     propertiesSidebar.replaceChildren(heading("Properties",$("closeInspector")),$("propertiesPane"));
     const metadata=collapsible("Severity, state and people",['commentSeverity','commentState','commentTags'].map(id=>$(id).closest?.('label')||$(id)),false,'comment-metadata');$("commentEditor").insertBefore(metadata,$("commentText").closest?.('label')||$("commentText"));
@@ -517,9 +528,9 @@
     }
     function anchorLabel(value) { return `${value.reference || value.netName || value.kind || "Drawing"} · ${value.file}${value.position ? ` · ${value.position.x.toFixed(2)}, ${value.position.y.toFixed(2)} mm` : ""}${value.variant && value.variant !== "default" ? ` · ${value.variant}` : ""}`; }
     function editComment(note = null, at = null) {
-      try { editor = note ? {...note} : {id:crypto.randomUUID(), createdAt:new Date().toISOString(), text:"", severity:"info", threadType:$("githubCommentType").value||"issue", anchor:at || anchor()}; }
+      try { editor = note ? {...note} : {id:crypto.randomUUID(), createdAt:new Date().toISOString(), text:"", severity:"info", threadType:commentCategory!=="all"?commentCategory:$("githubCommentType").value||"issue", anchor:at || anchor()}; }
       catch (error) { commentStatus(error.message,true); inspector("comments"); return; }
-      if(note?.threadType){$("githubCommentType").value=note.threadType;chooseCommentType();} $("commentEditor").hidden = false; $("commentAnchor").textContent=remoteAvailable?`${$("githubCommentType").value==="discussion"?"Discussion":"Issue"} · ${anchorLabel(editor.anchor)}; choose its destination below.`:`Local review: ${anchorLabel(editor.anchor)}`; $("commentText").value = editor.text; $("commentSeverity").value = editor.severity || "info";$("commentState").value=editor.state||"open";$("commentTags").value=(editor.tags||[]).join(", ");$("commentMentions").value=(editor.mentions||[]).map(login=>"@"+login).join(", ");
+      const type=KiCadReviewComments.commentType(editor);if(type){editor.threadType=type;$("githubCommentType").value=type;chooseCommentType();setCommentCategory(type,false);} $("commentEditor").hidden = false; $("commentAnchor").textContent=remoteAvailable?`${$("githubCommentType").value==="discussion"?"Discussion":"Issue"} · ${anchorLabel(editor.anchor)}; choose its destination below.`:`Local review: ${anchorLabel(editor.anchor)}`; $("commentText").value = editor.text; $("commentSeverity").value = editor.severity || "info";$("commentState").value=editor.state||"open";$("commentTags").value=(editor.tags||[]).join(", ");$("commentMentions").value=(editor.mentions||[]).map(login=>"@"+login).join(", ");
       inspector("comments","add"); $("commentText").focus();
       $("editorThreadType").value=editor.threadType||"issue";$("editorTitle").value="";configureEditorDestination();$("editorMarkdown").hidden=true;
       capturePreview();draw();
@@ -539,13 +550,13 @@
     }
     function visibleNotes() {
       return KiCadReviewComments.sortAndFilter([...notes,...remoteNotes],{
-        severity:$("severityFilter").value,state:$("stateFilter").value,read:$("readFilter").value,
+        threadType:commentCategory,severity:$("severityFilter").value,state:$("stateFilter").value,read:$("readFilter").value,
         order:$("commentSort").value,query:$("commentSearch").value
       },receipt);
     }
     function nextUnread() {
       const unread=KiCadReviewComments.sortAndFilter([...notes,...remoteNotes],{
-        severity:$("severityFilter").value,state:$("stateFilter").value,read:"unread",order:$("commentSort").value,query:$("commentSearch").value
+        threadType:commentCategory,severity:$("severityFilter").value,state:$("stateFilter").value,read:"unread",order:$("commentSort").value,query:$("commentSearch").value
       },receipt);
       if(!unread.length){commentStatus("No unread annotations match the current filters.");return;}
       unreadCursor=(unreadCursor+1)%unread.length;const note=unread[unreadCursor];
@@ -590,12 +601,13 @@
         return false;}finally{action.disabled=false;}
     }
     function renderComments() {
+      for(const [type,node]of categoryButtons){const count=[...notes,...remoteNotes].filter(note=>type==='all'||KiCadReviewComments.commentType(note)===type).length;node.textContent=`${type==='issue'?'Issues':type==='discussion'?'Discussions':'All'} (${count})`;node.title='Total annotations before state, severity and date filters';}
       $("commentList").replaceChildren();
       const shown=visibleNotes();
       for (const note of shown) {
         const card=make("article");card.className="note severity-"+(note.severity||"info");
         const unread=KiCadReviewComments.isUnread(note,receipt(note));
-        card.append(make("strong",`${(note.severity||"info").toUpperCase()} · ${!remoteAvailable?'Local review':note.threadType==='discussion'?'Discussion':note.threadType==='issue'?'Issue':'Unassigned type'} · ${unread?"Unread":"Read"}`),make("small",anchorLabel(note.anchor)),make("p",note.text),
+        card.append(make("strong",`${(note.severity||"info").toUpperCase()} · ${KiCadReviewComments.commentType(note)==='discussion'?'Discussion':KiCadReviewComments.commentType(note)==='issue'?'Issue':'Uncategorized'} · ${unread?"Unread":"Read"}`),make("small",anchorLabel(note.anchor)),make("p",note.text),
           make("small",`Created ${new Date(note.createdAt).toLocaleString()} · Updated ${new Date(note.updatedAt||note.createdAt).toLocaleString()} · ${note.github?`${providerName} ${note.github.source} #${note.github.number} · ${note.github.state} · ${note.github.author||""}`:"local"}`));
         if(note.mentions?.length)card.append(make("small",`Mentions: ${note.mentions.map(login=>"@"+login).join(", ")}`));
         if(note.github?.createdAt)card.append(make('small',`GitHub posted ${new Date(note.github.createdAt).toLocaleString()}${note.github.updatedAt?` · edited ${new Date(note.github.updatedAt).toLocaleString()}`:''}`));
@@ -617,7 +629,7 @@
       }
       if(!shown.length)$("commentList").append(make("p","No annotations match these filters."));
       const linked=$("githubThreadList");linked.replaceChildren();const urls=new Set();
-      for(const note of [...notes,...remoteNotes])for(const thread of [...(note.remoteRefs||[]),...(note.github?[{url:note.github.url,kind:note.github.source,number:note.github.number}]:[])]){
+      for(const note of [...notes,...remoteNotes].filter(note=>commentCategory==='all'||KiCadReviewComments.commentType(note)===commentCategory))for(const thread of [...(note.remoteRefs||[]),...(note.github?[{url:note.github.url,kind:note.github.source,number:note.github.number}]:[])]){
         if(!thread.url||urls.has(thread.url))continue;urls.add(thread.url);const row=make("article");row.className="note";
         const link=make("a",`${thread.kind||"thread"} #${thread.number}`);link.href=thread.url;link.target="_blank";link.rel="noopener noreferrer";row.append(link,make("p",note.text));linked.append(row);
       }
@@ -800,7 +812,7 @@
     function destinationChanged(){const value=$("commentDestination").value;$("githubCommentType").value=provider==='gitlab'?$("githubCommentType").value:value.includes("discussion")?"discussion":"issue";$("threadNumberLabel").hidden=!value.startsWith("existing-");for(const id of ["discussionCategoryLabel","loadCategories"])$(id).hidden=value!=="discussion";$("threadNumber").placeholder=value.includes("discussion")?"Discussion number":"Issue number";}
     function chooseCommentType(initial=false){const discussion=$("githubCommentType").value==="discussion", choices=discussion?(provider==='gitlab'?[["existing-issue","Discussion on an existing issue"]]:[["discussion","New discussion"],["existing-discussion","Existing discussion"]]):[["issue","New issue"],["existing-issue","Existing issue"],...(provider==='github'&&options.pullNumber?[["pull-request",`This pull request #${options.pullNumber}`]]:[])];
       $("commentDestination").replaceChildren();for(const [value,label]of choices){const item=make("option",label);item.value=value;$("commentDestination").append(item);}$("commentDestination").value=initial&&provider==='github'&&options.pullNumber?"pull-request":choices[0][0];destinationChanged();if(editor){$("editorThreadType").value=$("githubCommentType").value;configureEditorDestination();}if(editor)$("commentAnchor").textContent=remoteAvailable?`${$("githubCommentType").value==="discussion"?"Discussion":"Issue"} · ${anchorLabel(editor.anchor)}; choose its destination below.`:`Local review: ${anchorLabel(editor.anchor)}`;}
-    $("githubCommentType").value="issue";$("githubCommentType").onchange=()=>chooseCommentType();$("commentDestination").onchange=destinationChanged;chooseCommentType(true);
+    $("githubCommentType").value="issue";$("githubCommentType").onchange=()=>{chooseCommentType();setCommentCategory($("githubCommentType").value,false);};$("commentDestination").onchange=destinationChanged;chooseCommentType(true);
     const targetRepository=options.pullRepository||repository;
     $("repositoryIssues").href=provider==='gitlab'?`${host}/${targetRepository}/-/issues`:`https://github.com/${targetRepository}/issues`;$("repositoryDiscussions").href=provider==='gitlab'?$("repositoryIssues").href:`https://github.com/${targetRepository}/discussions`;
     $("githubAvailability").textContent=remoteAvailable?`Repository: ${targetRepository}. Configure your account in settings to publish directly. ${providerName} repository permissions and review policy apply.${provider==='gitlab'?' GitLab discussions are conversations on an existing issue.':''}`:provider==='gitlab'?"GitLab remote collaboration is available in the browser extension. This VS Code viewer stores review notes in your workspace.":"GitHub remote collaboration is available in the browser extension. This VS Code viewer stores review notes in your workspace.";
@@ -839,7 +851,7 @@
       }catch(error){commentStatus(error.message,true);}finally{$("saveComment").disabled=$("postComment").disabled=false;}
     }
     $("commentPublishSettings").hidden=!remoteAvailable;$("saveComment").textContent=remoteAvailable?"Save draft":"Save comment";
-    $("editorThreadType").onchange=()=>{$("githubCommentType").value=$("editorThreadType").value;chooseCommentType();};$("editorDestination").onchange=editorDestinationChanged;
+    $("editorThreadType").onchange=()=>{if(editor)editor.threadType=$("editorThreadType").value;$("githubCommentType").value=$("editorThreadType").value;chooseCommentType();setCommentCategory($("editorThreadType").value,false);};$("editorDestination").onchange=editorDestinationChanged;
     $("editorAccount").onclick=$("reviewSettings").onclick;
     $("editorLoadCategories").onclick=async()=>{try{if(provider!=='github')throw new Error("GitLab discussions belong to issues and have no GitHub category.");const categories=await request("github-discussion-categories",{repository:targetRepository});$("editorCategory").replaceChildren();for(const category of categories){const item=make("option",category.name);item.value=category.id;$("editorCategory").append(item);}$("editorCategory").value=categories[0]?.id||"";}catch(error){commentStatus(error.message,true);}};
     $("editorPreview").onclick=()=>{try{$("editorMarkdown").textContent=KiCadReviewComments.toMarkdown(editorNote()).replace(/<!--[\s\S]*?-->/g,"").trim();$("editorMarkdown").hidden=false;}catch(error){commentStatus(error.message,true);}};
