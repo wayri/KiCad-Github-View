@@ -1,8 +1,8 @@
-# Install KiCad Visual Review v0.11.2
+# Install KiCad Visual Review v0.11.3
 
 ## Browser extension: inline on GitHub
 
-1. Download `kicad-visual-review-extension-0.11.2.zip` from this release and extract it into a permanent folder.
+1. Download `kicad-visual-review-extension-0.11.3.zip` from this release and extract it into a permanent folder.
 2. Open `chrome://extensions` (or `edge://extensions`), enable Developer mode and choose **Load unpacked**.
 3. Select the extracted folder containing `manifest.json`. Keep that folder in place.
 4. Open a public `.kicad_sch` or `.kicad_pcb` file on GitHub and refresh the page. The visual preview appears inside the file page.
@@ -13,10 +13,10 @@ Open **Git revisions** to load branches and commits touching the drawing, select
 
 ## VS Code
 
-Download `kicad-visual-review-vscode-0.11.2.vsix`, run **Extensions: Install from VSIX**, and select the file. Open a saved KiCad drawing or run **KiCad: Open Visual Viewer**. If needed choose **Reopen Editor With → KiCad Visual Review**. After an update, run **Developer: Reload Window**.
+Download `kicad-visual-review-vscode-0.11.3.vsix`, run **Extensions: Install from VSIX**, and select the file. Open a saved KiCad drawing or run **KiCad: Open Visual Viewer**. If needed choose **Reopen Editor With → KiCad Visual Review**. After an update, run **Developer: Reload Window**.
 
 ```sh
-code --install-extension kicad-visual-review-vscode-0.11.2.vsix --force
+code --install-extension kicad-visual-review-vscode-0.11.3.vsix --force
 ```
 
 The extension uses the workspace provider and read-only custom editors. GitHub comment publication is currently a browser-extension feature; native notes use the Git-trackable review sidecar. HTML previews in VS Code are static; self-contained interactive iBOM runs in the browser extension. Actual github.dev deployment still needs separate hosted validation.

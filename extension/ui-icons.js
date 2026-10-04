@@ -2,6 +2,7 @@
 ((root)=>{
   'use strict';
   const paths={
+    back:'M19 12H5m6-6-6 6 6 6',forward:'M5 12h14m-6-6 6 6-6 6',up:'M12 19V5m-6 6 6-6 6 6',home:'M3 11 12 3l9 8 M5 10v11h14V10 M10 21v-7h4v7',
     rules:'M12 3 22 21H2z M12 9v5m0 3v1',
     board:'M4 3h13l3 3v14H4z M7 7h7v7H7z M17 9h1m-1 3h1M8 17h6 M2 6h2M2 10h2M2 14h2',
     parts:'M7 7h10v10H7z M9 3v4m6-4v4M9 17v4m6-4v4M3 9h4m-4 6h4m10-6h4m-4 6h4',

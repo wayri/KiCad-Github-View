@@ -288,3 +288,18 @@ test('sheet browser renders compact names with source paths in tooltips and open
   assert.match(rows[1].children[2].attributes['aria-label'],/Locate.*design\/root/);
   rows[0].children[0].click();assert.equal(view.get('sheetList').children[1].children.length,1);
 });
+
+test('sheet history bounds visits, replaces forward history after a new branch, and ignores repeat selections',()=>{
+ const history=require('../review-workspace.js').sheetHistory(3);history.visit('a');history.visit('b');history.visit('b');history.visit('c');assert.equal(history.move(-1),'b');assert.equal(history.target(1),'c');history.visit('d');assert.equal(history.target(1),null);assert.equal(history.move(-1),'b');history.move(1);history.visit('e');assert.equal(history.move(-1),'d');assert.equal(history.move(-1),'b');assert.equal(history.move(-1),null);
+});
+test('sheet navigation follows visits, up and root; keyboard history respects text entry',()=>{
+ const files=[{path:'root.kicad_sch',content:'(kicad_sch (sheet (at 0 0) (size 10 10) (uuid "s") (property "Sheetfile" "child.kicad_sch")))'},{path:'child.kicad_sch',content:'(kicad_sch (sheet (at 0 0) (size 10 10) (uuid "t") (property "Sheetfile" "leaf.kicad_sch")))'},{path:'leaf.kicad_sch',content:'(kicad_sch)'}];
+ let active=files[0].path,view;const open=path=>{active=path;view.workspace.draw();};view=workspaceRuntime(async()=>[],{pcb:false,files,currentFile:()=>active,openSheet:open});view.load();
+ assert.equal(view.get('sheetBack').disabled,true);assert.equal(view.get('sheetHome').disabled,true);
+ open('child.kicad_sch');open('leaf.kicad_sch');view.get('sheetBack').click();assert.equal(active,'child.kicad_sch');assert.equal(view.get('sheetForward').disabled,false);view.get('sheetForward').click();assert.equal(active,'leaf.kicad_sch');view.get('sheetUp').click();assert.equal(active,'child.kicad_sch');assert.equal(view.get('sheetForward').disabled,true);
+ view.get('sheetHome').click();assert.equal(active,'root.kicad_sch');assert.equal(view.get('sheetUp').disabled,true);view.key('ArrowLeft',{altKey:true});assert.equal(active,'child.kicad_sch');view.key('ArrowRight',{altKey:true});assert.equal(active,'root.kicad_sch');view.key('ArrowLeft',{altKey:true,composedPath:()=>[{tagName:'INPUT'}]});assert.equal(active,'root.kicad_sch');
+});
+test('root navigation resolves an initially opened child and rejects reused-parent ambiguity and cycles',()=>{
+ const rootPath=require('../review-workspace.js').rootSheetPath,files=['root','child','other'].map(name=>({path:name+'.kicad_sch'})),link=(path,target)=>({kind:'sheet',path:path+'.kicad_sch',properties:{Sheetfile:target+'.kicad_sch'}});
+ assert.equal(rootPath('child.kicad_sch',[link('root','child')],files),'root.kicad_sch');assert.equal(rootPath('child.kicad_sch',[link('root','child'),link('other','child')],files),null);assert.equal(rootPath('child.kicad_sch',[link('root','child'),link('child','root')],files),null);
+});

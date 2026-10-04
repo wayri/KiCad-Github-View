@@ -85,6 +85,19 @@
     for (const sheet of sheets) if (!emitted.has(sheet.path)) visit(sheet, 0, new Set());
     return entries;
   }
+  function sheetHistory(limit=256) {
+    let paths=[],index=-1;
+    return {visit(path){if(paths[index]===path)return;paths=paths.slice(0,index+1);paths.push(path);if(paths.length>limit)paths.shift();index=paths.length-1;},
+      target(delta){return paths[index+delta]??null;},move(delta){if(index+delta<0||index+delta>=paths.length)return null;index+=delta;return paths[index];}};
+  }
+  function rootSheetPath(start,objects,files) {
+    const loaded=new Set(files.filter(file=>/\.kicad_sch$/i.test(file.path)).map(file=>file.path)),seen=new Set();let path=start;
+    while(loaded.has(path)&&!seen.has(path)){
+      seen.add(path);const parents=[...new Set(objects.filter(o=>o.kind==='sheet'&&sheetTarget(o)===path&&loaded.has(o.path)).map(o=>o.path))];
+      if(!parents.length)return path;if(parents.length!==1)return null;path=parents[0];
+    }
+    return null;
+  }
   function symbolUuidFromPath(object) {
     const tree = object?.saved?.tree;
     if (!Array.isArray(tree)) return null;
@@ -110,7 +123,7 @@
     const request = async (type, extra = {}) => { const reply = await chrome.runtime.sendMessage({type, ...extra}); if (!reply?.ok) throw new Error(reply?.error || "The extension could not complete this request."); return reply.result; };
     let config = null, model = KiCadDesignModel.buildProject(files), objects = KiCadDesignModel.applyVariant(model, "default");
     let pointerWorld=null;
-    const collapsedSheets = new Set();
+    const collapsedSheets = new Set(),sheetVisits=sheetHistory();
     let variant = "default", selected = null, lastFile = null, notes = [], remoteNotes = [], remoteLoad = 0, loadId = 0, editor = null;
     let receiptUser = "local-profile", unreadCursor = -1, policyStatus = null;
     const analyticsCache=new Map(); let dnpHighlight=false;
@@ -292,7 +305,18 @@
       }
       if (!visible.length) list.append(make("p", "No objects match this search."));
     }
-    function renderSheets(){
+    function updateSheetNavigation(){
+      if(pcb)return;const active=currentFile()||rootFile,home=rootSheetPath(rootFile,objects,files);
+      $('sheetBack').disabled=!sheetVisits.target(-1);$('sheetForward').disabled=!sheetVisits.target(1);
+      $('sheetUp').disabled=!objects.some(o=>o.kind==='sheet'&&sheetTarget(o)===active&&files.some(f=>f.path===o.path));
+      $('sheetHome').disabled=!home||home===active;$('sheetHome').title=home?'Root sheet: '+home:'Root sheet is ambiguous or cyclic';
+    }
+    function historySheet(delta){
+      const path=sheetVisits.move(delta);if(!path)return;
+      try{openSheet(path);pointerWorld=null;}catch(error){sheetVisits.move(-delta);notice(error.message);}updateSheetNavigation();
+    }
+    function homeSheet(){const home=rootSheetPath(rootFile,objects,files);if(home){openSheet(home);pointerWorld=null;}else{navigate('sheets');notice('The loaded hierarchy has no unambiguous root sheet. Choose a sheet in the navigator.');}}
+    function renderSheets(){updateSheetNavigation();
       const list=$("sheetList");list.replaceChildren();
       const query=$("sheetSearch").value.trim(),sheets=model.sheets.filter(s=>s.kind==='schematic'),links=objects.filter(o=>o.kind==='sheet');
       const entries=sheetEntries(sheets,links,query,collapsedSheets),toggles=new Map();
@@ -480,7 +504,7 @@
     function draw() {
       const overlay = $("reviewOverlay"), pins = $("commentPins"); overlay.replaceChildren(); pins.replaceChildren();
       if (scene) return;
-      const active = currentFile() || rootFile;refreshNets();
+      const active = currentFile() || rootFile;if(!pcb)sheetVisits.visit(active);refreshNets();
       if (active !== lastFile) {
         lastFile = active;pointerWorld=null;measurePoints=[];measurePreview=rulerSnap=boardMeasure=null;refreshNets(); $("selectionStatus").textContent="Select a part or net to inspect"; remoteLoad++; remoteNotes=[]; $("refreshGitHub").disabled=false; $("activeSheet").textContent = active; $("activeSheet").title = active;
         $("sheetSelect").value = active;renderSheets();
@@ -650,6 +674,7 @@
     const reviewKeydown=event=>{
       if(event.defaultPrevented||event.repeat||event.composedPath().some(node=>node?.isContentEditable||/^(INPUT|TEXTAREA|SELECT)$/.test(node?.tagName||'')))return;
       if(event.key==='Escape'){$('objectMenu').hidden=true;if(commentMode)setCommentMode(null);if(selectedNet||pinnedNets.size||pinnedClasses.size||highlightObjects.length)clearHighlights();if(measureMode)$('measureButton').click();return;}
+      if(event.altKey&&!event.ctrlKey&&!event.metaKey&&!pcb&&!scene&&['ArrowLeft','ArrowRight','Home'].includes(event.key)){event.preventDefault();if(event.key==='Home')homeSheet();else historySheet(event.key==='ArrowLeft'?-1:1);return;}
       if(event.altKey&&event.key==='ArrowUp'&&!event.ctrlKey&&!event.metaKey&&!pcb&&!scene){event.preventDefault();parentSheet();return;}
       if(event.ctrlKey||event.altKey||event.metaKey)return;
       const key=event.key.toLowerCase();
@@ -680,6 +705,7 @@
     $('fitHighlights').onclick=()=>{const canvas=getCanvas(),box=root.KiCadOwnedCanvas?.bounds([...canvas.netPrimitives||[]]);if(box){canvas.resize();const margin=Math.max(3,Math.max(box.w,box.h)*.1);canvas.viewport.camera.bbox={x:box.x-margin,y:box.y-margin,w:box.w+margin*2,h:box.h+margin*2};canvas.draw();}};
     $('previousConnection').onclick=()=>cycleConnection(-1);$('nextConnection').onclick=()=>cycleConnection(1);
     $('netClassSelect').onchange=renderNetClasses;
+    $('sheetBack').onclick=()=>historySheet(-1);$('sheetForward').onclick=()=>historySheet(1);$('sheetUp').onclick=parentSheet;$('sheetHome').onclick=homeSheet;
     $('highlightNetClass').onclick=()=>{const name=$('netClassSelect').value;if(!classConfig||!name)return;const key=JSON.stringify([currentFile(),name]),existed=pinnedClasses.has(key);if(!$('multiHighlight').checked){pinnedNets.clear();pinnedClasses.clear();highlightObjects=[];selectedNet=null;}if(existed)pinnedClasses.delete(key);else if(pinnedClasses.size<64)pinnedClasses.set(key,{path:currentFile(),name});activeConnection=null;connectionCursor=-1;updateHighlights();renderNets();renderNetClasses();};
     root.KiCadUIIcons?.decorate();$("schematicLayersHint").hidden=pcb;showNavigator(matchMedia("(min-width:850px)").matches);variants();
     if(chrome.storage?.local)chrome.storage.local.get(variantKey).then((saved)=>{if(saved[variantKey])installConfig(saved[variantKey]);}).catch((error)=>notice(error.message));
@@ -689,6 +715,6 @@
       setScene(next){scene=next;$("highlightControls").hidden=Boolean(scene);$("highlightDnp").disabled=Boolean(scene);for(const id of ["measureButton","navNets","navLayers","pointComment","areaComment"])$(id).disabled=Boolean(scene);if(scene&&navigatorTab!=="parts")navigate("parts");if(scene){setCommentMode(null);measureMode=false;measurePoints=[];getCanvas()?.canvas.classList?.toggle("ruler-mode",false);measurePreview=rulerSnap=boardMeasure=null;$("rulerControls").hidden=true;$("measureButton").setAttribute("aria-pressed","false");$("measurementStatus").textContent="";scene.setPopulation(objects.filter((item)=>item.kind==="footprint").map((item)=>({reference:item.reference,populated:item.populated})));}draw();},
       dispose(){loadId++;remoteLoad++;root.removeEventListener?.('keydown',reviewKeydown);narrowPanels.removeEventListener?.("change",keepDrawingVisible);navigation?.dispose();attach?.dispose();}}
   }
-  root.KiCadReviewWorkspace={mount,resolveObject,measurement,matchesSearch,sheetTarget,sheetEntries};
+  root.KiCadReviewWorkspace={mount,resolveObject,measurement,matchesSearch,sheetTarget,sheetEntries,sheetHistory,rootSheetPath};
   if(typeof module==="object"&&module.exports)module.exports=root.KiCadReviewWorkspace;
 })(globalThis);
