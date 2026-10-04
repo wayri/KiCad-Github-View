@@ -4,6 +4,7 @@
   const repositoryPattern = /^[A-Za-z0-9_.-]+(?:\/[A-Za-z0-9_.-]+)+$/;
   const filePattern = /\.kicad_(?:sch|pcb)$/i;
   const PROJECT_MAX_BYTES = 96 * 1024 * 1024;
+  const PROJECT_MAX_FILES = 128, PARENT_MAX_CANDIDATES = 24, READ_CONCURRENCY = 4;
   const fileByteLimit = (path) => (/\.kicad_pcb$/i.test(path) ? 64 : 8) * 1024 * 1024;
 
   function validRepository(value, provider = "github") {
@@ -44,7 +45,7 @@
     if(c===")") {
       if(!stack.length)throw new Error("Unexpected closing KiCad parenthesis.");
       const entry=stack.pop();i++;
-      if(entry[0]==="property" && entry[1]==="Sheetfile" && typeof entry[2]==="string" &&
+      if(entry[0]==="property" && ["Sheetfile", "Sheet file"].includes(entry[1]) && typeof entry[2]==="string" &&
         stack.length===2 && stack[0][0]==="kicad_sch" && stack[1][0]==="sheet")names.push(entry[2]);
       continue;
     }
@@ -69,12 +70,14 @@
     if (!validRepository(repository, provider) || !validPath(file) || !validRef(ref)) {
       throw new Error("Invalid GitHub project location.");
     }
-    const cache = new Map(), encoder = new TextEncoder();
+    const cache = new Map(), sizes = new Map(), inFlight = new Map(), sheetCache = new Map(), encoder = new TextEncoder();
     let totalBytes = 0, readCount = 0;
     async function read(path) {
       if (cache.has(path)) return cache.get(path);
-      if (readCount >= 32) throw new Error("Project discovery exceeds 32 KiCad files; open its root schematic directly.");
+      if (inFlight.has(path)) return inFlight.get(path);
+      if (readCount >= PROJECT_MAX_FILES + PARENT_MAX_CANDIDATES) throw new Error("Project discovery exceeds the bounded KiCad file count.");
       readCount++;
+      const work = (async () => {
       const content = await readFile(repository, ref, path);
       if (content !== null && typeof content !== "string") throw new Error("GitHub returned invalid KiCad file contents.");
       if (content !== null) {
@@ -83,11 +86,35 @@
           throw new Error("Project discovery exceeds the browser preview size limit.");
         }
         totalBytes += size;
+        sizes.set(path, size);
       }
       cache.set(path, content);
       return content;
+      })();
+      inFlight.set(path, work);
+      try { return await work; } finally { inFlight.delete(path); }
     }
-    if (await read(file) === null) throw new Error(`KiCad file was not returned by ${provider === "gitlab" ? "GitLab" : "GitHub"} (HTTP 404): ${repository}, revision ${ref}, path ${file}. The file may be missing or repository access may be unavailable. ${provider === "gitlab" ? "Only public GitLab repositories are supported." : "GitHub website sign-in does not sign the extension in. Connect an account with private repository access or a token with this repository's Contents read permission in extension settings."}`);
+    function descendants(path, content) {
+      if (!sheetCache.has(path)) sheetCache.set(path, content === null || !/\.kicad_sch$/i.test(path) ? [] :
+        sheetFiles(content).map(name => childPath(path, name)).filter(Boolean));
+      return sheetCache.get(path);
+    }
+    async function readBatch(paths) {
+      let next = 0, failure = null;
+      await Promise.all(Array.from({ length: Math.min(READ_CONCURRENCY, paths.length) }, async () => {
+        while (next < paths.length && !failure) {
+          const path = paths[next++];
+          try { await read(path); } catch (error) { failure ||= error; }
+        }
+      }));
+      if (failure) throw failure;
+    }
+    function retain(paths) {
+      for (const path of cache.keys()) if (!paths.has(path)) {
+        totalBytes -= sizes.get(path) || 0; sizes.delete(path); cache.delete(path); sheetCache.delete(path);
+      }
+    }
+    if (await read(file) === null) throw new Error(`KiCad file was not returned by ${provider === "gitlab" ? "GitLab" : "GitHub"} (HTTP 404): ${repository}, revision ${ref}, path ${file}. The file may be missing or repository access may be unavailable. ${provider === "gitlab" ? "Sign in to the matching GitLab server in extension settings and check your project access." : "GitHub website sign-in does not sign the extension in. Connect an account with private repository access or a token with this repository's Contents read permission in extension settings."}`);
     let roots = [file];
     let discoveryWarning = null;
     if (/\.kicad_sch$/i.test(file) && listDirectory) {
@@ -107,14 +134,14 @@
             throw new Error("GitHub returned an unsafe schematic directory listing.");
           }
           candidates.add(path);
-          if (candidates.size > 24) throw new Error("More than 24 parent-sheet candidates; open the project root directly.");
+          if (candidates.size > PARENT_MAX_CANDIDATES) throw new Error("More than 24 parent-sheet candidates; open the project root directly.");
         }
       }
-      for (const path of candidates) await read(path);
+      await readBatch([...candidates]);
       const edges = new Map();
       for (const path of candidates) {
         const content = cache.get(path);
-        edges.set(path, content === null ? [] : sheetFiles(content).map((name) => childPath(path, name)).filter(Boolean));
+        edges.set(path, descendants(path, content));
       }
       const reachesLeaf = (path) => {
         const pending=[path],visited=new Set();
@@ -128,29 +155,62 @@
       }
       roots = [...ancestors].filter((path) => !childAncestors.has(path)).sort();
       if (!roots.length) roots = [file];
+      const reachable = new Set(), remaining = [...roots];
+      while (remaining.length) {
+        const path = remaining.pop(); if (reachable.has(path)) continue; reachable.add(path);
+        for (const child of edges.get(path) || []) if (!reachable.has(child)) remaining.push(child);
+      }
+      // Unrelated candidates are discovery evidence, not retained project files.
+      // Reclaim their byte budget before loading the actual hierarchy.
+      retain(reachable);
       } catch (error) {
         roots = [file];
+        retain(new Set([file]));
         discoveryWarning = `Parent-sheet discovery was incomplete (${error.message || "directory unavailable"}). Open the project root for its full hierarchy.`;
       }
     }
     const queue = [...roots], seen = new Set(), files = [];
     while (queue.length) {
-      const path = queue.shift();
-      if (seen.has(path)) continue;
-      seen.add(path);
-      const content = await read(path);
-      if (content === null) continue;
-      files.push({ path, content });
-      if (!/\.kicad_sch$/i.test(path)) continue;
-      for (const name of /\.kicad_sch$/i.test(path) ? sheetFiles(content) : []) {
-        const child = childPath(path, name);
-      if (child && !seen.has(child)) queue.push(child);
+      const batch = [];
+      for (const path of queue.splice(0)) {
+        if (seen.has(path)) continue;
+        if (seen.size >= PROJECT_MAX_FILES) throw new Error(`Schematic hierarchy exceeds ${PROJECT_MAX_FILES} files; open a smaller subproject.`);
+        seen.add(path); batch.push(path);
+      }
+      await readBatch(batch);
+      for (const path of batch) {
+        const content = cache.get(path);
+        if (content === null) continue;
+        files.push({ path, content });
+        for (const child of descendants(path, content)) if (!seen.has(child)) queue.push(child);
       }
     }
     if (discoveryWarning && files.length) files[0].discoveryWarning = discoveryWarning;
     return files;
   }
 
-  root.KiCadBrowserData = { validRepository, validRef, validPath, childPath, sheetFiles, loadProject, fileByteLimit, PROJECT_MAX_BYTES };
+  // Scope one cache to one repository revision/viewer. Cache transport successes,
+  // never failures; the renderer still validates asset content before parsing.
+  function createModelAssetCache(loadAsset, maxBytes = 24 * 1024 * 1024) {
+    if (typeof loadAsset !== "function" || !Number.isSafeInteger(maxBytes) || maxBytes < 1 || maxBytes > 24 * 1024 * 1024) throw new Error("Invalid model asset cache configuration.");
+    const cached = new Map(), inFlight = new Map(); let bytes = 0, generation = 0;
+    async function load(path) {
+      if (cached.has(path)) return cached.get(path);
+      if (inFlight.has(path)) return inFlight.get(path);
+      const current = generation;
+      const work = (async () => {
+        const result = await loadAsset(path), size = typeof result?.base64 === "string" ? result.base64.length * 2 : Infinity;
+        // Account for UTF-16 storage, rather than only decoded model size.
+        if (generation === current && size <= maxBytes - bytes && cached.size < 128) { cached.set(path, result); bytes += size; }
+        return result;
+      })();
+      inFlight.set(path, work);
+      try { return await work; } finally { if (inFlight.get(path) === work) inFlight.delete(path); }
+    }
+    function clear() { generation++; bytes = 0; cached.clear(); inFlight.clear(); }
+    return { load, clear };
+  }
+
+  root.KiCadBrowserData = { validRepository, validRef, validPath, childPath, sheetFiles, loadProject, createModelAssetCache, fileByteLimit, PROJECT_MAX_BYTES, PROJECT_MAX_FILES, READ_CONCURRENCY };
   if (typeof module === "object" && module.exports) module.exports = root.KiCadBrowserData;
 })(typeof globalThis === "object" ? globalThis : this);

@@ -26,11 +26,11 @@ The helper detects Apple's current `safari-web-extension-packager` or its older 
 
 4. Open the generated `.xcodeproj` in Xcode. Select your signing Team for the application and extension targets, and ensure their deployment target supports Safari 16.4 or later. Build and run the macOS app.
 5. In Safari Settings → Extensions, enable KiCad Visual Review and grant access to GitHub and GitLab as needed. A development build may require Safari's developer option for unsigned extensions; use this only for local testing. Follow [Apple's running instructions](https://developer.apple.com/documentation/safariservices/running-your-safari-web-extension) for your Safari/Xcode version.
-6. Visit a KiCad file on GitHub or a public GitLab.com repository. Use the toolbar button if the inline viewer has not appeared. Open the extension's Options page to connect GitHub; options are private extension resources and are never exposed as website-accessible pages.
+6. Visit a KiCad file on GitHub or GitLab. Private projects need a connected account; self-hosted GitLab requires an explicit server permission grant. Use the toolbar button if the inline viewer has not appeared. Open the extension's Options page to connect GitHub or the selected GitLab server; options are private extension resources and are never exposed as website-accessible pages.
 
 ## Features and limits
 
-The package shares schematic/PCB review, project setup, layers, nets, selection, comparison and local review notes with the Chromium viewer. GitHub publication uses its existing explicit Issue/Discussion actions and session credentials. GitLab supports public repository viewing and its existing composer workflow; this package does not add GitLab OAuth or private project support.
+The package shares schematic/PCB review, project setup, layers, nets, selection, comparison and local review notes with the Chromium viewer. GitHub publication uses its existing explicit Issue/Discussion actions and session credentials. GitLab supports authorized private reads, explicitly approved HTTPS servers, and issue/issue-discussion publication. Options → **GitLab accounts and servers** provides per-server encrypted token connection. GitLab OAuth uses PKCE, requires a registered non-confidential Application ID and the exact browser redirect URI, and needs the browser identity API. If that API is unavailable in Safari, use **Connect with token**; no GitLab publisher Application ID is bundled. Native Safari OAuth and server permission behavior remain unverified.
 
 Repository HTML/interactive BOM execution is **disabled** in the Safari package. Saved HTML source remains viewable. Chromium's privileged extension sandbox is not assumed to be portable: the Safari manifest omits it, its sandbox scripts are excluded, and the preview handler displays a limitation instead of creating a frame. The normal extension CSP remains restrictive. No credential persistence fallback is introduced.
 
@@ -42,8 +42,8 @@ Safari supports the `chrome` namespace and Promise APIs used here; Apple documen
 - Open a schematic and PCB inline on GitHub and GitLab; navigate file pages and GitHub pull requests without stale frames.
 - Verify sheet navigation, multi-net highlighting, measurements, light/dark themes, project settings and paired schematic/PCB review.
 - Load repo-linked supported WRL/GLB geometry in 3D; inspect diagnostics for missing and unsupported STEP models.
-- Confirm GitHub Options connection and disconnect work, credentials do not enter local notes/exports, and a page cannot invoke private credential actions.
-- Save a local note, export/import it, then explicitly publish one Issue and one Discussion in a test repository with appropriate permissions. Verify receipts and avoid duplicate retries after ambiguous failures.
+- Confirm GitHub and GitLab Options connection, sign-out/reset and self-host removal work, credentials do not enter local notes/exports, and a page cannot invoke private credential actions.
+- Save a local note, export/import it, then explicitly publish one Issue and one Discussion in a test repository with appropriate permissions. For GitLab, publish a new issue and a discussion inside an existing issue. Verify receipts and avoid duplicate retries after ambiguous failures.
 - Confirm HTML preview is disabled, and Options/settings are absent from `web_accessible_resources`.
 - Check Safari Inspector for errors and run tests after any converter-driven source changes.
 

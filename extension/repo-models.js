@@ -1,7 +1,7 @@
 /* Safe, source-bound KiCad footprint 3D model references for the browser viewer. */
 ((root) => {
   "use strict";
-  const MAX_MODELS = 32;
+  const MAX_MODELS = 2048;
   const MAX_PATH = 500;
   const value = item => item && typeof item === "object" && !Array.isArray(item) ? item.quoted : item;
   const kind = node => Array.isArray(node) ? String(value(node[0])) : "";
@@ -17,6 +17,10 @@
     !/[\\\u0000-\u001f\u007f?#%]/.test(path) && !/^[a-z][a-z\d+.-]*:/i.test(path) && !path.startsWith("/");
 
   function resolveModelPath(boardPath, modelPath) {
+    // KiCad projects authored on Windows can save relative model separators as
+    // backslashes. Normalize only the reference; drive, UNC and URL paths remain
+    // forbidden, and traversal is still constrained to the repository root.
+    if (typeof modelPath === "string") modelPath = modelPath.replace(/\\/g, "/");
     if (!isPath(boardPath) || !/\.kicad_pcb$/i.test(boardPath) || !isPath(modelPath)) return null;
     const boardParts = boardPath.split("/");
     if (boardParts.some(part => !part || part === "." || part === "..")) return null;

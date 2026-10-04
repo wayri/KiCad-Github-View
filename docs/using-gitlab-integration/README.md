@@ -1,47 +1,65 @@
 # Using GitLab integration
 
-The browser extension opens supported KiCad drawings from public GitLab.com repositories and lets you keep local review notes anchored to the project, ref, file, object, point, or drawing area. It does not connect a GitLab account or publish notes to GitLab issues or merge requests. For remote discussion, use GitLab's own issue or merge-request page and post the note manually.
+Starting with v0.12.0, the browser extension supports public and authorized private GitLab projects, explicitly approved self-hosted HTTPS servers, and publishing drawing reviews to issues or discussion threads within existing issues. The design stays read-only.
 
-The screenshots below show the actual viewer in a local preview harness using local fixture files and mocked Git metadata. They do not show a live GitLab repository, create a GitLab issue, or post a remote comment.
+The screenshots below come from the actual shared viewer in a local harness with fixture files and mocked Git metadata. They are illustrative screenshots from earlier local-review builds; they do not demonstrate live private access, OAuth approval or remote posting. The current release adds GitLab account/publication controls described below. Do not treat the images as proof that a live GitLab issue was created.
 
-## Open and inspect a KiCad file
+## 1. Install and choose your server
 
-Install the browser extension and allow access to `gitlab.com` as described in [INSTALL.md](../INSTALL.md). Open a public repository **Files** page and select a `.kicad_sch` or `.kicad_pcb` file. The viewer reads the public GitLab revision and displays the saved design as a read-only drawing.
+Install your browser's package as described in [INSTALL.md](../INSTALL.md), reload it and refresh an existing repository file tab. GitLab.com is built in. For a self-hosted server, open Options → **GitLab accounts and servers**, enter an exact HTTPS origin such as `https://gitlab.example.com`, choose **Grant server access**, and approve the browser permission prompt. Select the server before connecting an account. Instances hosted under a URL subpath such as `https://example.com/gitlab` and merge-request file cards are not supported.
 
-![PCB component selected in the GitLab viewer with Explorer and saved properties visible](../images/integration/gitlab-part-properties.jpg)
+Public viewing needs no login. Private viewing requires an extension credential with access to that project; being signed into the GitLab website alone is insufficient. Enter an expiring token and choose **Connect with token**. `read_api` may suffice for private reads; posting needs `api` and project permissions. Never put tokens into issue text, screenshots or review JSON.
 
-Use **Explorer** to browse parts, nets, layers, sheets, search results, BOM, and saved ERC/DRC reports. Select a component to see its saved reference, footprint, net, coordinates, assembly status, and other available properties in **Inspect**. Search can find design objects and project files, and selecting a result locates it on the canvas. PCB net or net-class highlights help trace saved connectivity; layer controls focus the drawing on relevant copper or fabrication layers. The browser does not edit the source file or run KiCad rule checks.
+To use OAuth, expand **Sign in with GitLab OAuth**. Follow the selected server's registration link, create a **non-confidential** application, copy the exact **Browser redirect URI** shown in Options, enable `api` scope, and enter its **Public Application ID**. Then choose **Sign in with GitLab** and approve access on GitLab. PKCE and random state protect this flow; no client secret is used. No publisher Application ID is bundled, and the browser redirect URI can differ between installations. If the browser identity API is unavailable, including some Safari builds, use the token connection.
 
-For a schematic, open a sheet from the sheet list and use Back, Forward, Up, or Root to navigate the loaded hierarchy. To compare branches or commits, select the GitLab revisions and inspect base/head drawings and saved-object changes. To compare a schematic and its PCB, use **Split schematic + PCB** and choose the corresponding project file. Only public GitLab.com repositories are supported in the browser; merge-request file cards and self-hosted GitLab are not included.
+Tokens are encrypted separately for each server. The encryption key stays only in background memory, so background/browser restart requires reconnection. Sign-out/reset purge credentials; reset also clears the custom Application ID. Removing a server also removes its preview registration and permission. Local notes remain. Revoke remote access separately in that server's account settings. See [security details](../../SECURITY.md).
 
-![Shared schematic viewer with sheet navigation](../images/schematic-sheets.jpg)
+## 2. Open and inspect a project
 
-This is a shared-renderer fixture screenshot, not a live GitLab page. Double-click a sheet symbol to open it; `E` opens part properties, `F` fits the drawing and `Home` fits its worksheet. Preserve full nested paths when choosing a paired drawing or imported annotation.
+Open a `.kicad_sch`, `.kicad_pcb` or supported project file under the repository **Files** page, including subgroup namespaces. The extension obtains explicit project/ref/file metadata and resolves references to commit SHAs. Missing metadata, unavailable permissions and oversized files are reported rather than guessed. A private 404 can conceal denied access.
 
-![Shared revision comparison interface](../images/revision-comparison.jpg)
+![PCB component selected in the fixture GitLab viewer](../images/integration/gitlab-part-properties.jpg)
 
-Use the revision controls to choose exact branches or commits. The illustrated comparison is a local synthetic GitHub fixture of the shared comparison engine; GitLab supplies its own project and revision metadata. Project setup, saved stackup, BOM/statistics and supported repository-linked WRL/GLB models use the same renderer. Missing/unsupported assets are reported; STEP import is unavailable.
+Use **Explorer** to select parts, nets, layers, sheets and search results, and **Inspect** to read saved properties. Multihighlight can retain several selections. For schematics, use Back, Forward, Up and Root, or double-click a loaded sheet symbol. `E` opens properties, `F` fits the drawing and `Home` fits the worksheet. Preserve nested file paths when opening paired files.
 
-## Create a local note
+![Shared schematic sheet-navigation fixture](../images/schematic-sheets.jpg)
 
-Open **Review → Comments**. Use **New note** to attach the note to the current selection or drawing, **Point** and click a precise location, or **Area** and drag a rectangle. You can capture the visible contents of an anchored area as a PNG. The capture excludes viewer controls. It stays in the local/exported note; attach it manually if you post to GitLab.
+Use **Split schematic + PCB** for paired drawings and **Git revisions** for branch/commit comparison. Setup, saved stackup, BOM/statistics and supported repository-linked WRL/GLB models use the shared renderer. Missing models are diagnosed; STEP import is unavailable.
 
-Set the severity (Info, Minor, Major, Critical), review state (Open, Skipped, Resolved, or Won't fix), optional tags, and optional `@login` mentions, then write the note and choose **Save comment**. Text is limited to 4,000 characters. Up to 20 tags of 40 characters and 20 valid GitHub-style account names are accepted. Mentions are plain note metadata here: GitLab notifications are not sent.
+![Shared comparison engine using synthetic revisions](../images/revision-comparison.jpg)
 
-![GitLab note editor with severity, state, tags, mention and drawing area capture controls](../images/integration/gitlab-comment-editor.jpg)
+## 3. Anchor and prepare your review
 
-Created and updated times are generated automatically in UTC and displayed in the browser's local time zone. Editing a note or changing its state updates its timestamp. Read/unread is a separate, browser-user-specific marker; changed notes become unread again. Use severity, state, read status, text/part/tag search, ordering, and **Next unread** to triage the local notes.
+Open **Review → Comments**. **New note** anchors to the selected part or drawing. **Point** lets you click a location; **Area** lets you drag a rectangle. **Capture area** captures visible drawing content as a PNG, excluding viewer controls. The image remains in the local/exported note until you download and manually attach it.
 
-![Saved local note anchored to footprint R1, with severity, tags and mention visible](../images/integration/gitlab-saved-note.jpg)
+Set severity (Info, Minor, Major, Critical), local state (Open, Skipped, Resolved, Won't fix), tags, `@mentions`, and review text. Notes support up to 4,000 characters, twenty tags and twenty account mentions. GitLab usernames with underscores or dots are supported. Local mentions send no notification.
 
-GitLab notes are kept in this browser's storage and remain provider-bound. They are isolated from GitHub comments and credentials. Notes are not synchronized to another browser or teammate until you export and share them.
+![Earlier fixture note editor showing severity, state and geometric capture controls](../images/integration/gitlab-comment-editor.jpg)
 
-## Export and import review notes
+## 4. Publish an Issue or Discussion
 
-Choose **Export comments** to download a portable `kicad-review-comments.json` file. Share it with a teammate or commit the export as a Git review artifact. To restore notes in another browser, open the same GitLab project revision and drawing, choose **Import comments**, and select that JSON file. The viewer checks that the provider, project path, revision, and drawing match; it will reject notes for a different project or revision. The portable export is bounded to 100 notes and 1 MiB. The GitLab viewer has no dedicated connection control for the `.kicad-review.json` sidecar.
+The current editor offers **Post to GitLab**:
 
-## Post manually through GitLab
+| Choice | Destination | Required input |
+| --- | --- | --- |
+| Issue → New issue | Creates a project issue containing the formatted review | Issue title |
+| Issue → Existing issue | Adds a note to the issue | Existing issue number |
+| Discussion | Creates a discussion thread inside an existing issue | Existing issue number |
 
-The local viewer has no **Publish to GitLab** or prefilled GitLab composer. To share a note remotely, open the project's GitLab issue or merge-request discussion in GitLab, copy the note text and relevant anchor details from the viewer, and submit them using GitLab's normal interface. If the note includes a PNG capture, download it from the note and attach it in GitLab. Keep the exported JSON or local note if you want to retain severity, state, tags, exact drawing coordinates, and revision binding; a manual GitLab post does not sync those fields back to the viewer.
+GitLab discussions are issue conversation threads, not standalone GitHub-style Discussions. There is no GitHub category selector. **Preview GitLab Markdown** displays the review heading and context table with severity/state, component or net, geometry, variant, repository, revision permalink, identifiers, tags, mentions and UTC times. **Save draft** saves locally without posting. **Post to GitLab**, or **Publish to GitLab** on a saved note, explicitly submits the review with your connected account and records the confirmed remote link.
 
-GitLab comments do not get repository policy checks, remote readback, mention notifications, or remote-state synchronization in this release. GitHub's Issue/Discussion account and publishing controls are hidden in GitLab views. See [Git host support](../GIT-HOSTS.md) and [comment data details](../COMMENTS.md#gitlab-and-vs-code).
+A failed post preserves the draft. An uncertain outcome blocks automatic retry to prevent duplicates: inspect the GitLab issue before trying again. Confirmed publications recover their saved receipt. Use the linked issue to reply, subscribe and follow notifications. Actual posted mentions notify users according to GitLab's permissions and behavior. Download the screenshot and attach it through GitLab's normal editor; API publication excludes PNG data.
+
+![Earlier fixture saved note with local severity, tags and mentions](../images/integration/gitlab-saved-note.jpg)
+
+## 5. Read annotations and manage policy
+
+Open the **GitLab** collaboration tab, select an existing issue destination and enter its issue number, then choose **Load GitLab annotations**. The extension scans the description and at most 500 notes for its validated annotation markers. Markers must match the exact server, project, revision and drawing. Ordinary messages are not converted into drawing notes. Complete conversations remain on GitLab. Local review state and remote issue state are separate; resolving or skipping a local note does not close an issue or edit the original post.
+
+Repository owners can add `.kicad-review-policy.json` on the default branch. Use `all`, `collaborators` or an explicit `allowlist` as appropriate; malformed/unverifiable policies block publication. Contributors-only mode fails closed without verifiable account membership or an explicit allowlist because commit emails do not prove authorship. Policy is a check on this extension's publishing workflow, not a replacement for GitLab's access controls or a way to prevent users posting directly on the website. See [policy format and comment details](../COMMENTS.md).
+
+## 6. Share the Git review record
+
+Choose **Export comments** to save `kicad-review-comments.json`, then commit it through normal Git tools if desired. **Import comments** checks provider, HTTPS host, project, revision and drawing; records from another context are rejected. Import/export is bounded to 100 notes and 1 MiB. GitLab uses browser-local storage and exports rather than the connected GitHub `.kicad-review.json` file workflow. Notes do not synchronize between users automatically, and saving an export does not commit or push it.
+
+See [Git host boundaries](../GIT-HOSTS.md), [Firefox](../FIREFOX.md), [Safari](../SAFARI.md), and [release notes](../releases/v0.12.0.md). Browser packages remain development/preview releases; live account approval, installed-browser lifecycle and signed-store distribution require separate acceptance testing.

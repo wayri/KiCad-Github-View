@@ -5,10 +5,10 @@
   const ownerPattern = /^[A-Za-z0-9_.-]+$/;
   const repoPattern = /^[A-Za-z0-9_.-]+$/;
 
-  function route(url) {
+  function route(url, {gitlabHosts = []} = {}) {
     let parsed;
     try { parsed = new URL(url); } catch { return null; }
-    if (parsed.origin === "https://gitlab.com") {
+    if (parsed.protocol === "https:" && !parsed.username && !parsed.password && (parsed.origin === "https://gitlab.com" || parsed.origin !== "https://github.com" && gitlabHosts.includes(parsed.origin))) {
       const parts = parsed.pathname.split("/").filter(Boolean);
       const delimiter = parts.indexOf("-");
       if (delimiter < 2 || parts[delimiter + 1] !== "blob") return null;
@@ -16,7 +16,7 @@
       const tail = parts.slice(delimiter + 2).map(decodeSegment);
       if (!namespace.every((part) => part && ownerPattern.test(part)) || tail.length < 2 ||
           !tail.every(Boolean) || !filePattern.test(tail.at(-1))) return null;
-      return { kind: "blob", provider: "gitlab", repository: namespace.join("/"), tail };
+      return { kind: "blob", provider: "gitlab", ...(parsed.origin!=="https://gitlab.com"?{host:parsed.origin}:{}), repository: namespace.join("/"), tail };
     }
     if (parsed.origin !== "https://github.com") return null;
     const pieces = parsed.pathname.split("/").filter(Boolean);
@@ -84,7 +84,7 @@
       if (routeMatches && (parsedRoute.provider !== "gitlab" ||
           tail === `${embedded.head}/${embedded.file}` && embedded.repository === parsedRoute.repository)) {
         return { repository: parsedRoute.repository, file: embedded.file, head: embedded.head,
-          ...(parsedRoute.provider ? { provider: parsedRoute.provider } : {}) };
+          ...(parsedRoute.provider ? { provider: parsedRoute.provider, ...(parsedRoute.host?{host:parsedRoute.host}:{}) } : {}) };
       }
     }
     if (parsedRoute.provider === "gitlab") return null;
@@ -102,7 +102,7 @@
       oldFile: request.oldFile || request.file,
       head: request.head
     });
-    if (request.provider === "gitlab") params.set("provider", "gitlab");
+    if (request.provider === "gitlab") { params.set("provider", "gitlab"); if(request.host)params.set("host",request.host); }
     if (request.base) params.set("base", request.base);
     if (request.status === "added" || request.status === "removed") params.set("status", request.status);
     if (request.pullNumber !== undefined || request.pullRepository !== undefined) {

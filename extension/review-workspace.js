@@ -29,7 +29,7 @@
     return tokens.every(token=>{const exclude=token[0]==='-';if(exclude)token=token.slice(1);const colon=token.indexOf(':');const key=colon>0?token.slice(0,colon).toLowerCase():null;const term=(key?token.slice(colon+1):token).replace(/^"|"$/g,'').toLowerCase();const found=String(key?fields[key]??'':all).toLowerCase().includes(term);return exclude?!found:found;});
   }
   function sheetTarget(item) {
-    const name=item.properties?.Sheetfile;if(typeof name!=='string'||!name||/[\\:]/.test(name)||name.startsWith('/'))return null;
+    const name=item.properties?.Sheetfile??item.properties?.['Sheet file'];if(typeof name!=='string'||!name||/[\\:]/.test(name)||name.startsWith('/'))return null;
     const parts=item.path.split('/');parts.pop();for(const part of name.split('/')){if(part==='..'){if(!parts.length)return null;parts.pop();}else if(part!=='.'&&part)parts.push(part);}return parts.join('/');
   }
   // File hierarchy, with query ancestors retained and bounded cycle traversal.
@@ -120,7 +120,7 @@
     const $ = (id) => document.getElementById(id);
     const make = (tag, text) => { const node = document.createElement(tag); if (text !== undefined) node.textContent = String(text); return node; };
     const button = (text, handler) => { const node = make("button", text); node.type = "button"; node.onclick = handler; return node; };
-    const provider=options.provider||'github',providerContext=provider==='gitlab'?{provider}:{}, remoteAvailable=provider==='github'&&!root.KiCadVSCodeContext;
+    const provider=options.provider||'github',providerName=provider==='gitlab'?'GitLab':'GitHub',host=provider==='gitlab'?KiCadReviewComments.normalizeScope({provider:'gitlab',host:options.host||'https://gitlab.com',repository,ref,file:rootFile}).host:'https://github.com',providerContext=provider==='gitlab'?{provider,host}:{}, remoteAvailable=['github','gitlab'].includes(provider)&&!root.KiCadVSCodeContext;
     const request = async (type, extra = {}) => { const reply = await chrome.runtime.sendMessage({type, ...extra,...providerContext}); if (!reply?.ok) throw new Error(reply?.error || "The extension could not complete this request."); return reply.result; };
     let config = null, model = KiCadDesignModel.buildProject(files), objects = KiCadDesignModel.applyVariant(model, "default");
     let pointerWorld=null;
@@ -130,17 +130,19 @@
     const analyticsCache=new Map(); let dnpHighlight=false;
     let navigation=null,highlightObjects=[],pinnedNets=new Map(),pinnedClasses=new Map(),connectionCursor=-1,activeConnection=null,classConfig=null;
     let netModel={nets:[],warnings:[]}, selectedNet=null, netFilterObject=null, navigatorTab="parts", netSource=null;
+    const netBuilder=root.KiCadNetModel?.createBuilder?.();
+    let showRatsnest=false,ratsnestSource=null,ratsnestResult=null;
     let measureMode = false, measurePoints = [], measurePreview=null, rulerSnap=null, boardMeasure=null, scene = null, attach = null, nativePick = null, rightDown = null,commentMode=null,areaStart=null,areaEnd=null,ignoreClick=false;
-    const variantKey = JSON.stringify(["kicad-review-variants", ...(provider==='gitlab'?['gitlab']:[]),repository, rootFile]);
+    const variantKey = JSON.stringify(["kicad-review-variants", ...(provider==='gitlab'?['gitlab',host]:[]),repository, rootFile]);
     function notice(message) { $("reviewNotice").textContent = message; $("reviewNotice").hidden = !message; options.updateDiagnostics?.(); }
     function commentStatus(message, error = false) { $("commentStatus").textContent = message; $("commentStatus").classList.toggle("error", error); $("githubStatus").textContent=message; $("githubStatus").classList.toggle("error",error); }
-    async function refreshCommentPolicy() {if(!remoteAvailable){policyStatus={allowed:false};$('commentPolicyStatus').textContent=provider==='gitlab'?'GitLab notes are saved in this browser and can be exported to a Git-controlled review file. GitLab account login and issue publication are not available yet.':'This workspace saves review notes locally. GitHub account integration is available in the browser extension.';return;}
+    async function refreshCommentPolicy() {if(!remoteAvailable){policyStatus={allowed:false};$('commentPolicyStatus').textContent=provider==='gitlab'?'This VS Code viewer saves notes in your workspace. GitLab account integration is available in the browser extension.':'This workspace saves review notes locally. GitHub account integration is available in the browser extension.';return;}
       $("commentPolicyStatus").textContent="Checking repository comment policy…";
       $("refreshCommentPolicy").disabled=true;
       try {
         const status=await request("comment-policy-status",{repository:options.pullRepository||repository});policyStatus=status;
-        if(typeof status?.login==="string"&&/^[A-Za-z0-9](?:[A-Za-z0-9-]{0,37}[A-Za-z0-9])?$/.test(status.login))receiptUser=status.login;
-        $("commentPolicyStatus").textContent=`Repository policy: ${status.mode||"unknown"} · ${status.allowed?"you may publish":"publishing restricted"}${status.reason?` · ${status.reason}`:""}. GitHub permissions still apply; the extension checks this policy again when publishing.`;
+        if(typeof status?.login==="string"&&(provider==='gitlab'?/^[A-Za-z0-9_][A-Za-z0-9_.-]{0,254}$/:/^[A-Za-z0-9](?:[A-Za-z0-9-]{0,37}[A-Za-z0-9])?$/).test(status.login))receiptUser=status.login;
+        $("commentPolicyStatus").textContent=`Repository policy: ${status.mode||"unknown"} · ${status.allowed?"you may publish":"publishing restricted"}${status.reason?` · ${status.reason}`:""}. ${providerName} permissions still apply; the extension checks this policy again when publishing.`;
       }catch(error){policyStatus=null;$("commentPolicyStatus").textContent=`Repository policy could not be checked: ${error.message}. Publication will be checked by the extension before posting.`;}
       finally{$("refreshCommentPolicy").disabled=false;renderComments();draw();}
     }
@@ -251,7 +253,7 @@
       else{pinnedNets.clear();pinnedClasses.clear();highlightObjects=[];selectedNet=net;}
       selected=null;nativePick=null;connectionCursor=-1;activeConnection=null;updateHighlights();$('selectionStatus').textContent=selectedNet?`${selectedNet.name} · ${selectedNet.kind==='pcb'?'PCB net '+selectedNet.code:'sheet network'}`:'Net highlight cleared';properties();renderNets();renderObjects();if(selectedNet){inspector('properties');if(move)focusNet(selectedNet);options.onSelection?.({kind:'net',netName:selectedNet.name,path:selectedNet.path});}getCanvas()?.draw();
     }
-    function refreshNets(){const source=getCanvas()?.design;if(!source||source===netSource)return;netSource=source;netModel=root.KiCadNetModel?root.KiCadNetModel.build(files,options.getDesigns?.()||new Map([[currentFile(),source]])):{nets:[],warnings:[]};selectedNet=null;activeConnection=null;getCanvas()?.setNetHighlight(null);renderNets();renderNetClasses();updateHighlights();}
+    function refreshNets(){const source=getCanvas()?.design;if(!source||source===netSource)return;netSource=source;const designs=options.getDesigns?.()||new Map([[currentFile(),source]]);netModel=netBuilder?netBuilder.build(files,designs):root.KiCadNetModel?root.KiCadNetModel.build(files,designs):{nets:[],warnings:[]};selectedNet=null;activeConnection=null;getCanvas()?.setNetHighlight(null);renderNets();renderNetClasses();updateHighlights();}
     function navigate(tab){navigatorTab=tab;for(const name of ["parts","sheets","nets","layers","search","rules","bom"]){$(name+"Pane").hidden=name!==tab;$("nav"+name[0].toUpperCase()+name.slice(1)).setAttribute("aria-selected",String(name===tab));}if(tab==="bom")renderBom();if(tab==="search")navigation?.renderSearch();if(tab==="rules")navigation?.renderRules();if(tab==="sheets")renderSheets();if(tab==="nets"){renderNets();$("netHelp").textContent=pcb?"Select a net to highlight its copper and inspect connections.":"Sheet-local wires, pins and explicit power symbols. Cross-sheet hierarchy and buses are not resolved.";}showNavigator(true);}
     function selectObject(object, native = false, move = false, fromScene = false) {
       selectedNet=null;activeConnection=null;if(!$("multiHighlight").checked){pinnedNets.clear();pinnedClasses.clear();highlightObjects=[];}getCanvas()?.setNetHighlight(null);renderNets();
@@ -339,7 +341,9 @@
         const active=sheet.path===currentFile(),open=button('',()=>openSheet(sheet.path));open.className='sheet-open'+(active?' selected':'');open.setAttribute('aria-current',active?'page':'false');open.title=sheet.path;
         const icon=make('span');icon.className='sheet-icon';if(root.KiCadUIIcons)icon.append(root.KiCadUIIcons.icon('sheet'));else icon.textContent='▤';
         const name=make('span',sheet.label||sheet.path.split('/').pop());name.className='sheet-name';open.append(icon,name);row.append(toggle,open);
+        const source=make('a','↗');source.className='sheet-source';source.title=`Open source: ${sheet.path}`;source.setAttribute('aria-label',source.title);source.href=(provider==='gitlab'?`${host}/${repository}/-/blob/`:`https://github.com/${repository}/blob/`)+encodeURIComponent(ref)+'/'+sheet.path.split('/').map(encodeURIComponent).join('/');source.target='_blank';source.rel='noopener noreferrer';
         for(const parent of parents){const locate=button('◎',()=>selectObject(parent,true,true));locate.className='sheet-locate';locate.title=`Locate ${parent.label||'sheet symbol'} in ${parent.path}`;locate.setAttribute('aria-label',locate.title);row.append(locate);}
+        row.append(source);
         rows.append(row);
       }
       if(!entries.length)rows.append(make('p','No matching sheets.'));
@@ -405,7 +409,7 @@
       $("editorThreadType").value=editor.threadType||"issue";$("editorTitle").value="";configureEditorDestination();$("editorMarkdown").hidden=true;
       capturePreview();draw();
     }
-    function capturePreview(){const image=$("capturePreview");image.hidden=!editor?.capture;if(editor?.capture)image.src=editor.capture.dataUrl;else image.removeAttribute?.('src');$("removeCapture").hidden=!editor?.capture;$("captureComment").disabled=!editor?.anchor.area;$("captureStatus").textContent=editor?.capture?'Screenshot saved with this note. Download it to attach in a GitHub composer.':editor?.anchor.area?'Capture the visible drawing inside this area.':'Draw an area to attach a screenshot.';}
+    function capturePreview(){const image=$("capturePreview");image.hidden=!editor?.capture;if(editor?.capture)image.src=editor.capture.dataUrl;else image.removeAttribute?.('src');$("removeCapture").hidden=!editor?.capture;$("captureComment").disabled=!editor?.anchor.area;$("captureStatus").textContent=editor?.capture?`Screenshot saved with this note. Download it to attach in a ${providerName} composer.`:editor?.anchor.area?'Capture the visible drawing inside this area.':'Draw an area to attach a screenshot.';}
     function setCommentMode(mode){commentMode=commentMode===mode?null:mode;areaStart=areaEnd=null;measureMode=false;measurePoints=[];getCanvas()?.canvas.classList?.toggle("ruler-mode",false);measurePreview=rulerSnap=boardMeasure=null;$("rulerControls").hidden=true;$("measureButton").setAttribute('aria-pressed','false');for(const [id,value] of [['pointComment','point'],['areaComment','area']])$(id).setAttribute('aria-pressed',String(commentMode===value));getCanvas()?.canvas.classList?.toggle('area-mode',Boolean(commentMode));commentStatus(commentMode==='area'?'Drag a rectangle on the drawing to comment.':commentMode==='point'?'Click the drawing to place a comment.':'');draw();}
     async function refreshComments() {
       const run = ++loadId, target = scope();
@@ -440,12 +444,12 @@
         await refreshComments();options.onCommentsChanged?.();commentStatus(`Annotation marked ${state}.`);
       }catch(error){commentStatus(error.message,true);}
     }
-    function assertNoteDestination(note){const selectedType=$("commentDestination").value.includes("discussion")?"discussion":"issue";if(note.threadType&&note.threadType!==selectedType)throw new Error(`This note is marked ${note.threadType}. Choose a matching destination in the GitHub tab, or edit and save the note with a different type before publishing.`);}
+    function assertNoteDestination(note){const selectedType=provider==='gitlab'?$("githubCommentType").value:$("commentDestination").value.includes("discussion")?"discussion":"issue";if(note.threadType&&note.threadType!==selectedType)throw new Error(`This note is marked ${note.threadType}. Choose a matching destination in the ${providerName} tab, or edit and save the note with a different type before publishing.`);}
     function draftOptions(note) {
       assertNoteDestination(note);const destination=$("commentDestination").value, targetRepository=options.pullRepository||repository;
       if(destination.startsWith("existing-")) {
         const targetNumber=Number($("threadNumber").value);
-        if(!Number.isSafeInteger(targetNumber)||targetNumber<=0)throw new Error("Enter a positive GitHub thread number.");
+        if(!Number.isSafeInteger(targetNumber)||targetNumber<=0)throw new Error(`Enter a positive ${providerName} thread number.`);
         return {comment:note,targetType:destination.slice(9),targetNumber,targetRepository};
       }
       if(destination==="pull-request"&&!options.pullNumber)throw new Error("Open a pull-request file to comment on its PR.");
@@ -454,12 +458,13 @@
     async function publishNote(note,action,publication=null){
       action.disabled=true;try{
         if(!publication)assertNoteDestination(note);const value=publication?.value||$("commentDestination").value,destination={issue:"new-issue",discussion:"new-discussion","existing-issue":"issue","existing-discussion":"discussion","pull-request":"issue"}[value];
+        if(!remoteAvailable)throw new Error(`${providerName} publication is unavailable in this viewer.`);if(provider==='gitlab'&&!["issue","existing-issue"].includes(value))throw new Error("GitLab reviews use new issues or discussions on existing issues.");
         const number=value==="pull-request"?options.pullNumber:value.startsWith("existing-")?Number(publication?.number||$("threadNumber").value):undefined;
-        if(!destination||(destination==="issue"||destination==="discussion")&&(!Number.isSafeInteger(number)||number<=0))throw new Error("Choose a valid GitHub issue or discussion number.");
-        const result=await request("github-publish-comment",{comment:note,destination,repository:options.pullRepository||repository,...(publication?.title?{title:publication.title}:{}),...(number?{number}:{}),...(destination==="new-discussion"?{categoryId:publication?.category||$("discussionCategory").value}:{})});
+        if(!destination||(destination==="issue"||destination==="discussion")&&(!Number.isSafeInteger(number)||number<=0))throw new Error(`Choose a valid ${providerName} issue or discussion number.`);
+        const result=await request(provider==='gitlab'?"comment-publish":"github-publish-comment",{comment:note,destination,repository:options.pullRepository||repository,...(publication?.title?{title:publication.title}:{}),...(provider==='gitlab'&&note.threadType==='discussion'?{discussion:true}:{}),...(number?{number}:{}),...(destination==="new-discussion"?{categoryId:publication?.category||$("discussionCategory").value}:{})});
         const refs=[...(note.remoteRefs||[])];if(!refs.some(ref=>ref.url===result.remoteRef.url))refs.push(result.remoteRef);
-        await request("comment-save",{comment:KiCadReviewComments.validateComment({...note,remoteRefs:refs,updatedAt:new Date(Math.max(Date.now(),Date.parse(note.updatedAt||note.createdAt)+1)).toISOString()}),expectedUpdatedAt:note.updatedAt||note.createdAt});await refreshComments();options.onCommentsChanged?.();commentStatus(`Posted to GitHub ${result.remoteRef.kind} #${result.remoteRef.number}. The linked conversation is saved below.`);return true;
-      }catch(error){commentStatus(error.message+" Your draft remains saved. If GitHub accepted the post but local saving failed, retry Publish to recover its link.",true);return false;}finally{action.disabled=false;}
+        await request("comment-save",{comment:KiCadReviewComments.validateComment({...note,remoteRefs:refs,updatedAt:new Date(Math.max(Date.now(),Date.parse(note.updatedAt||note.createdAt)+1)).toISOString()}),expectedUpdatedAt:note.updatedAt||note.createdAt});await refreshComments();options.onCommentsChanged?.();commentStatus(`Posted to ${providerName} ${result.remoteRef.kind} #${result.remoteRef.number}. The linked conversation is saved below.`);return true;
+      }catch(error){commentStatus(error.message+` Your draft remains saved. If ${providerName} accepted the post but local saving failed, retry Publish to recover its link.`,true);return false;}finally{action.disabled=false;}
     }
     function renderComments() {
       $("commentList").replaceChildren();
@@ -468,17 +473,17 @@
         const card=make("article");card.className="note severity-"+(note.severity||"info");
         const unread=KiCadReviewComments.isUnread(note,receipt(note));
         card.append(make("strong",`${(note.severity||"info").toUpperCase()} · ${!remoteAvailable?'Local review':note.threadType==='discussion'?'Discussion':note.threadType==='issue'?'Issue':'Unassigned type'} · ${unread?"Unread":"Read"}`),make("small",anchorLabel(note.anchor)),make("p",note.text),
-          make("small",`Created ${new Date(note.createdAt).toLocaleString()} · Updated ${new Date(note.updatedAt||note.createdAt).toLocaleString()} · ${note.github?`GitHub ${note.github.source} #${note.github.number} · ${note.github.state} · ${note.github.author||""}`:"local"}`));
+          make("small",`Created ${new Date(note.createdAt).toLocaleString()} · Updated ${new Date(note.updatedAt||note.createdAt).toLocaleString()} · ${note.github?`${providerName} ${note.github.source} #${note.github.number} · ${note.github.state} · ${note.github.author||""}`:"local"}`));
         if(note.mentions?.length)card.append(make("small",`Mentions: ${note.mentions.map(login=>"@"+login).join(", ")}`));
         const actions=make("div");actions.className="inspector-actions";
         actions.append(button("Locate",()=>{if(note.anchor.file!==currentFile())openSheet(note.anchor.file,note.anchor.position);else if(note.anchor.position)focus(note.anchor.position);inspector("comments");}),
           button(unread?"Mark read":"Mark unread",()=>markRead(note,unread)));
-        if(note.github){const link=make("a","Open GitHub thread");link.href=note.github.url;link.target="_blank";link.rel="noopener noreferrer";actions.append(link);}
-        else {const draft=button("Open GitHub composer",async()=>{try{await request("open-comment-draft",draftOptions(note));commentStatus("GitHub composer opened with the annotation and severity. Review and submit it there.");}catch(error){commentStatus(error.message,true);}});draft.className="github-draft-action";draft.hidden=!remoteAvailable;actions.append(button("Edit",()=>editComment(note)),draft,
+        if(note.github){const link=make("a",`Open ${providerName} thread`);link.href=note.github.url;link.target="_blank";link.rel="noopener noreferrer";actions.append(link);}
+        else {const draft=button(`Open ${providerName} composer`,async()=>{try{await request("open-comment-draft",draftOptions(note));commentStatus("GitHub composer opened with the annotation and severity. Review and submit it there.");}catch(error){commentStatus(error.message,true);}});draft.className="github-draft-action";draft.hidden=!remoteAvailable||provider==='gitlab';actions.append(button("Edit",()=>editComment(note)),draft,
           button("Delete",async()=>{try{await request("comment-delete",{...scope(note.anchor.file),id:note.id});await refreshComments();options.onCommentsChanged?.();commentStatus("Local comment deleted.");}catch(error){commentStatus(error.message,true);}}));
         }
         if(!note.github){for(const [state,label] of [["open","Open"],["skipped","Skip"],["resolved","Resolve"]])if((note.state||"open")!==state)actions.append(button(label,()=>setNoteState(note,state)));}
-        if(!note.github&&remoteAvailable){actions.append(button("Choose GitHub destination",()=>inspector("github")));const publish=button("Publish to GitHub",()=>publishNote(note,publish));publish.className="github-publish-action";publish.disabled=policyStatus?.allowed===false;if(publish.disabled)publish.title=policyStatus.reason||"Repository comment policy restricts publishing.";actions.append(publish);}
+        if(!note.github&&remoteAvailable){actions.append(button(`Choose ${providerName} destination`,()=>inspector("github")));const publish=button(`Publish to ${providerName}`,()=>publishNote(note,publish));publish.className="github-publish-action";publish.disabled=policyStatus?.allowed===false;if(publish.disabled)publish.title=policyStatus.reason||"Repository comment policy restricts publishing.";actions.append(publish);}
         if(!note.github){card.append(make("small",`State: ${note.state||"open"}${note.tags?.length?" · "+note.tags.join(", "):""}`));for(const ref of note.remoteRefs||[]){const link=make("a",`${ref.kind} #${ref.number}`);link.href=ref.url;link.target="_blank";link.rel="noopener noreferrer";card.append(link);}}
         if(note.capture){const image=make('img');image.src=note.capture.dataUrl;image.alt='Captured drawing area for this annotation';card.append(image);const download=make('a','Download screenshot');download.href=note.capture.dataUrl;download.download=`kicad-review-${note.id}.png`;actions.append(download);}
         card.append(actions);$("commentList").append(card);
@@ -489,13 +494,13 @@
         if(!thread.url||urls.has(thread.url))continue;urls.add(thread.url);const row=make("article");row.className="note";
         const link=make("a",`${thread.kind||"thread"} #${thread.number}`);link.href=thread.url;link.target="_blank";link.rel="noopener noreferrer";row.append(link,make("p",note.text));linked.append(row);
       }
-      if(!urls.size)linked.append(make("p","No linked conversations for this drawing. Publish a saved note or load GitHub annotations."));
+      if(!urls.size)linked.append(make("p",`No linked conversations for this drawing. Publish a saved note or load ${providerName} annotations.`));
     }
     async function loadGitHub() {
       const run=++remoteLoad,target=scope();$("refreshGitHub").disabled=true;
-      try{const result=await request("github-annotations",{...target,includeDiscussions:$("commentDestination").value.includes("discussion"),...(options.pullNumber?{pullNumber:options.pullNumber,pullRepository:options.pullRepository}:{}),
+      try{const result=await request(provider==='gitlab'?"comment-remote-list":"github-annotations",{...target,includeDiscussions:$("commentDestination").value.includes("discussion"),...(options.pullNumber?{pullNumber:options.pullNumber,pullRepository:options.pullRepository}:{}),
           ...($("commentDestination").value==="existing-issue"&&Number.isSafeInteger(Number($("threadNumber").value))&&Number($("threadNumber").value)>0?{issueNumber:Number($("threadNumber").value)}:{})});
-        if(run!==remoteLoad||target.file!==scope().file)return;remoteNotes=result.notes;renderComments();draw();commentStatus(`Loaded ${remoteNotes.length} GitHub annotations. ${result.warnings.join(" ")}`);
+        if(run!==remoteLoad||target.file!==scope().file)return;remoteNotes=result.notes;renderComments();draw();commentStatus(`Loaded ${remoteNotes.length} ${providerName} annotations. ${result.warnings.join(" ")}`);
       }catch(error){if(run===remoteLoad)commentStatus(error.message,true);}finally{if(run===remoteLoad)$("refreshGitHub").disabled=false;}
     }
     function point(event) {
@@ -515,6 +520,7 @@
       const overlay = $("reviewOverlay"), pins = $("commentPins"); overlay.replaceChildren(); pins.replaceChildren();
       if (scene) return;
       const active = currentFile() || rootFile;if(!pcb)sheetVisits.visit(active);refreshNets();
+      if(showRatsnest&&pcb&&root.KiCadRatsnest){if(ratsnestSource!==netSource){ratsnestSource=netSource;ratsnestResult=root.KiCadRatsnest.build(netModel.nets.filter(n=>n.path===active));}for(const line of ratsnestResult.lines){if(selectedNet&&line.netId!==selectedNet.id)continue;const a=screen(line.a),b=screen(line.b);if(a&&b)overlay.append(svg('line',{x1:a.x,y1:a.y,x2:b.x,y2:b.y,stroke:'#53a9d1','stroke-width':1,'stroke-dasharray':'5 4',opacity:.8}));}}
       if (active !== lastFile) {
         lastFile = active;pointerWorld=null;measurePoints=[];measurePreview=rulerSnap=boardMeasure=null;refreshNets(); $("selectionStatus").textContent="Select a part or net to inspect"; remoteLoad++; remoteNotes=[]; $("refreshGitHub").disabled=false; $("activeSheet").textContent = active; $("activeSheet").title = active;
         $("sheetSelect").value = active;renderSheets();
@@ -589,7 +595,7 @@
     function inspectPointer(){const object=objectAt(pointerWorld);if(object)selectObject(object);properties();inspector('properties');}
     function highlightPointerNet(){
       const hits=hitsAt(pointerWorld),net=netModel.nets.find(n=>n.path===currentFile()&&hits.some(hit=>n.primitives.includes(hit.bbox?.primitive)));
-      if(net)selectNet(net);else {const linked=netsForObject(selected);if(linked.length===1)selectNet(linked[0]);else if(linked.length){netFilterObject=selected.id;navigate('nets');}else notice('Point at a saved wire, pin, pad or copper item to highlight its net.');}
+      if(net)selectNet(net);else {const pointed=objectAt(pointerWorld)||selected,linked=netsForObject(pointed);if(linked.length===1)selectNet(linked[0]);else if(linked.length){netFilterObject=pointed.id;navigate('nets');}else notice('Point at a saved wire, pin, pad or copper item to highlight its net.');}
     }
     function rulerPoint(event){
       const c=getCanvas(),at=point(event);if(!at)return null;
@@ -630,6 +636,8 @@
     for(const sheet of model.sheets){const option=make("option",sheet.label||sheet.path);option.value=sheet.path;$("sheetSelect").append(option);}
     $("sheetSelect").onchange=()=>openSheet($("sheetSelect").value);
     $("closeNavigator").onclick=()=>showNavigator(false);
+    const focusView=button('Focus view',()=>{const focused=document.body?.classList?.toggle('drawing-focused');showNavigator(false);hideInspector();focusView.textContent=focused?'Restore controls':'Focus view';});focusView.title='Maximize drawing area (Ctrl+Shift+F); Esc restores controls';$('frameControls').append(focusView);
+    if(pcb&&root.KiCadRatsnest){const ratsnestButton=button('Ratsnest',()=>{showRatsnest=!showRatsnest;ratsnestButton.setAttribute('aria-pressed',String(showRatsnest));draw();if(showRatsnest)notice(`Candidate connections: ${ratsnestResult?.lines.length||0}. ${ratsnestResult?.warnings.join(' ')||''}`);});ratsnestButton.title='Read-only candidate airwires from saved copper; not native KiCad unrouted/DRC';ratsnestButton.setAttribute('aria-pressed','false');$('frameControls').append(ratsnestButton);}
     for(const name of ["parts","sheets","nets","layers","search","rules","bom"])$("nav"+name[0].toUpperCase()+name.slice(1)).onclick=()=>navigate(name);
     $("netSearch").oninput=()=>{netFilterObject=null;renderNets();};$("clearNet").onclick=()=>{netFilterObject=null;selectNet(null);};
     $("selectObjectNet").onclick=()=>{const linked=netsForObject(selected);if(linked.length===1)selectNet(linked[0]);else{netFilterObject=selected?.id;navigate("nets");}};
@@ -640,18 +648,24 @@
     $("partSearch").oninput=renderObjects;$("objectFilter").onchange=renderObjects;$("allSheets").onchange=renderObjects;
     $("focusSelected").onclick=()=>{if(selectedNet)focusNet(selectedNet);else if(selected)selectObject(selected,true,true);};$("openSelectedSheet").onclick=()=>openSubsheet();
     $("commentSelected").onclick=()=>editComment(null,selectedNet?anchor(selectedNet.members.find(m=>m.position)?.position,{path:selectedNet.path,id:selectedNet.id,kind:"net",reference:selectedNet.name.slice(0,100)}):null);$("newComment").onclick=()=>editComment();
-    function destinationChanged(){const value=$("commentDestination").value;$("githubCommentType").value=value.includes("discussion")?"discussion":"issue";$("threadNumberLabel").hidden=!value.startsWith("existing-");for(const id of ["discussionCategoryLabel","loadCategories"])$(id).hidden=value!=="discussion";$("threadNumber").placeholder=value.includes("discussion")?"Discussion number":"Issue number";}
-    function chooseCommentType(initial=false){const discussion=$("githubCommentType").value==="discussion", choices=discussion?[["discussion","New discussion"],["existing-discussion","Existing discussion"]]:[["issue","New issue"],["existing-issue","Existing issue"],...(options.pullNumber?[["pull-request",`This pull request #${options.pullNumber}`]]:[])];
-      $("commentDestination").replaceChildren();for(const [value,label]of choices){const item=make("option",label);item.value=value;$("commentDestination").append(item);}$("commentDestination").value=initial&&options.pullNumber?"pull-request":choices[0][0];destinationChanged();if(editor){$("editorThreadType").value=$("githubCommentType").value;configureEditorDestination();}if(editor)$("commentAnchor").textContent=remoteAvailable?`${$("githubCommentType").value==="discussion"?"Discussion":"Issue"} · ${anchorLabel(editor.anchor)}; choose its destination below.`:`Local review: ${anchorLabel(editor.anchor)}`;}
+    function destinationChanged(){const value=$("commentDestination").value;$("githubCommentType").value=provider==='gitlab'?$("githubCommentType").value:value.includes("discussion")?"discussion":"issue";$("threadNumberLabel").hidden=!value.startsWith("existing-");for(const id of ["discussionCategoryLabel","loadCategories"])$(id).hidden=value!=="discussion";$("threadNumber").placeholder=value.includes("discussion")?"Discussion number":"Issue number";}
+    function chooseCommentType(initial=false){const discussion=$("githubCommentType").value==="discussion", choices=discussion?(provider==='gitlab'?[["existing-issue","Discussion on an existing issue"]]:[["discussion","New discussion"],["existing-discussion","Existing discussion"]]):[["issue","New issue"],["existing-issue","Existing issue"],...(provider==='github'&&options.pullNumber?[["pull-request",`This pull request #${options.pullNumber}`]]:[])];
+      $("commentDestination").replaceChildren();for(const [value,label]of choices){const item=make("option",label);item.value=value;$("commentDestination").append(item);}$("commentDestination").value=initial&&provider==='github'&&options.pullNumber?"pull-request":choices[0][0];destinationChanged();if(editor){$("editorThreadType").value=$("githubCommentType").value;configureEditorDestination();}if(editor)$("commentAnchor").textContent=remoteAvailable?`${$("githubCommentType").value==="discussion"?"Discussion":"Issue"} · ${anchorLabel(editor.anchor)}; choose its destination below.`:`Local review: ${anchorLabel(editor.anchor)}`;}
     $("githubCommentType").value="issue";$("githubCommentType").onchange=()=>chooseCommentType();$("commentDestination").onchange=destinationChanged;chooseCommentType(true);
     const targetRepository=options.pullRepository||repository;
-    $("repositoryIssues").href=`https://github.com/${targetRepository}/issues`;$("repositoryDiscussions").href=`https://github.com/${targetRepository}/discussions`;
-    $("githubAvailability").textContent=remoteAvailable?`Repository: ${targetRepository}. Configure your account in settings to publish directly. GitHub repository permissions and review policy apply.`:provider==='gitlab'?"GitLab remote collaboration is not available yet. Use Comments to save and export local notes.":"GitHub remote collaboration is available in the browser extension. This VS Code viewer stores review notes in your workspace.";
+    $("repositoryIssues").href=provider==='gitlab'?`${host}/${targetRepository}/-/issues`:`https://github.com/${targetRepository}/issues`;$("repositoryDiscussions").href=provider==='gitlab'?$("repositoryIssues").href:`https://github.com/${targetRepository}/discussions`;
+    $("githubAvailability").textContent=remoteAvailable?`Repository: ${targetRepository}. Configure your account in settings to publish directly. ${providerName} repository permissions and review policy apply.${provider==='gitlab'?' GitLab discussions are conversations on an existing issue.':''}`:provider==='gitlab'?"GitLab remote collaboration is available in the browser extension. This VS Code viewer stores review notes in your workspace.":"GitHub remote collaboration is available in the browser extension. This VS Code viewer stores review notes in your workspace.";
+    $("showGitHub").textContent=providerName;$("postComment").textContent=`Post to ${providerName}`;$("editorAccount").textContent=`${providerName} account`;$("editorPreview").textContent=`Preview ${providerName} Markdown`;$("refreshGitHub").textContent=`Load ${providerName} annotations`;
+    if(provider==='gitlab'){
+      const labels=[["commentPublishSettings","h3","Post to GitLab"],["githubPane","h2","GitLab collaboration"],["commentsPane","p.hint","Save notes locally, create a GitLab issue, or post a discussion on an existing issue. Read status belongs to this browser user."],["githubPane",".collaboration-guide","Choose Issue for a new task or Discussion to comment on an existing GitLab issue. Set the issue number, add severity, tags and mentions, then Post to GitLab. Follow replies and notifications in the linked issue. Local review state does not close an issue. Attach downloaded screenshots manually on GitLab."]];
+      for(const[id,selector,text]of labels){const node=$(id).querySelector?.(selector);if(node)node.textContent=text;}
+      $("repositoryDiscussions").textContent="Issue discussions";
+    }
     $("githubAvailableControls").hidden=!remoteAvailable;
     $("refreshGitHub").onclick=loadGitHub;
     $("refreshCommentPolicy").onclick=refreshCommentPolicy;
     $("reviewSettings").onclick=async()=>{try{await request("open-options");}catch(error){commentStatus(error.message,true);}};
-    $("loadCategories").onclick=async()=>{try{const categories=await request("github-discussion-categories",{repository:options.pullRepository||repository});$("discussionCategory").replaceChildren();for(const category of categories){const option=make("option",category.name);option.value=category.id;$("discussionCategory").append(option);}}catch(error){commentStatus(error.message,true);}};$("severityFilter").onchange=()=>{renderComments();draw();};
+    $("loadCategories").onclick=async()=>{try{if(provider!=='github')throw new Error("GitLab discussions belong to issues and have no GitHub category.");const categories=await request("github-discussion-categories",{repository:options.pullRepository||repository});$("discussionCategory").replaceChildren();for(const category of categories){const option=make("option",category.name);option.value=category.id;$("discussionCategory").append(option);}}catch(error){commentStatus(error.message,true);}};$("severityFilter").onchange=()=>{renderComments();draw();};
     $("cancelComment").onclick=()=>{$("commentEditor").hidden=true;editor=null;draw();};
     $("pointComment").onclick=()=>setCommentMode('point');$("areaComment").onclick=()=>setCommentMode('area');
     $("stateFilter").onchange=$("readFilter").onchange=$("commentSort").onchange=$("commentSearch").oninput=()=>{unreadCursor=-1;renderComments();draw();};
@@ -660,7 +674,7 @@
     $("removeCapture").onclick=()=>{delete editor.capture;capturePreview();};
     function configureEditorDestination(){
       const discussion=$("editorThreadType").value==="discussion";
-      const choices=discussion?[["discussion","New discussion"],["existing-discussion","Existing discussion"]]:[["issue","New issue"],["existing-issue","Existing issue"],...(options.pullNumber?[["pull-request",`This pull request #${options.pullNumber}`]]:[])];
+      const choices=discussion?(provider==='gitlab'?[["existing-issue","Discussion on an existing issue"]]:[["discussion","New discussion"],["existing-discussion","Existing discussion"]]):[["issue","New issue"],["existing-issue","Existing issue"],...(provider==='github'&&options.pullNumber?[["pull-request",`This pull request #${options.pullNumber}`]]:[])];
       $("editorDestination").replaceChildren();for(const[value,label]of choices){const item=make("option",label);item.value=value;$("editorDestination").append(item);}$("editorDestination").value=choices.some(([value])=>value===$("commentDestination").value)?$("commentDestination").value:choices[0][0];
       $("editorThreadNumber").value=$("threadNumber").value;editorDestinationChanged();
     }
@@ -669,16 +683,16 @@
     async function saveEditor(post=false){
       if(!editor||$("saveComment").disabled)return;$("saveComment").disabled=$("postComment").disabled=true;
       try{const saved=editorNote();let publication;
-        if(post){if(!remoteAvailable)throw new Error("GitHub publication is unavailable in this viewer.");const value=$("editorDestination").value,number=Number($("editorThreadNumber").value),category=$("editorCategory").value,title=$("editorTitle").value.trim();
-          if(value.startsWith("existing-")&&(!Number.isSafeInteger(number)||number<=0))throw new Error("Enter a positive GitHub thread number.");if(value==="discussion"&&!category)throw new Error("Load and select a discussion category.");publication={value,number,category,title};}
+        if(post){if(!remoteAvailable)throw new Error(`${providerName} publication is unavailable in this viewer.`);const value=$("editorDestination").value,number=Number($("editorThreadNumber").value),category=$("editorCategory").value,title=$("editorTitle").value.trim();
+          if(value.startsWith("existing-")&&(!Number.isSafeInteger(number)||number<=0))throw new Error(`Enter a positive ${providerName} thread number.`);if(value==="discussion"&&!category)throw new Error("Load and select a discussion category.");publication={value,number,category,title};}
         await request("comment-save",{comment:saved,...(editor.updatedAt?{expectedUpdatedAt:editor.updatedAt}:{})});editor=saved;await refreshComments();options.onCommentsChanged?.();
-        if(!post||await publishNote(saved,$("postComment"),publication)){$("commentEditor").hidden=true;editor=null;if(!post)commentStatus(remoteAvailable?"Draft saved. Choose Post to GitHub to share it remotely.":"Annotation saved in the configured review store.");}
+        if(!post||await publishNote(saved,$("postComment"),publication)){$("commentEditor").hidden=true;editor=null;if(!post)commentStatus(remoteAvailable?`Draft saved. Choose Post to ${providerName} to share it remotely.`:"Annotation saved in the configured review store.");}
       }catch(error){commentStatus(error.message,true);}finally{$("saveComment").disabled=$("postComment").disabled=false;}
     }
     $("commentPublishSettings").hidden=!remoteAvailable;$("saveComment").textContent=remoteAvailable?"Save draft":"Save comment";
     $("editorThreadType").onchange=()=>{$("githubCommentType").value=$("editorThreadType").value;chooseCommentType();};$("editorDestination").onchange=editorDestinationChanged;
     $("editorAccount").onclick=$("reviewSettings").onclick;
-    $("editorLoadCategories").onclick=async()=>{try{const categories=await request("github-discussion-categories",{repository:targetRepository});$("editorCategory").replaceChildren();for(const category of categories){const item=make("option",category.name);item.value=category.id;$("editorCategory").append(item);}$("editorCategory").value=categories[0]?.id||"";}catch(error){commentStatus(error.message,true);}};
+    $("editorLoadCategories").onclick=async()=>{try{if(provider!=='github')throw new Error("GitLab discussions belong to issues and have no GitHub category.");const categories=await request("github-discussion-categories",{repository:targetRepository});$("editorCategory").replaceChildren();for(const category of categories){const item=make("option",category.name);item.value=category.id;$("editorCategory").append(item);}$("editorCategory").value=categories[0]?.id||"";}catch(error){commentStatus(error.message,true);}};
     $("editorPreview").onclick=()=>{try{$("editorMarkdown").textContent=KiCadReviewComments.toMarkdown(editorNote()).replace(/<!--[\s\S]*?-->/g,"").trim();$("editorMarkdown").hidden=false;}catch(error){commentStatus(error.message,true);}};
     $("saveComment").onclick=()=>saveEditor();$("postComment").onclick=()=>saveEditor(true);
     const download=(name,text)=>{const link=make("a");link.download=name;link.href=URL.createObjectURL(new Blob([text],{type:"application/json"}));link.click();setTimeout(()=>URL.revokeObjectURL(link.href),1000);};
@@ -687,7 +701,7 @@
     $("commentFile").onchange=async()=>{
       const file=$("commentFile").files?.[0];if(!file)return;let saved=0;
       try{if(file.size>1024*1024)throw new Error("Comment import exceeds 1 MiB.");const imported=KiCadReviewComments.parseComments(await file.text());
-        if(imported.some((note)=>(note.anchor.provider||'github')!==provider||note.anchor.repository!==repository||note.anchor.ref!==ref||!files.some((source)=>source.path===note.anchor.file)))throw new Error("These comments belong to another repository, revision, or drawing.");
+        if(imported.some((note)=>(note.anchor.provider||'github')!==provider||(provider==='gitlab'&&(note.anchor.host||'https://gitlab.com')!==host)||note.anchor.repository!==repository||note.anchor.ref!==ref||!files.some((source)=>source.path===note.anchor.file)))throw new Error("These comments belong to another repository, revision, or drawing.");
         for(const note of imported){await request("comment-save",{comment:note});saved++;}await refreshComments();if(saved)options.onCommentsChanged?.();commentStatus(`Imported ${saved} comments.`);
       }catch(error){await refreshComments();if(saved)options.onCommentsChanged?.();commentStatus(`${error.message}${saved?` ${saved} comments were saved before the error.`:""}`,true);}finally{$("commentFile").value="";}
     };
@@ -706,14 +720,15 @@
     $('measureBoard').onclick=()=>{const extent=KiCadReviewTools.boardExtents(getCanvas()?.design?.primitives,KiCadOwnedCanvas.arcThrough);if(!extent){$('measurementStatus').textContent='No saved Edge.Cuts geometry to measure';return;}boardMeasure=extent;measurePoints=[{x:extent.x,y:extent.y},{x:extent.x+extent.width,y:extent.y+extent.height}];measurePreview=rulerSnap=null;draw();$('rulerSnapStatus').textContent='Saved outline bounding extents (not DRC validation)';};
     const reviewKeydown=event=>{
       if(event.defaultPrevented||event.repeat||event.composedPath().some(node=>node?.isContentEditable||/^(INPUT|TEXTAREA|SELECT)$/.test(node?.tagName||'')))return;
-      if(event.key==='Escape'){$('objectMenu').hidden=true;if(commentMode)setCommentMode(null);if(selectedNet||pinnedNets.size||pinnedClasses.size||highlightObjects.length)clearHighlights();if(measureMode)$('measureButton').click();return;}
+      if(event.key==='Escape'){$('objectMenu').hidden=true;document.body?.classList?.remove('drawing-focused');focusView.textContent='Focus view';if(commentMode)setCommentMode(null);if(selectedNet||pinnedNets.size||pinnedClasses.size||highlightObjects.length)clearHighlights();if(measureMode)$('measureButton').click();return;}
+      if(event.ctrlKey&&event.shiftKey&&event.key.toLowerCase()==='f'&&!event.altKey&&!event.metaKey){event.preventDefault();const focused=document.body?.classList?.toggle('drawing-focused');focusView.textContent=focused?'Restore controls':'Focus view';showNavigator(false);hideInspector();return;}
       if(event.altKey&&!event.ctrlKey&&!event.metaKey&&!pcb&&!scene&&['ArrowLeft','ArrowRight','Home'].includes(event.key)){event.preventDefault();if(event.key==='Home')homeSheet();else historySheet(event.key==='ArrowLeft'?-1:1);return;}
       if(event.altKey&&event.key==='ArrowUp'&&!event.ctrlKey&&!event.metaKey&&!pcb&&!scene){event.preventDefault();parentSheet();return;}
       if(event.ctrlKey||event.altKey||event.metaKey)return;
       const key=event.key.toLowerCase();
-      if(key==='e'){event.preventDefault();inspectPointer();}
+      if(key==='e'){event.preventDefault();if(scene){properties();inspector('properties');}else inspectPointer();}
       else if(key==='/'){event.preventDefault();navigate('search');$('projectSearch').focus();}
-      else if(key==='h'&&!scene){event.preventDefault();highlightPointerNet();}
+      else if((key==='h'||key==='`'||key==='~'||event.code==='Backquote')&&!scene){event.preventDefault();highlightPointerNet();}
       else if(key==='c'){event.preventDefault();const item=objectAt(pointerWorld)||selected;editComment(null,item?anchor(item.position,item):pointerWorld?anchor(pointerWorld,null):null);}
       else if(key==='m'&&!scene){event.preventDefault();$('measureButton').click();}
       else if(event.key==='Enter'&&!pcb&&!scene&&selected?.kind==='sheet'&&!event.composedPath().some(node=>/^(BUTTON|A)$/.test(node?.tagName||''))){event.preventDefault();openSubsheet();}
@@ -747,7 +762,7 @@
     return {attachCanvas,draw,refreshNets,refreshComments,highlightRelated,select3D(record){nativePick=record;const object=resolveObject(objects,rootFile,record);selectObject(object,false,false,true);},
       comment3D(record){const object=resolveObject(objects,rootFile,record);if(object)editComment(null,anchor(object.position,object));else notice("This 3D object has no unambiguous saved part anchor; switch to 2D to place a comment.");},
       setScene(next){scene=next;$("highlightControls").hidden=Boolean(scene);$("highlightDnp").disabled=Boolean(scene);for(const id of ["measureButton","navNets","navLayers","pointComment","areaComment"])$(id).disabled=Boolean(scene);if(scene&&navigatorTab!=="parts")navigate("parts");if(scene){setCommentMode(null);measureMode=false;measurePoints=[];getCanvas()?.canvas.classList?.toggle("ruler-mode",false);measurePreview=rulerSnap=boardMeasure=null;$("rulerControls").hidden=true;$("measureButton").setAttribute("aria-pressed","false");$("measurementStatus").textContent="";scene.setPopulation(objects.filter((item)=>item.kind==="footprint").map((item)=>({reference:item.reference,populated:item.populated})));}draw();},
-      dispose(){loadId++;remoteLoad++;root.removeEventListener?.('keydown',reviewKeydown);narrowPanels.removeEventListener?.("change",keepDrawingVisible);navigation?.dispose();attach?.dispose();}}
+      dispose(){loadId++;remoteLoad++;netBuilder?.clear();root.removeEventListener?.('keydown',reviewKeydown);narrowPanels.removeEventListener?.("change",keepDrawingVisible);navigation?.dispose();attach?.dispose();}}
   }
   root.KiCadReviewWorkspace={mount,resolveObject,measurement,matchesSearch,sheetTarget,sheetEntries,sheetHistory,rootSheetPath};
   if(typeof module==="object"&&module.exports)module.exports=root.KiCadReviewWorkspace;

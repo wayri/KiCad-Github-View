@@ -323,8 +323,8 @@
       if (hasNativeVariant(parsed)) warnings.push(`${file.path}: saved native KiCad variant data is present but is not interpreted by this review overlay.`);
     }
     for (const item of raw) if (item.kind === "sheet") {
-      const target = childPath(item.path, item.metadata.properties.Sheetfile);
-      if (target && paths.has(target)) labels.set(target, item.metadata.properties.Sheetname || target.split("/").at(-1));
+      const target = childPath(item.path, item.metadata.properties.Sheetfile ?? item.metadata.properties['Sheet file']);
+      if (target && paths.has(target)) labels.set(target, item.metadata.properties.Sheetname || item.metadata.properties['Sheet name'] || target.split("/").at(-1));
     }
     for (const sheet of sheets) if (labels.has(sheet.path)) sheet.label = labels.get(sheet.path);
     const ids = new Map(), byRawKey = new Map(), objects = [];

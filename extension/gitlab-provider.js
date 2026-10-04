@@ -1,17 +1,19 @@
-/* Public GitLab.com transport. Credentials and arbitrary hosts are deliberately absent. */
+/* GitLab transport, bound to one explicitly authorized HTTPS origin. */
 ((root) => {
   'use strict';
+  function forHost(host='https://gitlab.com'){
+    const parsed=new URL(host);if(parsed.protocol!=='https:'||parsed.username||parsed.password||parsed.search||parsed.hash||parsed.pathname!=='/')throw new Error('Invalid GitLab host.');host=parsed.origin;
   const MIB=1024*1024, SHA=/^[a-f0-9]{40}$/i;
   const validRepository=value=>typeof value==='string'&&value.length<=300&&/^[A-Za-z0-9_.-]+(?:\/[A-Za-z0-9_.-]+)+$/.test(value)&&value.split('/').every(p=>p!=='.'&&p!=='..');
   const validPath=value=>typeof value==='string'&&value.length<=500&&value.length>0&&!value.startsWith('/')&&!/[\\:\x00-\x1f\x7f]/.test(value)&&value.split('/').every(p=>p&&p!=='.'&&p!=='..');
   function scope(repository,ref,file){if(!validRepository(repository)||!root.KiCadBrowserData.validRef(ref)||!validPath(file))throw new Error('Invalid GitLab project location.');}
-  function endpoint(repository){if(!validRepository(repository))throw new Error('Invalid GitLab repository.');return 'https://gitlab.com/api/v4/projects/'+encodeURIComponent(repository)+'/repository';}
+  function endpoint(repository){if(!validRepository(repository))throw new Error('Invalid GitLab repository.');return host+'/api/v4/projects/'+encodeURIComponent(repository)+'/repository';}
   async function response(url,limit=4*MIB){
-    if(!url.startsWith('https://gitlab.com/api/v4/projects/'))throw new Error('Invalid GitLab API endpoint.');
+    if(new URL(url).origin!==host||!url.startsWith(host+'/api/v4/projects/'))throw new Error('Invalid GitLab API endpoint.');
     const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),60000);
-    try{const result=await fetch(url,{credentials:'omit',cache:'no-store',redirect:'error',signal:controller.signal});
+    try{const headers=await root.KiCadGitLabReviewApi?.authorizationHeaders(host);const result=await fetch(url,{...(headers&&Object.keys(headers).length?{headers}:{}),credentials:'omit',cache:'no-store',redirect:'error',signal:controller.signal});
       if(result.status===404)return null;
-      if(!result.ok)throw new Error(`GitLab returned HTTP ${result.status}; only publicly accessible repositories are supported.`);
+      if(!result.ok)throw new Error(`GitLab returned HTTP ${result.status}; check the server, repository access and GitLab connection in extension settings.`);
       if(Number(result.headers.get('content-length'))>limit)throw new Error('GitLab response exceeds its size limit.');
       const reader=result.body.getReader(),chunks=[];let length=0;
       while(true){const {done,value}=await reader.read();if(done)break;length+=value.length;if(length>limit){await reader.cancel();throw new Error('GitLab response exceeds its size limit.');}chunks.push(value);}
@@ -19,7 +21,7 @@
       return {bytes,next:result.headers.get('x-next-page')||'',link:result.headers.get('link')||''};
     }catch(error){if(error.name==='AbortError')throw new Error('GitLab retrieval timed out.');throw error;}finally{clearTimeout(timer);}
   }
-  async function json(url){const result=await response(url);if(!result)throw new Error('Public GitLab resource was not found.');return {...result,value:JSON.parse(new TextDecoder().decode(result.bytes))};}
+  async function json(url){const result=await response(url);if(!result)throw new Error('GitLab resource was not found or access is unavailable.');return {...result,value:JSON.parse(new TextDecoder().decode(result.bytes))};}
   async function file(repository,ref,path){scope(repository,ref,path);const result=await response(`${endpoint(repository)}/files/${encodeURIComponent(path)}/raw?ref=${encodeURIComponent(ref)}`,root.KiCadBrowserData.fileByteLimit(path));return result?new TextDecoder().decode(result.bytes):null;}
   async function resolve(repository,ref,path){scope(repository,ref,path);const {value}=await json(`${endpoint(repository)}/commits/${encodeURIComponent(ref)}`);if(!SHA.test(value?.id))throw new Error('GitLab did not resolve an immutable revision.');return {repository,ref,sha:value.id};}
   async function tree(repository,ref,directory='',recursive=true){
@@ -44,6 +46,8 @@
   async function branches(repository,ref,path){scope(repository,ref,path);const {value,next,link}=await json(`${endpoint(repository)}/branches?per_page=100&page=1`);if(!Array.isArray(value)||value.length>100)throw new Error('Invalid GitLab branch listing.');return {repository,branches:value.filter(item=>root.KiCadBrowserData.validRef(item?.name)&&SHA.test(item?.commit?.id)).map(item=>({name:item.name,sha:item.commit.id})),warnings:next||/rel="next"/.test(link)||value.length===100?['At most 100 branches shown; enter another branch manually.']:[]};}
   async function commits(repository,ref,path){const snapshot=await resolve(repository,ref,path),query=new URLSearchParams({ref_name:snapshot.sha,path,per_page:'50',page:'1'});const {value,next,link}=await json(`${endpoint(repository)}/commits?${query}`);if(!Array.isArray(value)||value.length>50)throw new Error('Invalid GitLab commit listing.');const clean=value=>typeof value==='string'?value.replace(/[\x00-\x1f\x7f]/g,' ').slice(0,300):'';return {repository,file:path,snapshotRef:snapshot.sha,commits:value.filter(item=>SHA.test(item?.id)).map(item=>({sha:item.id,message:clean(item.title),author:clean(item.author_name),date:clean(item.authored_date)})),warnings:next||/rel="next"/.test(link)||value.length===50?['At most 50 commits shown; enter an older SHA manually.']:[]};}
   async function compare(repository,base,head,path){scope(repository,base,path);scope(repository,head,path);const from=await resolve(repository,base,path),to=await resolve(repository,head,path);const {value}=await json(`${endpoint(repository)}/compare?${new URLSearchParams({from:from.sha,to:to.sha,straight:'true'})}`);if(!Array.isArray(value.diffs)||value.diffs.length>3000)throw new Error('Invalid or oversized GitLab comparison.');const warnings=value.compare_timeout?['GitLab comparison timed out; changed-file discovery may be incomplete.']:[];const files=value.diffs.flatMap(item=>{const old=item.old_path,newPath=item.new_path;if(item.a_mode==='120000'||item.b_mode==='120000')return [];const a=root.KiCadBrowserData.validPath(old),b=root.KiCadBrowserData.validPath(newPath);if(a&&b)return [{file:newPath,oldFile:old,status:item.deleted_file?'removed':item.new_file?'added':item.renamed_file?'renamed':'modified'}];return [...(a?[{file:old,oldFile:old,status:'removed'}]:[]),...(b?[{file:newPath,oldFile:newPath,status:'added'}]:[])];});return {files,base:from.sha,head:to.sha,warnings};}
-  root.KiCadGitLabProvider={validRepository,validPath,file,resolve,directory,inventory,projectFile,search,branches,commits,compare,response,endpoint};
+  return {validRepository,validPath,file,resolve,directory,inventory,projectFile,search,branches,commits,compare,response,endpoint};
+  }
+  root.KiCadGitLabProvider={...forHost(),forHost};
   if(typeof module==='object'&&module.exports)module.exports=root.KiCadGitLabProvider;
 })(typeof globalThis==='object'?globalThis:this);

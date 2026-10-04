@@ -18,8 +18,10 @@ test('resolves only same-repository model references', () => {
   assert.equal(resolveModelPath('hardware/board.kicad_pcb', 'models/a.wrl'), 'hardware/models/a.wrl');
   assert.equal(resolveModelPath('hardware/board.kicad_pcb', '../shared/a.wrl'), 'shared/a.wrl');
   assert.equal(resolveModelPath('hardware/board.kicad_pcb', '${KIPRJMOD}/models/a.wrl'), 'hardware/models/a.wrl');
+  assert.equal(resolveModelPath('hardware/board.kicad_pcb', 'models\\body.wrl'), 'hardware/models/body.wrl');
+  assert.equal(resolveModelPath('hardware/board.kicad_pcb', '${KIPRJMOD}\\packages3D\\body.wrl'), 'hardware/packages3D/body.wrl');
   for (const path of ['../../escape.wrl', '/absolute.wrl', 'C:/absolute.wrl', 'https://host/model.wrl',
-    '${KICAD8_3DMODEL_DIR}/body.wrl', 'models\\body.wrl', 'model.wrl?other', 'models/%00.wrl']) {
+    '${KICAD8_3DMODEL_DIR}/body.wrl', 'model.wrl?other', 'models/%00.wrl', 'C:\\absolute.wrl', '\\\\server\\share\\body.wrl', '..\\..\\escape.wrl']) {
     assert.equal(resolveModelPath('hardware/board.kicad_pcb', path), null, path);
   }
 });
@@ -64,10 +66,10 @@ test('rejects invalid transforms and hidden models without loading them', () => 
 test('model parsing rejects non-board source and caps model count', () => {
   assert.throws(() => collect('(kicad_sch)', 'board.kicad_pcb'), /saved KiCad PCB/);
   const many = `(kicad_pcb (footprint "Part" (layer "F.Cu") (at 1 2)
-    (property "Reference" "U1") ${Array.from({ length: 40 }, (_, index) => `(model "m/${index}.wrl")`).join(' ')}))`;
+    (property "Reference" "U1") ${Array.from({ length: 2049 }, (_, index) => `(model "m/${index}.wrl")`).join(' ')}))`;
   const result = collect(many, 'board.kicad_pcb');
-  assert.equal(result.models.length, 32);
-  assert.ok(result.diagnostics.some(message => message.includes('first 32')));
+  assert.equal(result.models.length, 2048);
+  assert.ok(result.diagnostics.some(message => message.includes('first 2048')));
 });
 
 test('legacy reference and missing UUID follow SPIKE parser identity fallback', () => {

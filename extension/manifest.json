@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "KiCad Visual Review for GitHub and GitLab",
-  "version": "0.11.10",
-  "description": "Browser-only interactive KiCad schematic and PCB review on GitHub and public GitLab.com repositories.",
+  "version": "0.12.0",
+  "description": "Browser-only KiCad schematic and PCB review on GitHub, GitLab.com and configured GitLab servers, with issue comments.",
   "host_permissions": [
     "https://github.com/*",
     "https://gitlab.com/*",
@@ -36,8 +36,7 @@
         "project-viewer.html"
       ],
       "matches": [
-        "https://github.com/*",
-        "https://gitlab.com/*"
+        "https://*/*"
       ]
     }
   ],
@@ -65,7 +64,9 @@
     }
   },
   "permissions": [
-    "storage"
+    "storage",
+    "identity",
+    "scripting"
   ],
   "sandbox": {
     "pages": [
@@ -75,5 +76,8 @@
   "content_security_policy": {
     "extension_pages": "script-src 'self'; object-src 'self';",
     "sandbox": "sandbox allow-scripts; default-src 'none'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'unsafe-inline'; frame-src about:; child-src about:; connect-src 'none'; img-src data:; object-src 'none'; form-action 'none'; base-uri 'none';"
-  }
+  },
+  "optional_host_permissions": [
+    "https://*/*"
+  ]
 }

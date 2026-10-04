@@ -7,7 +7,7 @@
     file: params.get("file"), oldFile: params.get("oldFile") || params.get("file"),
     head: params.get("head") || params.get("ref"), base: params.get("base"), status: params.get("status") || "modified", pullNumber: Number(params.get("pullNumber")) || null, pullRepository: params.get("pullRepository") || params.get("repository")
   };
-  const provider=params.get('provider')||'github',providerContext=provider==='gitlab'?{provider}:{};if(!['github','gitlab'].includes(provider))throw new Error('Unsupported Git host.');request.provider=provider;
+  const provider=params.get('provider')||'github',providerContext=provider==='gitlab'?{provider,host:params.get('host')||'https://gitlab.com'}:{};if(!['github','gitlab'].includes(provider))throw new Error('Unsupported Git host.');request.provider=provider;request.host=providerContext.host;
   const send=message=>chrome.runtime.sendMessage({...message,...providerContext});
   const data = globalThis.KiCadBrowserData;
   const $ = (id) => document.getElementById(id);
@@ -225,7 +225,7 @@
     $("baseRef").textContent = request.base?.slice(0, 12) || "—";
     $("headRef").textContent = request.head.slice(0, 12);
     $("sourceLink").textContent = provider==='gitlab'?'GitLab source':'GitHub source';
-    $("sourceLink").href = `${provider==='gitlab'?'https://gitlab.com':'https://github.com'}/${request.status === "removed" ? request.repository : request.headRepository}/${provider==='gitlab'?'-/blob':'blob'}/${encodeURIComponent(request.status === "removed" ? request.base : request.head)}/${(request.status === "removed" ? request.oldFile : request.file).split("/").map(encodeURIComponent).join("/")}`;
+    $("sourceLink").href = `${provider==='gitlab'?providerContext.host:'https://github.com'}/${request.status === "removed" ? request.repository : request.headRepository}/${provider==='gitlab'?'-/blob':'blob'}/${encodeURIComponent(request.status === "removed" ? request.base : request.head)}/${(request.status === "removed" ? request.oldFile : request.file).split("/").map(encodeURIComponent).join("/")}`;
     if (request.base) {
       for (const [label, mode] of [["Side by side", "compare"], ["Base", "base"], ["Head", "head"]]) {
         control(label, mode, () => { manualMode = true; setMode(mode); });

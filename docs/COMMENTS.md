@@ -1,4 +1,4 @@
-# Review comments and GitHub integration
+# Review comments and Git host integration
 
 KiCad Visual Review stores comments alongside the design context they refer to: repository, revision, KiCad file, optional object identity or reference, and a point or rectangular area in drawing coordinates. Each note can also carry severity (`info`, `minor`, `major`, or `critical`), tags, mentions, text, timestamps, and a local state (`open`, `skipped`, `resolved`, or `wont-fix`). Area captures can include a PNG. These annotations help reviewers discuss saved design data; they do not modify the schematic or board.
 
@@ -52,11 +52,15 @@ Discussion readback is not implemented. Ordinary GitHub comments without the ext
 
 ## GitLab and VS Code
 
-On GitLab.com, notes are local to that browser and anchored to the GitLab project/ref/file. They can be exported as review JSON and committed manually, but GitLab account connection, GitLab issue or merge-request publication, remote readback, and repository comment policies are not implemented. GitHub publication and GitHub sidecar controls are hidden in GitLab viewers.
+GitLab notes are isolated by HTTPS server, project, revision and file. In Options → **GitLab accounts and servers**, connect an expiring token or configure a non-confidential OAuth Application ID and exact browser redirect URI. OAuth uses PKCE with `api` scope; no bundled GitLab Application ID or client secret is supplied. Private reads use the selected server's credentials; posting also needs project write permissions. For self-hosted GitLab, first choose **Grant server access** for its exact HTTPS origin. Credentials use the encrypted background-memory-key lifecycle described in [SECURITY.md](../SECURITY.md).
+
+In the editor select **Issue** to create a new issue or add a note to an existing one, or **Discussion** to create a discussion thread within an existing issue. GitLab discussions require an issue number and have no standalone category selector. **Preview GitLab Markdown** shows the formatted section; **Post to GitLab** saves a draft and explicitly publishes it. Confirmed links are saved in the annotation. Uncertain publication outcomes block automatic retries. Mentions can notify users when actually posted, subject to GitLab behavior and permissions; local mentions alone send no notification.
+
+In the **GitLab** tab, select an existing issue number and **Load GitLab annotations**. Readback scans its description and up to 500 issue notes for validated markers matching the server/project/revision/drawing. It does not import ordinary comments, synchronize remote state or replace full conversations. Download captures and attach them manually on GitLab; API posts contain no PNG image data. Marking a note resolved/skipped never closes the remote issue. Repository policies are checked before posting; contributors-only mode fails closed without verifiable account membership or an explicit allowlist. Prefer `collaborators` or `allowlist` when controlling reviewers. Notes remain local/exportable; the connected GitHub sidecar control is not used for GitLab. Merge-request file cards and URL-subpath installations are not supported. See the [illustrated GitLab guide](using-gitlab-integration/README.md).
 
 The VS Code extension saves annotations through the workspace file system and can use a Git-tracked `.kicad-review.json` file in the workspace. It does not currently offer GitHub token setup or publication from the VS Code viewer. A note created in VS Code has local/workspace provenance; copying its JSON sidecar does not automatically make it a GitHub-anchored note. Browser and VS Code writes do not share an atomic lock, so avoid editing the same sidecar from both at once.
 
-Automated checks use mocked GitHub responses. They do not create live issues, discussions, or comments, and they do not prove that a particular repository's token permissions or policy will allow publication.
+Automated checks use mocked provider responses. They do not create live issues, discussions, or comments, and they do not prove that a particular repository's token permissions or policy will allow publication.
 
 
 ## Direct posting from the comment editor

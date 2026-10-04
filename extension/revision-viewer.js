@@ -6,10 +6,10 @@
 
   const params=new URLSearchParams(location.search),repository=params.get('repository'),rootFile=params.get('file');let ref=params.get('ref');
 
-  const provider=params.get('provider')||'github',providerContext=provider==='gitlab'?{provider}:{};const send=message=>chrome.runtime.sendMessage({...message,...providerContext});
+  const provider=params.get('provider')||'github',providerContext=provider==='gitlab'?{provider,host:params.get('host')||'https://gitlab.com'}:{};const send=message=>chrome.runtime.sendMessage({...message,...providerContext});
   const status=document.getElementById('status'),pcb=/\.kicad_pcb$/i.test(rootFile||'');
 
-  let dark=pcb,workspace=null,canvas=null,scene=null,disposed=false,applying=false,crossApplying=false,lastView='',lastFile='';
+  let dark=pcb,workspace=null,canvas=null,scene=null,modelAssetCache=null,disposed=false,applying=false,crossApplying=false,lastView='',lastFile='';
 
   const own=new URL(chrome.runtime.getURL('browser-viewer.html')),ownOrigin=`${own.protocol}//${own.host}`;
 
@@ -34,7 +34,7 @@
 
     const files=reply.result;if(!Array.isArray(files)||!files.some(file=>file.path===rootFile))throw new Error('No KiCad file at this revision.');
 
-    const preferenceKey=JSON.stringify(['kicad-review-preferences',...(provider==='gitlab'?['gitlab']:[]),repository,rootFile]);
+    const preferenceKey=JSON.stringify(['kicad-review-preferences',...(provider==='gitlab'?['gitlab',providerContext.host]:[]),repository,rootFile]);
 
     let preferences={uiTheme:pcb?'dark':'light',drawingTheme:pcb?'dark':'light',rulerUnits:'mm'};
 
@@ -140,7 +140,7 @@
 
     }
 
-    workspace=KiCadReviewWorkspace.mount({files,repository,provider,ref,rootFile,pcb,getCanvas:()=>canvas,currentFile,focus,openSheet,getRulerUnits:()=>preferences.rulerUnits,
+    workspace=KiCadReviewWorkspace.mount({files,repository,provider,host:providerContext.host,ref,rootFile,pcb,getCanvas:()=>canvas,currentFile,focus,openSheet,getRulerUnits:()=>preferences.rulerUnits,
 
       getDesigns:()=>designs,updateDiagnostics,
       onSelection(selection){if(crossApplying||!globalThis.KiCadPairedReview?.validSelection(selection))return;if(globalThis.KiCadVSCodeBridge?.selection)globalThis.KiCadVSCodeBridge.selection(selection);else parent.postMessage({type:'kicad-review:selection',selection},ownOrigin);},
@@ -186,6 +186,8 @@
 
     if(pcb){
 
+      modelAssetCache=KiCadBrowserData.createModelAssetCache(async path=>{const result=await send({type:'repo-asset',repository,ref,file:path});if(!result?.ok)throw new Error(result?.error||'Repository model unavailable.');return result.result;});
+
       const mode=$('mode3d'),pane=$('threePane');mode.hidden=false;let busy=false,loading=null;
 
       const load=()=>loading||=new Promise((resolve,reject)=>{if(globalThis.SpikeBoard3D?.mountBoard3D){resolve(SpikeBoard3D);return;}const script=document.createElement('script');script.src='vendor/spike-board3d.bundle.js';script.onload=()=>globalThis.SpikeBoard3D?.mountBoard3D?resolve(SpikeBoard3D):reject(new Error('SPIKE 3D did not initialize.'));script.onerror=()=>{loading=null;reject(new Error('SPIKE 3D could not be loaded.'));};document.head.append(script);});
@@ -200,7 +202,7 @@
 
         try{const engine=await load();if(disposed)return;pane.hidden=false;canvas.canvas.hidden=true;
 
-          scene=engine.mountBoard3D(pane,files.find(file=>file.path===rootFile).content,{dark,boardPath:rootFile,loadAsset:async path=>{const result=await send({type:'repo-asset',repository,ref,file:path});if(!result?.ok)throw new Error(result?.error||'Repository model unavailable.');return result.result;},onSelect:record=>workspace?.select3D(record),onComment:record=>workspace?.comment3D(record)});
+          scene=engine.mountBoard3D(pane,files.find(file=>file.path===rootFile).content,{dark,boardPath:rootFile,loadAsset:modelAssetCache.load,onSelect:record=>workspace?.select3D(record),onComment:record=>workspace?.comment3D(record)});
 
           workspace.setScene(scene);$('drawingLegend').hidden=true;lock(true);mode.setAttribute('aria-pressed','true');if($('renderMode'))$('renderMode').textContent='3D';
 
@@ -232,7 +234,8 @@
 
     addEventListener('keydown',event=>{
 
-      if(event.composedPath().some(node=>node?.isContentEditable||/^(INPUT|TEXTAREA|SELECT)$/.test(node?.tagName||''))||event.ctrlKey||event.altKey||event.metaKey||scene)return;
+      if(event.composedPath().some(node=>node?.isContentEditable||/^(INPUT|TEXTAREA|SELECT)$/.test(node?.tagName||''))||event.ctrlKey||event.altKey||event.metaKey)return;
+      if(scene){if(event.key.toLowerCase()==='f'||event.key==='Home'){event.preventDefault();scene.fit?.(event.key==='Home');}else if(['+','='].includes(event.key)){event.preventDefault();scene.zoom?.(1.25);}else if(['-','_'].includes(event.key)){event.preventDefault();scene.zoom?.(.8);}return;}
 
       if(event.key==='Escape'&&canvas.focusedLayer){canvas.restoreLayers();layers();canvas.draw();}else if(['[',']'].includes(event.key)&&pcb){const choices=canvas.design.layers||[],index=choices.indexOf(canvas.focusedLayer||canvas.activeLayer);if(choices.length){event.preventDefault();canvas.focusLayer(choices[(index+(event.key===']'?1:-1)+choices.length)%choices.length],$('layerFocusMode').value||'dim');layers();canvas.draw();}}else if(event.shiftKey&&event.key.toLowerCase()==='f'&&canvas.focusedLayer){event.preventDefault();$('fitLayer').click();}else if(['+','='].includes(event.key)){event.preventDefault();zoom(1.25);}else if(['-','_'].includes(event.key)){event.preventDefault();zoom(1/1.25);}else if(event.key.toLowerCase()==='f'){event.preventDefault();fit('drawing');}else if(event.key==='Home'){event.preventDefault();fit('page');}else if(event.key.toLowerCase()==='d'){event.preventDefault();$('themeButton').click();}
 
@@ -242,7 +245,7 @@
 
   }
 
-  addEventListener('pagehide',()=>{disposed=true;workspace?.dispose();scene?.dispose();canvas?.dispose();});
+  addEventListener('pagehide',()=>{disposed=true;modelAssetCache?.clear();workspace?.dispose();scene?.dispose();canvas?.dispose();});
 
   start().catch(error=>{status.textContent=error.message;status.classList.add('error');if(!status.isConnected)$('drawingHost').append(status);});
 

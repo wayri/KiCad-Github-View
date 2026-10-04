@@ -1,6 +1,6 @@
 "use strict";
 
-importScripts("parsing.js", "browser-data.js", "review-comments.js", "review-file-store.js", "github-review-api.js", "gitlab-provider.js");
+importScripts("parsing.js", "browser-data.js", "review-comments.js", "review-file-store.js", "github-review-api.js", "gitlab-provider.js", "gitlab-review-api.js", "gitlab-hosts.js");
 
 const SHA = /^[0-9a-f]{40}$/i;
 const REPOSITORY = /^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/;
@@ -410,8 +410,8 @@ function optionsSender(sender) {
 
 const commentLocks = new Map();
 function commentKey(scope) {
-  const { repository, ref, file, provider } = KiCadReviewComments.normalizeScope(scope);
-  return `${provider === 'gitlab' ? 'review-comments:gitlab:' : 'review-comments:'}${JSON.stringify([repository.toLowerCase(), ref, file])}`;
+  const { repository, ref, file, provider, host } = KiCadReviewComments.normalizeScope(scope);
+  return `${provider === 'gitlab' ? 'review-comments:gitlab:' : 'review-comments:'}${JSON.stringify([...(provider==='gitlab'&&host!=='https://gitlab.com'?[host]:[]),repository.toLowerCase(), ref, file])}`;
 }
 function withCommentLock(key, task) {
   const previous = commentLocks.get(key) || Promise.resolve();
@@ -638,7 +638,7 @@ async function openFromAction(tab) {
   if (!Number.isInteger(tab?.id) || typeof tab.url !== "string") return;
   let page;
   try { page = new URL(tab.url); } catch { return; }
-  if (page.origin === "https://gitlab.com") {
+  if (page.origin !== "https://github.com" && await globalThis.KiCadGitLabHosts?.allowed(page.origin)) {
     if (page.pathname.includes('/-/blob/')) await chrome.tabs.sendMessage(tab.id, { type: 'focusInline' }).catch(() => {});
     return;
   }
@@ -659,9 +659,50 @@ async function openFromAction(tab) {
 chrome.action.onClicked.addListener((tab) => { openFromAction(tab).catch(() => {}); });
 
 const gitlabAssetBudgets = new Map();
+async function gitlabAnnotations(api,scope){
+  const normalized=KiCadReviewComments.normalizeScope({...scope,provider:'gitlab'}),notes=[],warnings=[];
+  const number=Number(scope.number||scope.issueNumber||scope.threadNumber);
+  if(!Number.isSafeInteger(number)||number<1)return {notes,warnings:['Enter an existing GitLab issue number to read its review notes.']};
+  const endpoint=normalized.host+'/api/v4/projects/'+encodeURIComponent(normalized.repository)+'/issues/'+number;
+  const issueUrl=normalized.host+'/'+normalized.repository+'/-/issues/'+number;
+  const add=(text,record,isNote=false)=>{for(const note of KiCadReviewComments.fromMarkdown(text||''))if(note.anchor.provider==='gitlab'&&note.anchor.host===normalized.host&&note.anchor.repository===normalized.repository&&note.anchor.ref===normalized.ref&&note.anchor.file===normalized.file&&notes.length<100){
+    const sourceId=isNote?Number(record.id):0;
+    if(isNote&&(!Number.isSafeInteger(sourceId)||sourceId<1))continue;
+    note.github={provider:'gitlab',url:issueUrl+(isNote?'#note_'+sourceId:''),source:note.threadType==='discussion'?'discussion':'issue',number,state:record.state||'posted',author:record.author?.username||''};
+    notes.push(note);
+  }};
+  const issue=await api.response(endpoint,1024*1024);if(!issue)throw new Error('GitLab issue is unavailable or access was denied.');
+  const issueRecord=JSON.parse(new TextDecoder().decode(issue.bytes));add(issueRecord.description,issueRecord);
+  for(let page=1;page<=5;page++){
+    const response=await api.response(endpoint+'/notes?'+new URLSearchParams({per_page:'100',page:String(page)}),1024*1024);
+    if(!response)throw new Error('GitLab issue notes are unavailable.');
+    const records=JSON.parse(new TextDecoder().decode(response.bytes));if(!Array.isArray(records)||records.length>100)throw new Error('Invalid GitLab issue notes.');
+    for(const record of records)add(record.body,record,true);
+    if(!response.next&&records.length<100)break;
+    if(page===5)warnings.push('Readback stopped at 500 issue notes; open GitLab for the complete thread.');
+  }
+  return {notes:[...new Map(notes.map(note=>[note.id,note])).values()],warnings};
+}
 async function gitlabDispatch(message, sender) {
-  const api=globalThis.KiCadGitLabProvider;
+  const auth=globalThis.KiCadGitLabReviewApi,hosts=globalThis.KiCadGitLabHosts;
+  if(['gitlab-host-list','gitlab-host-add','gitlab-host-remove'].includes(message.type)){
+    if(!optionsSender(sender))throw new Error('Only extension settings can configure GitLab servers.');
+    if(message.type==='gitlab-host-list')return {hosts:await hosts.list()};
+    return message.type==='gitlab-host-add'?hosts.add(message.host):hosts.remove(message.host);
+  }
+  const host=message.host||'https://gitlab.com';
+  if (globalThis.KiCadGitLabHosts ? !await KiCadGitLabHosts.allowed(host) : host!=='https://gitlab.com')throw new Error('Configure and grant access to this GitLab host first.');
+  const api=globalThis.KiCadGitLabProvider.forHost(host);
   const {repository,ref,file}=message;
+  if(['gitlab-auth-status','gitlab-auth-set','gitlab-auth-clear','gitlab-auth-reset','gitlab-client-set','gitlab-oauth-start'].includes(message.type)){
+    if(!optionsSender(sender)&&!(message.type==='gitlab-auth-status'&&viewerSender(sender)))throw new Error('Only extension settings can change GitLab authentication.');
+    if(message.type==='gitlab-auth-status')return auth.authStatus(host);
+    if(message.type==='gitlab-auth-set')return auth.setToken(host,message.token);
+    if(message.type==='gitlab-auth-clear')return auth.clearToken(host);
+    if(message.type==='gitlab-auth-reset')return auth.resetAuth(host);
+    if(message.type==='gitlab-client-set')return auth.setClientId(host,message.clientId);
+    return auth.startOAuth(host);
+  }
   if (!viewerSender(sender) && message.type !== 'project') throw new Error('Only extension viewers can use GitLab repository tools.');
   if (optionsSender(sender)) throw new Error('Options cannot load GitLab projects.');
   switch(message.type) {
@@ -689,7 +730,7 @@ async function gitlabDispatch(message, sender) {
     }
     case 'repo-asset': {
       if(!api.validRepository(repository)||!validAssetRef(ref)||!validAssetPath(file))throw new Error('Invalid GitLab model location.');
-      const key=repository.toLowerCase()+':'+ref,now=Date.now();let budget=gitlabAssetBudgets.get(key);
+      const key=host+':'+repository.toLowerCase()+':'+ref,now=Date.now();let budget=gitlabAssetBudgets.get(key);
       if(!budget||budget.resetAt<=now)budget={requests:0,bytes:0,resetAt:now+300000};
       if(budget.requests>=32||budget.bytes>=32*1024*1024)throw new Error('The 3D model retrieval budget was reached; retry after five minutes.');
       budget.requests++;gitlabAssetBudgets.set(key,budget);if(gitlabAssetBudgets.size>128)gitlabAssetBudgets.delete(gitlabAssetBudgets.keys().next().value);
@@ -705,27 +746,38 @@ async function gitlabDispatch(message, sender) {
       const project=message.type==='open-project-overview';
       if(!project&&!KiCadBrowserData.validPath(file))throw new Error('Invalid drawing file.');
       if(message.pairedFile!==undefined&&(!KiCadBrowserData.validPath(message.pairedFile)||/\.kicad_pcb$/i.test(message.pairedFile)===/\.kicad_pcb$/i.test(file)))throw new Error('Paired drawing must be the opposite file type.');
-      const query=new URLSearchParams({provider:'gitlab',repository,...(project?{ref}:{head:ref}),file,...(message.pairedFile?{pairedFile:message.pairedFile}:{})});
+      const query=new URLSearchParams({provider:'gitlab',host,repository,...(project?{ref}:{head:ref}),file,...(message.pairedFile?{pairedFile:message.pairedFile}:{})});
       const window=await chrome.windows.create({url:chrome.runtime.getURL(project?'project-viewer.html':'browser-viewer.html')+'?'+query,type:'popup',state:'maximized'});
       return {windowId:window?.id??null};
     }
-    case 'comment-list': return commentList({...message,provider:'gitlab'});
-    case 'comment-save': return commentSave({...message.comment,anchor:{...message.comment?.anchor,provider:'gitlab'}},message.expectedUpdatedAt);
-    case 'comment-delete': return commentDelete({...message,provider:'gitlab'},message.id);
+    case 'comment-list': return commentList({...message,provider:'gitlab',host});
+    case 'comment-save': {
+      const anchor=KiCadReviewComments.normalizeScope({...message.comment?.anchor,provider:'gitlab'});
+      if(anchor.host!==host)throw new Error('Review note belongs to another GitLab host.');
+      return commentSave({...message.comment,anchor:{...message.comment.anchor,provider:'gitlab',host}},message.expectedUpdatedAt);
+    }
+    case 'comment-delete': return commentDelete({...message,provider:'gitlab',host},message.id);
     case 'comment-store-status': return {connected:false,provider:'gitlab',localOnly:true};
+    case 'github-auth-status': return auth.authStatus(host);
+    case 'comment-policy-status': return auth.commentPolicyStatus(host,repository);
+    case 'comment-publish':
+    case 'github-publish-comment': return auth.publish({...message,host,destination:message.discussion?'discussion':message.destination});
+    case 'comment-remote-list':
+    case 'github-annotations': return gitlabAnnotations(api,{...message,host});
     case 'open-options': await chrome.runtime.openOptionsPage();return {opened:true};
-    default: throw new Error('GitLab authentication, remote comments, issues and merge-request integration are not available yet. Public viewing and local annotations are supported.');
+    default: throw new Error('Unsupported GitLab operation.');
   }
 }
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-  if (!(senderAllowed(sender) || optionsSender(sender)) || !message || typeof message !== "object") return false;
+  const customHostSender=sender?.id===chrome.runtime.id&&typeof sender.url==='string'&&sender.url.startsWith('https://')&&message?.provider==='gitlab';
+  if (!(senderAllowed(sender) || optionsSender(sender)||customHostSender) || !message || typeof message !== "object") return false;
   (async () => {
     if (message.provider !== undefined && !['github','gitlab'].includes(message.provider)) throw new Error('Unsupported repository provider.');
     let senderOrigin;try{senderOrigin=new URL(sender.url).origin;}catch{}
-    if(senderOrigin==='https://gitlab.com'&&message.provider!=='gitlab')throw new Error('GitLab pages must specify the GitLab provider.');
+    if(senderOrigin?.startsWith('https://')&&senderOrigin!=='https://github.com'&&message.provider!=='gitlab')throw new Error('GitLab pages must specify the GitLab provider.');
     if(senderOrigin==='https://github.com'&&message.provider==='gitlab')throw new Error('Repository provider does not match the host page.');
-    if(message.provider==='gitlab')return gitlabDispatch(message,sender);
+    if(message.provider==='gitlab'){const host=message.host||'https://gitlab.com';if(senderOrigin?.startsWith('https://')&&senderOrigin!==host)throw new Error('GitLab host does not match the sender.');return gitlabDispatch(message,sender);}
     if(message.comment?.anchor?.provider==='gitlab')throw new Error('GitLab annotations must use the GitLab provider.');
     switch (message.type) {
       case "github-auth-status":

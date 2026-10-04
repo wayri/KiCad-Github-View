@@ -256,10 +256,11 @@ export function mountBoard3D(container, source, options = {}) {
     modelDiagnostics.push(...inventory.diagnostics);
     showModelDiagnostics();
     const cache = new Map();
+    const componentIndexes=new Map(board.components.map((component,index)=>[component.id,index]));
     let totalBytes = 0, cursor = 0;
     async function one(entry) {
-      const index = board.components.findIndex(component => component.id === entry.footprintId);
-      if (index < 0) { modelDiagnostics.push(`${entry.reference}: footprint identity not found`); return; }
+      const index = componentIndexes.get(entry.footprintId);
+      if (index === undefined) { modelDiagnostics.push(`${entry.reference}: footprint identity not found`); return; }
       try {
         if (!cache.has(entry.path)) cache.set(entry.path, (async () => {
           const asset = await options.loadAsset(entry.path);
@@ -404,6 +405,8 @@ export function mountBoard3D(container, source, options = {}) {
   animate();
   void loadRepositoryModels();
   return { host, board,
+    fit(topView=false){if(active)fit(topView);},
+    zoom(factor){if(!active||!Number.isFinite(factor)||factor<=0)return;const offset=camera.position.clone().sub(controls.target);const distance=Math.max(controls.minDistance,Math.min(controls.maxDistance,offset.length()/factor));if(offset.length()>0)camera.position.copy(controls.target).add(offset.setLength(distance));controls.update();},
     setTheme(dark) {
       if (!active) return;
       host.dataset.theme = dark ? "dark" : "light";

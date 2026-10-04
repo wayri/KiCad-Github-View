@@ -6,16 +6,16 @@
 [![Status: preview](https://img.shields.io/badge/status-preview-orange)](#what-you-can-do)
 [![Chromium: Manifest V3](https://img.shields.io/badge/Chromium-Manifest%20V3-4285f4?logo=googlechrome&logoColor=white)](docs/INSTALL.md)
 [![VS Code: VSIX](https://img.shields.io/badge/VS%20Code-VSIX-007acc)](docs/INSTALL.md)
-[![GitHub and GitLab: public repositories](https://img.shields.io/badge/GitHub%20%2B%20GitLab-public%20repositories-6f42c1)](docs/GIT-HOSTS.md)
+[![GitHub and GitLab: public and private repositories](https://img.shields.io/badge/GitHub%20%2B%20GitLab-public%20%2B%20private-6f42c1)](docs/GIT-HOSTS.md)
 [![Design access: read only](https://img.shields.io/badge/design%20access-read--only-2ea44f)](#what-you-can-do)
 
-**Interactive KiCad review inside GitHub and public GitLab.com file pages.** Open schematics and PCB layouts as drawings, inspect saved parts and nets, compare revisions, and anchor review notes to the design. The viewer runs in the browser with our own schematic/PCB engine and the owner-authorized SPIKE 3D adapter. No KiCad installation, local companion process or rendering server is needed for the browser extension.
+**Interactive KiCad review inside GitHub and GitLab file pages.** Open schematics and PCB layouts as drawings, inspect saved parts and nets, compare revisions, and anchor review notes to the design. The viewer runs in the browser with our own schematic/PCB engine and the owner-authorized SPIKE 3D adapter. No KiCad installation, local companion process or rendering server is needed for the browser extension.
 
-[Download v0.11.10](https://github.com/wayri/KiCad-Github-View/releases/tag/v0.11.10) · [Install](docs/INSTALL.md) · [Comment integration](docs/COMMENTS.md) · [Git services](docs/GIT-HOSTS.md) · [Release notes](docs/releases/v0.11.10.md)
+[Download v0.12.0](https://github.com/wayri/KiCad-Github-View/releases/tag/v0.12.0) · [Install](docs/INSTALL.md) · [Comment integration](docs/COMMENTS.md) · [Git services](docs/GIT-HOSTS.md) · [Release notes](docs/releases/v0.12.0.md)
 
 Illustrated walkthroughs: [Using GitHub integration](docs/using-github-integration/README.md) · [Using GitLab integration](docs/using-gitlab-integration/README.md). Browser packages: [Firefox](docs/FIREFOX.md) · [Safari](docs/SAFARI.md).
 
-**Status: preview release.** Source designs are read-only: no routing, schematic editing or automatic design changes. This project is not affiliated with KiCad, GitHub or GitLab. Browser-store and VS Code Marketplace listings are not published. Public repository previews are supported; browser access to private repositories is not implemented. See the limitations below before relying on a view for engineering review.
+**Status: preview release.** Source designs are read-only: no routing, schematic editing or automatic design changes. This project is not affiliated with KiCad, GitHub or GitLab. Browser-store and VS Code Marketplace listings are not published. Public previews work without login. Private GitHub and GitLab projects require an authorized extension account; GitLab credentials and previews are isolated by server. See the limitations below before relying on a view for engineering review.
 
 ## Screenshots
 
@@ -69,11 +69,11 @@ Properties and analytics come from the saved source revision. Missing settings a
 
 ## Install in Chrome or Edge
 
-1. Download **`kicad-visual-review-extension-0.11.10.zip`** from [Releases](https://github.com/wayri/KiCad-Github-View/releases/tag/v0.11.10). The GitHub **Source code** archives are not the prepared extension package.
+1. Download **`kicad-visual-review-extension-0.12.0.zip`** from [Releases](https://github.com/wayri/KiCad-Github-View/releases/tag/v0.12.0). The GitHub **Source code** archives are not the prepared extension package.
 2. Extract the ZIP into a permanent folder. Select the folder containing `manifest.json`, not the ZIP itself.
 3. Open `chrome://extensions` in Chrome/Chromium or `edge://extensions` in Edge.
 4. Enable **Developer mode**, select **Load unpacked**, and choose that folder.
-5. Allow the extension on `github.com` and `gitlab.com`. Open a public KiCad file page and refresh it. The drawing appears in the repository's file preview.
+5. Allow the extension on `github.com` and `gitlab.com`. Open a KiCad file page and refresh it. Connect an authorized account in Options for private projects. The drawing appears in the repository's file preview.
 
 Keep the extracted folder in place. To update, extract the new package there, click **Reload** on the extension card, and refresh repository tabs. Pin the toolbar icon for quick access; the toolbar button or `Alt+Shift+K` focuses the inline viewer. **Show source** returns to the text view; **Open full viewer** and **Pop out** provide larger views.
 
@@ -102,12 +102,13 @@ Use each browser's dedicated package: [Firefox installation](docs/FIREFOX.md) an
 | Service | Inline file drawings | Revision comparison | Remote review integration |
 | --- | --- | --- | --- |
 | GitHub.com, public repositories | Schematic/PCB and project file previews; pull-request file cards | Branch/commit picker and PR merge-base comparisons | Explicit issue/discussion/PR publication with configured authentication; issue/PR marker readback |
-| GitLab.com, public repositories | File pages, including subgroup namespaces | Manual branch/commit picker | Local notes and JSON export only |
-| Self-hosted GitLab / GitHub Enterprise | Not implemented | Not implemented in browser | Not implemented |
+| GitLab.com, public and private projects | File pages, including subgroup namespaces; private access needs account connection | Branch/commit picker | Explicit new issues, issue notes and issue discussions; marker readback on a selected issue |
+| Self-hosted GitLab, explicitly granted HTTPS origins | Same GitLab adapter; server must be hosted at its origin root | Branch/commit picker | Per-server credentials and Issue/issue-discussion publication |
+| GitHub Enterprise | Not implemented | Not implemented in browser | Not implemented |
 | Bitbucket / Azure DevOps / Gitea / Forgejo | Not implemented | Not implemented in browser | Not implemented |
 | Any service checked out locally in VS Code | Saved workspace files are host-independent | No native VS Code revision comparison yet | Local Git-trackable review sidecar; no direct publication |
 
-GitLab login, private repository previews, merge-request cards and issue publication remain pending. The extension grants permissions only to its supported hosts; it does not send GitHub credentials to GitLab. See [host compatibility and adapter boundaries](docs/GIT-HOSTS.md).
+GitLab account connection, private project reads and issue publication are supported. Self-hosted GitLab requires an explicit browser permission grant in Options. Merge-request file cards and GitLab served beneath a URL subpath remain unsupported. The extension grants permissions only to its supported hosts; it does not send GitHub credentials to GitLab. See [host compatibility and adapter boundaries](docs/GIT-HOSTS.md).
 
 ## Using the viewer
 
@@ -119,12 +120,17 @@ Useful shortcuts with the drawing focused:
 | --- | --- |
 | Zoom / pan | Pointer-anchored mouse wheel / right or middle drag |
 | Fit drawing / fit sheet | `F` / `Home` |
-| Properties / net highlight | `E` / `H` |
+| Properties / net highlight | `E` / `H`, backtick or tilde |
+| Maximize drawing area | **Focus view** / `Ctrl+Shift+F`; `Escape` restores controls |
 | Search / comments | `/` / `C` |
 | Measure / drawing theme | `M` / `D` |
 | Enter a subsheet | Double-click the sheet symbol or select it and press `Enter` |
 | Sheet history / parent / root | `Alt+Left`, `Alt+Right` / `Alt+Up` / `Alt+Home` |
 | Layer focus | `[` and `]`; `Shift+F` fits focused layer; `Escape` restores visibility |
+
+Project drawing previews fill the available space. **Hide project files**, **Focus drawing** and **Close preview** control the outer workspace; Explorer and Inspect have close buttons. The larger Sheets tree supports older `Sheet file`/`Sheet name` fields and up to 128 bounded drawing files; source links open the matching revision on its Git host. Marble's 25 unique schematics were checked using its public source and a local browser fixture.
+
+The PCB **Ratsnest** button shows candidate connections from saved copper islands; zones and unsupported geometry can cause extra lines, so this is not native KiCad unrouted or DRC evidence. SPIKE uses WebGL for 3D; 2D uses Canvas2D with frame-coalesced pan/zoom and offscreen culling. Linked WRL/VRML/GLB models support up to 2,048 instances within a 24 MiB asset budget, sharing downloads for repeated paths. STEP and globally installed KiCad libraries are not loaded.
 
 Text fields retain normal typing behavior. Reused hierarchy instances currently share file views; complete instance-specific connectivity is not resolved. Page setup overrides are for viewing and do not modify the source or implement arbitrary custom worksheet templates.
 
@@ -147,16 +153,16 @@ The Git-tracked `.kicad-review.json` file is an optional review record, not a pr
 
 Review notes retain repository/ref/file, saved object identity or millimetre position/area, variant, creation/update times and lifecycle metadata. Changing a note to Resolved or Skipped changes review metadata; it does not close a GitHub issue or edit an earlier post. Captured PNGs remain in the local/exported review record: download and attach them manually in GitHub's composer. API publication excludes image attachments. Mentions saved locally do not notify anyone until text is posted remotely, subject to GitHub behavior.
 
-Repository owners can provide `.kicad-review-policy.json` to restrict the extension's authenticated publication workflow. The policy is a viewer-side publishing check, not a replacement for GitHub repository permissions and not a way to prevent people posting directly on GitHub. GitLab notes remain provider-isolated local/exportable records; VS Code writes a local sidecar without token publication.
+Repository owners can provide `.kicad-review-policy.json` to restrict the extension's authenticated publication workflow. The policy is a viewer-side publishing check, not a replacement for GitHub repository permissions and not a way to prevent people posting directly on GitHub. GitLab notes remain provider- and server-isolated local/exportable records and can be explicitly published to issues or discussions within existing issues. VS Code writes a local sidecar without token publication. GitLab contributor policy fails closed when account authorship cannot be verified; use collaborators or an allowlist.
 
 Read [the complete comment guide](docs/COMMENTS.md) for authentication, permissions, the exact policy schema, file access, conflicts, retry handling and limitations.
 
 ## VS Code installation
 
-Download **`kicad-visual-review-vscode-0.11.10.vsix`** from Releases. In VS Code run **Extensions: Install from VSIX**, select the file and run **Developer: Reload Window**. Open a KiCad project folder and use **KiCad: Open Visual Viewer** or **Reopen Editor With → KiCad Visual Review**. The **KiCad Review** explorer lists saved drawings and review sidecars.
+Download **`kicad-visual-review-vscode-0.12.0.vsix`** from Releases. In VS Code run **Extensions: Install from VSIX**, select the file and run **Developer: Reload Window**. Open a KiCad project folder and use **KiCad: Open Visual Viewer** or **Reopen Editor With → KiCad Visual Review**. The **KiCad Review** explorer lists saved drawings and review sidecars.
 
 ```sh
-code --install-extension kicad-visual-review-vscode-0.11.10.vsix --force
+code --install-extension kicad-visual-review-vscode-0.12.0.vsix --force
 ```
 
 Local notes use `.kicad-review.json` in the workspace root (or drawing directory outside a workspace). Filesystem-provider permissions still apply. The VSIX is not currently published in Visual Studio Marketplace. See [the VS Code guide](vscode-extension/README.md).
@@ -170,7 +176,7 @@ Local notes use `.kicad-review.json` in the workspace root (or drawing directory
 | Optional GitHub App / hosted viewer ZIPs | Adds PR checks linking to a standalone browser viewer | App registration, HTTPS hosting and service configuration |
 | Optional Python tool / GitHub Action | Produces KiCad-authored SVG and pixel-comparison HTML reports | Python 3.10+, Git and installed KiCad CLI 9+ |
 
-A GitHub App cannot replace the built-in file preview or install the browser extension. The optional service processes signed webhook metadata; browser rendering stays client-side. No production App deployment, Marketplace billing integration or registered OAuth client is supplied. See [the App guide](docs/github-app.md).
+A GitHub App cannot replace the built-in file preview or install the browser extension. The optional service processes signed webhook metadata; browser rendering stays client-side. No production App deployment or Marketplace billing integration is supplied. Browser GitHub sign-in has a registered public client ID; GitLab OAuth requires separate per-server/browser registration. See [the App guide](docs/github-app.md).
 
 For local native reports:
 

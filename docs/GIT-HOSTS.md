@@ -1,28 +1,40 @@
 # Git host compatibility
 
-The browser extension embeds the viewer in supported repository file pages. A GitHub App cannot replace the website file renderer; the browser extension supplies that integration.
+The browser extension embeds read-only viewers in supported repository file pages. A GitHub App cannot replace the website file renderer; the browser extension supplies that integration.
 
-| Capability | GitHub.com | GitLab.com | VS Code local checkout |
+| Capability | GitHub.com | GitLab.com and approved self-hosted GitLab | VS Code local checkout |
 | --- | --- | --- | --- |
-| Schematic and PCB viewers, selection and properties | Public; private file reads with authorized extension token | Public repositories | Saved local files |
-| Project explorer, hierarchy, setup and repository assets | Yes | Yes, including subgroup namespaces | Yes |
+| Schematic and PCB selection, properties and hierarchy | Public and authorized private file reads | Public and authorized private project reads, including subgroup namespaces | Saved local files |
+| Project setup and supported repository-linked models | Yes | Yes, credentials bound to the selected server | Yes |
 | Branch/commit visual comparison | Yes | Yes | Not yet |
-| Inline pull-request / merge-request file cards | Pull requests | Not yet | Not applicable |
-| Local annotations and review JSON export | Yes | Yes, isolated by provider | Yes |
-| Account connection and issue/discussion publication | GitHub controls | Not yet | Local sidecar only |
-| Private repository browser previews | File/project/model reads with repository access; authorized Issue/Discussion publication; private PR comparison and annotation readback unavailable | Not yet | Available after a local checkout |
-| Self-hosted hostnames | Not yet | Not yet | Local files are host-independent |
+| Inline PR / merge-request file cards | GitHub pull requests | Merge-request cards not implemented | Not applicable |
+| Local annotations and review JSON export | Yes | Yes, isolated by provider and server | Git-tracked sidecar |
+| Account and remote review publication | Issues, PR comments and GitHub Discussions | New issues, comments and discussion threads within existing issues | Local sidecar only |
+| Annotation marker readback | Public issue/PR markers; private and Discussion readback unavailable | Markers on a selected issue, with authorized private access | Sidecar reads |
+| Self-hosted hostnames | Enterprise not implemented | Explicit HTTPS origin permission required; URL subpaths unsupported | Host-independent local files |
 
-## GitLab.com installation and behavior
+## GitLab accounts and servers
 
-Reload the updated extension in `chrome://extensions` or `edge://extensions` and allow access to `gitlab.com`. Open a public `.kicad_sch`, `.kicad_pcb` or supported project file under a repository's **Files** page. The extension uses the page's repository, file and ref metadata so branch names containing slashes are not guessed from the URL. If that metadata or preview container is unavailable, it leaves the source view intact.
+Reload the current browser package and open Options → **GitLab accounts and servers**. GitLab.com is built in. For another server, enter an exact origin such as `https://gitlab.example.com` and choose **Grant server access**. Approve only your intended server. A server hosted beneath a URL prefix such as `/gitlab` is not supported. Up to twenty additional servers may be configured. Removing a server deletes its credentials and OAuth Application ID, unregisters its preview and removes the browser permission; review notes are retained.
 
-Repository reads use the GitLab REST API on the exact `gitlab.com` host. Drawing and comparison sessions resolve refs to commit SHAs before loading project files. Tree discovery and file/model retrieval have pagination, size and time limits; incomplete listings are reported. API failures and rate limits appear as viewer errors. Public GitLab reads do not send GitHub credentials.
+Select the server, enter an expiring GitLab token and choose **Connect with token**. `read_api` access may suffice for private viewing; issue publication requires `api` access and project permissions. Website sign-in alone does not authenticate the extension. OAuth is also implemented: register a non-confidential application on that server, copy the exact **Browser redirect URI** from Options, select `api` scope, and enter its **Public Application ID**. Choose **Sign in with GitLab**. PKCE and random state protect the authorization flow; no client secret is used. No publisher GitLab Application ID is bundled. Registration is specific to the server and browser redirect URI. If the browser identity API is unavailable, use the token connection.
 
-GitLab comments are saved in browser storage, with provider-bound anchors, severity, state, mentions and geometric locations. Export the review JSON and commit it to the repository manually to share it. This release does not sync GitLab notes to issues, enforce GitLab contributor policies, notify mentioned users, or connect GitLab accounts. GitHub publication and sidecar controls are hidden in GitLab viewers.
+Credentials are AES-256-GCM encrypted with keys only in background memory, bound to the server, and expire within eight hours or the provider's shorter expiry. Background restart requires reconnection. Sign-out/reset purge credentials; remote revocation is a separate account action. See [SECURITY.md](../SECURITY.md).
 
-## Adding providers
+## Viewing and comparison
 
-GitLab transport is isolated in `extension/gitlab-provider.js`; routes and host-page mounting are handled by `parsing.js` and `content.js`. Shared parsers, renderers, properties and interaction code use validated repository/ref/file requests. Additional providers require their own exact-host adapter, page metadata integration, permissions, pagination, sender validation and tests. Bitbucket, Azure DevOps, Gitea and self-hosted GitLab have not been implemented.
+Open a `.kicad_sch`, `.kicad_pcb` or supported project file under the repository **Files** page. Repository/ref/file metadata disambiguates branches containing slashes. Missing metadata leaves the normal source page intact. Requests use the selected server's REST API, never GitHub credentials; redirects with credentials are rejected. References resolve to commit SHAs before project loading. Pagination, file/model byte limits and time limits apply, and incomplete discovery is reported. A private-project 404 can mean denied access as well as a missing file.
 
-The renderer remains read-only and existing rendering limitations apply on every host. Imported ERC/DRC reports are displayed; the browser does not run native rule checks.
+## GitLab review comments
+
+Choose **Review → Comments** to create a part, point or area note. Choose **Issue** for a new issue or an existing issue note. Choose **Discussion** for a discussion thread within an existing issue; GitLab has no standalone GitHub-style Discussion categories. Set the existing issue number when required, preview the formatted Markdown, and choose **Post to GitLab** or **Publish to GitLab**. Saving a draft never posts automatically. Successful publication records its link; uncertain results block automatic retries to avoid duplicates.
+
+The GitLab collaboration tab can load validated annotation markers from a selected existing issue. It reads the issue description and at most 500 notes; only markers matching the server, project, revision and drawing become annotations. Ordinary comments are not converted into drawing notes. Full conversation history, replies and notifications remain on GitLab. PNG captures must be downloaded and manually attached. Local state changes do not close issues or synchronize remote edits.
+
+Owners may provide `.kicad-review-policy.json` on the default branch. Malformed or unverifiable policy blocks publication. Use `all`, `collaborators` or `allowlist` as appropriate; contributors-only checks fail closed without verifiable account membership or an explicit allowlist because commit emails do not establish account identity. Provider permissions remain authoritative. GitLab notes use local storage/export rather than the connected GitHub sidecar workflow.
+
+## Boundaries and validation
+
+Transport is isolated in `extension/gitlab-provider.js`; authentication/publication in `gitlab-review-api.js`; approved server registration in `gitlab-hosts.js`; routes and page mounting in `parsing.js` and `content.js`. Bitbucket, Azure DevOps, Gitea, Forgejo and GitHub Enterprise remain unimplemented. All hosts share renderer limitations; the browser displays imported ERC/DRC reports rather than running native checks.
+
+Chromium, Firefox and Safari development packages share these capabilities. Safari conversion/signing and installed-browser OAuth acceptance require a Mac; a generated ZIP is not a signed store release. Automated fixtures verify routing and API contracts, not real account permissions, provider availability or every server's page markup.

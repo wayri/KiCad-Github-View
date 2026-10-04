@@ -88,6 +88,11 @@ def payload(root: Path = ROOT) -> dict[str, bytes]:
                 content = content.replace(b'Isolated self-contained HTML preview.', b'Static isolated HTML preview in Firefox. Repository scripts and interactive iBOM are disabled.')
         elif name == 'project-viewer.js':
             content = adapt_project_entry(content)
+        elif name == 'gitlab-hosts.js':
+            original = b"js:['parsing.js','content.js']"
+            if content.count(original) != 1:
+                raise ValueError('GitLab content registration changed; review the Firefox API adapter.')
+            content = content.replace(original, b"js:['firefox/browser-api.js','parsing.js','content.js']")
         elif name == 'review-file-settings.js':
             content = content.replace(b'Connect .kicad-review.json inside your local Git checkout.', b'Firefox cannot write a selected local review file automatically. Export review JSON from the viewer and save .kicad-review.json in your Git checkout.')
             content = content.replace(b'File access requires a supported Chrome extension page.', b'Firefox does not support this file picker. Export review JSON from the viewer and save it in your checkout.')

@@ -3,7 +3,7 @@
   "use strict";
   const MAX_FILE = 8 * 1024 * 1024;
   const MAX_PROJECT = 96 * 1024 * 1024;
-  const MAX_FILES = 32;
+  const MAX_FILES = 128;
   const MAX_DEPTH = 96;
   const MAX_NODES = 1000000;
   const SCHEMATIC = new Set(["symbol", "sheet", "wire", "bus", "bus_entry", "label",
@@ -140,7 +140,7 @@
   }
   function labelFor(form, kind, props, parentLabel) {
     if (kind === "pad") return `${parentLabel || "Footprint"} pad ${props.Number || ""}`.trim();
-    return props.Reference || props.Sheetname || props.Text ||
+    return props.Reference || props.Sheetname || props['Sheet name'] || props.Text ||
       (kind === "footprint" ? String(value(form[1] ?? "Footprint")) :
         kind === "symbol" ? props.lib_id || "symbol" : kind.replace(/_/g, " "));
   }
@@ -247,6 +247,6 @@
     changes.sort((a, b) => a.path.localeCompare(b.path) || a.id.localeCompare(b.id) || a.status.localeCompare(b.status));
     return { changes, counts };
   }
-  root.KiCadDesignDiff = { compareProjects, projectObjects, parse };
+  root.KiCadDesignDiff = { compareProjects, projectObjects, parse, MAX_FILES };
   if (typeof module === "object" && module.exports) module.exports = root.KiCadDesignDiff;
 })(typeof globalThis === "object" ? globalThis : this);

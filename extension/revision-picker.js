@@ -5,7 +5,7 @@
   function comparisonQuery(request,base,head){
     if(!data.validRepository(request.repository,request.provider)||!data.validRepository(request.headRepository,request.provider)||!data.validPath(request.file)||!data.validPath(request.oldFile||request.file)||!SHA.test(head)||base&&!SHA.test(base))throw new Error('Invalid comparison location or unresolved revision.');
     const params=new URLSearchParams({repository:base?request.repository:request.headRepository,headRepository:request.headRepository,file:request.file,oldFile:base?(request.oldFile||request.file):request.file,head,status:base&&request.oldFile&&request.oldFile!==request.file?'renamed':'modified'});
-    if(request.provider==='gitlab')params.set('provider','gitlab');if(base)params.set('base',base);
+    if(request.provider==='gitlab'){params.set('provider','gitlab');if(request.host)params.set('host',request.host);}if(base)params.set('base',base);
     // PR viewers use their existing merge-base comparison and do not mount this picker.
     if(request.pullNumber)throw new Error('Manual revision comparison is separate from the pull-request review.');
     return params;

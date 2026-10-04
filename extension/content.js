@@ -48,7 +48,7 @@
   }
   function setStatus(node, message, error = false) { node.textContent = message; node.classList.toggle("error", error); }
   function embedded() {
-    if (location.href.startsWith("https://gitlab.com/")) {
+    if (location.origin !== "https://github.com") {
       // GitLab's server-rendered blob app exposes unambiguous ref and file data.
       const app = document.querySelector("#js-view-blob-app,#js-repository-blob-header-app");
       return app ? { repository: app.dataset.projectPath, file: app.dataset.blobPath,
@@ -56,10 +56,10 @@
     }
     return parse.embeddedBlobData([...document.querySelectorAll('script[type="application/json"]')]
       .filter((script) => script.dataset.target?.includes("embeddedData") || script.closest("react-app"))
-      .map((script) => script.textContent), parse.route(location.href));
+      .map((script) => script.textContent), parse.route(location.href,{gitlabHosts:location.origin!=="https://github.com"?[location.origin]:[]}));
   }
   function findBlobTarget() {
-    if (location.href.startsWith("https://gitlab.com/")) {
+    if (location.origin !== "https://github.com") {
       return document.querySelector("#blob-content-holder,.blob-viewer");
     }
     return document.querySelector('.react-code-file-contents,[class*="CodeBlob-module__codeBlobInner"],'
@@ -121,6 +121,7 @@
     });
     showCode.hidden = !original;
     controls.append(button("Refresh", "", () => load()), button("Open full viewer", "", () => window.open(viewerURL, "_blank", "noopener")), showCode);
+    controls.append(button('Close preview','',()=>{runId++;loaded=false;showingCode=false;if(original)original.hidden=view.originalHidden;content.hidden=false;content.replaceChildren(button('Open visual preview','action',load));showCode.textContent='Show source';setStatus(status,'');}));
     top.append(title, controls); view.box.append(top, status, content);
     view.hiddenTarget = original;
     async function load() {
@@ -130,7 +131,7 @@
       if (original) original.hidden = view.originalHidden;
       const frame = element("iframe");
       frame.title = `KiCad visual review: ${requestBody.file}`;
-      frame.style.cssText = "display:block;width:100%;height:790px;border:0;background:#111a23";
+      frame.style.cssText = "display:block;width:100%;height:max(790px,calc(100vh - 100px));border:0;background:#111a23";
       frame.src = viewerURL;
       frame.addEventListener("load", () => {
         if (token !== sequence || run !== runId || !view.host.isConnected ||
@@ -312,7 +313,7 @@
   chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     if (sender.id !== chrome.runtime.id || !message || typeof message !== "object") return false;
     if (message.type === "viewerContext") {
-      const route = parse.route(location.href);
+      const route = parse.route(location.href,{gitlabHosts:location.origin!=="https://github.com"?[location.origin]:[]});
       const info = route?.kind === "blob" ? parse.blobRequest(route, embedded()) : null;
       sendResponse(info ? { kind: "blob", ...info, url: location.href } : null);
       return false;
@@ -325,7 +326,7 @@
       return false;
     }
     if (message.type === "focusInline") {
-      const route = parse.route(location.href);
+      const route = parse.route(location.href,{gitlabHosts:location.origin!=="https://github.com"?[location.origin]:[]});
       if (route?.kind !== "blob") { sendResponse({ focused: false }); return false; }
       focusPending = true;
       check();

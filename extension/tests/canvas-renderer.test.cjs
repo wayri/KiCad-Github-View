@@ -36,9 +36,19 @@ test('owned redraw clears the full physical buffer at fractional browser scaling
 test('multiple highlights form a union; isolate retains board outline and bright mode preserves context opacity',()=>{
  const {canvas}=runtime(),a={type:'circle',x:1,y:1,r:1,layer:'F.Cu'},b={type:'circle',x:5,y:5,r:1,layer:'F.Cu'},other={type:'circle',x:9,y:9,r:1,layer:'F.Cu'},edge={type:'line',points:[{x:0,y:0},{x:10,y:0}],layer:'Edge.Cuts'};
  canvas.setDocument({layers:['F.Cu','Edge.Cuts'],primitives:[a,b,other,edge]},'board.kicad_pcb');const painted=[];canvas.paint=(p,style)=>painted.push({p,style});
+ canvas.viewport.camera.bbox={x:-3,y:-3,w:16,h:16};
+ canvas.viewport.camera.bbox={x:-3,y:-3,w:16,h:16};
  canvas.setNetHighlights([{primitives:[a]},{primitives:[b]}],{mode:'isolate'});canvas.draw();assert.deepEqual(painted.map(x=>x.p),[a,b,edge]);assert.equal(canvas.netPrimitives.size,2);
  painted.length=0;canvas.setNetHighlights([{primitives:[a,b]}],{mode:'bright'});canvas.draw();assert.equal(painted.find(x=>x.p===other).style.opacity,1);assert.ok(painted.find(x=>x.p===a).style.color);
  canvas.setNetHighlights([]);assert.equal(canvas.netHighlight,null);assert.equal(canvas.netPrimitives.size,0);
+});
+test('viewport culling skips offscreen copper but keeps crossing geometry and text',()=>{
+ const {canvas}=runtime(),inside={type:'circle',x:10,y:10,r:1,layer:'F.Cu'},outside={...inside,x:1000},crossing={type:'line',points:[{x:-100,y:10},{x:100,y:10}],layer:'F.Cu'},text={type:'text',text:'Wide label',x:1000,y:10};
+ canvas.setDocument({layers:['F.Cu'],primitives:[inside,outside,crossing,text]},'board.kicad_pcb');canvas.viewport.camera.bbox={x:0,y:0,w:20,h:20};const painted=[];canvas.paint=p=>painted.push(p);canvas.draw();assert.deepEqual(painted,[inside,crossing,text]);assert.equal(canvas.inView(inside,canvas.viewport.camera.bbox),true);
+});
+test('viewport culling skips offscreen copper but keeps crossing geometry and text',()=>{
+ const {canvas}=runtime(),inside={type:'circle',x:10,y:10,r:1,layer:'F.Cu'},outside={...inside,x:1000},crossing={type:'line',points:[{x:-100,y:10},{x:100,y:10}],layer:'F.Cu'},text={type:'text',text:'Wide label',x:1000,y:10};
+ canvas.setDocument({layers:['F.Cu'],primitives:[inside,outside,crossing,text]},'board.kicad_pcb');canvas.viewport.camera.bbox={x:0,y:0,w:20,h:20};const painted=[];canvas.paint=p=>painted.push(p);canvas.draw();assert.deepEqual(painted,[inside,crossing,text]);assert.equal(canvas.inView(inside,canvas.viewport.camera.bbox),true);
 });
 test('pointer zoom preserves the mm point under the cursor and hidden layers cannot be picked',()=>{
   const {canvas,listeners}=runtime();canvas.setDocument({page:{width:297,height:210},layers:['F.Cu'],primitives:[{type:'circle',x:25,y:30,r:2,fill:true,uuid:'part',layer:'F.Cu'}]},'board.kicad_pcb');

@@ -90,7 +90,7 @@
 
     constructor(host,options={}){
 
-      super();this.host=host;this.canvas=document.createElement('canvas');this.canvas.className='owned-canvas';this.canvas.tabIndex=0;this.canvas.setAttribute('aria-label','Interactive KiCad drawing; click to select, right-drag to pan, wheel to zoom');host.append(this.canvas);
+      super();this.host=host;this.geometryBounds=new WeakMap();this.frameRequest=null;this.canvas=document.createElement('canvas');this.canvas.className='owned-canvas';this.canvas.tabIndex=0;this.canvas.setAttribute('aria-label','Interactive KiCad drawing; click to select, right-drag to pan, wheel to zoom');host.append(this.canvas);
 
       this.ctx=this.canvas.getContext('2d');if(!this.ctx)throw new Error('Canvas2D rendering is unavailable.');this.viewport={camera:new Camera()};this.primitives=[];this.visibleLayers=new Set();this.dark=Boolean(options.dark);this.pcb=Boolean(options.pcb);this.grid=false;this.selected=null;this.drag=null;this.netHighlight=null;this.netPrimitives=new Set();this.isolateNet=false;this.paperVisible=!this.pcb;this.activeLayer='F.Cu';this.focusedLayer=null;this.layerFocusMode='dim';this.layerSnapshot=null;
 
@@ -100,13 +100,13 @@
 
       listen('pointerdown',e=>{if(e.button===1||e.button===2){e.preventDefault();this.drag={x:e.clientX,y:e.clientY,moved:false};this.canvas.setPointerCapture(e.pointerId);}});
 
-      listen('pointermove',e=>{if(!this.drag)return;const dx=e.clientX-this.drag.x,dy=e.clientY-this.drag.y;if(Math.abs(dx)+Math.abs(dy)>0)this.drag.moved=true;const c=this.viewport.camera;c.center.x-=dx/c.zoom*(c.flipped?-1:1);c.center.y-=dy/c.zoom;this.drag.x=e.clientX;this.drag.y=e.clientY;this.draw();});
+      listen('pointermove',e=>{if(!this.drag)return;const dx=e.clientX-this.drag.x,dy=e.clientY-this.drag.y;if(Math.abs(dx)+Math.abs(dy)>0)this.drag.moved=true;const c=this.viewport.camera;c.center.x-=dx/c.zoom*(c.flipped?-1:1);c.center.y-=dy/c.zoom;this.drag.x=e.clientX;this.drag.y=e.clientY;this.requestDraw();});
 
       listen('pointerup',e=>{this.drag=null;if(this.canvas.hasPointerCapture(e.pointerId))this.canvas.releasePointerCapture(e.pointerId);});listen('pointercancel',()=>this.drag=null);
 
       listen('click',e=>{const r=this.canvas.getBoundingClientRect(),at=this.viewport.camera.screen_to_world({x:e.clientX-r.left,y:e.clientY-r.top});const hit=this.query(at)[0];this.select(hit?{primitive:hit,context:{uuid:hit.uuid,reference:hit.reference,kind:hit.kind,pinNumber:hit.pinNumber,connectPoint:hit.connectPoint,parent:hit.ownerUuid?{uuid:hit.ownerUuid}:null}}:null);});
 
-      listen('wheel',e=>{e.preventDefault();const r=this.canvas.getBoundingClientRect(),p={x:e.clientX-r.left,y:e.clientY-r.top},c=this.viewport.camera,before=c.screen_to_world(p);c.zoom=Math.max(.001,Math.min(10000,c.zoom*Math.exp(-Math.max(-100,Math.min(100,e.deltaY))*.004)));const after=c.screen_to_world(p);c.center.x+=before.x-after.x;c.center.y+=before.y-after.y;this.draw();},{passive:false});
+      listen('wheel',e=>{e.preventDefault();const r=this.canvas.getBoundingClientRect(),p={x:e.clientX-r.left,y:e.clientY-r.top},c=this.viewport.camera,before=c.screen_to_world(p);c.zoom=Math.max(.001,Math.min(10000,c.zoom*Math.exp(-Math.max(-100,Math.min(100,e.deltaY))*.004)));const after=c.screen_to_world(p);c.center.x+=before.x-after.x;c.center.y+=before.y-after.y;this.requestDraw();},{passive:false});
 
       listen('contextmenu',e=>e.preventDefault());
 
@@ -157,6 +157,8 @@
 
     paperColor(){return this.dark?'#18242d':'#fffef9';}
 
+    requestDraw(){if(typeof requestAnimationFrame!=='function'){this.draw();return;}if(this.frameRequest===null)this.frameRequest=requestAnimationFrame(()=>{this.frameRequest=null;if(!this.disposed)this.draw();});}
+    inView(p,view){if(p.type==='text')return true;let box=this.geometryBounds.get(p);if(box===undefined){box=bounds([p],true);this.geometryBounds.set(p,box||null);}if(!box)return true;const margin=3/this.viewport.camera.zoom;return box.x+box.w>=view.x-margin&&box.x<=view.x+view.w+margin&&box.y+box.h>=view.y-margin&&box.y<=view.y+view.h+margin;}
     draw(){
 
       const c=this.viewport.camera,ctx=this.ctx,dpr=globalThis.devicePixelRatio||1;ctx.setTransform(1,0,0,1,0,0);ctx.fillStyle=this.background();ctx.fillRect(0,0,this.canvas.width,this.canvas.height);ctx.setTransform(dpr,0,0,dpr,0,0);
@@ -165,9 +167,10 @@
 
       if(this.paperVisible){const page=this.design?.page||{width:297,height:210},a=c.world_to_screen({x:0,y:0}),b=c.world_to_screen({x:page.width,y:page.height});ctx.save();ctx.shadowColor='#00000055';ctx.shadowBlur=18;ctx.shadowOffsetY=4;ctx.fillStyle=this.paperColor();ctx.fillRect(Math.min(a.x,b.x),a.y,Math.abs(b.x-a.x),b.y-a.y);ctx.restore();}
 
+      const view=c.bbox;
       if(this.renderPrimitives)this.renderPrimitives(ctx,c,this);else for(const p of this.primitives){
 
-        if(p.hidden)continue;
+        if(p.hidden||!this.inView(p,view))continue;
 
         if(p.frame&&!this.paperVisible)continue;
 
@@ -207,7 +210,7 @@
 
     }
 
-    dispose(){this.observer.disconnect();for(const stop of this.handlers)stop();this.canvas.remove();}
+    dispose(){this.disposed=true;if(this.frameRequest!==null&&typeof cancelAnimationFrame==='function')cancelAnimationFrame(this.frameRequest);this.frameRequest=null;this.observer.disconnect();for(const stop of this.handlers)stop();this.canvas.remove();}
 
   }
 

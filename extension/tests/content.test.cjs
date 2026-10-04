@@ -174,6 +174,25 @@ test('blob mounts inline, source toggles, action focuses, and navigation restore
   assert.equal(ui.source.hidden, false);
 });
 
+test('closing and reopening a preview restores source and ignores a stale frame load', () => {
+  const ui = fixture('https://github.com/owner/repo/blob/main/design/root.kicad_sch');
+  const host = find(ui.body, (node) => node.dataset.kicadVisualReview !== undefined);
+  const frame = find(host, (node) => node.tag === 'iframe');
+  frame.dispatch('load');
+  assert.equal(ui.source.hidden, true);
+  find(host, (node) => node.tag === 'button' && node.textContent === 'Close preview').click();
+  assert.equal(ui.source.hidden, false);
+  assert.equal(Boolean(find(host, (node) => node.tag === 'iframe')), false);
+  frame.dispatch('load');
+  assert.equal(ui.source.hidden, false);
+  find(host, (node) => node.tag === 'button' && node.textContent === 'Open visual preview').click();
+  const reopened = find(host, (node) => node.tag === 'iframe');
+  assert.ok(reopened);
+  assert.notEqual(reopened, frame);
+  reopened.dispatch('load');
+  assert.equal(ui.source.hidden, true);
+});
+
 test('PR preview stays inside the file card and preserves its header and comments', async () => {
   const ui = fixture('https://github.com/owner/repo/pull/7/files', { pull: true });
   await new Promise(setImmediate);

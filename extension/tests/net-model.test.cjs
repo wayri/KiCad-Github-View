@@ -140,7 +140,7 @@ test("pin members use conductive metadata and highlight only that pin, including
 test("invalid project input fails through the bounded source parser",()=> {
   assert.throws(()=>build([board(""),board("")]),/duplicate/);
   assert.throws(()=>build([file("bad.kicad_pcb","(kicad_pcb")]),/Incomplete/);
-  assert.throws(()=>build(new Array(33).fill(board(""))),/Too many/);
+  assert.throws(()=>build(new Array(129).fill(board(""))),/Too many/);
 });
 
 // Minimal native source subset from installed KiCad 10 pic_programmer demo:
@@ -155,6 +155,38 @@ const placedPower = (uuid,x,y,name="GND",id="pic_programmer:GND") =>
 const powerSource = (forms,definitions=powerDefinition(),version=20260101,path="power.kicad_sch") =>
   file(path,`(kicad_sch (version ${version}) (lib_symbols ${definitions}) ${forms})`);
 const schRendered = (files) => new Map(files.map((f)=>[f.path,sch.build(diff.parse(f.content),f.path)]));
+
+function cachedHarness() {
+  const fs=require('node:fs'),vm=require('node:vm'),counts={parse:0,objects:0};
+  const context={TextEncoder,Map,Set,WeakMap,KiCadDesignDiff:{...diff,parse(source){counts.parse++;return diff.parse(source);},projectObjects(files){counts.objects++;return diff.projectObjects(files);}}};
+  vm.runInNewContext(fs.readFileSync(require.resolve('../net-model.js'),'utf8'),context);
+  return {builder:context.KiCadNetModel.createBuilder(),counts};
+}
+test('workspace net snapshots reuse unchanged files and rebuild only changed source',()=>{
+  const h=cachedHarness(),files=Array.from({length:25},(_,i)=>schematic(wire('w',[0,0],[10,0])+label('l','NET'+i,0,0),`sheet${i}.kicad_sch`));
+  h.builder.build(files);assert.deepEqual(h.counts,{parse:25,objects:25});
+  h.builder.build(files);assert.deepEqual(h.counts,{parse:25,objects:25});
+  files[4]={...files[4],content:files[4].content.replace('NET4','UPDATED')};
+  const changed=h.builder.build(files);assert.deepEqual(h.counts,{parse:26,objects:26});assert.equal(changed.nets.find(net=>net.path===files[4].path).name,'UPDATED');
+  h.builder.clear();h.builder.build(files);assert.deepEqual(h.counts,{parse:51,objects:51});
+});
+test('workspace net snapshots invalidate replaced primitives and mutated pin connection metadata',()=>{
+  const source=schematic('(symbol (lib_id "Test:X") (at 0 0) (uuid "s") (property "Reference" "U1"))'+wire('w',[0,0],[10,0])+label('l','SIGNAL',0,0));
+  let pin={kind:'pin',uuid:'s',ownerUuid:'s',pinNumber:'1',connectPoint:{x:0,y:0}};
+  const design={primitives:[pin]},designs=new Map([[source.path,design]]),h=cachedHarness();
+  const first=h.builder.build([source],designs);assert.equal(first.nets[0].members.filter(member=>member.kind==='pin').length,1);
+  h.builder.build([source],designs);assert.equal(h.counts.parse,1);
+  pin={...pin,connectPoint:{...pin.connectPoint}};design.primitives[0]=pin;
+  const replaced=h.builder.build([source],designs);assert.equal(h.counts.parse,2);assert.equal(replaced.nets[0].primitives[0],pin);
+  pin.connectPoint.y=10;const moved=h.builder.build([source],designs);assert.equal(h.counts.parse,3);assert.equal(moved.nets[0].members.filter(member=>member.kind==='pin').length,0);
+});
+test('workspace snapshots do not retain removed sources or leak caller net mutations',()=>{
+  const h=cachedHarness(),a=schematic(wire('a',[0,0],[10,0]),'a.kicad_sch'),b=schematic(wire('b',[0,0],[10,0]),'b.kicad_sch');
+  const first=h.builder.build([a,b]);first.nets[0].objectIds.length=0;first.nets[0].stats.lengthMm=999;first.nets[0].members[0].position.x=999;
+  const clean=h.builder.build([a,b]);assert.ok(clean.nets[0].objectIds.length);assert.equal(clean.nets[0].stats.lengthMm,10);assert.equal(clean.nets[0].members[0].position.x,0);
+  h.builder.build([a]);assert.equal(h.counts.parse,2);h.builder.build([a,b]);assert.equal(h.counts.parse,3);
+  assert.throws(()=>h.builder.build([a,a]),/duplicate/);assert.throws(()=>h.builder.build(Array.from({length:129},()=>a)),/Too many/);
+});
 
 test("native explicit power flag names and joins separated GND symbols inside one file",()=> {
   const source=powerSource(placedPower("00000000-0000-0000-0000-0000442a4d38",102.87,48.26)+

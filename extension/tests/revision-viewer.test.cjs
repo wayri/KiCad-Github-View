@@ -2,7 +2,7 @@ const test=require('node:test'),assert=require('node:assert/strict');
 const fs=require('node:fs'),vm=require('node:vm'),path=require('node:path');
 const viewState=require('../view-state.js'),core=require('../owned-canvas.js');
 const tick=()=>new Promise(resolve=>setImmediate(resolve)),plain=value=>JSON.parse(JSON.stringify(value));
-async function revision(query='',extraFiles=[]){
+async function revision(query='',extraFiles=[],options={}){
  const listeners=new Map(),controls=new Map(),reports=[],calls={board:0,page:0,draw:0,disposed:0,attach:0};
  class Element{constructor(){this.attributes={};this.children=[];this.hidden=false;this.dataset={viewer:'auto'};this.isConnected=true;this.classList={add(){}};this.style={};}setAttribute(k,v){this.attributes[k]=String(v);}append(...children){this.children.push(...children);}remove(){}replaceChildren(){this.children=[];}click(){return this.onclick?.();}}
  const get=id=>{if(!controls.has(id))controls.set(id,new Element());return controls.get(id);};
@@ -10,12 +10,15 @@ async function revision(query='',extraFiles=[]){
  const canvas={canvas:new Element(),viewport:{camera},document:null,visibleLayers:new Set(),resize(){},draw(){calls.draw++;},dispose(){calls.disposed++;},
   setDocument(design,file){this.design=design;this.document={filename:file};this.zoom_to_board();this.draw();},
   zoom_to_board(){calls.board++;camera.bbox={x:92,y:192,w:16,h:16};},zoom_to_page(){calls.page++;camera.bbox={x:0,y:0,w:297,h:210};}};
- const context={URL,URLSearchParams,console,location:{search:'?repository=wayri/board&ref=main&file=root.kicad_sch'+query},parent,
+ const initialFile=options.pcb?'board.kicad_pcb':'root.kicad_sch';
+ const context={URL,URLSearchParams,console,location:{search:'?repository=wayri/board&ref=main&file='+initialFile+query},parent,
   document:{getElementById:get,body:new Element(),createElement:()=>new Element(),head:new Element()},
-  chrome:{runtime:{getURL:name=>'chrome-extension://ours/'+name,sendMessage:async()=>({ok:true,result:[{path:'root.kicad_sch',content:'(kicad_sch)'},...extraFiles]})}},
+  chrome:{runtime:{getURL:name=>'chrome-extension://ours/'+name,sendMessage:async message=>{if(message.type==='repo-asset'){(calls.assetRequests||=[]).push(message);return{ok:true,result:{base64:'AAAA'}};}return{ok:true,result:[{path:initialFile,content:options.pcb?'(kicad_pcb)':'(kicad_sch)'},...extraFiles]};}}},
   KiCadPairedReview:require('../paired-review.js'),KiCadReviewTools:require('../review-tools.js'),KiCadWorksheet:require('../worksheet.js'),KiCadBrowserData:require('../browser-data.js'),KiCadDesignModel:require('../design-model.js'),KiCadDesignDiff:require('../design-diff.js'),KiCadViewState:viewState,
   KiCadSchematicRenderer:{build:()=>({primitives:[],layers:[],page:{width:297,height:210},warnings:[]})},
-  KiCadOwnedCanvas:{mount:()=>canvas},KiCadReviewWorkspace:{mount:options=>{calls.workspaceOptions=options;return {draw(){},attachCanvas(){calls.attach++;},dispose(){calls.disposed++;},highlightRelated(selection){calls.related=selection;options.onSelection?.(selection);},refreshComments(){calls.refreshed=(calls.refreshed||0)+1;},options};}},
+  KiCadPCBRenderer:{build:()=>({primitives:[],layers:[],page:{width:297,height:210},warnings:[]})},
+  SpikeBoard3D:{mountBoard3D(_pane,_source,config){calls.modelOptions=config;return{dispose(){},setTheme(){}};}},
+  KiCadOwnedCanvas:{mount:()=>canvas},KiCadReviewWorkspace:{mount:options=>{calls.workspaceOptions=options;return {draw(){},setScene(){},attachCanvas(){calls.attach++;},dispose(){calls.disposed++;},highlightRelated(selection){calls.related=selection;options.onSelection?.(selection);},refreshComments(){calls.refreshed=(calls.refreshed||0)+1;},options};}},
   addEventListener:(type,callback)=>listeners.set(type,callback)};
  vm.runInNewContext(fs.readFileSync(path.join(__dirname,'../revision-viewer.js'),'utf8'),context);await tick();
  return{canvas,camera,calls,get,reports,parent,context,message(data,source=parent,origin='chrome-extension://ours'){listeners.get('message')({source,origin,data});},key(key,nodes=[],modifiers={}){let prevented=false;listeners.get('keydown')({key,composedPath:()=>nodes,preventDefault(){prevented=true;},...modifiers});return prevented;},hide(){listeners.get('pagehide')();}};
@@ -54,4 +57,12 @@ test('paired selection relay validates parent and suppresses cross-highlight ech
  v.message({type:'kicad-review:command',command:'highlight-related',selection:{...selection,reference:'R1\n'}});
  assert.equal(v.calls.related,null);
  v.message({type:'kicad-review:command',command:'refresh-comments'});assert.equal(v.calls.refreshed,1);
+});
+test('3D mode reuses successful model assets across toggles and clears them on pagehide',async()=>{
+ const v=await revision('',[],{pcb:true});await v.get('mode3d').click();
+ await v.calls.modelOptions.loadAsset('models/part.wrl');
+ await v.get('mode3d').click();await v.get('mode3d').click();
+ await v.calls.modelOptions.loadAsset('models/part.wrl');assert.equal(v.calls.assetRequests.length,1);
+ assert.equal(v.calls.assetRequests[0].repository,'wayri/board');assert.equal(v.calls.assetRequests[0].ref,'main');assert.equal(v.calls.assetRequests[0].file,'models/part.wrl');
+ v.hide();await v.calls.modelOptions.loadAsset('models/part.wrl');assert.equal(v.calls.assetRequests.length,2);
 });

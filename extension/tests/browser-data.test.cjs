@@ -141,3 +141,47 @@ test('nested project hierarchy retains exact case and ignores asset folders for 
   assert.deepEqual(schematic.map(file=>file.path),['Hardware/HPBM-SMALL.kicad_sch','Hardware/SubSheets/Power.kicad_sch']);
   assert.ok(reads.every(path=>!path.includes('packages3D')&&!path.includes('assets')));
 });
+test('KiCad 6 Sheet file properties load the hierarchy and exclude library lookalikes', async () => {
+  const root = '(kicad_sch (version 20211123) (lib_symbols (symbol "Ignore" (property "Sheet file" "fake.kicad_sch"))) (sheet (property "Sheet name" "Power") (property "Sheet file" "SubSheets/Power.kicad_sch")) (sheet (property "Sheetfile" "USB.kicad_sch")))';
+  assert.deepEqual(data.sheetFiles(root), ['SubSheets/Power.kicad_sch', 'USB.kicad_sch']);
+  const files = new Map([['design/Marble.kicad_sch', root], ['design/SubSheets/Power.kicad_sch', '(kicad_sch)'], ['design/USB.kicad_sch', '(kicad_sch)']]);
+  const loaded = await data.loadProject('wayri/Marble', 'main', 'design/Marble.kicad_sch', async (_repo, _ref, file) => files.get(file) ?? null);
+  assert.deepEqual(loaded.map(file => file.path), [...files.keys()]);
+});
+test('hierarchy over 32 files uses bounded parallel reads and deduplicates reused sheets', async () => {
+  const children = Array.from({ length: 40 }, (_, i) => `sheet${i}.kicad_sch`);
+  const root = '(kicad_sch ' + [...children, children[0]].map(file => `(sheet (property "Sheet file" "${file}"))`).join(' ') + ')';
+  let active = 0, peak = 0; const reads = [];
+  const loaded = await data.loadProject('wayri/board', 'main', 'root.kicad_sch', async (_repo, _ref, file) => {
+    reads.push(file); active++; peak = Math.max(peak, active); await new Promise(resolve => setImmediate(resolve)); active--;
+    return file === 'root.kicad_sch' ? root : '(kicad_sch)';
+  });
+  assert.equal(peak, data.READ_CONCURRENCY); assert.equal(loaded.length, 41); assert.equal(reads.length, 41);
+  assert.deepEqual(loaded.map(file => file.path), ['root.kicad_sch', ...children]);
+});
+test('hierarchy enforces its file cap independently of parent discovery', async () => {
+  const root = '(kicad_sch ' + Array.from({ length: data.PROJECT_MAX_FILES }, (_, i) => `(sheet (property "Sheetfile" "sheet${i}.kicad_sch"))`).join(' ') + ')';
+  await assert.rejects(data.loadProject('wayri/board', 'main', 'root.kicad_sch', async (_repo, _ref, file) => file === 'root.kicad_sch' ? root : '(kicad_sch)'), /128 files/);
+});
+test('repository model transport cache deduplicates loads, retries failures and bounds memory', async () => {
+  let requests = 0;
+  const cache = data.createModelAssetCache(async path => { requests++; await new Promise(resolve => setImmediate(resolve)); if (path === 'missing.wrl') throw new Error('missing'); return { base64: 'AAAA' }; }, 8);
+  await Promise.all([cache.load('part.wrl'), cache.load('part.wrl')]); await cache.load('part.wrl'); assert.equal(requests, 1);
+  await cache.load('other.wrl'); await cache.load('other.wrl'); assert.equal(requests, 3, 'assets beyond the cache budget are loaded without retaining them');
+  await assert.rejects(cache.load('missing.wrl')); await assert.rejects(cache.load('missing.wrl')); assert.equal(requests, 5);
+  cache.clear(); await cache.load('part.wrl'); assert.equal(requests, 6);
+});
+test('clearing the model cache prevents in-flight responses from repopulating it', async () => {
+  let requests = 0, release;
+  const cache = data.createModelAssetCache(async () => { requests++; if (requests === 1) await new Promise(resolve => { release = resolve; }); return { base64: 'AAAA' }; });
+  const pending = cache.load('part.wrl'); cache.clear(); release(); await pending; await cache.load('part.wrl'); assert.equal(requests, 2);
+});
+test('unrelated discovery candidates cannot consume the requested hierarchy byte budget', async () => {
+  const large = '(kicad_sch' + ' '.repeat(8 * 1024 * 1024 - 11) + ')';
+  const root = '(kicad_sch (sheet (property "Sheet file" "sub/child.kicad_sch")))';
+  const unrelated = Array.from({ length: 13 }, (_, i) => `unrelated${i}.kicad_sch`);
+  const loaded = await data.loadProject('wayri/board', 'main', 'root.kicad_sch', async (_repo, _ref, file) => file === 'root.kicad_sch' ? root : large,
+    async () => ['root.kicad_sch', ...unrelated]);
+  assert.deepEqual(loaded.map(file => file.path), ['root.kicad_sch', 'sub/child.kicad_sch']);
+  assert.match(loaded[0].discoveryWarning, /size limit/);
+});

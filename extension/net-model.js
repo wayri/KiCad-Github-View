@@ -254,6 +254,67 @@
     nets.sort((a,b)=>a.path.localeCompare(b.path)||a.name.localeCompare(b.name)||a.code.localeCompare(b.code));
     return {nets,warnings};
   }
-  root.KiCadNetModel={build};
+  function createBuilder() {
+    // Workspace-owned connectivity snapshots. No global AST retention: changing
+    // one rendered sheet rebuilds that sheet rather than reparsing the project.
+    const cache=new Map(), encoder=new TextEncoder();
+    let primitiveIds=new WeakMap(), nextPrimitiveId=0;
+    const CACHE_LIMIT=96*1024*1024;
+    function primitiveSignature(primitives) {
+      if(primitives.length>250000)throw new Error("Too many render primitives for net selection.");
+      const chunks=[];let chars=0;
+      for(const p of primitives) {
+        let entry;
+        if(!p||typeof p!=="object")entry=[typeof p,String(p)];
+        else {
+        if(!primitiveIds.has(p))primitiveIds.set(p,++nextPrimitiveId);
+          entry=[primitiveIds.get(p),p.kind,p.uuid,p.ownerUuid,p.name,p.pinNumber,p.connectPoint?.x,p.connectPoint?.y,Boolean(p.frame)];
+        }
+        const chunk=JSON.stringify(entry);chars+=chunk.length+1;
+        if(chars>4*1024*1024)return null; // Large render metadata is processed without caching.
+        chunks.push(chunk);
+      }
+      return '['+chunks.join(',')+']';
+    }
+    function cloneNet(net) {
+      return {...net,objectIds:[...net.objectIds],uuids:[...net.uuids],primitives:[...net.primitives],stats:{...net.stats},
+        members:net.members.map(member=>({...member,...(member.position?{position:{...member.position}}:{})})),...(net.names?{names:[...net.names]}:{})};
+    }
+    function cachedBuild(files,designs=new Map()) {
+      // Use the source parser's current file-count contract without parsing its
+      // sources just to validate the cache. Each changed file uses build below.
+      if(!Array.isArray(files)||files.length>(diff.MAX_FILES||128))throw new Error("Too many KiCad files to compare.");
+      const paths=new Set(), inputs=[];let sourceBytes=0;
+      for(const file of files) {
+        if(!file||typeof file.path!=="string"||typeof file.content!=="string"||!/\.kicad_(?:sch|pcb)$/i.test(file.path)||paths.has(file.path))throw new Error("Invalid or duplicate KiCad file entry.");
+        paths.add(file.path);
+        const previous=cache.get(file.path),size=previous?.content===file.content?previous.sourceBytes:encoder.encode(file.content).length;
+        sourceBytes+=size;
+        if(size>(/\.kicad_pcb$/i.test(file.path)?64:8)*1024*1024||sourceBytes>CACHE_LIMIT)throw new Error("KiCad project exceeds browser comparison size limits.");
+        const design=designs instanceof Map?designs.get(file.path):designs?.[file.path],primitives=Array.isArray(design?.primitives)?design.primitives:[];
+        if(primitives.length>250000)throw new Error("Too many render primitives for net selection.");
+        inputs.push({file,sourceBytes:size,primitives,design});
+      }
+      for(const path of cache.keys())if(!paths.has(path))cache.delete(path);
+      const nets=[],warnings=[],seenWarnings=new Set();let retainedBytes=0;
+      for(const input of inputs) {
+        const {file,primitives,design}=input,signature=primitiveSignature(primitives),previous=cache.get(file.path);
+        let snapshot;
+        if(signature!==null&&previous?.content===file.content&&previous.signature===signature)snapshot=previous.snapshot;
+        else snapshot=build([file],new Map([[file.path,design]]));
+        const bytes=input.sourceBytes+(signature===null?Infinity:signature.length*2);
+        if(retainedBytes+bytes<=CACHE_LIMIT) {
+          cache.set(file.path,{content:file.content,sourceBytes:input.sourceBytes,signature,snapshot});retainedBytes+=bytes;
+        }else cache.delete(file.path);
+        nets.push(...snapshot.nets.map(cloneNet));
+        for(const warning of snapshot.warnings)if(warnings.length<1000&&!seenWarnings.has(warning)){seenWarnings.add(warning);warnings.push(warning);}
+      }
+      nets.sort((a,b)=>a.path.localeCompare(b.path)||a.name.localeCompare(b.name)||a.code.localeCompare(b.code));
+      return {nets,warnings};
+    }
+    function clear(){cache.clear();primitiveIds=new WeakMap();nextPrimitiveId=0;}
+    return {build:cachedBuild,clear};
+  }
+  root.KiCadNetModel={build,createBuilder};
   if(typeof module === "object" && module.exports)module.exports=root.KiCadNetModel;
 })(typeof globalThis === "object" ? globalThis : this);

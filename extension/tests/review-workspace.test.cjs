@@ -220,6 +220,7 @@ test('review shortcuts inspect pointer, highlight net, focus search, respect typ
  view.get('designInspector').hidden=true;view.key('e',{ctrlKey:true});assert.equal(view.get('designInspector').hidden,true);view.key('e',{composedPath:()=>[{tagName:'TEXTAREA'}]});assert.equal(view.get('designInspector').hidden,true);
  const move=new Event('pointermove');Object.assign(move,{clientX:400,clientY:300,buttons:0});view.canvas.canvas.dispatchEvent(move);view.key('e');assert.equal(view.get('selectedName').textContent,'R1 pad 1');assert.equal(view.get('designInspector').hidden,false);
  view.key('h');assert.equal(view.canvas.netHighlight.name,'SIGNAL');view.key(' ');assert.equal(focused[0].x,0);assert.equal(focused[0].y,0);view.key('/');assert.equal(view.get('navSearch').attributes['aria-selected'],'true');view.key('?');assert.equal(view.get('shortcutHelp').open,true);
+ for(const key of ['`','~']){view.get('clearHighlights').click();view.key(key);assert.equal(view.canvas.netHighlight.name,'SIGNAL');view.get('clearHighlights').click();view.key(key,{composedPath:()=>[{tagName:'INPUT'}]});assert.equal(view.canvas.netHighlight,null);}
  for(const key of ['r','Delete','Backspace','x','g'])assert.equal(view.key(key).defaultPrevented,undefined);
  const count=messages.length;view.workspace.dispose();view.key('c');assert.equal(messages.length,count);
 });
@@ -305,17 +306,14 @@ test('root navigation resolves an initially opened child and rejects reused-pare
  assert.equal(rootPath('child.kicad_sch',[link('root','child')],files),'root.kicad_sch');assert.equal(rootPath('child.kicad_sch',[link('root','child'),link('other','child')],files),null);assert.equal(rootPath('child.kicad_sch',[link('root','child'),link('child','root')],files),null);
 });
 
-test('GitLab viewer isolates local anchors and hides GitHub account/publication tools',async()=>{
- let notes=[];const calls=[];const view=workspaceRuntime(async message=>{calls.push(message);if(message.type==='comment-save'){notes=[message.comment];return message.comment;}if(message.type==='comment-list')return notes;return [];},{provider:'gitlab',repository:'group/sub/design'});view.load();await new Promise(resolve=>setImmediate(resolve));
- assert.equal(view.get('reviewSettings').hidden,true);assert.equal(view.get('refreshGitHub').hidden,true);assert.match(view.get('commentPolicyStatus').textContent,/GitLab.*browser/);
+test('GitLab viewer isolates host context and exposes provider account and publication controls',async()=>{
+ let notes=[];const calls=[];const view=workspaceRuntime(async message=>{calls.push(message);if(message.type==='comment-save'){notes=[message.comment];return message.comment;}if(message.type==='comment-list')return notes;if(message.type==='comment-policy-status')return{allowed:true,mode:'everyone'};return [];},{provider:'gitlab',host:'https://gitlab.example.com',repository:'group/sub/design'});view.load();await new Promise(resolve=>setImmediate(resolve));
+ assert.equal(view.get('reviewSettings').hidden,false);assert.equal(view.get('showGitHub').textContent,'GitLab');assert.equal(view.get('postComment').textContent,'Post to GitLab');assert.equal(view.get('editorAccount').textContent,'GitLab account');assert.equal(view.get('repositoryIssues').href,'https://gitlab.example.com/group/sub/design/-/issues');
  view.get('newComment').click();view.get('commentText').value='Check layout';await view.get('saveComment').click();
- assert.match(view.get('commentAnchor').textContent,/^Local review:/);
- assert.match(view.get('commentList').textContent,/Local review/);
- assert.doesNotMatch(view.get('commentList').textContent,/Unassigned type|Publish to GitHub/);
- const saved=calls.find(message=>message.type==='comment-save');assert.equal(saved.provider,'gitlab');assert.equal(saved.comment.anchor.provider,'gitlab');assert.equal(saved.comment.anchor.repository,'group/sub/design');
- assert.equal(calls.some(message=>message.type.startsWith('github-')||message.type==='comment-policy-status'),false);
+ assert.match(view.get('commentList').textContent,/Publish to GitLab/);assert.doesNotMatch(view.get('commentList').textContent,/Publish to GitHub/);
+ const saved=calls.find(message=>message.type==='comment-save');assert.equal(saved.provider,'gitlab');assert.equal(saved.host,'https://gitlab.example.com');assert.equal(saved.comment.anchor.provider,'gitlab');assert.equal(saved.comment.anchor.host,'https://gitlab.example.com');assert.equal(saved.comment.anchor.repository,'group/sub/design');
+ assert.equal(calls.some(message=>message.type.startsWith('github-')),false);assert.equal(calls.find(m=>m.type==='comment-policy-status').host,'https://gitlab.example.com');
 });
-
 
 test('GitHub collaboration is a separate pane and type controls preserve supported destinations without posting',async()=>{
  const calls=[];const view=workspaceRuntime(async m=>{calls.push(m);if(m.type==='comment-policy-status')return{allowed:true,mode:'everyone'};return[];},{pullNumber:42,pullRepository:'wayri/reviews'});view.load();await new Promise(resolve=>setImmediate(resolve));
@@ -326,11 +324,11 @@ test('GitHub collaboration is a separate pane and type controls preserve support
  view.get('githubCommentType').value='issue';view.get('githubCommentType').onchange();assert.deepEqual(Array.from(view.get('commentDestination').children,e=>e.value),['issue','existing-issue','pull-request']);
  view.get('showComments').click();assert.equal(view.get('githubPane').hidden,true);assert.equal(view.get('commentsPane').hidden,false);assert.equal(calls.some(m=>m.type==='github-publish-comment'),false);
 });
-test('standalone viewer never offers current PR and GitLab or VS Code collaboration is explicitly unavailable',async()=>{
+test('standalone viewer never offers current PR and VS Code remote collaboration remains unavailable',async()=>{
  const github=workspaceRuntime();assert.deepEqual(Array.from(github.get('commentDestination').children,e=>e.value),['issue','existing-issue']);
- for(const hooks of [{provider:'gitlab',repository:'group/sub/project'},{vscode:true}]){
+ for(const hooks of [{vscode:true},{provider:'gitlab',repository:'group/sub/project',vscode:true}]){
   const calls=[];const view=workspaceRuntime(async m=>{calls.push(m);return[];},hooks);view.load();await new Promise(resolve=>setImmediate(resolve));view.get('showGitHub').click();
-  assert.equal(view.get('githubPane').hidden,false);assert.equal(view.get('githubAvailableControls').hidden,true);assert.match(view.get('githubAvailability').textContent,hooks.vscode?/VS Code viewer/:/GitLab remote collaboration is not available/);
+  assert.equal(view.get('githubPane').hidden,false);assert.equal(view.get('githubAvailableControls').hidden,true);assert.match(view.get('githubAvailability').textContent,/VS Code viewer/);
   assert.equal(calls.some(m=>m.type.startsWith('github-')||m.type==='comment-policy-status'),false);
  }
 });
@@ -383,8 +381,19 @@ test('failed direct publication preserves a saved editable draft and does not re
  let notes=[];const calls=[];const view=workspaceRuntime(async m=>{calls.push(m);if(m.type==='comment-list')return notes;if(m.type==='comment-save'){notes=[m.comment];return m.comment;}if(m.type==='github-publish-comment')throw new Error('Connect GitHub to publish');return[];});view.load();await new Promise(resolve=>setImmediate(resolve));view.get('newComment').click();view.get('commentText').value='Review';await view.get('postComment').click();assert.equal(notes.length,1);assert.equal(notes[0].remoteRefs.length,0);assert.equal(view.get('commentEditor').hidden,false);assert.match(view.get('commentStatus').textContent,/draft remains saved/);assert.equal(calls.filter(m=>m.type==='github-publish-comment').length,1);
 });
 
-test('GitLab cannot dispatch direct publication from the hidden editor controls',async()=>{
- const calls=[];const view=workspaceRuntime(async m=>{calls.push(m);return[];},{provider:'gitlab',repository:'group/project'});view.load();await new Promise(resolve=>setImmediate(resolve));assert.equal(view.get('commentPublishSettings').hidden,true);view.get('newComment').click();view.get('commentText').value='Local review';await view.get('postComment').click();assert.equal(calls.some(m=>m.type==='github-publish-comment'),false);assert.match(view.get('commentStatus').textContent,/unavailable/);
+test('GitLab direct publication saves confirmed issue links and discussions target existing issues',async()=>{
+ for(const type of ['issue','discussion']){
+  const calls=[];let notes=[];const remoteRef={provider:'gitlab',host:'https://gitlab.example.com',kind:'issue',repository:'group/project',number:42,url:'https://gitlab.example.com/group/project/-/issues/42',publishedAt:'2026-10-04T00:00:00.000Z'};
+  const view=workspaceRuntime(async m=>{calls.push(m);if(m.type==='comment-list')return notes;if(m.type==='comment-save'){notes=[m.comment];return m.comment;}if(m.type==='comment-publish')return{remoteRef};if(m.type==='comment-policy-status')return{allowed:true};return[];},{provider:'gitlab',host:'https://gitlab.example.com',repository:'group/project'});view.load();await new Promise(resolve=>setImmediate(resolve));
+  view.get('newComment').click();view.get('commentText').value='Review connectivity';view.get('editorThreadType').value=type;view.get('editorThreadType').onchange();view.get('editorTitle').value='Connectivity review';
+  if(type==='discussion'){assert.deepEqual(Array.from(view.get('editorDestination').children,e=>e.value),['existing-issue']);view.get('editorThreadNumber').value='42';}
+  assert.equal(view.get('editorCategoryLabel').hidden,true);await view.get('postComment').click();
+  const publication=calls.find(m=>m.type==='comment-publish');assert.equal(publication.provider,'gitlab');assert.equal(publication.host,'https://gitlab.example.com');assert.equal(publication.destination,type==='discussion'?'issue':'new-issue');assert.equal(publication.discussion,type==='discussion'?true:undefined);assert.equal(publication.categoryId,undefined);assert.equal(publication.comment.threadType,type);
+  assert.equal(calls.some(m=>m.type==='github-publish-comment'),false);assert.equal(notes[0].remoteRefs[0].url,remoteRef.url);assert.match(view.get('commentStatus').textContent,/Posted to GitLab issue #42/);
+ }
+});
+test('GitLab annotations readback and settings retain exact provider host and no GitHub category lookup',async()=>{
+ const calls=[];const view=workspaceRuntime(async m=>{calls.push(m);if(m.type==='comment-remote-list')return{notes:[],warnings:['Only marked review notes are included.']};return[];},{provider:'gitlab',host:'https://gitlab.example.com',repository:'group/project'});await view.get('refreshGitHub').click();await view.get('reviewSettings').click();assert.equal(calls.find(m=>m.type==='comment-remote-list').host,'https://gitlab.example.com');assert.equal(calls.find(m=>m.type==='open-options').provider,'gitlab');assert.match(view.get('commentStatus').textContent,/Loaded 0 GitLab annotations/);view.get('githubCommentType').value='discussion';view.get('githubCommentType').onchange();assert.equal(view.get('loadCategories').hidden,true);assert.deepEqual(Array.from(view.get('commentDestination').children,e=>e.value),['existing-issue']);
 });
 
 test('net review drafts preserve the selected saved net name in formatted GitHub context',async()=>{
