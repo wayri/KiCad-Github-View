@@ -12,7 +12,7 @@ Reports include additions, modifications, deletions and detected renames. A rena
 
 `sensor.kicad_sch.html` and `sensor.kicad_pcb.html` are distinct output paths, even when the source files share a basename. `review.json` records resolved base/head IDs, old/new paths, Git status, report paths and success. A failed rendering fails the job and is identified in the index without a success link. The artifact upload runs after rendering failures so completed reports remain available. A comparison without changed drawings still produces an index stating that fact. More than 256 changed drawings is rejected with a visible limit message.
 
-Development after v0.12.8: whole-repository native review materializes each saved commit once and shares those snapshots across all changed drawings. Per-drawing SVG exports and report data remain separate. Native regression checks compare the complete report data and SVG content against independent single-file exports, ignoring only KiCad's generated SVG title timestamp; snapshot cleanup and source preservation are checked. A shared setup failure still writes the index and failure evidence in `review.json`.
+Since v0.12.9: whole-repository native review materializes each saved commit once and shares those snapshots across all changed drawings. Per-drawing SVG exports and report data remain separate. Native regression checks compare the complete report data and SVG content against independent single-file exports, ignoring only KiCad's generated SVG title timestamp; snapshot cleanup and source preservation are checked. A shared setup failure still writes the index and failure evidence in `review.json`.
 
 The workflow has read-only repository permissions and no posting token. It does not publish review comments, mutate designs, evaluate ERC/DRC or certify fabrication. Reports use the saved file state; the native renderer, browser fonts and supported layers still determine visual output. Fork PR workflows run untrusted repository code with the ordinary restricted PR token; do not switch this workflow to `pull_request_target` or add privileged secrets.
 
@@ -30,14 +30,14 @@ kicad-vizdiff review --base main --head feature --merge-base --output kicad-revi
 
 ## Use the composite action for every changed drawing
 
-Development after v0.12.8: omit `file` to generate a report directory containing `index.html`, `review.json` and each changed schematic/PCB report. Install KiCad on the runner first. Keep both commits available in the checkout and pin the action to a reviewed commit in production:
+Since v0.12.9: omit `file` to generate a report directory containing `index.html`, `review.json` and each changed schematic/PCB report. Install KiCad on the runner first. Keep both commits available in the checkout and pin the action to a reviewed commit in production:
 
 ```yaml
 - uses: actions/checkout@v4
   with:
     fetch-depth: 0
     persist-credentials: false
-- uses: wayri/KiCad-Github-View@main
+- uses: wayri/KiCad-Github-View@v0.12.9
   id: review
   with:
     base: ${{ github.event.pull_request.base.sha }}
@@ -63,7 +63,7 @@ Install KiCad on the runner first, then check out your hardware repository with 
   with:
     fetch-depth: 0
     persist-credentials: false
-- uses: wayri/KiCad-Github-View@main
+- uses: wayri/KiCad-Github-View@v0.12.9
   id: review
   with:
     file: hardware/controller.kicad_sch

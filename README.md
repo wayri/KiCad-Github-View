@@ -11,7 +11,7 @@
 
 **Interactive KiCad review inside GitHub and GitLab file pages.** Open schematics and PCB layouts as drawings, inspect saved parts and nets, compare revisions, and anchor review notes to the design. The viewer runs in the browser with our own schematic/PCB engine and the owner-authorized SPIKE 3D adapter. No KiCad installation, local companion process or rendering server is needed for the browser extension.
 
-[Download v0.12.8](https://github.com/wayri/KiCad-Github-View/releases/tag/v0.12.8) · [Install](docs/INSTALL.md) · [Comment integration](docs/COMMENTS.md) · [Git services](docs/GIT-HOSTS.md) · [Release notes](docs/releases/v0.12.8.md)
+[Download v0.12.9](https://github.com/wayri/KiCad-Github-View/releases/tag/v0.12.9) · [Install](docs/INSTALL.md) · [Comment integration](docs/COMMENTS.md) · [Git services](docs/GIT-HOSTS.md) · [Release notes](docs/releases/v0.12.9.md)
 
 Illustrated walkthroughs: [Using GitHub integration](docs/using-github-integration/README.md) · [Using GitLab integration](docs/using-gitlab-integration/README.md). Browser packages: [Firefox](docs/FIREFOX.md) · [Safari](docs/SAFARI.md).
 
@@ -69,7 +69,7 @@ Properties and analytics come from the saved source revision. Missing settings a
 
 ## Install in Chrome or Edge
 
-1. Download **`kicad-visual-review-chrome-edge-brave-opera-vivaldi-chromium-0.12.8.zip`** from [Releases](https://github.com/wayri/KiCad-Github-View/releases/tag/v0.12.8). The GitHub **Source code** archives are not the prepared extension package.
+1. Download **`kicad-visual-review-chrome-edge-brave-opera-vivaldi-chromium-0.12.9.zip`** from [Releases](https://github.com/wayri/KiCad-Github-View/releases/tag/v0.12.9). The GitHub **Source code** archives are not the prepared extension package.
 2. Extract the ZIP into a permanent folder. Select the folder containing `manifest.json`, not the ZIP itself.
 3. Open `chrome://extensions` in Chrome/Chromium or `edge://extensions` in Edge.
 4. Enable **Developer mode**, select **Load unpacked**, and choose that folder.
@@ -81,7 +81,7 @@ The drawing toolbar contains the active sheet selector, Back/Forward/Up/Root nav
 
 Project drawing previews now open in focused mode by default, hiding the outer project tree and setup headers. **Show project controls** brings them back without reloading the drawing or losing a draft; **Close preview** returns to the project. A local 1707 × 960 check measured 80.3% unobscured drawing across the complete project viewer with a Comments panel open; at that height, the toolbar switches between Properties and Comments to keep the active panel usable. This used the actual renderer with mocked transport.
 
-Development source after v0.12.8 adds **Tall / Wide** controls to Properties, Comments and the explorer. Tall mode narrows the active panel and gives it more reading height without changing the drawing-area budget. Drag the bottom edge to resize its height; keyboard Home/End sets minimum/maximum height and arrow keys adjust it. Resize keys leave the drawing zoom unchanged. In short split panes, **Expand** temporarily uses full panel height for comfortable reading/editing; **Restore** returns to the drawing-area budget. Closing, switching panels or restoring retains the draft. This explicit reading mode reduces unobscured drawing space. At 600 x 500, a local renderer check retained 82.3% drawing space with the compact sidebar header visible; Expand provided 434 pixels of reading height. In compact-header mode the hidden panel body is removed from keyboard/accessibility navigation until expanded. The toolbar remains horizontally scrollable without a separate scrollbar row. These measurements used mocked transport. A local 1707 x 960 renderer check increased Comments from 343 to 531 pixels high while retaining 86.0% unobscured drawing area inside the viewer. This used mocked transport; it does not prove every installed host layout.
+Since v0.12.9, the viewer includes **Tall / Wide** controls to Properties, Comments and the explorer. Tall mode narrows the active panel and gives it more reading height without changing the drawing-area budget. Drag the bottom edge to resize its height; keyboard Home/End sets minimum/maximum height and arrow keys adjust it. Resize keys leave the drawing zoom unchanged. In short split panes, **Expand** temporarily uses full panel height for comfortable reading/editing; **Restore** returns to the drawing-area budget. Closing, switching panels or restoring retains the draft. This explicit reading mode reduces unobscured drawing space. At 600 x 500, a local renderer check retained 82.3% drawing space with the compact sidebar header visible; Expand provided 434 pixels of reading height. In compact-header mode the hidden panel body is removed from keyboard/accessibility navigation until expanded. The toolbar remains horizontally scrollable without a separate scrollbar row. These measurements used mocked transport. A local 1707 x 960 renderer check increased Comments from 343 to 531 pixels high while retaining 86.0% unobscured drawing area inside the viewer. This used mocked transport; it does not prove every installed host layout.
 
 
 Panel heights adapt to target 86% of each drawing frame unobscured, including its toolbar and footer. When several panels would become too short, the viewer shows the active panel and lets you switch with the toolbar; closing panels restores the full canvas. Narrow split toolbars use icons with accessible labels, and split review keeps one compact header. Local browser verification at 1707 × 960 measured 86.0% with Properties and Comments open in a single viewer and 80.6% across a schematic/PCB split with one panel open in each pane. These are viewer-area measurements using the real renderer and mocked transport, not guarantees for the entire GitHub page or every window size. Small views show a space warning; **Focus view** hides panels. Installed-browser verification remains necessary.
@@ -170,10 +170,10 @@ Read [the complete comment guide](docs/COMMENTS.md) for authentication, permissi
 
 ## VS Code installation
 
-Download **`kicad-visual-review-vscode-0.12.8.vsix`** from Releases. In VS Code run **Extensions: Install from VSIX**, select the file and run **Developer: Reload Window**. Open a KiCad project folder and use **KiCad: Open Visual Viewer** or **Reopen Editor With → KiCad Visual Review**. The **KiCad Review** explorer lists saved drawings and review sidecars.
+Download **`kicad-visual-review-vscode-0.12.9.vsix`** from Releases. In VS Code run **Extensions: Install from VSIX**, select the file and run **Developer: Reload Window**. Open a KiCad project folder and use **KiCad: Open Visual Viewer** or **Reopen Editor With → KiCad Visual Review**. The **KiCad Review** explorer lists saved drawings and review sidecars.
 
 ```sh
-code --install-extension kicad-visual-review-vscode-0.12.8.vsix --force
+code --install-extension kicad-visual-review-vscode-0.12.9.vsix --force
 ```
 
 Local notes use `.kicad-review.json` in the workspace root (or drawing directory outside a workspace). Filesystem-provider permissions still apply. The VSIX is not currently published in Visual Studio Marketplace. See [the VS Code guide](vscode-extension/README.md).
@@ -196,6 +196,7 @@ python -m pip install -e .
 kicad-vizdiff doctor
 kicad-vizdiff view hardware/controller.kicad_sch --open
 kicad-vizdiff diff hardware/controller.kicad_pcb --base main --head HEAD --open
+kicad-vizdiff review --base main --head feature --merge-base --output kicad-review
 ```
 
 Pass the root schematic to include child sheets. The native report supports side-by-side, overlay, swipe and changed-pixel views; these should not be confused with the browser extension's saved-object comparison. [`action.yml`](action.yml) and [the example PR workflow](.github/workflows/visual-review.yml) provide optional runner-based reports.
