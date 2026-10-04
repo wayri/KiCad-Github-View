@@ -842,6 +842,9 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       case "github-discussion-categories":
         if (!viewerSender(sender)) throw new Error("Only extension viewers can retrieve discussion categories.");
         return KiCadGitHubReviewApi.categories(message.repository);
+      case "github-recover-publication":
+        if (!viewerSender(sender)) throw new Error("Only extension viewers can recover review publication links.");
+        return KiCadGitHubReviewApi.recoverPublication(message, githubAnnotations);
       case "github-publish-comment":
         if (!viewerSender(sender)) throw new Error("Only extension viewers can publish review comments.");
         return KiCadGitHubReviewApi.publish(message);

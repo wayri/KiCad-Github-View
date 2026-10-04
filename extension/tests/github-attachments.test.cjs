@@ -24,13 +24,14 @@ async function harness(options = {}) {
       assert.ok(url.startsWith('https://api.github.com/'));
       if (url.endsWith('/repos/owner/board')) return json({id: options.repoId ?? 42, full_name: 'owner/board', private: false, default_branch: 'main', permissions: {push: options.push ?? true}});
       if (url.includes('/contents/.kicad-review-policy.json?')) return new Response(null, {status: 404});
-      if (url.endsWith('/user')) return json({login: 'owner'});
+      if (url.endsWith('/user')) return json({login: options.profileLogin || 'owner'});
       if (url.endsWith('/issues') || url.endsWith('/issues/7/comments')) {
         if (issueFailures-- > 0) return new Response(null, {status: options.issueStatus || 422});
         return json({number: 7, id: 11});
       }
       if (url.endsWith('/graphql')) {
         const body = JSON.parse(init.body);
+        if(body.query.includes('mutation')&&options.mutationFailure){options.mutationFailure=false;return new Response(null,{status:503});}
         if (body.query.includes('CreateDiscussionInput')) return json({data: {createDiscussion: {discussion: {id: 'D_valid', number: 8}}}});
         if (body.query.includes('AddDiscussionCommentInput')) return json({data: {addDiscussionComment: {comment: {id: 'DC_valid', databaseId: 12}}}});
         if (body.query.includes('discussion(number')) return json({data: {repository: {discussion: {id: 'D_valid', number: 8}}}});
@@ -120,4 +121,46 @@ test('sign-out or account replacement during upload retains only its URL and blo
     assert.equal(posts(h).length, 0); assert.equal(uploads(h).length, 1);
     assert.equal([...h.local.values()].filter(record => record.attachment).length, 1);
   }
+});
+
+const recoveredNote = h => ({...comments.fromMarkdown(JSON.parse(posts(h)[0].init.body).body)[0],github:{number:7,source:'issue',author:'owner',url:'https://github.com/owner/board/issues/7',createdAt:'2026-10-05T01:00:00.000Z'}});
+test('uncertain publication can recover an exact authored annotation without posting or uploading again',async()=>{
+ const h=await harness({issueFailures:1,issueStatus:503});await assert.rejects(h.api.publish(message('new-issue')));
+ let scope;const result=await h.api.recoverPublication({...message('new-issue'),recoveryNumber:7},async value=>{scope=value;return{notes:[recoveredNote(h)]};});
+ assert.equal(scope.issueNumber,7);assert.equal(result.recovered,true);assert.equal(result.attachments[0].url,asset);assert.equal(uploads(h).length,1);assert.equal(posts(h).length,1);
+ const again=await h.api.publish(message('new-issue'));assert.equal(again.duplicate,true);assert.equal(again.remoteRef.url,'https://github.com/owner/board/issues/7');assert.equal(posts(h).length,1);
+});
+test('recovery rejects changed annotations, authors, scope, thread kind and duplicate matches while retaining retry protection',async()=>{
+ for(const change of [n=>n.text='changed',n=>n.github.author='someone',n=>n.anchor.file='other.kicad_pcb',n=>n.github.source='discussion',n=>n.github.number=8]){
+  const h=await harness({issueFailures:1,issueStatus:503});await assert.rejects(h.api.publish(message('new-issue')));const n=recoveredNote(h);change(n);
+  await assert.rejects(h.api.recoverPublication({...message('new-issue'),recoveryNumber:7},async()=>({notes:[n]})),/No exact matching/);
+  await assert.rejects(h.api.publish(message('new-issue')),/unconfirmed outcome/);assert.equal(posts(h).length,1);
+ }
+ const h=await harness({issueFailures:1,issueStatus:503});await assert.rejects(h.api.publish(message('new-issue')));
+ await assert.rejects(h.api.recoverPublication({...message('new-issue'),recoveryNumber:7},async()=>({notes:[recoveredNote(h),recoveredNote(h)]})),/Multiple matching/);
+});
+test('recovery cannot clear an old unbound pending record or use a different existing thread',async()=>{
+ const h=await harness({issueFailures:1,issueStatus:503});await assert.rejects(h.api.publish(message('issue')));
+ await assert.rejects(h.api.recoverPublication({...message('issue'),recoveryNumber:8},async()=>({notes:[]})),/original GitHub thread/);
+ for(const [key,value] of h.local)if(value.status==='pending')h.local.set(key,{status:'pending'});
+ await assert.rejects(h.api.recoverPublication({...message('issue'),recoveryNumber:7},async()=>({notes:[]})),/No recoverable/);
+ assert.equal(posts(h).length,1);
+});
+
+test('new and existing Discussion recovery retains the exact thread and author without another mutation',async()=>{
+ for(const destination of ['new-discussion','discussion']){
+  const h=await harness({mutationFailure:true});await assert.rejects(h.api.publish(message(destination)));
+  const posted=comments.fromMarkdown(JSON.parse(posts(h)[0].init.body).variables.input.body)[0];
+  const candidate={...posted,github:{number:8,source:destination==='discussion'?'discussion-comment':'discussion',author:'owner',url:'https://github.com/owner/board/discussions/8'+(destination==='discussion'?'#discussioncomment-12':''),createdAt:'2026-10-05T01:00:00.000Z'}};
+  const recovered=await h.api.recoverPublication({...message(destination),recoveryNumber:8},async args=>{assert.equal(args.discussionNumber,8);return{notes:[candidate]};});
+  assert.equal(recovered.remoteRef.kind,'discussion');assert.equal(recovered.remoteRef.url,candidate.github.url);assert.equal(posts(h).length,1);
+ }
+});
+test('account replacement and sign-out during recovery cannot record a successful receipt',async()=>{
+ const options={issueFailures:1,issueStatus:503},h=await harness(options);await assert.rejects(h.api.publish(message('new-issue')));
+ options.profileLogin='different';let reads=0;
+ await assert.rejects(h.api.recoverPublication({...message('new-issue'),recoveryNumber:7},async()=>{reads++;return{notes:[]};}),/account that attempted/);assert.equal(reads,0);
+ options.profileLogin='owner';
+ await assert.rejects(h.api.recoverPublication({...message('new-issue'),recoveryNumber:7},async()=>{await h.api.clearToken();return{notes:[recoveredNote(h)]};}),/signed out|changed|locked/i);
+ assert.equal([...h.local.values()].filter(r=>r.status==='pending').length,1);assert.equal(posts(h).length,1);
 });

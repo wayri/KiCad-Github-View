@@ -511,3 +511,11 @@ test('Reply to a remote annotation retains its drawing anchor and selects the ex
 test('net review drafts preserve the selected saved net name in formatted GitHub context',async()=>{
  let notes=[];const view=workspaceRuntime(async m=>{if(m.type==='comment-list')return notes;if(m.type==='comment-save'){notes=[m.comment];return m.comment;}return[];});view.load();view.get('netList').children[0].click();view.get('newComment').click();view.get('commentText').value='Review this net';view.get('editorPreview').click();assert.match(view.get('editorMarkdown').textContent,/\| Net \| SIGNAL \|/);await view.get('saveComment').click();assert.equal(notes[0].anchor.kind,'net');assert.equal(notes[0].anchor.netName,'SIGNAL');
 });
+
+test('uncertain posting exposes a read-only recovery control and saves its confirmed link without another publication',async()=>{
+ let notes=[];const calls=[],ref={kind:'issue',repository:'wayri/fixture',number:19,url:'https://github.com/wayri/fixture/issues/19',publishedAt:'2026-10-05T01:00:00.000Z'};
+ const view=workspaceRuntime(async m=>{calls.push(m);if(m.type==='comment-list')return notes;if(m.type==='comment-save'){notes=[m.comment];return m.comment;}if(m.type==='github-publish-comment')throw Error('Unconfirmed outcome');if(m.type==='github-recover-publication')return{remoteRef:ref,recovered:true};return[];});
+ view.load();await new Promise(setImmediate);view.get('newComment').click();view.get('commentText').value='Check connection';await view.get('postComment').click();
+ const row=view.get('postComment').parentElement.querySelector('.publication-recovery');assert.ok(row);assert.match(row.textContent,/never creates another post/);row.querySelector('input').value='19';await row.querySelector('button').click();
+ const recovery=calls.find(m=>m.type==='github-recover-publication');assert.equal(recovery.recoveryNumber,19);assert.equal(recovery.destination,'new-issue');assert.equal(calls.filter(m=>m.type==='github-publish-comment').length,1);assert.equal(notes[0].remoteRefs[0].url,ref.url);assert.match(view.get('commentStatus').textContent,/Recovered link to/);assert.equal(view.get('postComment').parentElement.querySelector('.publication-recovery'),null);
+});

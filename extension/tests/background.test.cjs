@@ -965,3 +965,8 @@ test('concealed private-repository 404 stays on the requested revision and yield
   assert.match(response.error,/HTTP 404.*owner\/private.*eeee.*Hardware\/HPBM-SMALL.*access.*website sign-in.*Contents read/);
   assert.equal(calls,1);
 });
+
+test('publication recovery is restricted to the isolated viewer surface',async()=>{
+ const input={type:'github-recover-publication',comment:sampleComment(),destination:'new-issue',recoveryNumber:1};
+ for(const sender of [options,githubTab(6,'/owner/board/issues/1')])assert.match((await message(input,sender)).error,/Only extension viewers/);
+});

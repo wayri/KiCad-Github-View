@@ -140,3 +140,5 @@ body .object-row.selected{background:var(--selected);color:var(--text);border:1p
 @media(max-width:1000px){.tool-group .button-label{display:none}.tool-group button{min-width:26px}.drawing-title .mode-badge,.drawing-title .ref-badge{display:none}}
 
 @media(max-width:1000px){#frameControls .drawing-title{display:none}.frame-actions{min-width:0;flex-shrink:0;overflow:visible}}
+
+.publication-recovery{display:grid;gap:8px;width:100%;padding:10px;border:1px solid var(--line);border-radius:6px;background:var(--panel)}.publication-recovery label{display:grid;gap:4px}.publication-recovery input{width:100%;min-width:0;padding:6px;border:1px solid var(--line);border-radius:4px;background:var(--surface)}.publication-recovery small{white-space:normal}

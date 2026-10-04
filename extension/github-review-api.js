@@ -772,6 +772,47 @@ const KiCadGitHubReviewApi = (() => {
       throw fail("GitHub did not confirm screenshot upload. The review note was not posted; try uploading again.", true);
     } finally { clearTimeout(timeout); bytes.fill(0); }
   }
+  async function annotationDigest(note) {
+    const { capture, ...value } = KiCadReviewComments.validateComment(note);
+    const bytes = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(JSON.stringify(value)));
+    return Array.from(new Uint8Array(bytes), byte => byte.toString(16).padStart(2, '0')).join('');
+  }
+  async function recoverPublication(message, lookup) {
+    const args = publishArgs(message), key = operationKey(args);
+    if (!NUMBER(message.recoveryNumber) || args.number && args.number !== message.recoveryNumber) throw fail('Choose the original GitHub thread number.', true);
+    if (locks.has(key)) throw fail('This publication is still running. Wait for it to finish.', true);
+    const work = recoverLocked(args, key, message.recoveryNumber, lookup);
+    locks.set(key, work);
+    try { return await work; } finally { if (locks.get(key) === work) locks.delete(key); }
+  }
+  async function recoverLocked(args, key, number, lookup) {
+    const saved = (await chrome.storage.local.get(key))[key];
+    if (saved?.status === 'done' && saved.remoteRef) return {remoteRef:saved.remoteRef, ...(saved.attachments ? {attachments:saved.attachments}:{}), duplicate:true};
+    if (saved?.status !== 'pending' || !LOGIN.test(saved.author || '') || !/^[0-9a-f]{64}$/.test(saved.annotationHash || '')) throw fail('No recoverable publication record exists. Older uncertain posts require manual GitHub inspection.', true);
+    const epoch = authEpoch, token = await getToken(), profile = policyJson(await policyGet('/user', token, 1024 * 1024));
+    if (!LOGIN.test(profile?.login || '') || profile.login.toLowerCase() !== saved.author.toLowerCase()) throw fail('Sign in as the account that attempted this publication.', true);
+    const kind = args.destination.includes('discussion') ? 'discussion' : 'issue';
+    const result = await lookup({scope:args.note.anchor, pullRepository:args.repository, [kind === 'discussion' ? 'discussionNumber' : 'issueNumber']:number});
+    if (!Array.isArray(result?.notes) || result.notes.length > 500) throw fail('GitHub annotation lookup was invalid.', true);
+    const matches = [];
+    for (const note of result.notes) {
+      const remote = note.github;
+      if (note.id !== args.note.id || remote?.number !== number || typeof remote.author !== 'string' || remote.author.toLowerCase() !== saved.author.toLowerCase() ||
+          remote.source?.startsWith('discussion') !== (kind === 'discussion') ||
+          !({'new-issue':['issue'],issue:['issue-comment','pull-request-comment'],'new-discussion':['discussion'],discussion:['discussion-comment','discussion-reply']}[args.destination]).includes(remote.source)) continue;
+      if (await annotationDigest(note) !== saved.annotationHash) continue;
+      const suffix = typeof remote.url === 'string' ? remote.url.match(/#(?:issuecomment|discussioncomment)-[0-9]+$/)?.[0] || '' : '';
+      const url = `https://github.com/${args.repository}/${kind === 'discussion' ? 'discussions' : 'issues'}/${number}${suffix}`;
+      const remoteRef = {kind,repository:args.repository,number,url,publishedAt:remote.createdAt};
+      KiCadReviewComments.validateComment({...args.note,remoteRefs:[remoteRef]});
+      matches.push({remoteRef,...(note.attachments ? {attachments:note.attachments}:{})});
+    }
+    if (matches.length !== 1) throw fail(matches.length ? 'Multiple matching posts were found; inspect GitHub manually.' : 'No exact matching post from the publishing account was found. The uncertain publication remains protected from retry.', true);
+    await assertCurrentToken(token, epoch);
+    const confirmed = matches[0];
+    await chrome.storage.local.set({[key]:{status:'done',...confirmed}});
+    return {...confirmed,recovered:true};
+  }
   async function publish(message) {
     const args = publishArgs(message), key = operationKey(args);
     if (locks.has(key)) return locks.get(key);
@@ -804,7 +845,7 @@ const KiCadGitHubReviewApi = (() => {
     const attachments = note.capture ? [await uploadCapture(note, repository, token, publicationEpoch)] : note.attachments;
     const body = KiCadReviewComments.toMarkdown(attachments ? { ...note, attachments } : note);
     await assertCurrentToken(token, publicationEpoch);
-    await chrome.storage.local.set({ [key]: { status: "pending", startedAt: new Date().toISOString() } });
+    await chrome.storage.local.set({ [key]: { status: "pending", startedAt: new Date().toISOString(), author: policy.login || null, annotationHash: await annotationDigest(attachments ? { ...note, attachments } : note) } });
     let remoteRef;
     try {
       const path = `/repos/${owner}/${name}/issues`;
@@ -846,7 +887,7 @@ const KiCadGitHubReviewApi = (() => {
     }
   }
   return { tokenStatus, setToken, clearToken, resetAuth, authorizationHeaders, deviceStatus, startDevice, pollDevice, cancelDevice,
-    commentPolicyStatus, validatePolicy, categories, publish, publishArgs, validRepository, createAnnotationReader, createPullReader, readDiscussionAnnotations };
+    commentPolicyStatus, validatePolicy, categories, publish, recoverPublication, publishArgs, validRepository, createAnnotationReader, createPullReader, readDiscussionAnnotations };
 })();
 
 if (typeof globalThis === "object") globalThis.KiCadGitHubReviewApi = KiCadGitHubReviewApi;
