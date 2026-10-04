@@ -72,6 +72,39 @@
 
   }
 
+  // Saved geometry is immutable between primitive-array replacements. Keep a
+  // bounded grid, with large shapes in an overflow list rather than duplicating
+  // them across thousands of cells. Text remains conservative for font metrics.
+  function spatialBounds(p){
+    if(p.type==='text')return null;
+    if(p.type==='arc'){const a=arcThrough(p.start,p.mid,p.end);if(a){const r=a.r+(p.width||.15)/2;return {x:a.x-r,y:a.y-r,w:2*r,h:2*r};}}
+    const b=bounds([{...p,hidden:false,width:p.width||.15}],true);
+    return b&&[b.x,b.y,b.w,b.h].every(Number.isFinite)?b:null;
+  }
+  class SpatialIndex {
+    constructor(primitives){
+      this.primitives=primitives;this.length=primitives.length;this.cells=new Map();this.overflow=[];
+      const boxes=primitives.map(spatialBounds);let x=Infinity,y=Infinity,right=-Infinity,bottom=-Infinity;
+      for(const b of boxes)if(b){x=Math.min(x,b.x);y=Math.min(y,b.y);right=Math.max(right,b.x+b.w);bottom=Math.max(bottom,b.y+b.h);}
+      this.box={x,y,w:Math.max(.01,right-x),h:Math.max(.01,bottom-y)};this.references=0;
+      for(let i=0;i<boxes.length;i++){
+        const b=boxes[i];if(!b){this.overflow.push(i);continue;}
+        const range=this.range(b),count=(range.x1-range.x0+1)*(range.y1-range.y0+1);
+        if(count>64||this.references+count>1000000){this.overflow.push(i);continue;}
+        for(let cy=range.y0;cy<=range.y1;cy++)for(let cx=range.x0;cx<=range.x1;cx++){const key=cy*64+cx;if(!this.cells.has(key))this.cells.set(key,[]);this.cells.get(key).push(i);}
+        this.references+=count;
+      }
+    }
+    range(b){const grid=(value,origin,size)=>Math.max(0,Math.min(63,Math.floor((value-origin)/size*64)));return {x0:grid(b.x,this.box.x,this.box.w),x1:grid(b.x+b.w,this.box.x,this.box.w),y0:grid(b.y,this.box.y,this.box.h),y1:grid(b.y+b.h,this.box.y,this.box.h)};}
+    query(b){
+      const indices=new Set(this.overflow),range=this.range(b);
+      if(range.x0===0&&range.y0===0&&range.x1===63&&range.y1===63)return this.primitives;
+      if(b.x+b.w>=this.box.x&&b.x<=this.box.x+this.box.w&&b.y+b.h>=this.box.y&&b.y<=this.box.y+this.box.h)
+        for(let y=range.y0;y<=range.y1;y++)for(let x=range.x0;x<=range.x1;x++)for(const i of this.cells.get(y*64+x)||[])indices.add(i);
+      return [...indices].sort((a,b)=>a-b).map(i=>this.primitives[i]);
+    }
+  }
+
   class Camera {
 
     constructor(width=800,height=600){this.width=width;this.height=height;this.zoom=4;this.center={x:0,y:0,set(x,y){this.x=x;this.y=y;}};this.flipped=false;}
@@ -118,7 +151,14 @@
 
     setDocument(design,path){this.resize();this.design=design;this.document={filename:path};this.primitives=design.primitives;this.visibleLayers=new Set((design.layers||[]).filter(layer=>!this.pcb||['F.Cu','B.Cu','F.SilkS','B.SilkS','Edge.Cuts'].includes(layer)));this.selected=null;this.focusedLayer=null;this.layerSnapshot=null;this.setNetHighlight(null);this.zoom_to_board();this.draw();}
 
-    query(at){const tolerance=5/this.viewport.camera.zoom;return this.primitives.filter(p=>!p.hidden&&p.pick!==false&&(p.uuid||p.reference)&&(!p.layer||this.visibleLayers.has(p.layer))&&(!this.focusedLayer||this.layerFocusMode!=='isolate'||p.layer===this.focusedLayer)&&hitPrimitive(p,at,tolerance)).sort((a,b)=>{const priority=p=>p.kind==='pad'?0:p.kind==='footprint'||p.kind==='symbol'?1:p.kind==='zone'?4:2;const focus=p=>this.focusedLayer&&p.layer===this.focusedLayer?0:1;return focus(a)-focus(b)||priority(a)-priority(b);}).slice(0,40);}
+    get primitives(){return this._primitives;}
+    set primitives(value){this._primitives=value;this.spatialIndex=null;this.geometryBounds=new WeakMap();}
+    candidates(box){
+      if(this.primitives.length<512)return this.primitives;
+      if(!this.spatialIndex||this.spatialIndex.length!==this.primitives.length)this.spatialIndex=new SpatialIndex(this.primitives);
+      return this.spatialIndex.query(box);
+    }
+    query(at){const tolerance=5/this.viewport.camera.zoom;return this.candidates({x:at.x-tolerance,y:at.y-tolerance,w:2*tolerance,h:2*tolerance}).filter(p=>!p.hidden&&p.pick!==false&&(p.uuid||p.reference)&&(!p.layer||this.visibleLayers.has(p.layer))&&(!this.focusedLayer||this.layerFocusMode!=='isolate'||p.layer===this.focusedLayer)&&hitPrimitive(p,at,tolerance)).sort((a,b)=>{const priority=p=>p.kind==='pad'?0:p.kind==='footprint'||p.kind==='symbol'?1:p.kind==='zone'?4:2;const focus=p=>this.focusedLayer&&p.layer===this.focusedLayer?0:1;return focus(a)-focus(b)||priority(a)-priority(b);}).slice(0,40);}
 
     select(hit){this.selected=hit?.primitive||null;this.draw();this.dispatchEvent(new CustomEvent('kicad:select',{detail:{item:hit?.context||null}}));}
 
@@ -158,7 +198,7 @@
     paperColor(){return this.dark?'#18242d':'#fffef9';}
 
     requestDraw(){if(typeof requestAnimationFrame!=='function'){this.draw();return;}if(this.frameRequest===null)this.frameRequest=requestAnimationFrame(()=>{this.frameRequest=null;if(!this.disposed)this.draw();});}
-    inView(p,view){if(p.type==='text')return true;let box=this.geometryBounds.get(p);if(box===undefined){box=bounds([p],true);this.geometryBounds.set(p,box||null);}if(!box)return true;const margin=3/this.viewport.camera.zoom;return box.x+box.w>=view.x-margin&&box.x<=view.x+view.w+margin&&box.y+box.h>=view.y-margin&&box.y<=view.y+view.h+margin;}
+    inView(p,view){let box=this.geometryBounds.get(p);if(box===undefined){box=spatialBounds(p);this.geometryBounds.set(p,box||null);}if(!box)return true;const margin=3/this.viewport.camera.zoom;return box.x+box.w>=view.x-margin&&box.x<=view.x+view.w+margin&&box.y+box.h>=view.y-margin&&box.y<=view.y+view.h+margin;}
     draw(){
 
       const c=this.viewport.camera,ctx=this.ctx,dpr=globalThis.devicePixelRatio||1;ctx.setTransform(1,0,0,1,0,0);ctx.fillStyle=this.background();ctx.fillRect(0,0,this.canvas.width,this.canvas.height);ctx.setTransform(dpr,0,0,dpr,0,0);
@@ -168,7 +208,8 @@
       if(this.paperVisible){const page=this.design?.page||{width:297,height:210},a=c.world_to_screen({x:0,y:0}),b=c.world_to_screen({x:page.width,y:page.height});ctx.save();ctx.shadowColor='#00000055';ctx.shadowBlur=18;ctx.shadowOffsetY=4;ctx.fillStyle=this.paperColor();ctx.fillRect(Math.min(a.x,b.x),a.y,Math.abs(b.x-a.x),b.y-a.y);ctx.restore();}
 
       const view=c.bbox;
-      if(this.renderPrimitives)this.renderPrimitives(ctx,c,this);else for(const p of this.primitives){
+      const margin=3/c.zoom;
+      if(this.renderPrimitives)this.renderPrimitives(ctx,c,this);else for(const p of this.candidates({x:view.x-margin,y:view.y-margin,w:view.w+2*margin,h:view.h+2*margin})){
 
         if(p.hidden||!this.inView(p,view))continue;
 

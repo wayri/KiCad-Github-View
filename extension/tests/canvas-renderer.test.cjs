@@ -29,6 +29,35 @@ function runtime(dpr=1){
   vm.runInNewContext(fs.readFileSync(path.join(__dirname,'../owned-canvas.js'),'utf8'),env);
   const canvas=env.KiCadOwnedCanvas.mount(host,{pcb:true,dark:true});return{canvas,element,operations,listeners};
 }
+
+test('large-board indexing preserves paint and pick results while narrowing local searches',()=>{
+ const {canvas}=runtime(),primitives=[];
+ for(let y=0;y<100;y++)for(let x=0;x<100;x++)primitives.push({type:'circle',x:x*10,y:y*10,r:1,width:.2,fill:true,uuid:`pad-${x}-${y}`,kind:'pad',layer:x%2?'B.Cu':'F.Cu'});
+ primitives.splice(300,0,{type:'line',points:[{x:-100,y:25},{x:1100,y:25}],width:1,uuid:'crossing',layer:'F.Cu'});
+ primitives.push({type:'text',text:'Unbounded label',x:2000,y:2000,uuid:'label'}, {type:'arc',start:{x:30,y:20},mid:{x:20,y:30},end:{x:10,y:20},width:.2,uuid:'arc',layer:'F.Cu'});
+ canvas.setDocument({layers:['F.Cu','B.Cu'],primitives},'large.kicad_pcb');
+ const view={x:10,y:10,w:40,h:40};canvas.viewport.camera.bbox=view;
+ const candidates=canvas.candidates(view);assert.ok(candidates.length<100,`local search returned ${candidates.length} of ${primitives.length}`);
+ assert.ok(canvas.spatialIndex.references<=1000000);
+ const painted=[];canvas.paint=p=>painted.push(p);
+ for(const focused of [null,'F.Cu']){
+  canvas.focusedLayer=focused;canvas.layerFocusMode='isolate';painted.length=0;canvas.draw();
+  const expected=primitives.filter(p=>!p.hidden&&canvas.inView(p,canvas.viewport.camera.bbox)&&(!p.layer||canvas.visibleLayers.has(p.layer))&&(!focused||p.layer===focused||p.hole||p.layer==='Edge.Cuts'));
+  assert.deepEqual(painted,expected);
+  for(const at of [{x:20,y:20},{x:25,y:25},{x:20,y:30},{x:2000,y:2000}]){
+   const indexed=canvas.query(at);const search=canvas.candidates;canvas.candidates=()=>primitives;
+   const linear=canvas.query(at);canvas.candidates=search;assert.deepEqual(Array.from(indexed),Array.from(linear));
+  }
+ }
+});
+
+test('primitive replacement and append rebuild the index; visibility toggles do not lose geometry',()=>{
+ const {canvas}=runtime(),primitives=Array.from({length:600},(_,i)=>({type:'circle',x:i*10,y:0,r:1,fill:true,uuid:`p${i}`,hidden:i===0,layer:'F.Cu'}));
+ canvas.setDocument({layers:['F.Cu'],primitives},'board.kicad_pcb');canvas.candidates({x:0,y:0,w:5,h:5});primitives[0].hidden=false;
+ assert.equal(canvas.query({x:0,y:0})[0],primitives[0]);
+ const added={type:'circle',x:-100,y:0,r:1,fill:true,uuid:'added',layer:'F.Cu'};primitives.push(added);assert.equal(canvas.query({x:-100,y:0})[0],added);
+ canvas.primitives=primitives.map(p=>({...p,x:p.x+100}));assert.equal(canvas.query({x:0,y:0})[0].uuid,'added');
+});
 test('owned redraw clears the full physical buffer at fractional browser scaling',()=>{
   for(const dpr of [.5,.75,1,1.25,2]){const view=runtime(dpr);view.canvas.draw();assert.deepEqual(view.operations[0],['setTransform',1,0,0,1,0,0]);assert.deepEqual(view.operations[1],['fillRect',0,0,Math.round(800*dpr),Math.round(600*dpr)]);assert.deepEqual(view.operations[2],['setTransform',dpr,0,0,dpr,0,0]);}
 });
