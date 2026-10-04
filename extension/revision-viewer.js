@@ -140,7 +140,7 @@
 
     }
 
-    workspace=KiCadReviewWorkspace.mount({files,repository,provider,host:providerContext.host,ref,rootFile,pcb,getCanvas:()=>canvas,currentFile,focus,openSheet,getRulerUnits:()=>preferences.rulerUnits,
+    workspace=KiCadReviewWorkspace.mount({files,repository,provider,host:providerContext.host,ref,rootFile,pcb,pairedFile:params.get('pairedFile')||undefined,getCanvas:()=>canvas,currentFile,focus,openSheet,getRulerUnits:()=>preferences.rulerUnits,
 
       getDesigns:()=>designs,updateDiagnostics,
       onSelection(selection){if(crossApplying||!globalThis.KiCadPairedReview?.validSelection(selection))return;if(globalThis.KiCadVSCodeBridge?.selection)globalThis.KiCadVSCodeBridge.selection(selection);else parent.postMessage({type:'kicad-review:selection',selection},ownOrigin);},

@@ -30,12 +30,26 @@ test('measurement retains signed millimetre offsets and rejects invalid coordina
 });
 const vm=require('node:vm'),fs=require('node:fs'),path=require('node:path');
 function workspaceRuntime(respond=async()=>[], hooks={}){
+  const elements=new Map();
   class Element extends EventTarget{
-    constructor(){super();this.children=[];this.attributes={};this.hidden=false;this.value='';this.checked=false;this.style={};this.text='';this.parentElement={hidden:false};this.classList={toggle(){}};}
+    constructor(tag='div'){super();this.tagName=tag.toUpperCase();this.children=[];this.attributes={};this.hidden=false;this.value='';this.checked=false;this.style={setProperty(k,v){this[k]=v;}};this.text='';this.parentElement=null;this.classes=new Set();this.classList={toggle:(name,on)=>{const enabled=on??!this.classes.has(name);if(enabled)this.classes.add(name);else this.classes.delete(name);return enabled;},contains:name=>this.classes.has(name),remove:name=>this.classes.delete(name)};}
+    set id(value){this.attributes.id=value;elements.set(value,this);}get id(){return this.attributes.id;}get className(){return this.attributes.class||'';}set className(value){this.attributes.class=value;this.classes=new Set(value.split(/\s+/));}
     set textContent(value){this.text=String(value);this.children=[];}get textContent(){return this.text+this.children.map(c=>c.textContent).join(' ');}
-    append(...children){this.children.push(...children);}replaceChildren(...children){this.text='';this.children=children;}setAttribute(k,v){this.attributes[k]=String(v);}contains(){return false;}focus(){}click(){return this.onclick?.();}getBoundingClientRect(){return{left:0,top:0,width:800,height:600};}
+    append(...children){for(const child of children){child.remove();child.parentElement=this;this.children.push(child);}}replaceChildren(...children){for(const child of this.children)child.parentElement=null;this.text='';this.children=[];this.append(...children);}remove(){if(this.parentElement)this.parentElement.children=this.parentElement.children.filter(c=>c!==this);this.parentElement=null;}
+    insertBefore(child,reference){child.remove();child.parentElement=this;const index=this.children.indexOf(reference);if(index<0)this.children.push(child);else this.children.splice(index,0,child);}
+    setAttribute(k,v){this.attributes[k]=String(v);if(k==='id')this.id=v;if(k==='class')this.className=v;}matches(selector){return selector.startsWith('.')?this.classes.has(selector.slice(1)):selector.startsWith('#')?this.id===selector.slice(1):this.tagName.toLowerCase()===selector.split('.')[0]&&(!selector.includes('.')||this.classes.has(selector.split('.')[1]));}
+    closest(selector){for(let node=this;node;node=node.parentElement)if(node.matches(selector))return node;return null;}querySelector(selector){for(const child of this.children){if(child.matches(selector))return child;const nested=child.querySelector(selector);if(nested)return nested;}return null;}
+    contains(node){return node===this||this.children.some(child=>child.contains(node));}focus(){this.focused=true;}click(){return this.onclick?.();}getBoundingClientRect(){return{left:0,top:0,width:hooks.width||800,height:600};}
   }
-  const elements=new Map(),get=id=>{if(!elements.has(id))elements.set(id,new Element());return elements.get(id);};
+  const get=id=>{if(!elements.has(id)){const element=new Element();element.id=id;}return elements.get(id);};
+  // Retain the shared HTML's ownership hierarchy so moving panes is exercised.
+  const body=new Element('body'),stack=[body],html=fs.readFileSync(path.join(__dirname,'../revision-viewer.html'),'utf8');
+  for(const token of html.match(/<[^>]+>|[^<]+/g)||[]){
+    if(token.startsWith('</')){if(stack.length>1)stack.pop();continue;}
+    if(token.startsWith('<!'))continue;
+    if(token.startsWith('<')){const tag=token.match(/^<([\w-]+)/)?.[1];if(!tag)continue;const node=new Element(tag);for(const match of token.matchAll(/([\w-]+)="([^"]*)"/g))node.setAttribute(match[1],match[2]);node.hidden=/\shidden(?:\s|>)/.test(token);if(node.attributes.value)node.value=node.attributes.value;stack.at(-1).append(node);if(!['input','img','meta','link','br','hr'].includes(tag))stack.push(node);}
+    else if(token.trim())stack.at(-1).text+=token.trim();
+  }
   get('objectFilter').value='parts';get('severityFilter').value='all';get('stateFilter').value='all';get('readFilter').value='all';get('commentSort').value='severity';
   const file=hooks.files?.[0]||{path:'board.kicad_pcb',content:'(kicad_pcb (net 1 "SIGNAL") (footprint "Resistor" (layer "F.Cu") (at 30 40) (uuid "fp") (property "Reference" "R1") (property "Value" "10k") (pad "1" smd rect (at 1 0) (size 2 2) (layers "F.Cu") (net 1 "SIGNAL") (uuid "pad"))))'};
   if(hooks.source)file.content=hooks.source;
@@ -43,7 +57,8 @@ function workspaceRuntime(respond=async()=>[], hooks={}){
   const canvas=new EventTarget();canvas.canvas=new Element();canvas.visibleLayers=new Set(['F.Cu']);canvas.viewport={camera:new(require('../owned-canvas.js').Camera)(800,600)};canvas.setNetHighlight=net=>canvas.netHighlight=net;canvas.resize=()=>{};canvas.draw=()=>workspace.draw();
   const receipts=new Map(),localStorage={getItem:key=>receipts.get(key)||null,setItem:(key,value)=>receipts.set(key,value),removeItem:key=>receipts.delete(key)};
   const keyHandlers=new Set();
-  const context={EventTarget,CustomEvent,Map,Set,console,crypto:require('node:crypto').webcrypto,localStorage,document:{getElementById:get,createElement:()=>new Element(),createElementNS:()=>new Element()},addEventListener:(type,fn)=>{if(type==='keydown')keyHandlers.add(fn);},removeEventListener:(type,fn)=>{if(type==='keydown')keyHandlers.delete(fn);},matchMedia:()=>({matches:true}),
+  let resizeCallback;
+  const context={EventTarget,CustomEvent,Map,Set,console,crypto:require('node:crypto').webcrypto,localStorage,document:{body,getElementById:id=>{const node=elements.get(id);return node&&body.contains(node)?node:null;},createElement:tag=>new Element(tag),createElementNS:(_,tag)=>new Element(tag)},addEventListener:(type,fn)=>{if(type==='keydown')keyHandlers.add(fn);if(type==='resize')resizeCallback=fn;},removeEventListener:(type,fn)=>{if(type==='keydown')keyHandlers.delete(fn);},matchMedia:()=>({matches:true}),
     KiCadReviewTools:require('../review-tools.js'),KiCadDesignModel:require('../design-model.js'),KiCadNetModel:require('../net-model.js'),KiCadReviewComments:require('../review-comments.js'),KiCadBrowserData:require('../browser-data.js'),KiCadOwnedCanvas:require('../owned-canvas.js'),
     KiCadPairedReview:require('../paired-review.js'),KiCadBomAnalytics:require('../bom-analytics.js'),
     chrome:{runtime:{sendMessage:async message=>({ok:true,result:await respond(message)})}},setTimeout,URL,Blob};
@@ -56,7 +71,7 @@ function workspaceRuntime(respond=async()=>[], hooks={}){
   workspace.attachCanvas(canvas);
   function load(){designs.set(file.path,design);canvas.design=design;canvas.primitives=design.primitives;workspace.draw();}
   function key(value,extra={}){const event={key:value,target:canvas.canvas,composedPath:()=>[],preventDefault(){this.defaultPrevented=true;},...extra};for(const fn of keyHandlers)fn(event);return event;}
-  return{get,workspace,canvas,design,load,receipts,key};
+  return{get,workspace,canvas,design,load,receipts,key,resize(width){hooks.width=width;resizeCallback?.();}};
 }
 test('workspace initializes net geometry after the drawing loads without a file-path change',()=>{
   const view=workspaceRuntime();assert.equal(view.get('netList').children.length,0);view.load();assert.equal(view.get('netCount').textContent,'1 net');
@@ -67,6 +82,61 @@ test('workspace initializes net geometry after the drawing loads without a file-
 test('part inspector groups saved properties and offers only connected net selection',()=>{
   const view=workspaceRuntime();view.load();view.get('objectList').children[0].click();assert.equal(view.get('selectedName').textContent,'R1');assert.match(view.get('propertyList').textContent,/Electrical Net SIGNAL/);assert.match(view.get('propertyList').textContent,/Geometry/);assert.equal(view.get('selectObjectNet').hidden,false);
   view.get('selectObjectNet').click();assert.equal(view.canvas.netHighlight.name,'SIGNAL');assert.equal(view.get('selectedName').textContent,'SIGNAL');
+});
+
+function uiEvent(type,values){const event=new Event(type,{cancelable:true});Object.assign(event,values);return event;}
+test('Properties and Comments are independent collapsible sidebars with bounded obscured area',()=>{
+ const view=workspaceRuntime(undefined,{width:1600});view.load();
+ assert.equal(view.get('designInspector').hidden,true);assert.equal(view.get('commentsSidebar').hidden,true);assert.equal(view.get('designNavigator').hidden,true);
+ view.get('propertiesButton').click();view.get('commentsButton').click();
+ assert.equal(view.get('designInspector').hidden,false);assert.equal(view.get('commentsSidebar').hidden,false);
+ assert.equal(view.get('commentsPane').parentElement.id,'commentsSidebar');assert.equal(view.get('propertiesPane').parentElement.id,'designInspector');
+ assert.equal(view.get('reviewWorkspace').classList.contains('two-sidebars'),true);
+ const obscured=(parseFloat(view.get('designInspector').style.width)+parseFloat(view.get('commentsSidebar').style.width))*parseFloat(view.get('commentsSidebar').style.height);
+ assert.ok(obscured<=1600*600*.18+1,'panels together obscure at most 18% of the frame');
+ view.get('closeInspector').click();assert.equal(view.get('designInspector').hidden,true);assert.equal(view.get('commentsSidebar').hidden,false);
+ assert.equal(view.get('propertiesButton').attributes['aria-expanded'],'false');assert.equal(view.get('commentsButton').attributes['aria-expanded'],'true');
+ view.get('closeComments').click();assert.equal(view.get('commentsSidebar').hidden,true);
+});
+test('narrow and resized paired panes show the active sidebar without losing open state',()=>{
+ const view=workspaceRuntime(undefined,{width:1600});view.get('propertiesButton').click();view.get('commentsButton').click();view.resize(600);
+ assert.equal(view.get('designInspector').hidden,true);assert.equal(view.get('commentsSidebar').hidden,false);assert.equal(view.get('reviewWorkspace').classList.contains('sidebar-overlays'),true);
+ view.get('propertiesButton').click();assert.equal(view.get('commentsSidebar').hidden,true);assert.equal(view.get('designInspector').hidden,false);
+ view.resize(1600);assert.equal(view.get('commentsSidebar').hidden,false);assert.equal(view.get('designInspector').hidden,false);
+ view.resize(350);assert.equal(view.get('panelSpaceStatus').hidden,false);
+});
+test('switching comment subtabs and collapsing a sidebar preserve an unsaved draft and never publish',async()=>{
+ const calls=[];const view=workspaceRuntime(async message=>{calls.push(message);return[];},{width:1600});view.load();view.get('newComment').click();view.get('commentText').value='Unsaved review';
+ assert.equal(view.get('addCommentPane').hidden,false);assert.equal(view.get('addCommentTab').attributes['aria-selected'],'true');
+ view.get('viewCommentsTab').click();assert.equal(view.get('viewCommentsPane').hidden,false);view.get('closeComments').click();view.get('commentsButton').click();view.get('addCommentTab').click();
+ assert.equal(view.get('commentText').value,'Unsaved review');assert.equal(view.get('commentEditor').hidden,false);
+ const tabs=view.get('addCommentTab').parentElement;tabs.dispatchEvent(uiEvent('keydown',{key:'End'}));assert.equal(view.get('viewCommentsTab').attributes['aria-selected'],'true');assert.equal(view.get('viewCommentsTab').focused,true);
+ assert.equal(calls.some(message=>message.type==='comment-save'||message.type==='github-publish-comment'),false);
+ view.get('cancelComment').click();assert.equal(view.get('viewCommentsPane').hidden,false);
+});
+test('sidebar handles resize with pointer and keyboard while sections retain collapse state',()=>{
+ const view=workspaceRuntime(undefined,{width:1600});view.load();view.get('objectList').children[0].click();
+ const handle=view.get('designInspector').children.find(child=>child.classList.contains('sidebar-resizer'));
+ handle.dispatchEvent(uiEvent('pointerdown',{button:0,clientX:500,pointerId:1}));handle.dispatchEvent(uiEvent('pointermove',{clientX:450,pointerId:1}));handle.dispatchEvent(uiEvent('pointerup',{pointerId:1}));
+ assert.equal(view.get('designInspector').style.width,'350px');handle.dispatchEvent(uiEvent('keydown',{key:'ArrowLeft'}));assert.equal(view.get('designInspector').style.width,'360px');
+ handle.dispatchEvent(uiEvent('keydown',{key:'Home'}));assert.equal(view.get('designInspector').style.width,'220px');assert.equal(handle.attributes['aria-valuenow'],'220');
+ const section=view.get('propertyList').children.find(child=>child.children[0].textContent==='Identity');section.open=false;section.dispatchEvent(new Event('toggle'));view.get('objectList').children[0].click();
+ assert.equal(view.get('propertyList').children.find(child=>child.children[0].textContent==='Identity').open,false);
+});
+test('top sheet navigation and optional review tools preserve their existing controls',()=>{
+ const view=workspaceRuntime(undefined,{pcb:false,files:[{path:'root.kicad_sch',content:'(kicad_sch (uuid root))'}]});
+ assert.equal(view.get('sheetLabel').parentElement.id,'topSheetNavigation');assert.equal(view.get('sheetBack').parentElement.id,'topSheetNavigation');
+ assert.equal(view.get('variantBar').parentElement.id,'extraReviewControls');assert.equal(view.get('highlightControls').parentElement.id,'extraReviewControls');assert.equal(view.get('extraReviewControls').hidden,true);
+ assert.equal(view.get('shortcutHelp').parentElement.id,'extraReviewControls');assert.equal(view.get('diagnostics').parentElement.id,'extraReviewControls');
+ view.get('reviewToolsButton').click();assert.equal(view.get('extraReviewControls').hidden,false);view.key('Escape');assert.equal(view.get('extraReviewControls').hidden,true);
+ view.key('?');assert.equal(view.get('shortcutHelp').open,true);assert.equal(view.get('extraReviewControls').hidden,false);
+});
+test('opposite drawing uses explicit or discovered saved paths and asks when several are available',async()=>{
+ const calls=[];const view=workspaceRuntime(async message=>{calls.push(message);if(message.type==='drawing-files')return{files:['board.kicad_pcb','one.kicad_sch','two.kicad_sch']};return[];});
+ await view.get('viewOppositeDrawing').click();assert.equal(view.get('companionChooser').hidden,false);assert.equal(calls.some(message=>message.type==='open-viewer-window'),false);
+ view.get('oppositeDrawingSelect').value='two.kicad_sch';await view.get('oppositeDrawingSelect').onchange();await new Promise(resolve=>setImmediate(resolve));assert.equal(calls.find(message=>message.type==='open-viewer-window').file,'two.kicad_sch');
+ const pairedCalls=[];const paired=workspaceRuntime(async message=>{pairedCalls.push(message);return[];},{pairedFile:'confirmed.kicad_sch'});await paired.get('viewOppositeDrawing').click();assert.equal(pairedCalls.find(message=>message.type==='open-viewer-window').file,'confirmed.kicad_sch');assert.equal(pairedCalls.some(message=>message.type==='drawing-files'),false);
+ const nativeCalls=[];const native=workspaceRuntime(async message=>{nativeCalls.push(message);if(message.type==='project-inventory')return{files:[{path:'saved.kicad_sch'},{path:'board.kicad_pcb'}]};return[];},{vscode:true});await native.get('viewOppositeDrawing').click();assert.equal(nativeCalls.find(message=>message.type==='open-project-drawing').file,'saved.kicad_sch');assert.equal(nativeCalls.some(message=>message.type==='drawing-files'),false);
 });
 
 test('3D keeps parts interaction while clearly disabling unavailable 2D net and layer tools',()=>{
@@ -315,14 +385,14 @@ test('GitLab viewer isolates host context and exposes provider account and publi
  assert.equal(calls.some(message=>message.type.startsWith('github-')),false);assert.equal(calls.find(m=>m.type==='comment-policy-status').host,'https://gitlab.example.com');
 });
 
-test('GitHub collaboration is a separate pane and type controls preserve supported destinations without posting',async()=>{
+test('GitHub collaboration lives in View comments and preserves supported destinations without posting',async()=>{
  const calls=[];const view=workspaceRuntime(async m=>{calls.push(m);if(m.type==='comment-policy-status')return{allowed:true,mode:'everyone'};return[];},{pullNumber:42,pullRepository:'wayri/reviews'});view.load();await new Promise(resolve=>setImmediate(resolve));
- view.get('showGitHub').click();assert.equal(view.get('githubPane').hidden,false);assert.equal(view.get('commentsPane').hidden,true);assert.equal(view.get('propertiesPane').hidden,true);assert.equal(view.get('showGitHub').attributes['aria-pressed'],'true');
+ view.get('showGitHub').click();assert.equal(view.get('githubPane').hidden,false);assert.equal(view.get('commentsPane').hidden,false);assert.equal(view.get('designInspector').hidden,true);assert.equal(view.get('commentCollaboration').open,true);assert.equal(view.get('viewCommentsTab').attributes['aria-selected'],'true');
  assert.equal(view.get('repositoryIssues').href,'https://github.com/wayri/reviews/issues');assert.equal(view.get('commentDestination').value,'pull-request');assert.equal(view.get('githubCommentType').value,'issue');
  view.get('githubCommentType').value='discussion';view.get('githubCommentType').onchange();assert.deepEqual(Array.from(view.get('commentDestination').children,e=>e.value),['discussion','existing-discussion']);assert.equal(view.get('discussionCategoryLabel').hidden,false);
  view.get('commentDestination').value='existing-discussion';view.get('commentDestination').onchange();assert.equal(view.get('threadNumberLabel').hidden,false);assert.equal(view.get('discussionCategoryLabel').hidden,true);assert.equal(view.get('threadNumber').placeholder,'Discussion number');
  view.get('githubCommentType').value='issue';view.get('githubCommentType').onchange();assert.deepEqual(Array.from(view.get('commentDestination').children,e=>e.value),['issue','existing-issue','pull-request']);
- view.get('showComments').click();assert.equal(view.get('githubPane').hidden,true);assert.equal(view.get('commentsPane').hidden,false);assert.equal(calls.some(m=>m.type==='github-publish-comment'),false);
+ view.get('showComments').click();assert.equal(view.get('githubPane').closest('#viewCommentsPane').id,'viewCommentsPane');assert.equal(view.get('commentsPane').hidden,false);assert.equal(calls.some(m=>m.type==='github-publish-comment'),false);
 });
 test('standalone viewer never offers current PR and VS Code remote collaboration remains unavailable',async()=>{
  const github=workspaceRuntime();assert.deepEqual(Array.from(github.get('commentDestination').children,e=>e.value),['issue','existing-issue']);

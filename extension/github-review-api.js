@@ -20,8 +20,9 @@ const KiCadGitHubReviewApi = (() => {
   const validId = (value) => typeof value === "string" && /^[A-Za-z0-9_+\/=.-]{1,200}$/.test(value);
   const fail = (message, definitive = false) => Object.assign(new Error(message), { definitive });
 
-  // No persistent key: copied session records cannot unlock another worker.
-  // Worker suspension/restart deliberately requires authentication again.
+  // Chrome keys survive background sleeps in the isolated offscreen worker.
+  // Unsupported browsers retain the in-memory background-key fallback.
+  const sessionVault = typeof KiCadCredentialVault !== "undefined" && KiCadCredentialVault.supported ? KiCadCredentialVault.forProvider("github") : null;
   let vaultKey = null, deviceSecret = null, authEpoch = 0, authQueue = Promise.resolve(), initialized = false;
   let disconnectReason = '';
   const SESSION_LIMIT = 8 * 60 * 60 * 1000;
@@ -29,9 +30,10 @@ const KiCadGitHubReviewApi = (() => {
     if (!initialized) {
       initialized = true;
       authQueue = authQueue.then(async () => {
-        if ((await chrome.storage.session.get(TOKEN_KEY))[TOKEN_KEY] ||
-            (await chrome.storage.session.get(DEVICE_KEY))[DEVICE_KEY]) disconnectReason = 'background-restarted';
-        await chrome.storage.session.remove([TOKEN_KEY, TOKEN_EXPIRY_KEY, DEVICE_KEY]);
+        const record = (await chrome.storage.session.get(TOKEN_KEY))[TOKEN_KEY];
+        const recoverable = record?.version === 2 && sessionVault && await sessionVault.hasKey().catch(() => false);
+        if (!recoverable && (record || (await chrome.storage.session.get(DEVICE_KEY))[DEVICE_KEY])) disconnectReason = 'background-restarted';
+        await chrome.storage.session.remove([TOKEN_EXPIRY_KEY, DEVICE_KEY, ...(!recoverable ? [TOKEN_KEY] : [])]);
         await chrome.storage.local.remove([TOKEN_KEY, TOKEN_EXPIRY_KEY, DEVICE_KEY]);
       });
     }
@@ -43,6 +45,7 @@ const KiCadGitHubReviewApi = (() => {
     const record = (await chrome.storage.session.get(TOKEN_KEY))[TOKEN_KEY];
     if (!record) return null;
     try {
+      if (sessionVault) return { token: await sessionVault.decrypt(record), expiresAt: record.expiresAt };
       if (!vaultKey || record.version !== 1 || !Number.isFinite(record.expiresAt) ||
           record.expiresAt <= Date.now() || !Array.isArray(record.iv) || record.iv.length !== 12 ||
           !Array.isArray(record.ciphertext) || record.ciphertext.length > 1024 ||
@@ -57,6 +60,7 @@ const KiCadGitHubReviewApi = (() => {
       disconnectReason = record.expiresAt <= Date.now() ? 'expired' : 'session-locked';
       vaultKey = null;
       await chrome.storage.session.remove([TOKEN_KEY, TOKEN_EXPIRY_KEY]);
+      if (sessionVault) await sessionVault.clear().catch(() => {});
       return null;
     }
   }
@@ -82,23 +86,31 @@ const KiCadGitHubReviewApi = (() => {
       if (chrome.storage.session.setAccessLevel) {
         await chrome.storage.session.setAccessLevel({ accessLevel: "TRUSTED_CONTEXTS" });
       }
-      const key = await crypto.subtle.generateKey({ name: "AES-GCM", length: 256 }, false, ["encrypt", "decrypt"]);
-      const iv = crypto.getRandomValues(new Uint8Array(12));
       const expiresAt = Date.now() + Math.min(SESSION_LIMIT, Number.isFinite(lifetime) && lifetime > 0 ? lifetime : SESSION_LIMIT);
-      const bytes = new TextEncoder().encode(value);
-      let ciphertext;
-      try { ciphertext = await crypto.subtle.encrypt({ name: "AES-GCM", iv,
-        additionalData: new TextEncoder().encode(`github-token:v1:${expiresAt}`) }, key, bytes); }
-      finally { bytes.fill(0); }
-      if (expectedEpoch !== authEpoch) throw fail("Sign-in was cancelled. Start again.", true);
-      vaultKey = key;
+      let record;
+      if (sessionVault) record = await sessionVault.encrypt(value, expiresAt);
+      else {
+        const key = await crypto.subtle.generateKey({ name: "AES-GCM", length: 256 }, false, ["encrypt", "decrypt"]);
+        const iv = crypto.getRandomValues(new Uint8Array(12)), bytes = new TextEncoder().encode(value);
+        let ciphertext;
+        try { ciphertext = await crypto.subtle.encrypt({ name: "AES-GCM", iv,
+          additionalData: new TextEncoder().encode(`github-token:v1:${expiresAt}`) }, key, bytes); }
+        finally { bytes.fill(0); }
+        vaultKey = key;
+        record = { version: 1, iv: Array.from(iv), ciphertext: Array.from(new Uint8Array(ciphertext)), expiresAt };
+      }
+      if (expectedEpoch !== authEpoch) {
+        vaultKey = null;
+        if (sessionVault) await sessionVault.clear();
+        throw fail("Sign-in was cancelled. Start again.", true);
+      }
       disconnectReason = '';
-      await chrome.storage.session.set({ [TOKEN_KEY]: { version: 1, iv: Array.from(iv),
-        ciphertext: Array.from(new Uint8Array(ciphertext)), expiresAt } });
+      await chrome.storage.session.set({ [TOKEN_KEY]: record });
       await chrome.storage.session.remove(TOKEN_EXPIRY_KEY);
       if (expectedEpoch !== authEpoch) {
         vaultKey = null;
         await chrome.storage.session.remove([TOKEN_KEY, TOKEN_EXPIRY_KEY]);
+        if (sessionVault) await sessionVault.clear();
         throw fail("Sign-in was cancelled. Start again.", true);
       }
       return { configured: true, expiresAt };
@@ -112,6 +124,7 @@ const KiCadGitHubReviewApi = (() => {
       disconnectReason = reset ? 'reset' : 'signed-out';
       await chrome.storage.session.remove([TOKEN_KEY, TOKEN_EXPIRY_KEY, DEVICE_KEY]);
       if (reset) await chrome.storage.local.remove(CLIENT_ID_KEY);
+      if (sessionVault) await sessionVault.clear();
       return { configured: false };
     });
   }

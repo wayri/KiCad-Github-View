@@ -9,7 +9,8 @@ FILES = {'gitlab-review-api.js', 'gitlab-hosts.js', 'gitlab-options.js', 'gitlab
          'review-tools.js', 'repo-models.js', 'browser-viewer.html', 'browser-viewer.js', 'revision-viewer.html', 'schematic-viewer.html',
          'pcb-viewer.html', 'revision-viewer.css', 'revision-viewer.js', 'owned-canvas.js',
          'schematic-renderer.js', 'pcb-renderer.js', 'vendor/spike-board3d.bundle.js',
-         'vendor/SPIKE-ENGINE-NOTICE.md', 'vendor/THREE-LICENSE'}
+         'vendor/SPIKE-ENGINE-NOTICE.md', 'vendor/THREE-LICENSE', 'credential-vault.js',
+         'credential-vault-host.html', 'credential-vault-host.js', 'credential-vault-worker.js'}
 
 def package(root: Path = ROOT, output: Path | None = None) -> Path:
     source = root / 'extension'

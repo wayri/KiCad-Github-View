@@ -11,7 +11,7 @@
 
 **Interactive KiCad review inside GitHub and GitLab file pages.** Open schematics and PCB layouts as drawings, inspect saved parts and nets, compare revisions, and anchor review notes to the design. The viewer runs in the browser with our own schematic/PCB engine and the owner-authorized SPIKE 3D adapter. No KiCad installation, local companion process or rendering server is needed for the browser extension.
 
-[Download v0.12.3](https://github.com/wayri/KiCad-Github-View/releases/tag/v0.12.3) · [Install](docs/INSTALL.md) · [Comment integration](docs/COMMENTS.md) · [Git services](docs/GIT-HOSTS.md) · [Release notes](docs/releases/v0.12.3.md)
+[Download v0.12.4](https://github.com/wayri/KiCad-Github-View/releases/tag/v0.12.4) · [Install](docs/INSTALL.md) · [Comment integration](docs/COMMENTS.md) · [Git services](docs/GIT-HOSTS.md) · [Release notes](docs/releases/v0.12.4.md)
 
 Illustrated walkthroughs: [Using GitHub integration](docs/using-github-integration/README.md) · [Using GitLab integration](docs/using-gitlab-integration/README.md). Browser packages: [Firefox](docs/FIREFOX.md) · [Safari](docs/SAFARI.md).
 
@@ -69,13 +69,19 @@ Properties and analytics come from the saved source revision. Missing settings a
 
 ## Install in Chrome or Edge
 
-1. Download **`kicad-visual-review-extension-0.12.3.zip`** from [Releases](https://github.com/wayri/KiCad-Github-View/releases/tag/v0.12.3). The GitHub **Source code** archives are not the prepared extension package.
+1. Download **`kicad-visual-review-extension-0.12.4.zip`** from [Releases](https://github.com/wayri/KiCad-Github-View/releases/tag/v0.12.4). The GitHub **Source code** archives are not the prepared extension package.
 2. Extract the ZIP into a permanent folder. Select the folder containing `manifest.json`, not the ZIP itself.
 3. Open `chrome://extensions` in Chrome/Chromium or `edge://extensions` in Edge.
 4. Enable **Developer mode**, select **Load unpacked**, and choose that folder.
 5. Allow the extension on `github.com` and `gitlab.com`. Open a KiCad file page and refresh it. Connect an authorized account in Options for private projects. The drawing appears in the repository's file preview.
 
 Keep the extracted folder in place. To update, extract the new package there, click **Reload** on the extension card, and refresh repository tabs. Pin the toolbar icon for quick access; the toolbar button or `Alt+Shift+K` focuses the inline viewer. **Show source** returns to the text view; **Open full viewer** and **Pop out** provide larger views.
+
+The drawing toolbar contains the active sheet selector, Back/Forward/Up/Root navigation and **View layout / View schematic**. **Review tools** holds assembly variants, highlight controls, shortcuts and rendering notes. Properties, Comments and Explorer are independent flyouts: collapse them from their headers, drag their edges to resize, or focus an edge and use the arrow keys. Comments has **Add comment** and **View comments** tabs; switching tabs preserves an unsaved draft.
+
+Panel heights adapt to leave a target of 82% of the drawing frame unobscured, including its toolbar and footer. This is a frame-area target, not a guarantee for the entire GitHub page. Small frames retain readable panel controls and show a space warning when the target cannot be met; **Focus view** closes panels. Local browser verification measured 82.0% with Properties and Comments open; installed-browser verification remains necessary.
+
+![Compact toolbar and independent review sidebars, using an original synthetic schematic fixture](docs/images/viewport-sidebars.jpg)
 
 Chrome's unpacked workflow is documented in [Chrome's developer guide](https://developer.chrome.com/docs/extensions/get-started/tutorial/hello-world#load-unpacked); Edge provides [its sideloading guide](https://learn.microsoft.com/en-us/microsoft-edge/extensions/getting-started/extension-sideloading). Managed browsers may prohibit developer installations. There is no signed CRX or automatic browser-store update channel in this release.
 
@@ -159,10 +165,10 @@ Read [the complete comment guide](docs/COMMENTS.md) for authentication, permissi
 
 ## VS Code installation
 
-Download **`kicad-visual-review-vscode-0.12.3.vsix`** from Releases. In VS Code run **Extensions: Install from VSIX**, select the file and run **Developer: Reload Window**. Open a KiCad project folder and use **KiCad: Open Visual Viewer** or **Reopen Editor With → KiCad Visual Review**. The **KiCad Review** explorer lists saved drawings and review sidecars.
+Download **`kicad-visual-review-vscode-0.12.4.vsix`** from Releases. In VS Code run **Extensions: Install from VSIX**, select the file and run **Developer: Reload Window**. Open a KiCad project folder and use **KiCad: Open Visual Viewer** or **Reopen Editor With → KiCad Visual Review**. The **KiCad Review** explorer lists saved drawings and review sidecars.
 
 ```sh
-code --install-extension kicad-visual-review-vscode-0.12.3.vsix --force
+code --install-extension kicad-visual-review-vscode-0.12.4.vsix --force
 ```
 
 Local notes use `.kicad-review.json` in the workspace root (or drawing directory outside a workspace). Filesystem-provider permissions still apply. The VSIX is not currently published in Visual Studio Marketplace. See [the VS Code guide](vscode-extension/README.md).
@@ -235,4 +241,4 @@ Authentication, repository permissions and service availability remain subject t
 
 See [third-party notices](THIRD-PARTY-NOTICES.md) for distributed dependencies and [licensing status](LICENSING.md) for owner code.
 
-Authentication protection, encryption limits and cleanup behavior are documented in [SECURITY.md](SECURITY.md). Background restarts require sign-in again; uninstall does not revoke GitHub authorization.
+Authentication protection, encryption limits and verification status are documented in [SECURITY.md](SECURITY.md). Supported Chrome sessions retain encrypted credentials through background idle; browser restart or extension reload requires sign-in again. Other browsers also lose sessions on background restart. Uninstall does not revoke GitHub authorization.

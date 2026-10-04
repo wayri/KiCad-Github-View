@@ -22,7 +22,7 @@
     $('gitlabRedirectUri').value=result.redirectUri||'';
     oauthSupported=Boolean(result.oauthSupported);$('gitlabOAuth').disabled=!oauthSupported;
     $('gitlabRemoveHost').disabled=hostSelect.value==='https://gitlab.com';
-    status.textContent=result.configured?'Connected to '+result.host+'. Credentials are encrypted; background restart requires sign-in again.':
+    status.textContent=result.configured?'Connected to '+result.host+' for up to eight hours. Supported Chrome sessions survive background idle. Browser restart or extension reload requires sign-in; other browsers may also sign out after background restart.':
       'Not connected. Public files work without login. Use a repository-authorized token or configure OAuth below.';
     $('gitlabAppLink').href=hostSelect.value+'/user_settings/applications';
   }

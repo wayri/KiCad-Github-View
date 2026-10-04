@@ -36,10 +36,10 @@ async function refresh() {
   accountConnected = Boolean(result.configured);
   if (expiryTimer !== null) clearTimeout(expiryTimer);
   expiryTimer = null;
-  statusElement.textContent = result.configured ? "GitHub connected. Encrypted credentials expire within eight hours; background restart requires sign-in again." :
+  statusElement.textContent = result.configured ? "GitHub connected for up to eight hours. Supported Chrome sessions survive background idle. Browser restart or extension reload requires sign-in; other browsers may also sign out after background restart." :
     "You are signed out. Public previews and local comments work without signing in.";
   if (!result.configured && result.reason === 'background-restarted') statusElement.textContent =
-    'The extension background restarted and cleared the session. Sign in again; GitHub authorization alone does not restore the discarded encryption key.';
+    'The extension background restarted and could not recover the session key. Sign in again; GitHub authorization alone does not restore a lost key.';
   else if (!result.configured && result.reason === 'expired') statusElement.textContent =
     'Your GitHub session expired. Sign in again.';
   else if (!result.configured && result.reason === 'session-locked') statusElement.textContent =
@@ -59,7 +59,7 @@ async function refresh() {
 function showScope() {
   scopeHelp.textContent = accessInput.value === "repo" ?
     "Private access requests GitHub's repo scope, which grants broad read and write access to public and private repositories. Approve it only if you need private repository access; organization approval or SSO may also be required." :
-    "Public access requests GitHub's public_repo scope. Credentials are encrypted with a temporary background-memory key.";
+    "Public access requests GitHub's public_repo scope. Credentials are encrypted with a temporary key kept only in memory.";
 }
 accessInput.addEventListener("change", showScope);
 function stopTimer() {

@@ -1,6 +1,6 @@
 "use strict";
 
-importScripts("parsing.js", "browser-data.js", "review-comments.js", "review-file-store.js", "github-review-api.js", "gitlab-provider.js", "gitlab-review-api.js", "gitlab-hosts.js");
+importScripts("parsing.js", "browser-data.js", "review-comments.js", "review-file-store.js", "credential-vault.js", "github-review-api.js", "gitlab-provider.js", "gitlab-review-api.js", "gitlab-hosts.js");
 
 const SHA = /^[0-9a-f]{40}$/i;
 const REPOSITORY = /^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/;

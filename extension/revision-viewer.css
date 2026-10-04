@@ -91,3 +91,44 @@ body .object-row.selected{background:var(--selected);color:var(--text);border:1p
 #designNavigator{width:300px;flex-basis:300px}.navigator-tabs{grid-template-columns:repeat(3,minmax(0,1fr));padding:0 6px}.navigator-tabs button{padding:7px 3px}.sheet-row{min-height:36px}.sheet-row>.sheet-open{min-height:34px!important;font-size:12px!important}.sheet-tree{gap:2px}.sheet-name{white-space:normal;overflow-wrap:anywhere}.sheet-source{padding:4px;flex-shrink:0;text-decoration:none}.sheet-navigation{flex-shrink:0}#sheetsPane{overflow:hidden}#sheetList{min-height:100px;overflow:auto;flex:1}#sheetHelp{flex-shrink:0}.sheet-row{position:relative}.sheet-row::before{content:'';position:absolute;left:8px;top:0;bottom:0;border-left:1px solid var(--line);pointer-events:none}.sheet-row>button,.sheet-source{position:relative}.drawing-focused #variantBar,.drawing-focused #highlightControls,.drawing-focused .diagnostics,.drawing-focused #rulerControls,.drawing-focused #designNavigator,.drawing-focused #designInspector{display:none!important}
 @media(max-width:1000px){#designNavigator,#designInspector{position:absolute;top:0;bottom:0;z-index:8;width:min(340px,78%);flex-basis:auto;box-shadow:0 0 24px #0005}#designNavigator{left:0}#designInspector{right:0}.navigator-tabs{grid-template-columns:repeat(3,minmax(0,1fr))}#highlightControls{flex-wrap:nowrap;overflow-x:auto;max-height:42px;flex-shrink:0}#highlightControls button{flex-shrink:0}#highlightSummary{white-space:nowrap}.drawing-title{flex-basis:auto!important;flex:1!important}.frame-actions{flex-wrap:nowrap;overflow-x:auto;max-width:100%}#frameControls{flex-wrap:nowrap!important;overflow-x:auto}.frame-actions button{flex-shrink:0}#variantBar{flex-wrap:nowrap!important;overflow-x:auto}}
 #designInspector .inspector-tabs{flex-wrap:wrap;padding-right:30px}#designInspector #closeInspector{position:absolute;right:0;top:9px;margin:0;min-width:28px;min-height:28px;display:inline-flex}
+
+/* Optional flyouts leave the canvas at the full workspace width. */
+#reviewWorkspace{isolation:isolate}
+#designInspector.review-sidebar,#commentsSidebar.review-sidebar,#designNavigator{position:absolute;top:0;bottom:0;z-index:8;flex:none;min-width:0;max-width:calc(100% - 32px);background:var(--panel);box-shadow:0 5px 22px #0006}
+#designInspector.review-sidebar,#commentsSidebar.review-sidebar{right:0;display:flex;flex-direction:column;padding:0;overflow:visible;border-left:1px solid var(--line)}
+#designNavigator{left:0;overflow:visible}
+#reviewWorkspace.two-sidebars #designInspector.review-sidebar{right:var(--comments-sidebar-width,340px)}
+#designInspector.review-sidebar #propertiesPane,#commentsSidebar #commentsPane{flex:1;min-height:0;overflow:auto;padding:12px}
+.sidebar-heading{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:7px 10px;min-height:40px;flex-shrink:0;border-bottom:1px solid var(--line)}
+.sidebar-heading h2{font-size:13px}
+#designInspector.review-sidebar #closeInspector,.sidebar-heading button{position:static;min-width:0;min-height:26px;width:auto;padding:3px 7px;font-size:11px}
+.sidebar-resizer{position:absolute;top:0;bottom:0;width:8px;cursor:ew-resize;touch-action:none;z-index:10}
+.sidebar-resizer.left{left:-4px}.sidebar-resizer.right{right:-4px}
+.sidebar-resizer:hover,.sidebar-resizer:focus-visible,.sidebar-resizer.resizing{background:var(--accent);opacity:.7;outline:none}
+.sidebar-resizer:focus-visible{box-shadow:0 0 0 2px var(--panel)}
+.comment-subtabs{display:flex;gap:3px;border-bottom:1px solid var(--line);margin:-4px 0 12px;position:sticky;top:-12px;padding:7px 0;background:var(--panel);z-index:4}
+.comment-subtabs button{flex:1;min-width:0;font-size:11px;padding:5px;white-space:normal}
+.sidebar-section{margin:10px 0;border:1px solid var(--line);border-radius:5px;padding:0 9px;overflow-wrap:anywhere}
+.sidebar-section>summary{cursor:pointer;padding:8px 0;font-size:11px;font-weight:600;color:var(--text)}
+.sidebar-section>summary:hover{color:var(--accent)}
+.sidebar-section[open]{padding-bottom:10px}
+.sidebar-section.property-group{margin:10px 0}.sidebar-section.property-group dl{margin:4px 0}
+.sidebar-section.property-group>p{font-size:10px;color:var(--muted);margin-bottom:7px}
+#viewCommentsPane label{display:grid;gap:4px;margin:8px 0;font-size:11px;color:var(--muted)}
+#commentsSidebar #githubPane h2{font-size:13px}#commentsSidebar #githubPane h3{font-size:11px}
+#commentsSidebar #commentEditor{margin:10px 0}#commentText{min-height:105px}
+.drawing-focused #commentsSidebar{display:none!important}
+.drawing-focused .review-control-popover,.drawing-focused #companionChooser{display:none!important}
+#designInspector.review-sidebar .selection-heading h2{font-size:16px}
+.review-footer #panelSpaceStatus{white-space:normal;font-size:9px}
+
+/* One compact toolbar row; optional assembly/highlight controls share a flyout. */
+#frameControls{padding:4px 8px;min-height:38px;gap:5px;flex-wrap:nowrap!important;overflow-x:auto}
+.drawing-title{flex:0 0 auto!important;gap:5px}.document-mark{display:none}#viewerKind{font-size:11px}#activeSheet{font-size:9px;max-width:150px}
+.frame-actions{flex-wrap:nowrap;gap:3px;overflow:visible}.tool-group{padding-right:4px;gap:1px}.tool-group button{min-height:27px;padding:4px 6px;font-size:10px}.icon-only{width:27px}.ui-icon{width:14px;height:14px;flex-basis:14px}
+.top-sheet-navigation{display:flex;align-items:center;gap:2px;flex-shrink:0}.top-sheet-navigation #sheetLabel{display:block;margin:0;font-size:0}.top-sheet-navigation #sheetSelect{width:155px;min-height:27px;padding:3px 6px;font-size:10px}.top-sheet-navigation button{min-height:27px;width:26px;padding:3px;flex-shrink:0}.top-sheet-navigation .button-label{display:none}
+.review-control-popover{position:absolute;top:42px;left:8px;right:8px;z-index:22;max-height:calc(100% - 54px);overflow:auto;background:var(--panel);border:1px solid var(--line);border-radius:6px;box-shadow:0 8px 22px #0005;padding:8px}
+.review-control-popover #variantBar,.review-control-popover #highlightControls{flex-wrap:wrap!important;overflow:visible;max-height:none;min-height:0;padding:7px 4px}
+#companionChooser{display:flex;flex-wrap:wrap;gap:6px;align-items:center;padding:7px;border-bottom:1px solid var(--line);background:var(--panel);font-size:11px}#companionChooser select{width:min(390px,100%)}
+.review-footer{min-height:24px;padding:3px 8px}.shortcut-help{padding:3px 8px}.diagnostics summary{padding:3px 8px}
+@media(max-width:720px){.drawing-title .mode-badge,.drawing-title .ref-badge{display:none}.top-sheet-navigation #sheetSelect{width:125px}.review-footer .hint{display:none}}

@@ -117,7 +117,8 @@
   }
   function mount(options) {
     const { files, repository, ref, rootFile, pcb, getCanvas, currentFile, focus, openSheet } = options;
-    const $ = (id) => document.getElementById(id);
+    const retainedControls=new Map();
+    const $ = (id) => {const node=document.getElementById(id)||retainedControls.get(id);if(node)retainedControls.set(id,node);return node;};
     const make = (tag, text) => { const node = document.createElement(tag); if (text !== undefined) node.textContent = String(text); return node; };
     const button = (text, handler) => { const node = make("button", text); node.type = "button"; node.onclick = handler; return node; };
     const provider=options.provider||'github',providerName=provider==='gitlab'?'GitLab':'GitHub',host=provider==='gitlab'?KiCadReviewComments.normalizeScope({provider:'gitlab',host:options.host||'https://gitlab.com',repository,ref,file:rootFile}).host:'https://github.com',providerContext=provider==='gitlab'?{provider,host}:{}, remoteAvailable=['github','gitlab'].includes(provider)&&!root.KiCadVSCodeContext;
@@ -146,19 +147,85 @@
       }catch(error){policyStatus=null;$("commentPolicyStatus").textContent=`Repository policy could not be checked: ${error.message}. Publication will be checked by the extension before posting.`;}
       finally{$("refreshCommentPolicy").disabled=false;renderComments();draw();}
     }
-    function showNavigator(open = true) { $("designNavigator").hidden = !open; $("partsButton").setAttribute("aria-pressed", String(open)); if (open && matchMedia("(max-width:720px)").matches) hideInspector(); }
-    function hideInspector() { $("designInspector").hidden = true; $("propertiesButton").setAttribute("aria-pressed", "false"); $("commentsButton").setAttribute("aria-pressed", "false"); }
-    function inspector(pane) {
-      $("designInspector").hidden = false;
-      $("propertiesPane").hidden = pane !== "properties"; $("commentsPane").hidden = pane !== "comments"; $("githubPane").hidden=pane!=="github";
-      for (const [id, active] of [["showProperties",pane === "properties"],["showComments",pane === "comments"],["showGitHub",pane === "github"],["propertiesButton",pane === "properties"],["commentsButton",pane === "comments"]]) $(id).setAttribute("aria-pressed", String(active));
-      if (matchMedia("(max-width:720px)").matches) showNavigator(false);
+    // Move the shared template's existing controls, retaining their IDs and handlers.
+    // This also applies to project, paired and VS Code viewers without copied markup.
+    const workspaceElement=$("reviewWorkspace"), sidebarState={properties:false,comments:false,navigator:false};
+    const sidebarWidths={properties:300,comments:340,navigator:260};let activeSidebar="properties",commentTab="view";
+    const sectionState=new Map(),resizeCleanups=[];
+    function collapsible(title,nodes,open=true,key=title){
+      const details=make("details");details.className="sidebar-section";details.open=sectionState.has(key)?sectionState.get(key):open;
+      details.append(make("summary",title),...nodes.filter(Boolean));details.addEventListener("toggle",()=>sectionState.set(key,details.open));return details;
     }
+    const commentsSidebar=make("aside");commentsSidebar.id="commentsSidebar";commentsSidebar.className="review-sidebar";commentsSidebar.hidden=true;commentsSidebar.setAttribute("aria-label","Drawing comments");
+    const propertiesSidebar=$("designInspector");propertiesSidebar.className="review-sidebar";propertiesSidebar.setAttribute("aria-label","Selection properties");
+    const heading=(title,close)=>{const header=make("div");header.className="sidebar-heading";header.append(make("h2",title),close);return header;};
+    const closeComments=button("Close",()=>hideSidebar("comments"));closeComments.id="closeComments";closeComments.className="quiet-button";closeComments.setAttribute("aria-label","Collapse comments sidebar");
+    $("closeInspector").setAttribute("aria-label","Collapse properties sidebar");
+    $("propertiesPane").hidden=false;
+    const legacyControls=make("div");legacyControls.hidden=true;legacyControls.append($("showProperties"),$("showComments"),$("showGitHub"));
+    const commentTabs=make("div");commentTabs.className="comment-subtabs";commentTabs.setAttribute("role","tablist");commentTabs.setAttribute("aria-label","Comments");
+    const addTab=button("Add comment",()=>showCommentTab("add")),viewTab=button("View comments",()=>showCommentTab("view"));
+    const addPane=make("section"),viewPane=make("section");addPane.id="addCommentPane";viewPane.id="viewCommentsPane";
+    for(const [tab,id,pane]of [[addTab,"addCommentTab",addPane],[viewTab,"viewCommentsTab",viewPane]]){tab.id=id;tab.setAttribute("role","tab");tab.setAttribute("aria-controls",pane.id);pane.setAttribute("role","tabpanel");pane.setAttribute("aria-labelledby",id);commentTabs.append(tab);}
+    const commentTools=make("div");commentTools.className="comment-tools";commentTools.append($("newComment"),$("pointComment"),$("areaComment"));
+    const addHelp=make("p","Choose the selected object, a point or an area to add a comment. Your draft stays here when you switch tabs or collapse this sidebar.");addHelp.className="hint";
+    addPane.append(addHelp,commentTools,$("commentEditor"));
+    const control=id=>$(id).closest?.("label")||$(id);
+    const filterGroup=collapsible("Filters and order",[...['severityFilter','stateFilter','readFilter','commentSort'].map(control),$("commentSearch"),$("nextUnread")],false,"comment-filters");
+    const storageGroup=collapsible("Import and export",[$("exportComments"),$("importComments"),$("commentFile")],false,"comment-storage");
+    const collaborationGroup=collapsible(`${providerName} collaboration`,[$("githubPane")],false,"collaboration");collaborationGroup.id="commentCollaboration";$("githubPane").hidden=false;
+    const commentHelp=$("commentsPane").querySelector?.("p.hint");
+    viewPane.append(...[commentHelp,filterGroup,$("commentList"),storageGroup,collaborationGroup].filter(Boolean));
+    $("commentsPane").replaceChildren(commentTabs,addPane,viewPane,$("commentStatus"));
+    commentsSidebar.append(heading("Comments",closeComments),$("commentsPane"),legacyControls);workspaceElement.append(commentsSidebar);
+    propertiesSidebar.replaceChildren(heading("Properties",$("closeInspector")),$("propertiesPane"));
+    const metadata=collapsible("Severity, state and people",['commentSeverity','commentState','commentTags','commentMentions'].map(id=>$(id).closest?.('label')||$(id)),false,'comment-metadata');$("commentEditor").insertBefore(metadata,$("commentText").closest?.('label')||$("commentText"));
+    const captureControls=$("commentEditor").querySelector?.('.capture-controls');if(captureControls)$("commentEditor").insertBefore(collapsible("Drawing screenshot",[captureControls],false,'comment-capture'),$("commentPublishSettings"));
+    const connectionsHeading=$("netMembers").querySelector?.('h3');connectionsHeading?.remove();$("netMembers").append(collapsible("Connections",[$("netMemberList")],true,'property:connections'));
+    const panelSpaceStatus=make('span');panelSpaceStatus.id='panelSpaceStatus';panelSpaceStatus.className='hint';panelSpaceStatus.hidden=true;$("selectionStatus").parentElement?.append(panelSpaceStatus);
+    for(const id of ["propertiesButton","commentsButton"]){$(id).setAttribute("aria-controls",id==="propertiesButton"?"designInspector":"commentsSidebar");}
+    function showCommentTab(tab){commentTab=tab;addPane.hidden=tab!=="add";viewPane.hidden=tab!=="view";for(const [node,name]of [[addTab,"add"],[viewTab,"view"]]){node.setAttribute("aria-selected",String(tab===name));node.tabIndex=tab===name?0:-1;}}
+    commentTabs.addEventListener("keydown",event=>{if(!['ArrowLeft','ArrowRight','Home','End'].includes(event.key))return;event.preventDefault();const tab=event.key==="Home"?"add":event.key==="End"?"view":commentTab==="add"?"view":"add";showCommentTab(tab);(tab==="add"?addTab:viewTab).focus();});showCommentTab("view");
+    function layoutSidebars(){
+      const width=workspaceElement.getBoundingClientRect().width||root.innerWidth||800;
+      const required=Object.keys(sidebarState).reduce((sum,name)=>sum+(sidebarState[name]?sidebarWidths[name]:0),480);
+      const overlay=width<required;workspaceElement.classList.toggle("sidebar-overlays",overlay);
+      workspaceElement.classList.toggle("two-sidebars",!overlay&&sidebarState.properties&&sidebarState.comments);workspaceElement.style.setProperty("--comments-sidebar-width",sidebarWidths.comments+"px");
+      const visiblePanels=[];
+      for(const [name,id,buttonId]of [["properties","designInspector","propertiesButton"],["comments","commentsSidebar","commentsButton"],["navigator","designNavigator","partsButton"]]){
+        const visible=sidebarState[name]&&(!overlay||activeSidebar===name);$(id).hidden=!visible;$(buttonId).setAttribute("aria-pressed",String(visible));$(buttonId).setAttribute("aria-expanded",String(visible));
+        if(visible)visiblePanels.push({name,panel:$(id)});
+      }
+      // Budget obscured area against the whole frame, including toolbar/footer.
+      // Panels scroll independently; small frames retain a usable minimum height.
+      const workspaceHeight=workspaceElement.getBoundingClientRect().height||600,frameHeight=document.body?.getBoundingClientRect().height||root.innerHeight||workspaceHeight;
+      const totalArea=width*frameHeight,panelBudget=Math.max(0,Math.min(totalArea*.18,width*workspaceHeight-totalArea*.82));
+      const visibleWidth=visiblePanels.reduce((sum,item)=>sum+Math.min(sidebarWidths[item.name],Math.max(0,width-32)),0);
+      const budgetHeight=visibleWidth?panelBudget/visibleWidth:workspaceHeight,panelHeight=Math.min(workspaceHeight,Math.max(180,budgetHeight));
+      for(const {panel}of visiblePanels)panel.style.height=panelHeight+"px";
+      panelSpaceStatus.hidden=!visiblePanels.length||budgetHeight>=Math.min(180,workspaceHeight);panelSpaceStatus.textContent=panelSpaceStatus.hidden?'':'Small view: collapse panels or use Focus view for more drawing space.';
+      $("commentsPane").hidden=commentsSidebar.hidden;
+    }
+    function showNavigator(open=true){sidebarState.navigator=open;if(open)activeSidebar="navigator";layoutSidebars();}
+    function hideSidebar(name){sidebarState[name]=false;if(activeSidebar===name)activeSidebar=Object.keys(sidebarState).find(key=>sidebarState[key])||"properties";layoutSidebars();}
+    function hideInspector(){sidebarState.properties=sidebarState.comments=false;layoutSidebars();}
+    function inspector(pane,tab){const name=pane==="properties"?"properties":"comments";sidebarState[name]=true;activeSidebar=name;if(tab)showCommentTab(tab);if(pane==="github"){showCommentTab("view");collaborationGroup.open=true;}layoutSidebars();}
+    function resizeSidebar(name,panel,edge){
+      const handle=make("div");handle.className="sidebar-resizer "+edge;handle.tabIndex=0;handle.setAttribute("role","separator");handle.setAttribute("aria-orientation","vertical");handle.setAttribute("aria-label",`Resize ${name} sidebar`);handle.setAttribute("aria-valuemin","220");handle.setAttribute("aria-valuemax","560");panel.append(handle);
+      const setWidth=value=>{const max=Math.min(560,Math.max(220,workspaceElement.getBoundingClientRect().width-32));sidebarWidths[name]=Math.max(220,Math.min(max,value));panel.style.width=panel.style.flexBasis=sidebarWidths[name]+"px";handle.setAttribute("aria-valuenow",String(sidebarWidths[name]));layoutSidebars();};setWidth(sidebarWidths[name]);
+      let drag=null;
+      handle.addEventListener("pointerdown",event=>{if(event.button!==0)return;event.preventDefault();drag={x:event.clientX,width:sidebarWidths[name],id:event.pointerId};handle.setPointerCapture?.(event.pointerId);handle.classList.toggle("resizing",true);});
+      handle.addEventListener("pointermove",event=>{if(drag&&event.pointerId===drag.id)setWidth(drag.width+(event.clientX-drag.x)*(edge==="left"?-1:1));});
+      const stop=()=>{drag=null;handle.classList.toggle("resizing",false);};for(const type of ["pointerup","pointercancel","lostpointercapture"])handle.addEventListener(type,stop);
+      handle.addEventListener("keydown",event=>{if(!['ArrowLeft','ArrowRight','Home','End'].includes(event.key))return;event.preventDefault();setWidth(event.key==="Home"?220:event.key==="End"?560:sidebarWidths[name]+(event.key==="ArrowLeft"?-1:1)*(edge==="left"?-1:1)*(event.shiftKey?40:10));});resizeCleanups.push(stop);
+    }
+    resizeSidebar("properties",propertiesSidebar,"left");resizeSidebar("comments",commentsSidebar,"left");resizeSidebar("navigator",$("designNavigator"),"right");
+    const sidebarObserver=root.ResizeObserver?new root.ResizeObserver(layoutSidebars):null;sidebarObserver?.observe(workspaceElement);root.addEventListener?.("resize",layoutSidebars);
     function propertySection(title,entries,collapsed=false){
       const values=Object.entries(entries).filter(([,value])=>value!==undefined&&value!==null);if(!values.length)return;
-      const section=make("section");section.className="property-group";section.append(make("h3",title));const dl=make("dl");
+      const dl=make("dl");
       for(const [key,value]of values){const dd=make("dd",String(value)===""?"(empty)":value);dd.title=String(value);dl.append(make("dt",key),dd);}
-      if(collapsed){const details=make("details");details.append(make("summary","Show saved identifiers"),dl);section.append(details);}else section.append(dl);
+      const section=collapsible(title,[dl],!collapsed,"property:"+title);section.className="property-group sidebar-section";
       $("propertyList").append(section);
     }
     function iconFor(kind){return kind==="pad"||kind==="pin"?"pin":kind==="segment"||kind==="arc"?"track":kind==="sheet"?"sheet":"parts";}
@@ -196,7 +263,7 @@
       propertySection("Properties",Object.fromEntries(Object.keys(entries).filter(key=>!used.has(key)).sort().map(key=>[key,entries[key]])));
       propertySection("Source",{"File":selected.path,"UUID":selected.uuid},true);
       if(selected.saved){
-        const section=make('section');section.className='property-group';section.append(make('h3','Saved KiCad settings'));
+        const section=collapsible('Saved KiCad settings',[],false,'property:saved-settings');section.className='property-group sidebar-section';
         section.append(make('p','Original file settings, including empty fields. Variant overrides appear above.'));
         const search=make('input');search.type='search';search.placeholder='Filter saved settings';search.setAttribute('aria-label','Filter saved KiCad settings');const tree=make('div');section.append(search,tree);
         const atom=value=>value&&typeof value==='object'?value.quoted!==undefined?JSON.stringify(value.quoted):value.omitted!==undefined?'['+value.omitted+' settings omitted]':'':String(value);
@@ -405,11 +472,11 @@
       try { editor = note || {id:crypto.randomUUID(), createdAt:new Date().toISOString(), text:"", severity:"info", threadType:$("githubCommentType").value||"issue", anchor:at || anchor()}; }
       catch (error) { commentStatus(error.message,true); inspector("comments"); return; }
       if(note?.threadType){$("githubCommentType").value=note.threadType;chooseCommentType();} $("commentEditor").hidden = false; $("commentAnchor").textContent=remoteAvailable?`${$("githubCommentType").value==="discussion"?"Discussion":"Issue"} · ${anchorLabel(editor.anchor)}; choose its destination below.`:`Local review: ${anchorLabel(editor.anchor)}`; $("commentText").value = editor.text; $("commentSeverity").value = editor.severity || "info";$("commentState").value=editor.state||"open";$("commentTags").value=(editor.tags||[]).join(", ");$("commentMentions").value=(editor.mentions||[]).map(login=>"@"+login).join(", ");
-      inspector("comments"); $("commentText").focus();
+      inspector("comments","add"); $("commentText").focus();
       $("editorThreadType").value=editor.threadType||"issue";$("editorTitle").value="";configureEditorDestination();$("editorMarkdown").hidden=true;
       capturePreview();draw();
     }
-    function capturePreview(){const image=$("capturePreview");image.hidden=!editor?.capture;if(editor?.capture)image.src=editor.capture.dataUrl;else image.removeAttribute?.('src');$("removeCapture").hidden=!editor?.capture;$("captureComment").disabled=!editor?.anchor.area;$("captureStatus").textContent=editor?.capture?`Screenshot saved with this note. Download it to attach in a ${providerName} composer.`:editor?.anchor.area?'Capture the visible drawing inside this area.':'Draw an area to attach a screenshot.';}
+    function capturePreview(){const image=$("capturePreview");image.hidden=!editor?.capture;if(editor?.capture)image.src=editor.capture.dataUrl;else image.removeAttribute?.('src');$("removeCapture").hidden=!editor?.capture;$("captureComment").disabled=!editor?.anchor.area;$("captureStatus").textContent=editor?.capture?`Screenshot saved with this note.${remoteAvailable&&provider==='github'?' Post includes this image in the GitHub thread.':` Download it to attach in a ${providerName} composer.`}`:editor?.anchor.area?'Capture the visible drawing inside this area.':'Draw an area to attach a screenshot.';}
     function setCommentMode(mode){commentMode=commentMode===mode?null:mode;areaStart=areaEnd=null;measureMode=false;measurePoints=[];getCanvas()?.canvas.classList?.toggle("ruler-mode",false);measurePreview=rulerSnap=boardMeasure=null;$("rulerControls").hidden=true;$("measureButton").setAttribute('aria-pressed','false');for(const [id,value] of [['pointComment','point'],['areaComment','area']])$(id).setAttribute('aria-pressed',String(commentMode===value));getCanvas()?.canvas.classList?.toggle('area-mode',Boolean(commentMode));commentStatus(commentMode==='area'?'Drag a rectangle on the drawing to comment.':commentMode==='point'?'Click the drawing to place a comment.':'');draw();}
     async function refreshComments() {
       const run = ++loadId, target = scope();
@@ -436,7 +503,7 @@
       unreadCursor=(unreadCursor+1)%unread.length;const note=unread[unreadCursor];
       if(note.anchor.file!==currentFile())openSheet(note.anchor.file,note.anchor.position);
       else if(note.anchor.position)focus(note.anchor.position);
-      inspector("comments");commentStatus(`Unread ${unreadCursor+1} of ${unread.length}: ${anchorLabel(note.anchor)}`);
+      inspector("comments","view");commentStatus(`Unread ${unreadCursor+1} of ${unread.length}: ${anchorLabel(note.anchor)}`);
     }
     async function setNoteState(note,state) {
       try {const updatedAt=new Date(Math.max(Date.now(),Date.parse(note.updatedAt||note.createdAt)+1)).toISOString();
@@ -476,7 +543,7 @@
           make("small",`Created ${new Date(note.createdAt).toLocaleString()} · Updated ${new Date(note.updatedAt||note.createdAt).toLocaleString()} · ${note.github?`${providerName} ${note.github.source} #${note.github.number} · ${note.github.state} · ${note.github.author||""}`:"local"}`));
         if(note.mentions?.length)card.append(make("small",`Mentions: ${note.mentions.map(login=>"@"+login).join(", ")}`));
         const actions=make("div");actions.className="inspector-actions";
-        actions.append(button("Locate",()=>{if(note.anchor.file!==currentFile())openSheet(note.anchor.file,note.anchor.position);else if(note.anchor.position)focus(note.anchor.position);inspector("comments");}),
+        actions.append(button("Locate",()=>{if(note.anchor.file!==currentFile())openSheet(note.anchor.file,note.anchor.position);else if(note.anchor.position)focus(note.anchor.position);inspector("comments","view");}),
           button(unread?"Mark read":"Mark unread",()=>markRead(note,unread)));
         if(note.github){const link=make("a",`Open ${providerName} thread`);link.href=note.github.url;link.target="_blank";link.rel="noopener noreferrer";actions.append(link);}
         else {const draft=button(`Open ${providerName} composer`,async()=>{try{await request("open-comment-draft",draftOptions(note));commentStatus("GitHub composer opened with the annotation and severity. Review and submit it there.");}catch(error){commentStatus(error.message,true);}});draft.className="github-draft-action";draft.hidden=!remoteAvailable||provider==='gitlab';actions.append(button("Edit",()=>editComment(note)),draft,
@@ -563,7 +630,7 @@
       for(const object of highlightObjects.filter(o=>o.path===active).slice(0,200)){const geometry=(getCanvas()?.primitives||[]).filter(p=>object.uuid&&(p.uuid===object.uuid||p.ownerUuid===object.uuid)),box=root.KiCadOwnedCanvas?.bounds(geometry);if(box){const a=screen(box),b=screen({x:box.x+box.w,y:box.y+box.h});if(a&&b)overlay.append(svg('rect',{x:Math.min(a.x,b.x)-3,y:Math.min(a.y,b.y)-3,width:Math.abs(b.x-a.x)+6,height:Math.abs(b.y-a.y)+6,fill:'none',stroke:'#e6a834','stroke-width':2}));}}
       if(activeConnection?.position){const p=screen(activeConnection.position);if(p)overlay.append(svg('circle',{cx:p.x,cy:p.y,r:12,fill:'none',stroke:'#39bce5','stroke-width':3}),svg('path',{d:`M ${p.x-18} ${p.y} h 36 M ${p.x} ${p.y-18} v 36`,stroke:'#39bce5','stroke-width':1}));}
       navigation?.draw(overlay,pins,screen,svg);
-      visibleNotes().forEach((note,index) => {const p = screen(note.anchor.position);if(!p)return;const pin=button(String(index+1),()=>{inspector("comments");commentStatus(note.text);});pin.className="pin";pin.style.background=severityColors[note.severity||"info"];pin.setAttribute("aria-label",`Comment ${index+1}: ${note.text.slice(0,60)}`);pin.style.left=p.x+"px";pin.style.top=p.y+"px";pins.append(pin);});
+      visibleNotes().forEach((note,index) => {const p = screen(note.anchor.position);if(!p)return;const pin=button(String(index+1),()=>{inspector("comments","view");commentStatus(note.text);});pin.className="pin";pin.style.background=severityColors[note.severity||"info"];pin.setAttribute("aria-label",`Comment ${index+1}: ${note.text.slice(0,60)}`);pin.style.left=p.x+"px";pin.style.top=p.y+"px";pins.append(pin);});
     }
     function menu(event) {
       event.preventDefault(); if (scene || rightDown?.moved) return;
@@ -635,6 +702,27 @@
     $("variantBar").hidden=false;
     for(const sheet of model.sheets){const option=make("option",sheet.label||sheet.path);option.value=sheet.path;$("sheetSelect").append(option);}
     $("sheetSelect").onchange=()=>openSheet($("sheetSelect").value);
+    const topSheets=make("nav");topSheets.id="topSheetNavigation";topSheets.className="top-sheet-navigation";topSheets.setAttribute("aria-label","Active sheet and history");topSheets.hidden=pcb;
+    topSheets.append($("sheetLabel"),...['sheetBack','sheetForward','sheetUp','sheetHome'].map(id=>{const node=$(id);node.classList.toggle("icon-only",true);return node;}));$("frameControls").append(topSheets);
+    const extraControls=make("div");extraControls.id="extraReviewControls";extraControls.className="review-control-popover";extraControls.hidden=true;extraControls.append($("variantBar"),$("highlightControls"),$("shortcutHelp"),$("diagnostics"));document.body?.append(extraControls);
+    const controlsButton=button("Review tools",()=>{extraControls.hidden=!extraControls.hidden;controlsButton.setAttribute("aria-expanded",String(!extraControls.hidden));});controlsButton.id="reviewToolsButton";controlsButton.title="Assembly variants and highlight controls";controlsButton.setAttribute("aria-controls",extraControls.id);controlsButton.setAttribute("aria-expanded","false");$("frameControls").append(controlsButton);
+    const updateReviewToolsHint=()=>{const hasNotes=!$("diagnostics").hidden;controlsButton.textContent=hasNotes?'Review tools · notes':'Review tools';controlsButton.title='Assembly variants, highlights and keyboard guide'+(hasNotes?' · '+$("diagnosticCount").textContent:'');};
+    const reviewToolsObserver=root.MutationObserver?new root.MutationObserver(updateReviewToolsHint):null;reviewToolsObserver?.observe($("diagnostics"),{attributes:true,childList:true,subtree:true,characterData:true});updateReviewToolsHint();
+    const companionValid=path=>typeof path==='string'&&KiCadBrowserData.validPath(path)&&/\.kicad_pcb$/i.test(path)!==pcb;
+    const companionChooser=make("div");companionChooser.id="companionChooser";companionChooser.hidden=true;const companionSelect=make("select");companionSelect.id="oppositeDrawingSelect";companionSelect.setAttribute("aria-label",pcb?"Choose schematic drawing":"Choose PCB layout");
+    const companionMessage=make("p");companionMessage.className="hint";
+    const openCompanion=async path=>{if(!companionValid(path))throw new Error("Choose a saved drawing of the opposite type.");await request(root.KiCadVSCodeContext?"open-project-drawing":"open-viewer-window",{repository,ref,file:path});companionChooser.hidden=true;};
+    const companionButton=button(pcb?"View schematic":"View layout",async()=>{companionButton.disabled=true;try{
+      if(companionValid(options.pairedFile)){await openCompanion(options.pairedFile);return;}
+      const listing=await request(root.KiCadVSCodeContext?"project-inventory":"drawing-files",{repository,ref,file:rootFile});
+      if(!Array.isArray(listing?.files)||listing.files.length>1000)throw new Error("Invalid companion drawing listing.");
+      const choices=[...new Set(listing.files.map(item=>typeof item==='string'?item:item?.path).filter(companionValid))];
+      if(choices.length===1){await openCompanion(choices[0]);return;}
+      companionSelect.replaceChildren(make("option",choices.length?"Choose a drawing…":"No companion drawing found"));companionSelect.children[0].value="";
+      for(const path of choices){const node=make("option",path);node.value=path;companionSelect.append(node);}companionSelect.value="";companionSelect.disabled=!choices.length;companionChooser.hidden=false;
+      companionMessage.textContent=(choices.length?"Choose the saved drawing to open.":"No opposite drawing is listed in this project directory.")+(listing.warnings?.length?' '+listing.warnings.slice(0,3).join(' '):'');
+    }catch(error){notice(error.message);}finally{companionButton.disabled=false;}});companionButton.id="viewOppositeDrawing";$("frameControls").append(companionButton);
+    companionSelect.onchange=()=>{if(companionSelect.value)openCompanion(companionSelect.value).catch(error=>notice(error.message));};const closeChooser=button("Close",()=>{companionChooser.hidden=true;});companionChooser.append(companionSelect,companionMessage,closeChooser);document.body?.append(companionChooser);
     $("closeNavigator").onclick=()=>showNavigator(false);
     const focusView=button('Focus view',()=>{const focused=document.body?.classList?.toggle('drawing-focused');showNavigator(false);hideInspector();focusView.textContent=focused?'Restore controls':'Focus view';});focusView.title='Maximize drawing area (Ctrl+Shift+F); Esc restores controls';$('frameControls').append(focusView);
     if(pcb&&root.KiCadRatsnest){const ratsnestButton=button('Ratsnest',()=>{showRatsnest=!showRatsnest;ratsnestButton.setAttribute('aria-pressed',String(showRatsnest));draw();if(showRatsnest)notice(`Candidate connections: ${ratsnestResult?.lines.length||0}. ${ratsnestResult?.warnings.join(' ')||''}`);});ratsnestButton.title='Read-only candidate airwires from saved copper; not native KiCad unrouted/DRC';ratsnestButton.setAttribute('aria-pressed','false');$('frameControls').append(ratsnestButton);}
@@ -642,9 +730,9 @@
     $("netSearch").oninput=()=>{netFilterObject=null;renderNets();};$("clearNet").onclick=()=>{netFilterObject=null;selectNet(null);};
     $("selectObjectNet").onclick=()=>{const linked=netsForObject(selected);if(linked.length===1)selectNet(linked[0]);else{netFilterObject=selected?.id;navigate("nets");}};
     $("partsButton").onclick=()=>showNavigator($("designNavigator").hidden);
-    $("propertiesButton").onclick=()=>$("designInspector").hidden||$("propertiesPane").hidden?inspector("properties"):hideInspector();
-    $("commentsButton").onclick=()=>$("designInspector").hidden||$("commentsPane").hidden?inspector("comments"):hideInspector();
-    $("showProperties").onclick=()=>inspector("properties");$("showComments").onclick=()=>inspector("comments");$("showGitHub").onclick=()=>inspector("github");$("closeInspector").onclick=hideInspector;
+    $("propertiesButton").onclick=()=>$("designInspector").hidden?inspector("properties"):hideSidebar("properties");
+    $("commentsButton").onclick=()=>commentsSidebar.hidden?inspector("comments"):hideSidebar("comments");
+    $("showProperties").onclick=()=>inspector("properties");$("showComments").onclick=()=>inspector("comments","view");$("showGitHub").onclick=()=>inspector("github");$("closeInspector").onclick=()=>hideSidebar("properties");
     $("partSearch").oninput=renderObjects;$("objectFilter").onchange=renderObjects;$("allSheets").onchange=renderObjects;
     $("focusSelected").onclick=()=>{if(selectedNet)focusNet(selectedNet);else if(selected)selectObject(selected,true,true);};$("openSelectedSheet").onclick=()=>openSubsheet();
     $("commentSelected").onclick=()=>editComment(null,selectedNet?anchor(selectedNet.members.find(m=>m.position)?.position,{path:selectedNet.path,id:selectedNet.id,kind:"net",reference:selectedNet.name.slice(0,100)}):null);$("newComment").onclick=()=>editComment();
@@ -658,7 +746,7 @@
     $("showGitHub").textContent=providerName;$("postComment").textContent=`Post to ${providerName}`;$("editorAccount").textContent=`${providerName} account`;$("editorPreview").textContent=`Preview ${providerName} Markdown`;$("refreshGitHub").textContent=`Load ${providerName} annotations`;
     if(provider==='gitlab'){
       const labels=[["commentPublishSettings","h3","Post to GitLab"],["githubPane","h2","GitLab collaboration"],["commentsPane","p.hint","Save notes locally, create a GitLab issue, or post a discussion on an existing issue. Read status belongs to this browser user."],["githubPane",".collaboration-guide","Choose Issue for a new task or Discussion to comment on an existing GitLab issue. Set the issue number, add severity, tags and mentions, then Post to GitLab. Follow replies and notifications in the linked issue. Local review state does not close an issue. Attach downloaded screenshots manually on GitLab."]];
-      for(const[id,selector,text]of labels){const node=$(id).querySelector?.(selector);if(node)node.textContent=text;}
+      for(const[id,selector,text]of labels){const node=id==='commentsPane'&&selector==='p.hint'?commentHelp:$(id).querySelector?.(selector);if(node)node.textContent=text;}
       $("repositoryDiscussions").textContent="Issue discussions";
     }
     $("githubAvailableControls").hidden=!remoteAvailable;
@@ -666,7 +754,7 @@
     $("refreshCommentPolicy").onclick=refreshCommentPolicy;
     $("reviewSettings").onclick=async()=>{try{await request("open-options");}catch(error){commentStatus(error.message,true);}};
     $("loadCategories").onclick=async()=>{try{if(provider!=='github')throw new Error("GitLab discussions belong to issues and have no GitHub category.");const categories=await request("github-discussion-categories",{repository:options.pullRepository||repository});$("discussionCategory").replaceChildren();for(const category of categories){const option=make("option",category.name);option.value=category.id;$("discussionCategory").append(option);}}catch(error){commentStatus(error.message,true);}};$("severityFilter").onchange=()=>{renderComments();draw();};
-    $("cancelComment").onclick=()=>{$("commentEditor").hidden=true;editor=null;draw();};
+    $("cancelComment").onclick=()=>{$("commentEditor").hidden=true;editor=null;showCommentTab("view");draw();};
     $("pointComment").onclick=()=>setCommentMode('point');$("areaComment").onclick=()=>setCommentMode('area');
     $("stateFilter").onchange=$("readFilter").onchange=$("commentSort").onchange=$("commentSearch").oninput=()=>{unreadCursor=-1;renderComments();draw();};
     $("nextUnread").onclick=nextUnread;
@@ -686,7 +774,7 @@
         if(post){if(!remoteAvailable)throw new Error(`${providerName} publication is unavailable in this viewer.`);const value=$("editorDestination").value,number=Number($("editorThreadNumber").value),category=$("editorCategory").value,title=$("editorTitle").value.trim();
           if(value.startsWith("existing-")&&(!Number.isSafeInteger(number)||number<=0))throw new Error(`Enter a positive ${providerName} thread number.`);if(value==="discussion"&&!category)throw new Error("Load and select a discussion category.");publication={value,number,category,title};}
         await request("comment-save",{comment:saved,...(editor.updatedAt?{expectedUpdatedAt:editor.updatedAt}:{})});editor=saved;await refreshComments();options.onCommentsChanged?.();
-        if(!post||await publishNote(saved,$("postComment"),publication)){$("commentEditor").hidden=true;editor=null;if(!post)commentStatus(remoteAvailable?`Draft saved. Choose Post to ${providerName} to share it remotely.`:"Annotation saved in the configured review store.");}
+        if(!post||await publishNote(saved,$("postComment"),publication)){$("commentEditor").hidden=true;editor=null;showCommentTab("view");if(!post)commentStatus(remoteAvailable?`Draft saved. Edit this note and choose Post to ${providerName} to share it remotely.`:"Annotation saved in the configured review store.");}
       }catch(error){commentStatus(error.message,true);}finally{$("saveComment").disabled=$("postComment").disabled=false;}
     }
     $("commentPublishSettings").hidden=!remoteAvailable;$("saveComment").textContent=remoteAvailable?"Save draft":"Save comment";
@@ -720,7 +808,7 @@
     $('measureBoard').onclick=()=>{const extent=KiCadReviewTools.boardExtents(getCanvas()?.design?.primitives,KiCadOwnedCanvas.arcThrough);if(!extent){$('measurementStatus').textContent='No saved Edge.Cuts geometry to measure';return;}boardMeasure=extent;measurePoints=[{x:extent.x,y:extent.y},{x:extent.x+extent.width,y:extent.y+extent.height}];measurePreview=rulerSnap=null;draw();$('rulerSnapStatus').textContent='Saved outline bounding extents (not DRC validation)';};
     const reviewKeydown=event=>{
       if(event.defaultPrevented||event.repeat||event.composedPath().some(node=>node?.isContentEditable||/^(INPUT|TEXTAREA|SELECT)$/.test(node?.tagName||'')))return;
-      if(event.key==='Escape'){$('objectMenu').hidden=true;document.body?.classList?.remove('drawing-focused');focusView.textContent='Focus view';if(commentMode)setCommentMode(null);if(selectedNet||pinnedNets.size||pinnedClasses.size||highlightObjects.length)clearHighlights();if(measureMode)$('measureButton').click();return;}
+      if(event.key==='Escape'){$('objectMenu').hidden=true;extraControls.hidden=companionChooser.hidden=true;controlsButton.setAttribute('aria-expanded','false');document.body?.classList?.remove('drawing-focused');focusView.textContent='Focus view';if(commentMode)setCommentMode(null);if(selectedNet||pinnedNets.size||pinnedClasses.size||highlightObjects.length)clearHighlights();if(measureMode)$('measureButton').click();return;}
       if(event.ctrlKey&&event.shiftKey&&event.key.toLowerCase()==='f'&&!event.altKey&&!event.metaKey){event.preventDefault();const focused=document.body?.classList?.toggle('drawing-focused');focusView.textContent=focused?'Restore controls':'Focus view';showNavigator(false);hideInspector();return;}
       if(event.altKey&&!event.ctrlKey&&!event.metaKey&&!pcb&&!scene&&['ArrowLeft','ArrowRight','Home'].includes(event.key)){event.preventDefault();if(event.key==='Home')homeSheet();else historySheet(event.key==='ArrowLeft'?-1:1);return;}
       if(event.altKey&&event.key==='ArrowUp'&&!event.ctrlKey&&!event.metaKey&&!pcb&&!scene){event.preventDefault();parentSheet();return;}
@@ -733,13 +821,13 @@
       else if(key==='m'&&!scene){event.preventDefault();$('measureButton').click();}
       else if(event.key==='Enter'&&!pcb&&!scene&&selected?.kind==='sheet'&&!event.composedPath().some(node=>/^(BUTTON|A)$/.test(node?.tagName||''))){event.preventDefault();openSubsheet();}
       else if(event.key===' '&&!scene&&event.target===getCanvas()?.canvas&&pointerWorld){event.preventDefault();focus(pointerWorld);}
-      else if(event.key==='?'){event.preventDefault();$('shortcutHelp').open=!$('shortcutHelp').open;}
+      else if(event.key==='?'){event.preventDefault();$('shortcutHelp').open=!$('shortcutHelp').open;if($('shortcutHelp').open){extraControls.hidden=false;controlsButton.setAttribute('aria-expanded','true');}}
     };
     addEventListener('keydown',reviewKeydown);
-    addEventListener("pointerdown",(event)=>{if(!$("objectMenu").contains(event.target))$("objectMenu").hidden=true;});
+    addEventListener("pointerdown",(event)=>{if(!$("objectMenu").contains(event.target))$("objectMenu").hidden=true;if(!extraControls.hidden&&!extraControls.contains(event.target)&&!controlsButton.contains(event.target)){extraControls.hidden=true;controlsButton.setAttribute('aria-expanded','false');}});
     // A pane can become narrow after pairing, focusing or resizing the popup.
-    const narrowPanels = matchMedia("(max-width:720px)");
-    const keepDrawingVisible = () => { if (narrowPanels.matches && !$("designInspector").hidden) showNavigator(false); };
+    const narrowPanels = matchMedia("(max-width:1000px)");
+    const keepDrawingVisible = layoutSidebars;
     narrowPanels.addEventListener?.("change", keepDrawingVisible);
     if(root.KiCadReviewNavigation&&root.KiCadProjectSearch&&root.KiCadRuleReports)navigation=root.KiCadReviewNavigation.mount({
       repository,ref,rootFile,request,getFiles:()=>files,getObjects:()=>objects,getNets:()=>netModel.nets,currentFile,
@@ -753,16 +841,16 @@
     $('fitHighlights').onclick=()=>{const canvas=getCanvas(),box=root.KiCadOwnedCanvas?.bounds([...canvas.netPrimitives||[]]);if(box){canvas.resize();const margin=Math.max(3,Math.max(box.w,box.h)*.1);canvas.viewport.camera.bbox={x:box.x-margin,y:box.y-margin,w:box.w+margin*2,h:box.h+margin*2};canvas.draw();}};
     $('previousConnection').onclick=()=>cycleConnection(-1);$('nextConnection').onclick=()=>cycleConnection(1);
     $('netClassSelect').onchange=renderNetClasses;
-    if(!remoteAvailable){const hint=$('commentsPane').querySelector?.('p.hint');if(hint)hint.textContent=provider==='gitlab'?'Notes are saved in this browser. Export them to a Git-controlled review file to share them. Read status belongs to this browser user.':'Notes are saved in your workspace review file. GitHub account integration is available in the browser extension.';for(const id of ['reviewSettings','refreshCommentPolicy','refreshGitHub','loadCategories','discussionCategoryLabel','threadNumberLabel'])$(id).hidden=true;$('commentDestination').parentElement.hidden=true;}
+    if(!remoteAvailable){if(commentHelp)commentHelp.textContent=provider==='gitlab'?'Notes are saved in your workspace review file. Export them to share with your team. Read status belongs to this browser user.':'Notes are saved in your workspace review file. GitHub account integration is available in the browser extension.';for(const id of ['reviewSettings','refreshCommentPolicy','refreshGitHub','loadCategories','discussionCategoryLabel','threadNumberLabel'])$(id).hidden=true;$('commentDestination').parentElement.hidden=true;}
     $('sheetBack').onclick=()=>historySheet(-1);$('sheetForward').onclick=()=>historySheet(1);$('sheetUp').onclick=parentSheet;$('sheetHome').onclick=homeSheet;
     $('highlightNetClass').onclick=()=>{const name=$('netClassSelect').value;if(!classConfig||!name)return;const key=JSON.stringify([currentFile(),name]),existed=pinnedClasses.has(key);if(!$('multiHighlight').checked){pinnedNets.clear();pinnedClasses.clear();highlightObjects=[];selectedNet=null;}if(existed)pinnedClasses.delete(key);else if(pinnedClasses.size<64)pinnedClasses.set(key,{path:currentFile(),name});activeConnection=null;connectionCursor=-1;updateHighlights();renderNets();renderNetClasses();};
-    root.KiCadUIIcons?.decorate();$("schematicLayersHint").hidden=pcb;showNavigator(matchMedia("(min-width:850px)").matches);variants();
+    root.KiCadUIIcons?.decorate();$("schematicLayersHint").hidden=pcb;showNavigator(false);variants();
     if(chrome.storage?.local)chrome.storage.local.get(variantKey).then((saved)=>{if(saved[variantKey])installConfig(saved[variantKey]);}).catch((error)=>notice(error.message));
     refreshCommentPolicy();
     return {attachCanvas,draw,refreshNets,refreshComments,highlightRelated,select3D(record){nativePick=record;const object=resolveObject(objects,rootFile,record);selectObject(object,false,false,true);},
       comment3D(record){const object=resolveObject(objects,rootFile,record);if(object)editComment(null,anchor(object.position,object));else notice("This 3D object has no unambiguous saved part anchor; switch to 2D to place a comment.");},
       setScene(next){scene=next;$("highlightControls").hidden=Boolean(scene);$("highlightDnp").disabled=Boolean(scene);for(const id of ["measureButton","navNets","navLayers","pointComment","areaComment"])$(id).disabled=Boolean(scene);if(scene&&navigatorTab!=="parts")navigate("parts");if(scene){setCommentMode(null);measureMode=false;measurePoints=[];getCanvas()?.canvas.classList?.toggle("ruler-mode",false);measurePreview=rulerSnap=boardMeasure=null;$("rulerControls").hidden=true;$("measureButton").setAttribute("aria-pressed","false");$("measurementStatus").textContent="";scene.setPopulation(objects.filter((item)=>item.kind==="footprint").map((item)=>({reference:item.reference,populated:item.populated})));}draw();},
-      dispose(){loadId++;remoteLoad++;netBuilder?.clear();root.removeEventListener?.('keydown',reviewKeydown);narrowPanels.removeEventListener?.("change",keepDrawingVisible);navigation?.dispose();attach?.dispose();}}
+      dispose(){loadId++;remoteLoad++;netBuilder?.clear();reviewToolsObserver?.disconnect();sidebarObserver?.disconnect();root.removeEventListener?.('resize',layoutSidebars);for(const cleanup of resizeCleanups)cleanup();root.removeEventListener?.('keydown',reviewKeydown);narrowPanels.removeEventListener?.("change",keepDrawingVisible);navigation?.dispose();attach?.dispose();}}
   }
   root.KiCadReviewWorkspace={mount,resolveObject,measurement,matchesSearch,sheetTarget,sheetEntries,sheetHistory,rootSheetPath};
   if(typeof module==="object"&&module.exports)module.exports=root.KiCadReviewWorkspace;

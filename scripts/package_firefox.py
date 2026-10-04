@@ -71,6 +71,7 @@ def payload(root: Path = ROOT) -> dict[str, bytes]:
     manifest['background'] = {'scripts': [SHIM, *dependencies, worker]}
     manifest['browser_specific_settings'] = {'gecko': {'id': ADDON_ID, 'strict_min_version': '128.0'}}
     manifest.pop('sandbox', None)
+    manifest['permissions'] = [permission for permission in manifest['permissions'] if permission != 'offscreen']
     manifest['content_security_policy'].pop('sandbox', None)
     data = {}
     for name in sorted(files):

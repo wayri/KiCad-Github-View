@@ -19,6 +19,7 @@ def payload(root: Path = ROOT) -> dict[str, bytes]:
     manifest = json.loads((source / 'manifest.json').read_text(encoding='utf-8'))
     # Do not rely on Chromium's extension sandbox semantics in another browser.
     manifest.pop('sandbox', None)
+    manifest['permissions'] = [permission for permission in manifest['permissions'] if permission != 'offscreen']
     manifest['content_security_policy'].pop('sandbox', None)
     files = set(FILES) - {'html-sandbox.html', 'html-sandbox.js'}
     files.add(manifest['background']['service_worker'])

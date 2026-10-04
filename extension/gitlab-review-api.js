@@ -4,6 +4,8 @@
 const KiCadGitLabReviewApi = (() => {
   const VAULT = "gitlab-review-vault-v1", CLIENTS = "gitlab-oauth-public-clients-v1";
   const LIMIT = 8 * 60 * 60 * 1000;
+  const externalVault = typeof KiCadCredentialVault !== "undefined" && KiCadCredentialVault.supported;
+  const sessionVault = host => externalVault ? KiCadCredentialVault.forProvider(`gitlab:${host}`) : null;
   const keys = new Map(), epochs = new Map(), pending = new Map(), locks = new Map();
   let initialized = false, queue = Promise.resolve();
   const fail = (text, definitive = false) => Object.assign(new Error(text), { definitive });
@@ -18,8 +20,18 @@ const KiCadGitLabReviewApi = (() => {
     if (!initialized) {
       initialized = true;
       queue = queue.then(async () => {
-        await chrome.storage.session.remove([VAULT, "gitlab-review-token", "gitlab-device-pending"]);
+        await chrome.storage.session.remove([...(!externalVault ? [VAULT] : []), "gitlab-review-token", "gitlab-device-pending"]);
         await chrome.storage.local.remove([VAULT, "gitlab-review-token", "gitlab-device-pending"]);
+        if (externalVault) {
+          const all = await records();
+          for (const [host, record] of Object.entries(all)) {
+            let usable = false;
+            try { usable = validateHost(host) === host && record?.version === 2 && await sessionVault(host).hasKey(); } catch {}
+            if (!usable) delete all[host];
+          }
+          if (Object.keys(all).length) await chrome.storage.session.set({ [VAULT]: all });
+          else await chrome.storage.session.remove(VAULT);
+        }
       });
     }
     const result = queue.then(work); queue = result.catch(() => {}); return result;
@@ -31,10 +43,12 @@ const KiCadGitLabReviewApi = (() => {
     keys.delete(host); const all = await records(); delete all[host];
     if (Object.keys(all).length) await chrome.storage.session.set({ [VAULT]: all });
     else await chrome.storage.session.remove(VAULT);
+    if (externalVault) await sessionVault(host).clear();
   }
   async function credential(host) {
     const record = (await records())[host]; if (!record) return null;
     try {
+      if (externalVault) return { token: await sessionVault(host).decrypt(record), expiresAt: record.expiresAt };
       if (!keys.has(host) || record.version !== 1 || !Number.isFinite(record.expiresAt) || record.expiresAt <= Date.now() ||
           !Array.isArray(record.iv) || record.iv.length !== 12 || !Array.isArray(record.ciphertext) || record.ciphertext.length > 2048 ||
           ![...record.iv, ...record.ciphertext].every(n => Number.isInteger(n) && n >= 0 && n <= 255)) throw fail("locked");
@@ -42,7 +56,7 @@ const KiCadGitLabReviewApi = (() => {
         additionalData: new TextEncoder().encode(`${host}:gitlab-token:v1:${record.expiresAt}`) }, keys.get(host), new Uint8Array(record.ciphertext));
       const token = new TextDecoder().decode(bytes); new Uint8Array(bytes).fill(0);
       return { token, expiresAt: record.expiresAt };
-    } catch { await purge(host); return null; }
+    } catch { await purge(host).catch(() => {}); return null; }
   }
   function validToken(token) {
     if (typeof token !== "string" || token.length < 20 || token.length > 1000 || /[^\x21-\x7e]/.test(token)) throw fail("Enter a valid GitLab token without spaces.", true);
@@ -53,14 +67,19 @@ const KiCadGitLabReviewApi = (() => {
     return operation(async () => {
       if (epoch(host) !== expectedEpoch) throw fail("GitLab sign-in was cancelled.", true);
       if (chrome.storage.session.setAccessLevel) await chrome.storage.session.setAccessLevel({ accessLevel: "TRUSTED_CONTEXTS" });
-      const key = await crypto.subtle.generateKey({ name: "AES-GCM", length: 256 }, false, ["encrypt", "decrypt"]);
-      const iv = crypto.getRandomValues(new Uint8Array(12)), expiresAt = Date.now() + Math.min(LIMIT, lifetime > 0 && Number.isFinite(lifetime) ? lifetime : LIMIT);
-      const bytes = new TextEncoder().encode(token); let cipher;
-      try { cipher = await crypto.subtle.encrypt({ name: "AES-GCM", iv, additionalData: new TextEncoder().encode(`${host}:gitlab-token:v1:${expiresAt}`) }, key, bytes); }
-      finally { bytes.fill(0); }
-      if (epoch(host) !== expectedEpoch) throw fail("GitLab sign-in was cancelled.", true);
-      keys.set(host, key); const all = await records();
-      all[host] = { version: 1, iv: Array.from(iv), ciphertext: Array.from(new Uint8Array(cipher)), expiresAt };
+      const expiresAt = Date.now() + Math.min(LIMIT, lifetime > 0 && Number.isFinite(lifetime) ? lifetime : LIMIT);
+      let record;
+      if (externalVault) record = await sessionVault(host).encrypt(token, expiresAt);
+      else {
+        const key = await crypto.subtle.generateKey({ name: "AES-GCM", length: 256 }, false, ["encrypt", "decrypt"]);
+        const iv = crypto.getRandomValues(new Uint8Array(12)), bytes = new TextEncoder().encode(token); let cipher;
+        try { cipher = await crypto.subtle.encrypt({ name: "AES-GCM", iv, additionalData: new TextEncoder().encode(`${host}:gitlab-token:v1:${expiresAt}`) }, key, bytes); }
+        finally { bytes.fill(0); }
+        keys.set(host, key);
+        record = { version: 1, iv: Array.from(iv), ciphertext: Array.from(new Uint8Array(cipher)), expiresAt };
+      }
+      if (epoch(host) !== expectedEpoch) { await purge(host); throw fail("GitLab sign-in was cancelled.", true); }
+      const all = await records(); all[host] = record;
       await chrome.storage.session.set({ [VAULT]: all });
       if (epoch(host) !== expectedEpoch) { await purge(host); throw fail("GitLab sign-in was cancelled.", true); }
       return { configured: true, expiresAt, host };
