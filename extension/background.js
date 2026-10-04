@@ -356,15 +356,17 @@ function pullEndpoint(repository, number) {
 
 async function githubPull(repository, number) {
   const endpoint = pullEndpoint(repository, number);
-  const pull = await githubJson(endpoint);
+  const reader=await KiCadGitHubReviewApi.createPullReader(repository,number);
+  const pull = await reader.read("pull");
   const baseRepo = pull.base?.repo, headRepo = pull.head?.repo;
-  if (!baseRepo || baseRepo.private !== false ||
+  if (!baseRepo || typeof baseRepo.private!=='boolean' ||
       baseRepo.full_name?.toLowerCase() !== repository.toLowerCase()) {
-    throw new Error("This browser preview supports public base repositories only.");
+    throw new Error("GitHub did not confirm the pull request base repository.");
   }
-  if (!headRepo || headRepo.private !== false || !validRepository(headRepo.full_name)) {
-    throw new Error("This browser preview supports public source repositories only.");
+  if (!headRepo || typeof headRepo.private!=='boolean' || !validRepository(headRepo.full_name)) {
+    throw new Error("GitHub did not provide an accessible pull request source repository.");
   }
+  if((baseRepo.private||headRepo.private)&&!reader.authenticated)throw new Error("Sign in with private repository access to compare this pull request.");
   const baseSha = pull.base?.sha, headSha = pull.head?.sha;
   if (!SHA.test(baseSha || "") || !SHA.test(headSha || "")) {
     throw new Error("GitHub did not provide valid pull request revisions.");
@@ -373,12 +375,12 @@ async function githubPull(repository, number) {
   if (!Number.isSafeInteger(changedFiles) || changedFiles < 0) {
     throw new Error("GitHub did not provide the changed file count.");
   }
-  const compareRef = encodeURIComponent(`refs/pull/${number}/head`);
-  const comparison = await githubJson(`https://api.github.com/repos/${repository}/compare/${baseSha}...${compareRef}`);
+  const comparison = await reader.read("compare",{base:baseSha,head:headSha});
   const mergeBase = comparison.merge_base_commit?.sha;
   if (!SHA.test(mergeBase || "")) throw new Error("GitHub did not provide the pull request merge base.");
-  return { base: mergeBase, head: headSha, headRepository: headRepo.full_name,
-    changedFiles, private: false };
+  if(comparison.base_commit?.sha!==baseSha||comparison.head_commit?.sha!==headSha)throw new Error("GitHub comparison did not confirm the pinned pull request revisions.");
+  return { base: mergeBase, baseTip:baseSha, head: headSha, headRepository: headRepo.full_name,
+    changedFiles, private: baseRepo.private||headRepo.private };
 }
 
 function designChanges(batch) {
@@ -397,7 +399,7 @@ function designChanges(batch) {
   return result;
 }
 
-async function githubFiles(repository, number, expectedFiles) {
+async function githubFiles(repository, number, expectedFiles, expectedHead, expectedBase) {
   const endpoint = pullEndpoint(repository, number);
   if (!Number.isSafeInteger(expectedFiles) || expectedFiles < 0) {
     throw new Error("GitHub did not provide the changed file count.");
@@ -405,10 +407,14 @@ async function githubFiles(repository, number, expectedFiles) {
   if (expectedFiles > 3000) {
     throw new Error("GitHub limits pull request file listings to 3,000 files; this review cannot show a complete comparison.");
   }
+  if(!SHA.test(expectedHead||'')||!SHA.test(expectedBase||''))throw new Error("Pinned pull request revisions are required; reload the review.");
+  const reader=await KiCadGitHubReviewApi.createPullReader(repository,number);
+  const verify=async()=>{const pull=await reader.read('pull');if(pull.base?.repo?.full_name?.toLowerCase()!==repository.toLowerCase()||pull.base?.sha!==expectedBase||pull.head?.sha!==expectedHead||pull.changed_files!==expectedFiles)throw new Error("GitHub changed the pull request while loading files; reload the review.");};
+  await verify();
   const files = [];
   let seen = 0;
   for (let page = 1; page <= 30; page++) {
-    const batch = await githubJson(`${endpoint}/files?per_page=100&page=${page}`);
+    const batch = await reader.read("files",{page});
     if (!Array.isArray(batch) || batch.length > 100) throw new Error("Unexpected GitHub file list.");
     seen += batch.length;
     files.push(...designChanges(batch));
@@ -417,6 +423,7 @@ async function githubFiles(repository, number, expectedFiles) {
   if (seen !== expectedFiles) {
     throw new Error("GitHub changed or truncated the pull request file list; reload the review.");
   }
+  await verify();
   return files;
 }
 
@@ -909,7 +916,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         return githubPull(message.repository, message.number);
       case "githubFiles":
         if (optionsSender(sender)) throw new Error("Options cannot load pull request files.");
-        return githubFiles(message.repository, message.number, message.expectedFiles);
+        return githubFiles(message.repository, message.number, message.expectedFiles, message.expectedHead, message.expectedBase);
       default: throw new Error("Unsupported extension request.");
     }
   })().then(async (result) => {

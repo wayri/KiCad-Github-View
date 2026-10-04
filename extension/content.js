@@ -173,10 +173,9 @@
     try {
       const pull = await request("githubPull", { repository: route.repository, number: route.number });
       if (token !== sequence || mount !== pullMount || location.href.split("#")[0] !== pageUrl) return;
-      if (pull.private) throw new Error("Private repositories need an authenticated extension flow; public repositories work in this browser-only build.");
       if (!pull.base || !pull.head) throw new Error("GitHub did not provide both comparison revisions.");
       const files = await request("githubFiles", { repository: route.repository, number: route.number,
-        expectedFiles: pull.changedFiles });
+        expectedFiles: pull.changedFiles, expectedHead:pull.head, expectedBase:pull.baseTip });
       if (token !== sequence || mount !== pullMount || location.href.split("#")[0] !== pageUrl) return;
       if (!files.length) { setStatus(status, "No KiCad schematic or PCB files changed."); return; }
       setStatus(status, `${files.length} KiCad file${files.length === 1 ? "" : "s"} changed. Select a file to compare the browser-rendered revisions.`);

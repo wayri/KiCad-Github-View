@@ -7,10 +7,10 @@ The browser extension embeds read-only viewers in supported repository file page
 | Schematic and PCB selection, properties and hierarchy | Public and authorized private file reads | Public and authorized private project reads, including subgroup namespaces | Saved local files |
 | Project setup and supported repository-linked models | Yes | Yes, credentials bound to the selected server | Yes |
 | Branch/commit visual comparison | Yes | Yes | Not yet |
-| Inline PR / merge-request file cards | GitHub pull requests | Merge-request cards not implemented | Not applicable |
+| Inline PR / merge-request file cards | Public and authorized private GitHub pull requests | Merge-request cards not implemented | Not applicable |
 | Local annotations and review JSON export | Yes | Yes, isolated by provider and server | Git-tracked sidecar |
 | Account and remote review publication | Issues, PR comments and GitHub Discussions | New issues, comments and discussion threads within existing issues | Local sidecar only |
-| Annotation marker readback | Public issue/PR markers; private and Discussion readback unavailable | Markers on a selected issue, with authorized private access | Sidecar reads |
+| Annotation marker readback | Public and authorized private Issue/PR markers; selected Discussion bodies/comments/replies | Markers on a selected issue, with authorized private access | Sidecar reads |
 | Self-hosted hostnames | Enterprise not implemented | Explicit HTTPS origin permission required; URL subpaths unsupported | Host-independent local files |
 
 ## GitLab accounts and servers

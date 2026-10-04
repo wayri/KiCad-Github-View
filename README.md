@@ -11,7 +11,7 @@
 
 **Interactive KiCad review inside GitHub and GitLab file pages.** Open schematics and PCB layouts as drawings, inspect saved parts and nets, compare revisions, and anchor review notes to the design. The viewer runs in the browser with our own schematic/PCB engine and the owner-authorized SPIKE 3D adapter. No KiCad installation, local companion process or rendering server is needed for the browser extension.
 
-[Download v0.12.6](https://github.com/wayri/KiCad-Github-View/releases/tag/v0.12.6) · [Install](docs/INSTALL.md) · [Comment integration](docs/COMMENTS.md) · [Git services](docs/GIT-HOSTS.md) · [Release notes](docs/releases/v0.12.6.md)
+[Download v0.12.7](https://github.com/wayri/KiCad-Github-View/releases/tag/v0.12.7) · [Install](docs/INSTALL.md) · [Comment integration](docs/COMMENTS.md) · [Git services](docs/GIT-HOSTS.md) · [Release notes](docs/releases/v0.12.7.md)
 
 Illustrated walkthroughs: [Using GitHub integration](docs/using-github-integration/README.md) · [Using GitLab integration](docs/using-gitlab-integration/README.md). Browser packages: [Firefox](docs/FIREFOX.md) · [Safari](docs/SAFARI.md).
 
@@ -69,7 +69,7 @@ Properties and analytics come from the saved source revision. Missing settings a
 
 ## Install in Chrome or Edge
 
-1. Download **`kicad-visual-review-extension-0.12.6.zip`** from [Releases](https://github.com/wayri/KiCad-Github-View/releases/tag/v0.12.6). The GitHub **Source code** archives are not the prepared extension package.
+1. Download **`kicad-visual-review-extension-0.12.7.zip`** from [Releases](https://github.com/wayri/KiCad-Github-View/releases/tag/v0.12.7). The GitHub **Source code** archives are not the prepared extension package.
 2. Extract the ZIP into a permanent folder. Select the folder containing `manifest.json`, not the ZIP itself.
 3. Open `chrome://extensions` in Chrome/Chromium or `edge://extensions` in Edge.
 4. Enable **Developer mode**, select **Load unpacked**, and choose that folder.
@@ -79,7 +79,7 @@ Keep the extracted folder in place. To update, extract the new package there, cl
 
 The drawing toolbar contains the active sheet selector, Back/Forward/Up/Root navigation and **View layout / View schematic**. **Review tools** holds assembly variants, highlight controls, shortcuts and rendering notes. Properties, Comments and Explorer are independent flyouts: collapse them from their headers, drag their edges to resize, or focus an edge and use the arrow keys. Comments has **Add comment** and **View comments** tabs; switching tabs preserves an unsaved draft.
 
-Panel heights adapt to target 86% of each drawing frame unobscured, including its toolbar and footer. When several panels would become too short, the viewer shows the active panel and lets you switch with the toolbar; closing panels restores the full canvas. Narrow split toolbars use icons with accessible labels, and split review keeps one compact header. Local browser verification at 1707 � 960 measured 86.0% with Properties and Comments open in a single viewer and 80.6% across a schematic/PCB split with one panel open in each pane. These are viewer-area measurements using the real renderer and mocked transport, not guarantees for the entire GitHub page or every window size. Small views show a space warning; **Focus view** hides panels. Installed-browser verification remains necessary.
+Panel heights adapt to target 86% of each drawing frame unobscured, including its toolbar and footer. When several panels would become too short, the viewer shows the active panel and lets you switch with the toolbar; closing panels restores the full canvas. Narrow split toolbars use icons with accessible labels, and split review keeps one compact header. Local browser verification at 1707 × 960 measured 86.0% with Properties and Comments open in a single viewer and 80.6% across a schematic/PCB split with one panel open in each pane. These are viewer-area measurements using the real renderer and mocked transport, not guarantees for the entire GitHub page or every window size. Small views show a space warning; **Focus view** hides panels. Installed-browser verification remains necessary.
 
 ![Compact toolbar and independent review sidebars, using an original synthetic schematic fixture](docs/images/viewport-sidebars.jpg)
 
@@ -107,7 +107,7 @@ Use each browser's dedicated package: [Firefox installation](docs/FIREFOX.md) an
 
 | Service | Inline file drawings | Revision comparison | Remote review integration |
 | --- | --- | --- | --- |
-| GitHub.com, public repositories | Schematic/PCB and project file previews; pull-request file cards | Branch/commit picker and PR merge-base comparisons | Explicit issue/discussion/PR publication with configured authentication; issue/PR marker readback |
+| GitHub.com, public and authorized private repositories | Schematic/PCB and project file previews; pull-request file cards | Branch/commit picker and PR merge-base comparisons | Explicit issue/discussion/PR publication with configured authentication; Issue/PR and selected Discussion marker readback |
 | GitLab.com, public and private projects | File pages, including subgroup namespaces; private access needs account connection | Branch/commit picker | Explicit new issues, issue notes and issue discussions; marker readback on a selected issue |
 | Self-hosted GitLab, explicitly granted HTTPS origins | Same GitLab adapter; server must be hosted at its origin root | Branch/commit picker | Per-server credentials and Issue/issue-discussion publication |
 | GitHub Enterprise | Not implemented | Not implemented in browser | Not implemented |
@@ -153,7 +153,7 @@ Write a review in the drawing and post it directly to a **GitHub Issue or Discus
 
 ![Choose Discussion and post directly from the note editor](docs/images/integration/github-direct-discussion.jpg)
 
-This is the actual editor in a local fixture with a mocked category list; no remote post was made for the screenshot. Connect your account through **GitHub account**. The primary sign-in button uses the registered publisher OAuth App; [sign-in setup](docs/GITHUB-SIGNIN.md) also explains the advanced token fallback. Public and authorized private repository publication are supported, with GitHub permissions and repository policy checked. Authorized private annotation readback is supported; private PR comparison remains unavailable.
+This is the actual editor in a local fixture with a mocked category list; no remote post was made for the screenshot. Connect your account through **GitHub account**. The primary sign-in button uses the registered publisher OAuth App; [sign-in setup](docs/GITHUB-SIGNIN.md) also explains the advanced token fallback. Public and authorized private repository publication are supported, with GitHub permissions and repository policy checked. Authorized private annotation readback is supported; authorized private PR comparison is supported.
 
 The Git-tracked `.kicad-review.json` file is an optional review record, not a prerequisite for posting. Without a connected file, confirmed links and drafts stay in browser storage. Connect/create a sidecar in a checkout to track them with Git; commit/push it with normal Git tools. Opening a drawing or choosing a destination does not post, commit or edit the design. Existing saved notes also retain **Publish to GitHub** and **Open GitHub composer** actions.
 
@@ -165,10 +165,10 @@ Read [the complete comment guide](docs/COMMENTS.md) for authentication, permissi
 
 ## VS Code installation
 
-Download **`kicad-visual-review-vscode-0.12.6.vsix`** from Releases. In VS Code run **Extensions: Install from VSIX**, select the file and run **Developer: Reload Window**. Open a KiCad project folder and use **KiCad: Open Visual Viewer** or **Reopen Editor With → KiCad Visual Review**. The **KiCad Review** explorer lists saved drawings and review sidecars.
+Download **`kicad-visual-review-vscode-0.12.7.vsix`** from Releases. In VS Code run **Extensions: Install from VSIX**, select the file and run **Developer: Reload Window**. Open a KiCad project folder and use **KiCad: Open Visual Viewer** or **Reopen Editor With → KiCad Visual Review**. The **KiCad Review** explorer lists saved drawings and review sidecars.
 
 ```sh
-code --install-extension kicad-visual-review-vscode-0.12.6.vsix --force
+code --install-extension kicad-visual-review-vscode-0.12.7.vsix --force
 ```
 
 Local notes use `.kicad-review.json` in the workspace root (or drawing directory outside a workspace). Filesystem-provider permissions still apply. The VSIX is not currently published in Visual Studio Marketplace. See [the VS Code guide](vscode-extension/README.md).

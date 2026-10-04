@@ -164,45 +164,64 @@ test('pull metadata uses GitHub merge base and permits a public fork', async (t)
       base: { sha: sha('a'), repo: { full_name: 'owner/board', private: false } },
       head: { sha: sha('b'), repo: { full_name: 'fork/board', private: false } }, changed_files: 2
     });
-    if (url.includes('/compare/')) return json({ merge_base_commit: { sha: sha('c') } });
+    if (url.includes('/compare/')) return json({ merge_base_commit: { sha: sha('c') },base_commit:{sha:sha('a')},head_commit:{sha:sha('b')} });
     throw new Error('Unexpected API request');
   });
   const result = await background.githubPull('owner/board', 7);
-  assert.deepEqual(result, { base: sha('c'), head: sha('b'), headRepository: 'fork/board',
+  assert.deepEqual(result, { base: sha('c'), baseTip:sha('a'), head: sha('b'), headRepository: 'fork/board',
     changedFiles: 2, private: false });
-  assert.match(urls[1], /\/compare\/a{40}\.\.\.refs%2Fpull%2F7%2Fhead$/);
+  assert.match(urls[1], /\/compare\/a{40}\.\.\.b{40}\?per_page=1$/);
 });
 
-test('private head and base fail before comparison or file retrieval', async (t) => {
-  const urls = [];
-  withFetch(t, async (url) => {
-    urls.push(url);
-    return json({ base: { sha: sha('a'), repo: { full_name: 'owner/board', private: false } },
-      head: { sha: sha('b'), repo: { full_name: 'private/board', private: true } }, changed_files: 1 });
-  });
-  await assert.rejects(background.githubPull('owner/board', 7), /public source repositories/);
-  assert.equal(urls.length, 1);
-  global.fetch = async () => json({ base: { sha: sha('a'), repo: { full_name: 'owner/board', private: true } },
-    head: { sha: sha('b'), repo: { full_name: 'fork/board', private: false } }, changed_files: 1 });
-  await assert.rejects(background.githubPull('owner/board', 7), /public base repositories/);
+test('private PR comparison uses one authenticated account and pinned fork revisions',async t=>{
+ const urls=[];let signed=false;
+ withFetch(t,async(url,init)=>{urls.push({url,init});if(url.includes('/compare/'))return json({merge_base_commit:{sha:sha('c')},base_commit:{sha:sha('a')},head_commit:{sha:sha('b')}});return json({base:{sha:sha('a'),repo:{full_name:'owner/board',private:true}},head:{sha:sha('b'),repo:{full_name:'private/board',private:true}},changed_files:1});});
+ await assert.rejects(background.githubPull('owner/board',7),/Sign in with private/);assert.equal(urls.length,1);
+ const token='github_pat_private_comparison_123456';await KiCadGitHubReviewApi.setToken(token);t.after(()=>KiCadGitHubReviewApi.clearToken());urls.length=0;
+ const pull=await background.githubPull('owner/board',7);assert.equal(pull.private,true);assert.equal(pull.headRepository,'private/board');assert.equal(pull.base,sha('c'));assert.equal(pull.baseTip,sha('a'));
+ assert.equal(urls.length,2);for(const call of urls){assert.equal(call.init.headers.Authorization,'Bearer '+token);assert.equal(new URL(call.url).origin,'https://api.github.com');assert.equal(call.init.credentials,'omit');assert.equal(call.init.redirect,'error');}
+ assert.ok(urls[1].url.includes(sha('a')+'...'+sha('b')));
+});
+test('account changes cancel PR metadata before comparison and mismatched comparison SHAs fail',async t=>{
+ await KiCadGitHubReviewApi.setToken('github_pat_compare_race_123456');t.after(()=>KiCadGitHubReviewApi.clearToken());let requests=0;
+ withFetch(t,async()=>{requests++;await KiCadGitHubReviewApi.clearToken();return json({base:{sha:sha('a'),repo:{full_name:'owner/board',private:true}},head:{sha:sha('b'),repo:{full_name:'owner/board',private:true}},changed_files:1});});
+ await assert.rejects(background.githubPull('owner/board',7),/changed or signed out/);assert.equal(requests,1);
+ global.fetch=async url=>url.includes('/compare/')?json({merge_base_commit:{sha:sha('c')},base_commit:{sha:sha('a')},head_commit:{sha:sha('d')}}):json({base:{sha:sha('a'),repo:{full_name:'owner/board',private:false}},head:{sha:sha('b'),repo:{full_name:'owner/board',private:false}},changed_files:1});
+ await assert.rejects(background.githubPull('owner/board',7),/pinned pull request revisions/);
 });
 
 test('file listing paginates and reports incomplete or over-limit results', async (t) => {
   const urls = [];
   withFetch(t, async (url) => {
     urls.push(url);
+    if(url.endsWith('/pulls/7'))return json({base:{sha:sha('a'),repo:{full_name:'owner/board'}},head:{sha:sha('b')},changed_files:101});
     const page = Number(new URL(url).searchParams.get('page'));
     return json(Array.from({ length: page === 1 ? 100 : 1 }, (_, index) => ({
       filename: `folder/file${page}-${index}.kicad_pcb`, status: 'modified'
     })));
   });
-  const files = await background.githubFiles('owner/board', 7, 101);
+  const files = await background.githubFiles('owner/board', 7, 101, sha('b'), sha('a'));
   assert.equal(files.length, 101);
-  assert.match(urls[1], /page=2$/);
-  await assert.rejects(background.githubFiles('owner/board', 7, 102), /changed or truncated/);
+  assert.match(urls[2], /page=2$/);
+  await assert.rejects(background.githubFiles('owner/board', 7, 101, sha('b'), sha('d')), /changed the pull request/);
   const before = urls.length;
   await assert.rejects(background.githubFiles('owner/board', 7, 3001), /3,000 files/);
   assert.equal(urls.length, before);
+});
+
+test('incomplete PR pagination is rejected even when its metadata remains stable',async t=>{
+ withFetch(t,async url=>url.endsWith('/pulls/7')?json({base:{sha:sha('a'),repo:{full_name:'owner/board'}},head:{sha:sha('b')},changed_files:101}):json(new URL(url).searchParams.get('page')==='1'?Array.from({length:100},(_,i)=>({filename:`board${i}.kicad_pcb`,status:'modified'})):[]));
+ await assert.rejects(background.githubFiles('owner/board',7,101,sha('b'),sha('a')),/changed or truncated/);
+});
+
+test('private PR file pagination discards changed snapshots and sign-out results',async t=>{
+ await KiCadGitHubReviewApi.setToken('github_pat_paginated_private_123456');t.after(()=>KiCadGitHubReviewApi.clearToken());
+ let metadataReads=0;const calls=[];
+ withFetch(t,async(url,init)=>{calls.push({url,init});if(url.endsWith('/pulls/7')){metadataReads++;return json({base:{sha:sha('a'),repo:{full_name:'owner/board'}},head:{sha:sha(metadataReads===1?'b':'d')},changed_files:1});}return json([{filename:'design/old.kicad_pcb',previous_filename:'nested/board.kicad_pcb',status:'renamed'}]);});
+ await assert.rejects(background.githubFiles('owner/board',7,1,sha('b'),sha('a')),/changed the pull request/);
+ assert.equal(calls.length,3);for(const call of calls)assert.ok(call.init.headers.Authorization);
+ metadataReads=0;global.fetch=async url=>{if(url.endsWith('/pulls/7'))return json({base:{sha:sha('a'),repo:{full_name:'owner/board'}},head:{sha:sha('b')},changed_files:1});await KiCadGitHubReviewApi.clearToken();return json([{filename:'board.kicad_pcb',status:'modified'}]);};
+ await assert.rejects(background.githubFiles('owner/board',7,1,sha('b'),sha('a')),/changed or signed out/);
 });
 
 test('suffix-changing renames become added and removed design entries', () => {

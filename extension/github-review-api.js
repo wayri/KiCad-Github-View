@@ -418,6 +418,19 @@ const KiCadGitHubReviewApi = (() => {
       return readbackJson(url.href, session);
     };
   }
+  async function createPullReader(repository, number) {
+    repoParts(repository);
+    if (!NUMBER(number)) throw fail("Invalid GitHub pull request.", true);
+    const session=await readbackSession(true), endpoint=`${API}/repos/${repository}`;
+    return { authenticated:Boolean(session.token), read:async(kind, args={})=>{
+      let path;
+      if(kind==='pull')path=`/pulls/${number}`;
+      else if(kind==='files'&&NUMBER(args.page)&&args.page<=30)path=`/pulls/${number}/files?per_page=100&page=${args.page}`;
+      else if(kind==='compare'&&/^[0-9a-f]{40}$/i.test(args.base||'')&&/^[0-9a-f]{40}$/i.test(args.head||''))path=`/compare/${args.base}...${args.head}?per_page=1`;
+      else throw fail("Invalid GitHub pull comparison request.", true);
+      return readbackJson(endpoint+path,session);
+    }};
+  }
   async function readDiscussionAnnotations({ repository, number, scope } = {}) {
     const [owner, name] = repoParts(repository);
     if (!NUMBER(number)) throw fail("Invalid GitHub Discussion number.", true);
@@ -833,7 +846,7 @@ const KiCadGitHubReviewApi = (() => {
     }
   }
   return { tokenStatus, setToken, clearToken, resetAuth, authorizationHeaders, deviceStatus, startDevice, pollDevice, cancelDevice,
-    commentPolicyStatus, validatePolicy, categories, publish, publishArgs, validRepository, createAnnotationReader, readDiscussionAnnotations };
+    commentPolicyStatus, validatePolicy, categories, publish, publishArgs, validRepository, createAnnotationReader, createPullReader, readDiscussionAnnotations };
 })();
 
 if (typeof globalThis === "object") globalThis.KiCadGitHubReviewApi = KiCadGitHubReviewApi;

@@ -56,7 +56,7 @@ For Discussions, sign in, choose **Discussion / Existing discussion**, enter its
 
 Cards show actual GitHub authors, posting/editing times and canonical links. **Reply** creates a fresh draft at the same anchor and selects the existing thread; enter text and **Post to GitHub** explicitly. Successful posts select their confirmed thread for subsequent refresh. Multiple reviewers can append posts and refresh them. Discussion replies from this viewer append to the conversation, rather than nesting under an individual reply.
 
-Readback holds one account identity through pagination. Sign-out, account changes or credential expiry abort it. It does not synchronize remote state or edits into existing local notes, close issues or replace GitHub conversations and notifications. Private PR revision comparison remains unavailable.
+Readback holds one account identity through pagination. Sign-out, account changes or credential expiry abort it. It does not synchronize remote state or edits into existing local notes, close issues or replace GitHub conversations and notifications. Authorized private PR revision comparison is supported.
 
 ## GitLab and VS Code
 
@@ -77,4 +77,4 @@ The note editor has a **Post to GitHub** section. Select Issue or Discussion, ne
 
 Posted Markdown contains review text and a design-context table with severity/state, Issue/Discussion type, component or net, point/area, repository, revision/file permalink, variant, identifiers, tags, mentions and UTC times. The validated hidden annotation marker remains available for supported readback. PNG data is excluded from the API body.
 
-Authorized private repositories can receive Issue/Discussion posts. The connected account must have the relevant write permission and Contents read permission for policy verification. Private policy requests are authenticated on GitHub's API. A private policy 404 is treated as absence only after a complete authenticated root listing verifies that no policy file exists. Unverifiable access or policy blocks the post. Public policies retain anonymous verification. Authorized private annotation readback is supported; private PR comparison remains unavailable.
+Authorized private repositories can receive Issue/Discussion posts. The connected account must have the relevant write permission and Contents read permission for policy verification. Private policy requests are authenticated on GitHub's API. A private policy 404 is treated as absence only after a complete authenticated root listing verifies that no policy file exists. Unverifiable access or policy blocks the post. Public policies retain anonymous verification. Authorized private annotation readback is supported; authorized private PR comparison is supported.

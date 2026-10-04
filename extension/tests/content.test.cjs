@@ -52,7 +52,7 @@ function find(node, predicate) { return walk(node).find(predicate); }
 function fixture(url, { pull = false, initialHidden = false, delayedCard = false,
   draft = false, draftValue = '', draftTitle = false, titleValue = '',
   draftBody = 'Review note for U3', draftHeading = '[Major] KiCad review: U3',
-  headRepository = 'owner/repo', gitlabBlob = null } = {}) {
+  headRepository = 'owner/repo', privatePull=false, gitlabBlob = null } = {}) {
   const body = new Node('body'), main = new Node('main'); body.append(main);
   let source, card, header, comments, pathNode;
   const makeCard = () => {
@@ -116,7 +116,7 @@ function fixture(url, { pull = false, initialHidden = false, delayedCard = false
       sendMessage: async (message) => {
         messages.push(message);
         if (message.type === 'githubPull') return { ok: true, result: {
-          base: 'a'.repeat(40), head: 'b'.repeat(40), headRepository, changedFiles: 1
+          base: 'a'.repeat(40), baseTip:'c'.repeat(40), head: 'b'.repeat(40), headRepository, changedFiles: 1, private:privatePull
         } };
         if (message.type === 'githubFiles') return { ok: true, result: [
           { file: 'design/root.kicad_sch', oldFile: 'design/root.kicad_sch', status: 'modified' }
@@ -225,6 +225,15 @@ test('fork PR inline viewer receives the base PR context and fork source reposit
   assert.equal(params.get('headRepository'), 'fork/repo');
   assert.equal(params.get('pullRepository'), 'owner/repo');
   assert.equal(params.get('pullNumber'), '7');
+});
+
+test('authorized private fork PR mounts inline and requests the same pinned metadata snapshot',async()=>{
+ const ui=fixture('https://github.com/owner/repo/pull/7/files',{pull:true,privatePull:true,headRepository:'private/repo'});
+ await new Promise(setImmediate);
+ find(ui.body,node=>node.tag==='button'&&node.textContent==='design/root.kicad_sch').click();
+ const frame=find(ui.card,node=>node.tag==='iframe');assert.ok(frame);
+ const params=new URL(frame.src).searchParams;assert.equal(params.get('headRepository'),'private/repo');assert.equal(params.get('head'),'b'.repeat(40));assert.equal(params.get('base'),'a'.repeat(40));
+ const listing=ui.messages.find(m=>m.type==='githubFiles');assert.equal(listing.expectedHead,'b'.repeat(40));assert.equal(listing.expectedBase,'c'.repeat(40));
 });
 
 test('navigation restores a source node that GitHub initially kept hidden', () => {

@@ -6,7 +6,7 @@ The screenshots below show the real viewer UI in a local harness with mocked rep
 
 ## Open and inspect a drawing
 
-Install and enable a supported browser build as described in [INSTALL.md](../INSTALL.md), grant it access to `github.com`, and open a public repository file ending in `.kicad_sch` or `.kicad_pcb`. The viewer renders the saved file in a read-only drawing canvas. A personal access token with repository access can also authorize file and metadata reads for a private repository. Authorized private annotation readback is supported; private pull-request comparison is not supported. Use **Show source** to return to the file text and **Open full viewer** or **Pop out** when you need more space.
+Install and enable a supported browser build as described in [INSTALL.md](../INSTALL.md), grant it access to `github.com`, and open a public repository file ending in `.kicad_sch` or `.kicad_pcb`. The viewer renders the saved file in a read-only drawing canvas. A personal access token with repository access can also authorize file and metadata reads for a private repository. Authorized private annotation readback is supported; authorized private pull-request comparison is supported. Use **Show source** to return to the file text and **Open full viewer** or **Pop out** when you need more space.
 
 Use **Explorer** to move among loaded schematic sheets, parts, nets, layers, search results, BOM, and saved ERC/DRC reports. Search can filter design objects and project files; selecting a result locates it in the drawing. Select a footprint or symbol to view its saved properties in **Inspect**. For PCBs, highlight nets or net classes, change visible layers, and use the connection controls to step through connected objects. The renderer displays saved data; it does not edit the KiCad source or run native ERC/DRC checks.
 
@@ -63,7 +63,7 @@ The comment form now includes **Thread type**, **Destination**, **Thread title**
 
 **Preview GitHub Markdown** shows the formatted review text and design-context table before transmission. Posted fields include severity, state, source revision/file link, object or area, tags, mentions and times. A successful request records the returned GitHub thread link. Failed publication leaves an editable draft; no automatic retry is made. This screenshot uses mocked repository/category data and does not show a live publication.
 
-Authorized private Issue/Discussion publication is supported when the connected account has write permission and Contents read access for policy verification. Authorized private annotation readback is supported; private PR comparison remains unavailable.
+Authorized private Issue/Discussion publication is supported when the connected account has write permission and Contents read access for policy verification. Authorized private annotation readback is supported; authorized private PR comparison is supported.
 
 ## Choose an Issue or Discussion
 
@@ -102,3 +102,11 @@ This screenshot uses the real comment editor with a synthetic remote annotation 
 On public GitLab.com repositories, the viewer supports local notes and JSON import/export, but no GitLab account connection, issue/merge-request posting, remote readback, or GitLab-linked sidecar. Use GitLab's own website to create or reply to an issue manually and copy the note text yourself. The browser extension does not open a prefilled GitLab composer.
 
 VS Code notes save through the workspace and can use a workspace `.kicad-review.json` file, but the VS Code viewer does not offer GitHub account setup or direct publishing. The browser extension is required for the GitHub publishing workflow described here.
+
+## Private pull-request comparisons
+
+Connect your account in extension settings with access to the base repository and source fork. OAuth sign-in needs public-and-private repository access; a fine-grained token needs Contents and Pull requests read permissions for every repository involved. GitHub website sign-in alone is insufficient.
+
+Open the PR's **Files changed** tab and choose a KiCad file. The worker compares immutable base/head commits to obtain the merge base and retains the fork identity for head drawings and linked models. The authenticated changed-file listing is paginated up to GitHub's 3,000-file limit and checked against the same base/head/count before and after loading. A moving PR, revoked access or account change stops the comparison; reload after updates or reconnect. Missing/deleted fork metadata is reported instead of guessed.
+
+Metadata requests use only api.github.com, reject redirects and omit website cookies. Automated private/fork tests use simulated responses; live private repository and installed-browser acceptance remain pending.
