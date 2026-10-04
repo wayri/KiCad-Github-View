@@ -7,6 +7,8 @@
     file: params.get("file"), oldFile: params.get("oldFile") || params.get("file"),
     head: params.get("head") || params.get("ref"), base: params.get("base"), status: params.get("status") || "modified", pullNumber: Number(params.get("pullNumber")) || null, pullRepository: params.get("pullRepository") || params.get("repository")
   };
+  const provider=params.get('provider')||'github',providerContext=provider==='gitlab'?{provider}:{};if(!['github','gitlab'].includes(provider))throw new Error('Unsupported Git host.');request.provider=provider;
+  const send=message=>chrome.runtime.sendMessage({...message,...providerContext});
   const data = globalThis.KiCadBrowserData;
   const $ = (id) => document.getElementById(id);
   const toolbar = $("toolbar"), comparison = $("comparison");
@@ -27,7 +29,7 @@
   function pairTools(){
     const split=projectControl('Split schematic + PCB',async()=>{
       const epoch=++pairEpoch;$('pairChooser').hidden=false;split.disabled=true;
-      try{const reply=await chrome.runtime.sendMessage({type:'drawing-files',repository:request.headRepository,ref:request.head,file:request.file});if(epoch!==pairEpoch)return;if(!reply?.ok)throw new Error(reply?.error||'Could not discover companion drawings.');
+      try{const reply=await send({type:'drawing-files',repository:request.headRepository,ref:request.head,file:request.file});if(epoch!==pairEpoch)return;if(!reply?.ok)throw new Error(reply?.error||'Could not discover companion drawings.');
         const files=reply.result?.files;if(!Array.isArray(files)||files.length>1000)throw new Error('Invalid companion file listing.');const choices=files.filter(companionValid);$('companionSelect').replaceChildren(element('option','Choose companion drawing'));for(const path of choices){const option=element('option',path);option.value=path;$('companionSelect').append(option);}
         $('companionSelect').children[0].value='';if(choices.length===1){$('companionSelect').value=choices[0];openPair(choices[0]);}else status(choices.length?'Choose the paired schematic or PCB.':'No companion in this directory. Enter a repository-relative drawing path.');
       }catch(error){status(error.message+' Enter a repository-relative companion path.',true);}finally{split.disabled=false;}
@@ -38,7 +40,7 @@
     const sync=add('Cross-highlight',()=>{crossLinked=!crossLinked;sync.setAttribute('aria-pressed',String(crossLinked));});sync.setAttribute('aria-pressed','true');
     add('Both panes',()=>pairView());add(/\.kicad_pcb$/i.test(request.file)?'PCB only':'Schematic only',()=>pairView('main'));add(/\.kicad_pcb$/i.test(request.file)?'Schematic only':'PCB only',()=>pairView('companion'));const stack=add('Stack panes',()=>{comparison.classList.toggle('vertical');});
     add('Close split',()=>{pairEpoch++;pairedFile=null;frames.delete('pair');$('pairDrawing').replaceChildren();$('pairPanel').hidden=true;controls.hidden=true;comparison.classList.toggle('paired',false);comparison.classList.toggle('focus-pane',false);comparison.classList.toggle('vertical',false);toolbar.hidden=false;$('headKind').textContent='HEAD';setMode('head');status('');});$('projectTools').append(controls);
-    projectControl('Pop out',async()=>{try{const reply=await chrome.runtime.sendMessage({type:'open-viewer-window',repository:request.headRepository,ref:request.head,file:request.file,...(pairedFile?{pairedFile}:{})});if(!reply?.ok)throw new Error(reply?.error||'Could not open viewer window.');}catch(error){status(error.message,true);}});
+    projectControl('Pop out',async()=>{try{const reply=await send({type:'open-viewer-window',repository:request.headRepository,ref:request.head,file:request.file,...(pairedFile?{pairedFile}:{})});if(!reply?.ok)throw new Error(reply?.error||'Could not open viewer window.');}catch(error){status(error.message,true);}});
     projectControl('Fit panes',()=>sendCommand('fit-drawing'));
     const initial=params.get('pairedFile');if(initial){if(companionValid(initial))openPair(initial);else status('Invalid companion drawing path.',true);}
   }
@@ -84,7 +86,7 @@
     holder.className = "drawing";
     const viewer = element("iframe");
     viewer.title = `${file} at ${ref.slice(0, 12)}`;
-    const query = new URLSearchParams({ repository, ref, file });
+    const query = new URLSearchParams({ repository, ref, file, ...providerContext });
     if (request.pullNumber) { query.set("pullNumber", request.pullNumber); query.set("pullRepository", request.pullRepository); }
     if (position && Number.isFinite(position.x) && Number.isFinite(position.y)) {
       query.set("focusX", position.x); query.set("focusY", position.y);
@@ -180,7 +182,7 @@
   }
   async function project(repository, ref, file, absent) {
     if (absent) return [];
-    const reply = await chrome.runtime.sendMessage({ type: "project", repository, ref, file });
+    const reply = await send({ type: "project", repository, ref, file });
     if (!reply?.ok) throw new Error(reply?.error || "Could not load saved KiCad objects.");
     return reply.result;
   }
@@ -201,22 +203,29 @@
     });
     return loading;
   }
-  function start() {
+  async function start() {
     if (!request.repository && !request.file) {
       status("Open a public GitHub .kicad_sch or .kicad_pcb file to view it inline, or open a pull request's Files changed tab to compare designs.");
       $("comparison").hidden = true; $("sourceLink").hidden = true;
       return;
     }
-    if (!data.validRepository(request.repository) || !data.validRepository(request.headRepository) ||
+    if (!data.validRepository(request.repository,provider) || !data.validRepository(request.headRepository,provider) ||
         !data.validPath(request.file) || !data.validPath(request.oldFile) || !data.validRef(request.head) ||
         (request.base && !data.validRef(request.base)) || !["added", "removed", "modified", "renamed", "changed", "copied", "unchanged"].includes(request.status)) {
-      throw new Error("The GitHub file location is invalid or incomplete.");
+      status("The Git host file location is invalid or incomplete."); return;
+    }
+    if(provider==='gitlab'){
+      for(const side of ['head',...(request.base?['base']:[])]){
+        const reply=await send({type:'revision-resolve',repository:side==='base'?request.repository:request.headRepository,ref:request[side],file:side==='base'?request.oldFile:request.file});
+        if(!reply?.ok||!/^[a-f0-9]{40}$/i.test(reply.result?.sha||''))throw new Error(reply?.error||'GitLab revision could not be resolved.');request[side]=reply.result.sha;
+      }
     }
     $("filename").textContent = request.file;
     $("reviewHeader").dataset.compact=String(!request.base);comparison.dataset.blob=String(!request.base);$("reviewFooter").hidden=!request.base;
     $("baseRef").textContent = request.base?.slice(0, 12) || "—";
     $("headRef").textContent = request.head.slice(0, 12);
-    $("sourceLink").href = `https://github.com/${request.status === "removed" ? request.repository : request.headRepository}/blob/${encodeURIComponent(request.status === "removed" ? request.base : request.head)}/${(request.status === "removed" ? request.oldFile : request.file).split("/").map(encodeURIComponent).join("/")}`;
+    $("sourceLink").textContent = provider==='gitlab'?'GitLab source':'GitHub source';
+    $("sourceLink").href = `${provider==='gitlab'?'https://gitlab.com':'https://github.com'}/${request.status === "removed" ? request.repository : request.headRepository}/${provider==='gitlab'?'-/blob':'blob'}/${encodeURIComponent(request.status === "removed" ? request.base : request.head)}/${(request.status === "removed" ? request.oldFile : request.file).split("/").map(encodeURIComponent).join("/")}`;
     if (request.base) {
       for (const [label, mode] of [["Side by side", "compare"], ["Base", "base"], ["Head", "head"]]) {
         control(label, mode, () => { manualMode = true; setMode(mode); });
@@ -254,7 +263,7 @@
     showProject("head", request.status === "removed" ? "" : request.headRepository, request.head, request.file);
     status("");pairTools();
     if(!request.pullNumber&&globalThis.KiCadRevisionPicker)globalThis.KiCadRevisionPicker.mount({holder:$('projectTools'),request,
-      send:message=>chrome.runtime.sendMessage(message),navigate:query=>location.assign(`${chrome.runtime.getURL('browser-viewer.html')}?${query}`)});
+      send:message=>send(message),navigate:query=>location.assign(`${chrome.runtime.getURL('browser-viewer.html')}?${query}`)});
   }
-  try { start(); } catch (error) { status(error.message, true); }
+  start().catch(error=>status(error.message,true));
 })();

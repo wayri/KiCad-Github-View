@@ -21,8 +21,8 @@ const KiCadReviewComments = (() => {
   };
   function normalizeScope(value) {
     if (!value || typeof value !== "object") throw new Error("Invalid comment file scope.");
-    const { repository, ref, file } = value;
-    if (typeof repository !== "string" || !REPOSITORY.test(repository) || repository.split("/").some((part) => part === "." || part === "..")) {
+    const { repository, ref, file } = value;const provider=value.provider||'github';if(!['github','gitlab'].includes(provider))throw new Error('Invalid comment provider.');
+    if (typeof repository !== "string" || !(provider==='gitlab'?/^[A-Za-z0-9_.-]+(?:\/[A-Za-z0-9_.-]+)+$/:REPOSITORY).test(repository) || repository.split("/").some((part) => part === "." || part === "..")) {
       throw new Error("Invalid comment repository.");
     }
     if (typeof ref !== "string" || !REF.test(ref) || ref.startsWith("/") || ref.endsWith("/") ||
@@ -33,7 +33,7 @@ const KiCadReviewComments = (() => {
         file.split("/").some((part) => !part || part === "." || part === "..")) {
       throw new Error("Invalid KiCad comment file.");
     }
-    return { repository, ref, file };
+    return { repository, ref, file,...(provider==='gitlab'?{provider}: {}) };
   }
   function normalizeAnchor(anchor) {
     const result = normalizeScope(anchor);
@@ -95,6 +95,7 @@ const KiCadReviewComments = (() => {
     });
     let capture;
     if(comment.capture!==undefined){const c=comment.capture;if(!c||c.mime!=='image/png'||typeof c.dataUrl!=='string'||c.dataUrl.length>262144||!/^data:image\/png;base64,iVBORw0KGgo[A-Za-z0-9+/]*={0,2}$/.test(c.dataUrl)||![c.width,c.height].every(n=>Number.isSafeInteger(n)&&n>=1&&n<=1024))throw new Error('Invalid annotation screenshot.');capture={mime:c.mime,dataUrl:c.dataUrl,width:c.width,height:c.height};}
+    if(comment.anchor?.provider==='gitlab'&&refs.length)throw new Error('GitHub thread references cannot be attached to GitLab notes.');
     return { id: comment.id, text: comment.text.trim(), createdAt: comment.createdAt, updatedAt, severity, state, tags:[...new Set(tags.map(tag=>tag.trim()))],mentions,remoteRefs:refs,...(capture?{capture}:{}),
       anchor: normalizeAnchor(comment.anchor) };
   }
@@ -162,7 +163,7 @@ const KiCadReviewComments = (() => {
     const comments = data.comments.map(validateComment);
     const seen = new Set();
     for (const note of comments) {
-      const key = JSON.stringify([note.anchor.repository, note.anchor.ref, note.anchor.file, note.id]);
+      const key = JSON.stringify([...(note.anchor.provider==='gitlab'?['gitlab']:[]),note.anchor.repository, note.anchor.ref, note.anchor.file, note.id]);
       if (seen.has(key)) throw new Error("Duplicate comment id in import.");
       seen.add(key);
     }
@@ -172,14 +173,14 @@ const KiCadReviewComments = (() => {
     if(typeof text!=="string"||new TextEncoder().encode(text).length>4*1024*1024)throw new Error("Review file exceeds 4 MiB.");
     let data;try{data=JSON.parse(text);}catch{throw new Error("Invalid review file JSON.");}
     if(data?.schemaVersion!==1||!Array.isArray(data.annotations)||data.annotations.length>1000||Object.keys(data).some(key=>!["schemaVersion","annotations"].includes(key)))throw new Error("Unsupported review file schema.");
-    const seen=new Set();return data.annotations.map(note=>{const valid=validateComment(note),key=JSON.stringify([valid.anchor.repository,valid.anchor.ref,valid.anchor.file,valid.id]);if(seen.has(key))throw new Error("Duplicate annotation in review file.");seen.add(key);return valid;});
+    const seen=new Set();return data.annotations.map(note=>{const valid=validateComment(note),key=JSON.stringify([...(valid.anchor.provider==='gitlab'?['gitlab']:[]),valid.anchor.repository,valid.anchor.ref,valid.anchor.file,valid.id]);if(seen.has(key))throw new Error("Duplicate annotation in review file.");seen.add(key);return valid;});
   }
-  function serializeSidecar(notes){return JSON.stringify({schemaVersion:1,annotations:parseSidecar(JSON.stringify({schemaVersion:1,annotations:notes})).sort((a,b)=>JSON.stringify([a.anchor.repository,a.anchor.ref,a.anchor.file,a.id])<JSON.stringify([b.anchor.repository,b.anchor.ref,b.anchor.file,b.id])?-1:JSON.stringify([a.anchor.repository,a.anchor.ref,a.anchor.file,a.id])>JSON.stringify([b.anchor.repository,b.anchor.ref,b.anchor.file,b.id])?1:0)},null,2)+"\n";}
+  function serializeSidecar(notes){return JSON.stringify({schemaVersion:1,annotations:parseSidecar(JSON.stringify({schemaVersion:1,annotations:notes})).sort((a,b)=>JSON.stringify([...(a.anchor.provider==='gitlab'?['gitlab']:[]),a.anchor.repository,a.anchor.ref,a.anchor.file,a.id])<JSON.stringify([...(b.anchor.provider==='gitlab'?['gitlab']:[]),b.anchor.repository,b.anchor.ref,b.anchor.file,b.id])?-1:JSON.stringify([...(a.anchor.provider==='gitlab'?['gitlab']:[]),a.anchor.repository,a.anchor.ref,a.anchor.file,a.id])>JSON.stringify([...(b.anchor.provider==='gitlab'?['gitlab']:[]),b.anchor.repository,b.anchor.ref,b.anchor.file,b.id])?1:0)},null,2)+"\n";}
   function receiptKey(note, user) {
     if (typeof user !== "string" || !MENTION.test(user)) throw new Error("Invalid review reader identity.");
     const normalized = validateComment(note);
     const anchor = normalized.anchor;
-    return JSON.stringify(["kicad-review-read-v1", user.toLowerCase(), anchor.repository, anchor.ref, anchor.file, normalized.id]);
+    return JSON.stringify(["kicad-review-read-v1", user.toLowerCase(), ...(anchor.provider==='gitlab'?['gitlab']:[]),anchor.repository, anchor.ref, anchor.file, normalized.id]);
   }
   function isUnread(note, receipt) {
     return typeof receipt !== "string" || !Number.isFinite(Date.parse(receipt)) ||

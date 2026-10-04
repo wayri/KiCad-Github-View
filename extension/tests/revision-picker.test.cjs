@@ -23,3 +23,9 @@ test('bounded listings expose commit and branch options without trusting markup'
  const h=harness(async m=>({ok:true,result:m.type==='revision-branches'?{repository:m.repository,branches:[{name:'<main>',sha:sha('a')}],warnings:['More branches omitted']}:{repository:m.repository,file:m.file,snapshotRef:sha('b'),commits:[{sha:sha('b'),message:'<script>alert(1)</script>',date:'2026-10-04'},{sha:sha('a'),message:'Previous'}],warnings:[]}}));
  await h.picker.populate();assert.ok(h.nodes.some(n=>n.tag==='option'&&n.textContent.includes('<script>')));assert.ok(h.nodes.some(n=>n.textContent.includes('More branches omitted')));assert.equal(h.nodes.find(n=>n['aria-label']==='base branch, tag or commit').value,sha('a'));
 });
+
+test('GitLab comparison preserves provider and nested namespaces',()=>{
+ const query=comparisonQuery({...request,provider:'gitlab',repository:'group/sub/design',headRepository:'group/sub/design'},sha('a'),sha('b'));
+ assert.equal(query.get('provider'),'gitlab');assert.equal(query.get('repository'),'group/sub/design');
+ assert.throws(()=>comparisonQuery({...request,repository:'group/sub/design'},sha('a'),sha('b')));
+});

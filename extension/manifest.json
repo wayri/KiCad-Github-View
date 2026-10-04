@@ -1,10 +1,11 @@
 {
   "manifest_version": 3,
-  "name": "KiCad Visual Review for GitHub",
-  "version": "0.11.3",
-  "description": "View KiCad schematics and PCB layouts directly on GitHub, with interactive revision comparisons and SPIKE 3D previews.",
+  "name": "KiCad Visual Review for GitHub and GitLab",
+  "version": "0.11.4",
+  "description": "Browser-only interactive KiCad schematic and PCB review on GitHub and public GitLab.com repositories.",
   "host_permissions": [
     "https://github.com/*",
+    "https://gitlab.com/*",
     "https://api.github.com/*"
   ],
   "background": {
@@ -14,7 +15,8 @@
   "content_scripts": [
     {
       "matches": [
-        "https://github.com/*"
+        "https://github.com/*",
+        "https://gitlab.com/*"
       ],
       "js": [
         "parsing.js",
@@ -33,7 +35,8 @@
         "project-viewer.html"
       ],
       "matches": [
-        "https://github.com/*"
+        "https://github.com/*",
+        "https://gitlab.com/*"
       ]
     }
   ],
@@ -57,7 +60,7 @@
       "suggested_key": {
         "default": "Alt+Shift+K"
       },
-      "description": "Focus the inline KiCad viewer on GitHub"
+      "description": "Focus the inline KiCad viewer"
     }
   },
   "permissions": [

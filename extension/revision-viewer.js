@@ -4,8 +4,9 @@
 
 (() => {
 
-  const params=new URLSearchParams(location.search),repository=params.get('repository'),ref=params.get('ref'),rootFile=params.get('file');
+  const params=new URLSearchParams(location.search),repository=params.get('repository'),rootFile=params.get('file');let ref=params.get('ref');
 
+  const provider=params.get('provider')||'github',providerContext=provider==='gitlab'?{provider}:{};const send=message=>chrome.runtime.sendMessage({...message,...providerContext});
   const status=document.getElementById('status'),pcb=/\.kicad_pcb$/i.test(rootFile||'');
 
   let dark=pcb,workspace=null,canvas=null,scene=null,disposed=false,applying=false,crossApplying=false,lastView='',lastFile='';
@@ -22,17 +23,18 @@
 
   async function start(){
 
-    if(!KiCadBrowserData.validRepository(repository)||!KiCadBrowserData.validRef(ref)||!KiCadBrowserData.validPath(rootFile))throw new Error('Invalid GitHub design location.');
+    if(!KiCadBrowserData.validRepository(repository,provider)||!KiCadBrowserData.validRef(ref)||!KiCadBrowserData.validPath(rootFile))throw new Error('Invalid GitHub design location.');
 
     const kind=document.body.dataset.viewer;if(kind&&kind!=='auto'&&kind!==(pcb?'pcb':'schematic'))throw new Error('This file belongs in the other dedicated viewer.');
 
-    const reply=await chrome.runtime.sendMessage({type:'project',repository,ref,file:rootFile});
+    if(provider==='gitlab'&&!/^[a-f0-9]{40}$/i.test(ref)){const resolved=await send({type:'revision-resolve',repository,ref,file:rootFile});if(!resolved?.ok||!/^[a-f0-9]{40}$/i.test(resolved.result?.sha||''))throw new Error(resolved?.error||'GitLab revision could not be resolved.');ref=resolved.result.sha;}
+    const reply=await send({type:'project',repository,ref,file:rootFile});
 
     if(!reply?.ok)throw new Error(reply?.error||'Could not retrieve the KiCad project.');
 
     const files=reply.result;if(!Array.isArray(files)||!files.some(file=>file.path===rootFile))throw new Error('No KiCad file at this revision.');
 
-    const preferenceKey=JSON.stringify(['kicad-review-preferences',repository,rootFile]);
+    const preferenceKey=JSON.stringify(['kicad-review-preferences',...(provider==='gitlab'?['gitlab']:[]),repository,rootFile]);
 
     let preferences={uiTheme:pcb?'dark':'light',drawingTheme:pcb?'dark':'light',rulerUnits:'mm'};
 
@@ -138,7 +140,7 @@
 
     }
 
-    workspace=KiCadReviewWorkspace.mount({files,repository,ref,rootFile,pcb,getCanvas:()=>canvas,currentFile,focus,openSheet,getRulerUnits:()=>preferences.rulerUnits,
+    workspace=KiCadReviewWorkspace.mount({files,repository,provider,ref,rootFile,pcb,getCanvas:()=>canvas,currentFile,focus,openSheet,getRulerUnits:()=>preferences.rulerUnits,
 
       getDesigns:()=>designs,updateDiagnostics,
       onSelection(selection){if(crossApplying||!globalThis.KiCadPairedReview?.validSelection(selection))return;if(globalThis.KiCadVSCodeBridge?.selection)globalThis.KiCadVSCodeBridge.selection(selection);else parent.postMessage({type:'kicad-review:selection',selection},ownOrigin);},
@@ -198,7 +200,7 @@
 
         try{const engine=await load();if(disposed)return;pane.hidden=false;canvas.canvas.hidden=true;
 
-          scene=engine.mountBoard3D(pane,files.find(file=>file.path===rootFile).content,{dark,boardPath:rootFile,loadAsset:async path=>{const result=await chrome.runtime.sendMessage({type:'repo-asset',repository,ref,file:path});if(!result?.ok)throw new Error(result?.error||'Repository model unavailable.');return result.result;},onSelect:record=>workspace?.select3D(record),onComment:record=>workspace?.comment3D(record)});
+          scene=engine.mountBoard3D(pane,files.find(file=>file.path===rootFile).content,{dark,boardPath:rootFile,loadAsset:async path=>{const result=await send({type:'repo-asset',repository,ref,file:path});if(!result?.ok)throw new Error(result?.error||'Repository model unavailable.');return result.result;},onSelect:record=>workspace?.select3D(record),onComment:record=>workspace?.comment3D(record)});
 
           workspace.setScene(scene);$('drawingLegend').hidden=true;lock(true);mode.setAttribute('aria-pressed','true');if($('renderMode'))$('renderMode').textContent='3D';
 

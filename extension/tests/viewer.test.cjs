@@ -189,3 +189,13 @@ test('invalid same-kind companion is rejected without making a frame',()=>{
  assert.equal(view.get('pairDrawing').children.length,0);
  assert.match(view.get('status').textContent,/Invalid companion/);
 });
+
+
+test('GitLab inline shell resolves branch commits before creating provider-bound drawing frames',async()=>{
+ const sha='c'.repeat(40),view=viewer({provider:'gitlab',repository:'group/sub/board',head:'feature/pcb',file:'board.kicad_pcb'},message=>({ok:true,result:{repository:message.repository,sha}}));
+ assert.equal(view.get('headDrawing').children.length,0);await tick();
+ assert.equal(view.calls[0].provider,'gitlab');assert.equal(view.calls[0].type,'revision-resolve');assert.equal(view.calls[0].ref,'feature/pcb');
+ const frame=view.get('headDrawing').children[0],query=new URL(frame.src).searchParams;
+ assert.equal(query.get('provider'),'gitlab');assert.equal(query.get('ref'),sha);assert.equal(query.get('repository'),'group/sub/board');
+ assert.equal(view.get('sourceLink').textContent,'GitLab source');assert.match(view.get('sourceLink').href,/gitlab.com\/group\/sub\/board\/-\/blob/);
+});

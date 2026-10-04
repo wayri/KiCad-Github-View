@@ -90,3 +90,13 @@ test('read receipts are per reader and revision; sorting age and read filters ar
   assert.deepEqual(comments.sortAndFilter([older,newer],{state:'skipped',query:'@alice'},()=>undefined),[]);
   assert.throws(() => comments.receiptKey(newer,'<bad>'), /reader/);
 });
+
+test('GitLab scopes preserve provider and subgroups while separating review receipts and import identities',()=>{
+ const github=sample(),gitlab={...sample(),anchor:{...sample().anchor,provider:'gitlab'}};
+ assert.equal(comments.normalizeScope({...gitlab.anchor,repository:'group/sub/project'}).repository,'group/sub/project');
+ assert.throws(()=>comments.normalizeScope({...github.anchor,repository:'group/sub/project'}));
+ assert.notEqual(comments.receiptKey(github,'alice'),comments.receiptKey(gitlab,'alice'));
+ assert.equal(comments.parseComments(comments.exportComments([github,gitlab])).length,2);
+ assert.equal(comments.parseSidecar(comments.serializeSidecar([github,gitlab])).length,2);
+ assert.throws(()=>comments.normalizeScope({...gitlab.anchor,provider:'unknown'}));
+});

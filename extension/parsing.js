@@ -1,4 +1,4 @@
-/* Shared, side-effect-free GitHub route parsing. */
+/* Shared, side-effect-free Git host route parsing. */
 ((root) => {
   "use strict";
   const filePattern = /(?:\.kicad_(?:sch|pcb|pro|prl|dru|wks)|\.(?:gbr|ger|gerber|gtl|gbl|gts|gbs|gto|gbo|gtp|gbp|gko|gm\d+|g\d+|drl|xln|html?)|(?:^|\/)(?:fp|sym)-lib-table)$/i;
@@ -8,6 +8,16 @@
   function route(url) {
     let parsed;
     try { parsed = new URL(url); } catch { return null; }
+    if (parsed.origin === "https://gitlab.com") {
+      const parts = parsed.pathname.split("/").filter(Boolean);
+      const delimiter = parts.indexOf("-");
+      if (delimiter < 2 || parts[delimiter + 1] !== "blob") return null;
+      const namespace = parts.slice(0, delimiter).map(decodeSegment);
+      const tail = parts.slice(delimiter + 2).map(decodeSegment);
+      if (!namespace.every((part) => part && ownerPattern.test(part)) || tail.length < 2 ||
+          !tail.every(Boolean) || !filePattern.test(tail.at(-1))) return null;
+      return { kind: "blob", provider: "gitlab", repository: namespace.join("/"), tail };
+    }
     if (parsed.origin !== "https://github.com") return null;
     const pieces = parsed.pathname.split("/").filter(Boolean);
     if (pieces.length < 4 || !ownerPattern.test(pieces[0]) || !repoPattern.test(pieces[1])) return null;
@@ -66,10 +76,13 @@
     if (!parsedRoute || parsedRoute.kind !== "blob") return null;
     if (embedded && filePath(embedded.file) && typeof embedded.head === "string" && embedded.head) {
       const tail = parsedRoute.tail.join("/");
-      if (tail.endsWith("/" + embedded.file)) {
-        return { repository: parsedRoute.repository, file: embedded.file, head: embedded.head };
+      if (tail.endsWith("/" + embedded.file) && (parsedRoute.provider !== "gitlab" ||
+          tail === `${embedded.head}/${embedded.file}` && embedded.repository === parsedRoute.repository)) {
+        return { repository: parsedRoute.repository, file: embedded.file, head: embedded.head,
+          ...(parsedRoute.provider ? { provider: parsedRoute.provider } : {}) };
       }
     }
+    if (parsedRoute.provider === "gitlab") return null;
     // The URL alone cannot disambiguate a slash in a branch name from a folder.
     // The common one-segment ref is a useful fallback when GitHub's embedded data is absent.
     const file = filePath(parsedRoute.tail.slice(1).join("/"));
@@ -84,6 +97,7 @@
       oldFile: request.oldFile || request.file,
       head: request.head
     });
+    if (request.provider === "gitlab") params.set("provider", "gitlab");
     if (request.base) params.set("base", request.base);
     if (request.status === "added" || request.status === "removed") params.set("status", request.status);
     if (request.pullNumber !== undefined || request.pullRepository !== undefined) {

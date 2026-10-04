@@ -52,7 +52,7 @@ function find(node, predicate) { return walk(node).find(predicate); }
 function fixture(url, { pull = false, initialHidden = false, delayedCard = false,
   draft = false, draftValue = '', draftTitle = false, titleValue = '',
   draftBody = 'Review note for U3', draftHeading = '[Major] KiCad review: U3',
-  headRepository = 'owner/repo' } = {}) {
+  headRepository = 'owner/repo', gitlabBlob = null } = {}) {
   const body = new Node('body'), main = new Node('main'); body.append(main);
   let source, card, header, comments, pathNode;
   const makeCard = () => {
@@ -82,6 +82,8 @@ function fixture(url, { pull = false, initialHidden = false, delayedCard = false
     createElement: (tag) => new Node(tag),
     querySelector: (selector) => {
       if (selector === 'main') return main;
+      if (selector === '#js-view-blob-app,#js-repository-blob-header-app') return gitlabBlob ? {dataset:gitlabBlob} : null;
+      if (selector === '#blob-content-holder,.blob-viewer') return source?.isConnected ? source : null;
       if (selector.includes('textarea[name="comment[body]"]') || selector.includes('textarea[name="discussion[body]"]')) return textarea;
       if (selector.includes('input[name="discussion[title]"]')) return titleInput;
       if (!pull && selector.includes('.react-code-file-contents')) return source?.isConnected ? source : null;
@@ -414,4 +416,28 @@ test('PR files view never claims a conversation draft into a diff textarea', asy
   ui.tick();
   assert.equal(ui.textarea.value, '');
   assert.deepEqual(ui.messages.map((item) => item.type), ['githubPull', 'githubFiles']);
+});
+
+
+test('GitLab blob preview mounts at the native source and preserves namespace/ref metadata', () => {
+  const ui = fixture('https://gitlab.com/group/subgroup/board/-/blob/feature/power/design/root.kicad_sch', {
+    gitlabBlob:{projectPath:'group/subgroup/board',blobPath:'design/root.kicad_sch',originalBranch:'feature/power'}
+  });
+  const frame = find(ui.body, node => node.tag === 'iframe');
+  assert.ok(frame);
+  const params = new URL(frame.src).searchParams;
+  assert.equal(params.get('provider'),'gitlab');
+  assert.equal(params.get('repository'),'group/subgroup/board');
+  assert.equal(params.get('head'),'feature/power');
+  assert.equal(params.get('file'),'design/root.kicad_sch');
+  frame.dispatch('load');
+  assert.equal(ui.source.hidden, true);
+  ui.location.href = 'https://gitlab.com/group/subgroup/board';
+  ui.tick();
+  assert.equal(ui.source.hidden, false);
+});
+
+test('GitLab blob URL without matching authoritative metadata never guesses a ref', () => {
+  const ui = fixture('https://gitlab.com/group/board/-/blob/feature/power/root.kicad_sch');
+  assert.equal(find(ui.body,node=>node.tag==='iframe'),undefined);
 });

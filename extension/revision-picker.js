@@ -1,11 +1,11 @@
-/* Read-only GitHub branch/file-history picker. Repository identities never come from dropdown labels. */
+/* Read-only Git host branch/file-history picker. Repository identities never come from dropdown labels. */
 ((root)=>{
   'use strict';
   const data=root.KiCadBrowserData||(typeof require==='function'?require('./browser-data.js'):null),SHA=/^[0-9a-f]{40}$/i;
   function comparisonQuery(request,base,head){
-    if(!data.validRepository(request.repository)||!data.validRepository(request.headRepository)||!data.validPath(request.file)||!data.validPath(request.oldFile||request.file)||!SHA.test(head)||base&&!SHA.test(base))throw new Error('Invalid comparison location or unresolved revision.');
+    if(!data.validRepository(request.repository,request.provider)||!data.validRepository(request.headRepository,request.provider)||!data.validPath(request.file)||!data.validPath(request.oldFile||request.file)||!SHA.test(head)||base&&!SHA.test(base))throw new Error('Invalid comparison location or unresolved revision.');
     const params=new URLSearchParams({repository:base?request.repository:request.headRepository,headRepository:request.headRepository,file:request.file,oldFile:base?(request.oldFile||request.file):request.file,head,status:base&&request.oldFile&&request.oldFile!==request.file?'renamed':'modified'});
-    if(base)params.set('base',base);
+    if(request.provider==='gitlab')params.set('provider','gitlab');if(base)params.set('base',base);
     // PR viewers use their existing merge-base comparison and do not mount this picker.
     if(request.pullNumber)throw new Error('Manual revision comparison is separate from the pull-request review.');
     return params;
@@ -25,7 +25,7 @@
     const status=make('p');status.setAttribute('role','status');panel.append(status);options.holder.append(detail);
     const tell=text=>{status.textContent=text;};
     const busy=value=>{load.disabled=compare.disabled=view.disabled=value;};
-    const send=async(type,row,ref)=>{const response=await options.send({type,repository:row.repository,ref,file:row.file});if(!response?.ok)throw new Error(response?.error||'GitHub history unavailable.');const result=response.result;if(result?.repository!==row.repository)throw new Error('Revision response repository does not match.');return result;};
+    const send=async(type,row,ref)=>{const response=await options.send({type,...(request.provider==='gitlab'?{provider:'gitlab'}:{}),repository:row.repository,ref,file:row.file});if(!response?.ok)throw new Error(response?.error||'Repository history unavailable.');const result=response.result;if(result?.repository!==row.repository)throw new Error('Revision response repository does not match.');return result;};
     async function populate(){
       const ticket=++epoch;busy(true);tell('Loading bounded branch lists and file history…');
       try{
@@ -45,7 +45,7 @@
     }
     async function openComparison(withBase){
       const ticket=++epoch;busy(true);tell('Resolving selected refs to immutable commits…');
-      try{const values={};for(const side of withBase?['base','head']:['head']){const row=rows[side],ref=row.input.value.trim();if(!data.validRef(ref))throw new Error(`Enter a ${side} branch, tag or commit.`);const result=await send('revision-resolve',row,ref);if(!SHA.test(result.sha))throw new Error('GitHub returned an unresolved revision.');values[side]=result.sha;}
+      try{const values={};for(const side of withBase?['base','head']:['head']){const row=rows[side],ref=row.input.value.trim();if(!data.validRef(ref))throw new Error(`Enter a ${side} branch, tag or commit.`);const result=await send('revision-resolve',row,ref);if(!SHA.test(result.sha))throw new Error('The Git host returned an unresolved revision.');values[side]=result.sha;}
         if(disposed||ticket!==epoch)return;options.navigate(comparisonQuery(request,values.base||null,values.head));
       }catch(error){if(!disposed&&ticket===epoch)tell(error.message);}finally{if(ticket===epoch)busy(false);}
     }

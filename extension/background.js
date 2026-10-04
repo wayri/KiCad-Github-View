@@ -1,6 +1,6 @@
 "use strict";
 
-importScripts("parsing.js", "browser-data.js", "review-comments.js", "review-file-store.js", "github-review-api.js");
+importScripts("parsing.js", "browser-data.js", "review-comments.js", "review-file-store.js", "github-review-api.js", "gitlab-provider.js");
 
 const SHA = /^[0-9a-f]{40}$/i;
 const REPOSITORY = /^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/;
@@ -340,7 +340,7 @@ async function githubFiles(repository, number, expectedFiles) {
 function senderAllowed(sender) {
   if (sender?.id !== chrome.runtime.id) return false;
   try {
-    if (new URL(sender.url).origin === "https://github.com") return true;
+    if (["https://github.com", "https://gitlab.com"].includes(new URL(sender.url).origin)) return true;
   } catch { return false; }
   const page = sender.url?.split(/[?#]/, 1)[0];
   return page === chrome.runtime.getURL("revision-viewer.html") ||
@@ -365,8 +365,8 @@ function optionsSender(sender) {
 
 const commentLocks = new Map();
 function commentKey(scope) {
-  const { repository, ref, file } = KiCadReviewComments.normalizeScope(scope);
-  return `review-comments:${JSON.stringify([repository.toLowerCase(), ref, file])}`;
+  const { repository, ref, file, provider } = KiCadReviewComments.normalizeScope(scope);
+  return `${provider === 'gitlab' ? 'review-comments:gitlab:' : 'review-comments:'}${JSON.stringify([repository.toLowerCase(), ref, file])}`;
 }
 function withCommentLock(key, task) {
   const previous = commentLocks.get(key) || Promise.resolve();
@@ -376,7 +376,7 @@ function withCommentLock(key, task) {
   return work;
 }
 async function commentList(scope) {
-  if ((await KiCadReviewFileStore.status()).connected) {
+  if (scope.provider !== 'gitlab' && (await KiCadReviewFileStore.status()).connected) {
     const key = commentKey(scope);
     return withCommentLock(key, async () => (await KiCadReviewFileStore.read()).filter((note) =>
       commentKey(note.anchor) === key));
@@ -389,7 +389,7 @@ async function commentList(scope) {
 }
 async function commentSave(value, expectedUpdatedAt) {
   const note = KiCadReviewComments.validateComment(value), key = commentKey(note.anchor);
-  if ((await KiCadReviewFileStore.status()).connected) {
+  if (note.anchor.provider !== 'gitlab' && (await KiCadReviewFileStore.status()).connected) {
     return withCommentLock(key, () => KiCadReviewFileStore.save(note, expectedUpdatedAt));
   }
   return withCommentLock(key, async () => {
@@ -411,7 +411,7 @@ async function commentSave(value, expectedUpdatedAt) {
 async function commentDelete(scope, id) {
   const key = commentKey(scope);
   if (typeof id !== "string" || !/^[A-Za-z0-9_-]{1,100}$/.test(id)) throw new Error("Invalid comment id.");
-  if ((await KiCadReviewFileStore.status()).connected) {
+  if (scope.provider !== 'gitlab' && (await KiCadReviewFileStore.status()).connected) {
     return withCommentLock(key, () => KiCadReviewFileStore.remove(scope, id));
   }
   return withCommentLock(key, async () => {
@@ -593,6 +593,10 @@ async function openFromAction(tab) {
   if (!Number.isInteger(tab?.id) || typeof tab.url !== "string") return;
   let page;
   try { page = new URL(tab.url); } catch { return; }
+  if (page.origin === "https://gitlab.com") {
+    if (page.pathname.includes('/-/blob/')) await chrome.tabs.sendMessage(tab.id, { type: 'focusInline' }).catch(() => {});
+    return;
+  }
   if (page.origin !== "https://github.com") return;
   const path = page.pathname.split("/").filter(Boolean);
   if (path.length >= 4 && /^[A-Za-z0-9_.-]+$/.test(path[0]) && /^[A-Za-z0-9_.-]+$/.test(path[1]) &&
@@ -609,9 +613,75 @@ async function openFromAction(tab) {
 
 chrome.action.onClicked.addListener((tab) => { openFromAction(tab).catch(() => {}); });
 
+const gitlabAssetBudgets = new Map();
+async function gitlabDispatch(message, sender) {
+  const api=globalThis.KiCadGitLabProvider;
+  const {repository,ref,file}=message;
+  if (!viewerSender(sender) && message.type !== 'project') throw new Error('Only extension viewers can use GitLab repository tools.');
+  if (optionsSender(sender)) throw new Error('Options cannot load GitLab projects.');
+  switch(message.type) {
+    case 'project': {
+      const snapshot=await api.resolve(repository,ref,file);
+      return KiCadBrowserData.loadProject(repository,snapshot.sha,file,api.file,api.directory,'gitlab');
+    }
+    case 'project-inventory': return api.inventory(repository,ref,file);
+    case 'project-file': return api.projectFile(repository,ref,file);
+    case 'project-search-files': return api.search(repository,ref,file);
+    case 'revision-resolve': return api.resolve(repository,ref,file);
+    case 'revision-branches': return api.branches(repository,ref,file);
+    case 'revision-commits': return api.commits(repository,ref,file);
+    case 'design-changes': return api.compare(repository,message.base,message.head,file);
+    case 'drawing-files': {
+      const snapshot=await api.resolve(repository,ref,file);
+      return {files:await api.directory(repository,snapshot.sha,file.split('/').slice(0,-1).join('/'),true),warnings:[]};
+    }
+    case 'rule-report': {
+      const snapshot=await api.resolve(repository,ref,file);
+      if (!api.validPath(message.reportPath)||!message.reportPath.endsWith('.json')||!KiCadBrowserData.validPath(file)) throw new Error('Invalid GitLab report path.');
+      const result=await api.response(`${api.endpoint(repository)}/files/${encodeURIComponent(message.reportPath)}/raw?ref=${encodeURIComponent(snapshot.sha)}`,4*1024*1024);
+      if (!result) throw new Error('Report was not found at this revision.');
+      return {content:new TextDecoder().decode(result.bytes),path:message.reportPath};
+    }
+    case 'repo-asset': {
+      if(!api.validRepository(repository)||!validAssetRef(ref)||!validAssetPath(file))throw new Error('Invalid GitLab model location.');
+      const key=repository.toLowerCase()+':'+ref,now=Date.now();let budget=gitlabAssetBudgets.get(key);
+      if(!budget||budget.resetAt<=now)budget={requests:0,bytes:0,resetAt:now+300000};
+      if(budget.requests>=32||budget.bytes>=32*1024*1024)throw new Error('The 3D model retrieval budget was reached; retry after five minutes.');
+      budget.requests++;gitlabAssetBudgets.set(key,budget);if(gitlabAssetBudgets.size>128)gitlabAssetBudgets.delete(gitlabAssetBudgets.keys().next().value);
+      const result=await api.response(`${api.endpoint(repository)}/files/${encodeURIComponent(file)}/raw?ref=${encodeURIComponent(ref)}`,8*1024*1024);
+      if(!result)throw new Error('GitLab model was not found at this revision.');
+      if(budget.bytes+result.bytes.length>32*1024*1024)throw new Error('Revision model retrieval budget exceeded.');budget.bytes+=result.bytes.length;
+      let binary='';for(let i=0;i<result.bytes.length;i+=8192)binary+=String.fromCharCode(...result.bytes.subarray(i,i+8192));
+      return {base64:btoa(binary),mediaType:file.toLowerCase().endsWith('.glb')?'model/gltf-binary':'model/vrml'};
+    }
+    case 'open-project-overview':
+    case 'open-viewer-window': {
+      if(!api.validRepository(repository)||!KiCadBrowserData.validRef(ref)||!KiCadGitHub.filePath(file))throw new Error('Invalid GitLab viewer location.');
+      const project=message.type==='open-project-overview';
+      if(!project&&!KiCadBrowserData.validPath(file))throw new Error('Invalid drawing file.');
+      if(message.pairedFile!==undefined&&(!KiCadBrowserData.validPath(message.pairedFile)||/\.kicad_pcb$/i.test(message.pairedFile)===/\.kicad_pcb$/i.test(file)))throw new Error('Paired drawing must be the opposite file type.');
+      const query=new URLSearchParams({provider:'gitlab',repository,...(project?{ref}:{head:ref}),file,...(message.pairedFile?{pairedFile:message.pairedFile}:{})});
+      const window=await chrome.windows.create({url:chrome.runtime.getURL(project?'project-viewer.html':'browser-viewer.html')+'?'+query,type:'popup',state:'maximized'});
+      return {windowId:window?.id??null};
+    }
+    case 'comment-list': return commentList({...message,provider:'gitlab'});
+    case 'comment-save': return commentSave({...message.comment,anchor:{...message.comment?.anchor,provider:'gitlab'}},message.expectedUpdatedAt);
+    case 'comment-delete': return commentDelete({...message,provider:'gitlab'},message.id);
+    case 'comment-store-status': return {connected:false,provider:'gitlab',localOnly:true};
+    case 'open-options': await chrome.runtime.openOptionsPage();return {opened:true};
+    default: throw new Error('GitLab authentication, remote comments, issues and merge-request integration are not available yet. Public viewing and local annotations are supported.');
+  }
+}
+
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (!(senderAllowed(sender) || optionsSender(sender)) || !message || typeof message !== "object") return false;
   (async () => {
+    if (message.provider !== undefined && !['github','gitlab'].includes(message.provider)) throw new Error('Unsupported repository provider.');
+    let senderOrigin;try{senderOrigin=new URL(sender.url).origin;}catch{}
+    if(senderOrigin==='https://gitlab.com'&&message.provider!=='gitlab')throw new Error('GitLab pages must specify the GitLab provider.');
+    if(senderOrigin==='https://github.com'&&message.provider==='gitlab')throw new Error('Repository provider does not match the host page.');
+    if(message.provider==='gitlab')return gitlabDispatch(message,sender);
+    if(message.comment?.anchor?.provider==='gitlab')throw new Error('GitLab annotations must use the GitLab provider.');
     switch (message.type) {
       case "github-auth-status":
         if (!viewerSender(sender) && !optionsSender(sender)) throw new Error("Only extension pages can inspect GitHub settings.");

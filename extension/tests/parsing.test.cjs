@@ -53,3 +53,19 @@ test('inline project and fabrication routes accept supported files without widen
  for(const file of ['../top.gbr','C:/top.gbr','x\u0000.gbr','a/../top.gbr','notes.json','top.gbr.exe'])assert.equal(filePath(file),null);
  assert.equal(require('../browser-data.js').validPath('board.kicad_pro'),false);
 });
+
+
+test('GitLab nested namespaces use authoritative blob data for slash refs', () => {
+  const parsed = route('https://gitlab.com/group/subgroup/board/-/blob/feature/power/design/root.kicad_sch?ref_type=heads');
+  assert.deepEqual(parsed, {kind:'blob', provider:'gitlab', repository:'group/subgroup/board',
+    tail:['feature','power','design','root.kicad_sch']});
+  assert.equal(blobRequest(parsed, null), null, 'URL and ref_type cannot disambiguate branch and folders');
+  const info = blobRequest(parsed, {repository:'group/subgroup/board', head:'feature/power', file:'design/root.kicad_sch'});
+  assert.equal(info.provider, 'gitlab');
+  assert.equal(viewerParams(info).get('provider'), 'gitlab');
+  assert.equal(blobRequest(parsed, {repository:'wrong/board',head:'feature/power',file:'design/root.kicad_sch'}), null);
+  assert.equal(blobRequest(parsed, {repository:'group/subgroup/board',head:'main',file:'design/root.kicad_sch'}), null);
+  assert.equal(route('https://gitlab.example.com/group/board/-/blob/main/root.kicad_sch'), null);
+  assert.equal(route('https://gitlab.com/group/board/-/merge_requests/1/diffs'), null);
+  assert.equal(route('https://gitlab.com/group/%2Fboard/-/blob/main/root.kicad_sch'), null);
+});

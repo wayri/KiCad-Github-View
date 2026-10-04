@@ -1,11 +1,12 @@
 /* Browser-only project retrieval helpers. No renderer or server dependency. */
 ((root) => {
   "use strict";
-  const repositoryPattern = /^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/;
+  const repositoryPattern = /^[A-Za-z0-9_.-]+(?:\/[A-Za-z0-9_.-]+)+$/;
   const filePattern = /\.kicad_(?:sch|pcb)$/i;
 
-  function validRepository(value) {
-    return typeof value === 'string' && repositoryPattern.test(value) &&
+  function validRepository(value, provider = "github") {
+    return typeof value === 'string' && value.length <= 500 && repositoryPattern.test(value) &&
+      (provider === 'gitlab' || provider === 'github' && value.split('/').length === 2) &&
       value.split('/').every((part) => part !== '.' && part !== '..');
   }
   function validRef(value) {
@@ -62,8 +63,8 @@
   return names;
 }
 
-  async function loadProject(repository, ref, file, readFile, listDirectory = null) {
-    if (!validRepository(repository) || !validPath(file) || !validRef(ref)) {
+  async function loadProject(repository, ref, file, readFile, listDirectory = null, provider = "github") {
+    if (!validRepository(repository, provider) || !validPath(file) || !validRef(ref)) {
       throw new Error("Invalid GitHub project location.");
     }
     const cache = new Map(), encoder = new TextEncoder();

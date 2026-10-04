@@ -67,3 +67,7 @@ Version 0.11.0 adds BOM / Stats, variant-aware DNP highlighting, source-bound bo
 Version 0.11.1 refines project setup into grouped read-only forms, typed values and net-class/stackup tables. Releases now include verified download packages and tag-driven GitHub publication; see [releasing](../docs/RELEASING.md).
 
 Version 0.11.2 opens PCB drawings from the project tree, provides saved layer details when physical stackup is absent, and simplifies project/schematic hierarchy navigation.
+
+## GitLab.com
+
+Public GitLab.com repository file previews and manual branch/commit comparisons are supported, including subgroup namespaces. GitLab annotations are local and exportable; remote publication, account login, merge-request cards and self-hosted instances are not included. See [Git host compatibility](../docs/GIT-HOSTS.md). Reload the extension after updating to enable its GitLab.com permission.

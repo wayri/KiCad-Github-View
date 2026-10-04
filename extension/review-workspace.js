@@ -120,7 +120,8 @@
     const $ = (id) => document.getElementById(id);
     const make = (tag, text) => { const node = document.createElement(tag); if (text !== undefined) node.textContent = String(text); return node; };
     const button = (text, handler) => { const node = make("button", text); node.type = "button"; node.onclick = handler; return node; };
-    const request = async (type, extra = {}) => { const reply = await chrome.runtime.sendMessage({type, ...extra}); if (!reply?.ok) throw new Error(reply?.error || "The extension could not complete this request."); return reply.result; };
+    const provider=options.provider||'github',providerContext=provider==='gitlab'?{provider}:{};
+    const request = async (type, extra = {}) => { const reply = await chrome.runtime.sendMessage({type, ...extra,...providerContext}); if (!reply?.ok) throw new Error(reply?.error || "The extension could not complete this request."); return reply.result; };
     let config = null, model = KiCadDesignModel.buildProject(files), objects = KiCadDesignModel.applyVariant(model, "default");
     let pointerWorld=null;
     const collapsedSheets = new Set(),sheetVisits=sheetHistory();
@@ -130,10 +131,10 @@
     let navigation=null,highlightObjects=[],pinnedNets=new Map(),pinnedClasses=new Map(),connectionCursor=-1,activeConnection=null,classConfig=null;
     let netModel={nets:[],warnings:[]}, selectedNet=null, netFilterObject=null, navigatorTab="parts", netSource=null;
     let measureMode = false, measurePoints = [], measurePreview=null, rulerSnap=null, boardMeasure=null, scene = null, attach = null, nativePick = null, rightDown = null,commentMode=null,areaStart=null,areaEnd=null,ignoreClick=false;
-    const variantKey = JSON.stringify(["kicad-review-variants", repository, rootFile]);
+    const variantKey = JSON.stringify(["kicad-review-variants", ...(provider==='gitlab'?['gitlab']:[]),repository, rootFile]);
     function notice(message) { $("reviewNotice").textContent = message; $("reviewNotice").hidden = !message; options.updateDiagnostics?.(); }
     function commentStatus(message, error = false) { $("commentStatus").textContent = message; $("commentStatus").classList.toggle("error", error); }
-    async function refreshCommentPolicy() {
+    async function refreshCommentPolicy() {if(provider==='gitlab'){policyStatus={allowed:false};$('commentPolicyStatus').textContent='GitLab notes are saved in this browser and can be exported to a Git-controlled review file. GitLab account login and issue publication are not available yet.';return;}
       $("commentPolicyStatus").textContent="Checking repository comment policy…";
       $("refreshCommentPolicy").disabled=true;
       try {
@@ -387,7 +388,7 @@
       if (selected) selected = objects.find((item) => item.id === selected.id) || null;
       variants();
     }
-    function scope(file = currentFile() || rootFile) { return {repository, ref, file}; }
+    function scope(file = currentFile() || rootFile) { return {repository, ref, file,...providerContext}; }
     function anchor(position = null, object = selected) {
       const value = {...scope(object?.path), variant, ...(object?.uuid ? {uuid:object.uuid} : {}),
         ...(object?.id && object.id.length <= 200 ? {objectId:object.id} : {}), ...(object?.reference ? {reference:object.reference} : {}),
@@ -470,11 +471,11 @@
         actions.append(button("Locate",()=>{if(note.anchor.file!==currentFile())openSheet(note.anchor.file,note.anchor.position);else if(note.anchor.position)focus(note.anchor.position);inspector("comments");}),
           button(unread?"Mark read":"Mark unread",()=>markRead(note,unread)));
         if(note.github){const link=make("a","Open GitHub thread");link.href=note.github.url;link.target="_blank";link.rel="noopener noreferrer";actions.append(link);}
-        else {const draft=button("Open GitHub composer",async()=>{try{await request("open-comment-draft",draftOptions(note));commentStatus("GitHub composer opened with the annotation and severity. Review and submit it there.");}catch(error){commentStatus(error.message,true);}});draft.className="github-draft-action";actions.append(button("Edit",()=>editComment(note)),draft,
+        else {const draft=button("Open GitHub composer",async()=>{try{await request("open-comment-draft",draftOptions(note));commentStatus("GitHub composer opened with the annotation and severity. Review and submit it there.");}catch(error){commentStatus(error.message,true);}});draft.className="github-draft-action";draft.hidden=provider==='gitlab';actions.append(button("Edit",()=>editComment(note)),draft,
           button("Delete",async()=>{try{await request("comment-delete",{...scope(note.anchor.file),id:note.id});await refreshComments();options.onCommentsChanged?.();commentStatus("Local comment deleted.");}catch(error){commentStatus(error.message,true);}}));
         }
         if(!note.github){for(const [state,label] of [["open","Open"],["skipped","Skip"],["resolved","Resolve"]])if((note.state||"open")!==state)actions.append(button(label,()=>setNoteState(note,state)));}
-        if(!note.github&&!root.KiCadVSCodeContext){const publish=button("Publish to GitHub",()=>publishNote(note,publish));publish.className="github-publish-action";publish.disabled=policyStatus?.allowed===false;if(publish.disabled)publish.title=policyStatus.reason||"Repository comment policy restricts publishing.";actions.append(publish);}
+        if(!note.github&&!root.KiCadVSCodeContext&&provider!=='gitlab'){const publish=button("Publish to GitHub",()=>publishNote(note,publish));publish.className="github-publish-action";publish.disabled=policyStatus?.allowed===false;if(publish.disabled)publish.title=policyStatus.reason||"Repository comment policy restricts publishing.";actions.append(publish);}
         if(!note.github){card.append(make("small",`State: ${note.state||"open"}${note.tags?.length?" · "+note.tags.join(", "):""}`));for(const ref of note.remoteRefs||[]){const link=make("a",`${ref.kind} #${ref.number}`);link.href=ref.url;link.target="_blank";link.rel="noopener noreferrer";card.append(link);}}
         if(note.capture){const image=make('img');image.src=note.capture.dataUrl;image.alt='Captured drawing area for this annotation';card.append(image);const download=make('a','Download screenshot');download.href=note.capture.dataUrl;download.download=`kicad-review-${note.id}.png`;actions.append(download);}
         card.append(actions);$("commentList").append(card);
@@ -654,7 +655,7 @@
     $("commentFile").onchange=async()=>{
       const file=$("commentFile").files?.[0];if(!file)return;let saved=0;
       try{if(file.size>1024*1024)throw new Error("Comment import exceeds 1 MiB.");const imported=KiCadReviewComments.parseComments(await file.text());
-        if(imported.some((note)=>note.anchor.repository!==repository||note.anchor.ref!==ref||!files.some((source)=>source.path===note.anchor.file)))throw new Error("These comments belong to another repository, revision, or drawing.");
+        if(imported.some((note)=>(note.anchor.provider||'github')!==provider||note.anchor.repository!==repository||note.anchor.ref!==ref||!files.some((source)=>source.path===note.anchor.file)))throw new Error("These comments belong to another repository, revision, or drawing.");
         for(const note of imported){await request("comment-save",{comment:note});saved++;}await refreshComments();if(saved)options.onCommentsChanged?.();commentStatus(`Imported ${saved} comments.`);
       }catch(error){await refreshComments();if(saved)options.onCommentsChanged?.();commentStatus(`${error.message}${saved?` ${saved} comments were saved before the error.`:""}`,true);}finally{$("commentFile").value="";}
     };
@@ -705,6 +706,7 @@
     $('fitHighlights').onclick=()=>{const canvas=getCanvas(),box=root.KiCadOwnedCanvas?.bounds([...canvas.netPrimitives||[]]);if(box){canvas.resize();const margin=Math.max(3,Math.max(box.w,box.h)*.1);canvas.viewport.camera.bbox={x:box.x-margin,y:box.y-margin,w:box.w+margin*2,h:box.h+margin*2};canvas.draw();}};
     $('previousConnection').onclick=()=>cycleConnection(-1);$('nextConnection').onclick=()=>cycleConnection(1);
     $('netClassSelect').onchange=renderNetClasses;
+    if(provider==='gitlab'){const hint=$('commentsPane').querySelector?.('p.hint');if(hint)hint.textContent='Notes are saved in this browser. Export them to a Git-controlled review file to share them. Read status belongs to this browser user.';for(const id of ['reviewSettings','refreshCommentPolicy','refreshGitHub','loadCategories','discussionCategoryLabel','threadNumberLabel'])$(id).hidden=true;$('commentDestination').parentElement.hidden=true;}
     $('sheetBack').onclick=()=>historySheet(-1);$('sheetForward').onclick=()=>historySheet(1);$('sheetUp').onclick=parentSheet;$('sheetHome').onclick=homeSheet;
     $('highlightNetClass').onclick=()=>{const name=$('netClassSelect').value;if(!classConfig||!name)return;const key=JSON.stringify([currentFile(),name]),existed=pinnedClasses.has(key);if(!$('multiHighlight').checked){pinnedNets.clear();pinnedClasses.clear();highlightObjects=[];selectedNet=null;}if(existed)pinnedClasses.delete(key);else if(pinnedClasses.size<64)pinnedClasses.set(key,{path:currentFile(),name});activeConnection=null;connectionCursor=-1;updateHighlights();renderNets();renderNetClasses();};
     root.KiCadUIIcons?.decorate();$("schematicLayersHint").hidden=pcb;showNavigator(matchMedia("(min-width:850px)").matches);variants();

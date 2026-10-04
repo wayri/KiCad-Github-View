@@ -48,11 +48,20 @@
   }
   function setStatus(node, message, error = false) { node.textContent = message; node.classList.toggle("error", error); }
   function embedded() {
+    if (location.href.startsWith("https://gitlab.com/")) {
+      // GitLab's server-rendered blob app exposes unambiguous ref and file data.
+      const app = document.querySelector("#js-view-blob-app,#js-repository-blob-header-app");
+      return app ? { repository: app.dataset.projectPath, file: app.dataset.blobPath,
+        head: app.dataset.originalBranch || app.dataset.ref } : null;
+    }
     return parse.embeddedBlobData([...document.querySelectorAll('script[type="application/json"]')]
       .filter((script) => script.dataset.target?.includes("embeddedData") || script.closest("react-app"))
       .map((script) => script.textContent));
   }
   function findBlobTarget() {
+    if (location.href.startsWith("https://gitlab.com/")) {
+      return document.querySelector("#blob-content-holder,.blob-viewer");
+    }
     return document.querySelector('.react-code-file-contents,[class*="CodeBlob-module__codeBlobInner"],'
       + '[data-testid="blob-viewer"],#blob-viewer,.blob-wrapper,[data-testid="code-viewer"],.js-code-view') ||
       document.querySelector("main table.highlight");
@@ -299,6 +308,7 @@
   addEventListener("popstate", check);
   addEventListener("turbo:load", check);
   addEventListener("pjax:end", check);
+  addEventListener("page:change", check);
   chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     if (sender.id !== chrome.runtime.id || !message || typeof message !== "object") return false;
     if (message.type === "viewerContext") {

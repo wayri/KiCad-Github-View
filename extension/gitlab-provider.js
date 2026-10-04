@@ -1,0 +1,49 @@
+/* Public GitLab.com transport. Credentials and arbitrary hosts are deliberately absent. */
+((root) => {
+  'use strict';
+  const MIB=1024*1024, SHA=/^[a-f0-9]{40}$/i;
+  const validRepository=value=>typeof value==='string'&&value.length<=300&&/^[A-Za-z0-9_.-]+(?:\/[A-Za-z0-9_.-]+)+$/.test(value)&&value.split('/').every(p=>p!=='.'&&p!=='..');
+  const validPath=value=>typeof value==='string'&&value.length<=500&&value.length>0&&!value.startsWith('/')&&!/[\\:\x00-\x1f\x7f]/.test(value)&&value.split('/').every(p=>p&&p!=='.'&&p!=='..');
+  function scope(repository,ref,file){if(!validRepository(repository)||!root.KiCadBrowserData.validRef(ref)||!validPath(file))throw new Error('Invalid GitLab project location.');}
+  function endpoint(repository){if(!validRepository(repository))throw new Error('Invalid GitLab repository.');return 'https://gitlab.com/api/v4/projects/'+encodeURIComponent(repository)+'/repository';}
+  async function response(url,limit=4*MIB){
+    if(!url.startsWith('https://gitlab.com/api/v4/projects/'))throw new Error('Invalid GitLab API endpoint.');
+    const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),30000);
+    try{const result=await fetch(url,{credentials:'omit',cache:'no-store',redirect:'error',signal:controller.signal});
+      if(result.status===404)return null;
+      if(!result.ok)throw new Error(`GitLab returned HTTP ${result.status}; only publicly accessible repositories are supported.`);
+      if(Number(result.headers.get('content-length'))>limit)throw new Error('GitLab response exceeds its size limit.');
+      const reader=result.body.getReader(),chunks=[];let length=0;
+      while(true){const {done,value}=await reader.read();if(done)break;length+=value.length;if(length>limit){await reader.cancel();throw new Error('GitLab response exceeds its size limit.');}chunks.push(value);}
+      const bytes=new Uint8Array(length);let offset=0;for(const chunk of chunks){bytes.set(chunk,offset);offset+=chunk.length;}
+      return {bytes,next:result.headers.get('x-next-page')||'',link:result.headers.get('link')||''};
+    }catch(error){if(error.name==='AbortError')throw new Error('GitLab retrieval timed out.');throw error;}finally{clearTimeout(timer);}
+  }
+  async function json(url){const result=await response(url);if(!result)throw new Error('Public GitLab resource was not found.');return {...result,value:JSON.parse(new TextDecoder().decode(result.bytes))};}
+  async function file(repository,ref,path){scope(repository,ref,path);const result=await response(`${endpoint(repository)}/files/${encodeURIComponent(path)}/raw?ref=${encodeURIComponent(ref)}`,8*MIB);return result?new TextDecoder().decode(result.bytes):null;}
+  async function resolve(repository,ref,path){scope(repository,ref,path);const {value}=await json(`${endpoint(repository)}/commits/${encodeURIComponent(ref)}`);if(!SHA.test(value?.id))throw new Error('GitLab did not resolve an immutable revision.');return {repository,ref,sha:value.id};}
+  async function tree(repository,ref,directory='',recursive=true){
+    if(directory&&!validPath(directory))throw new Error('Invalid GitLab directory.');
+    const entries=[],warnings=[];let more=false;
+    for(let page=1;page<=10;page++){
+      const query=new URLSearchParams({ref,recursive:String(recursive),per_page:'100',page:String(page),...(directory?{path:directory}:{})});
+      const {value,next,link}=await json(`${endpoint(repository)}/tree?${query}`);if(!Array.isArray(value)||value.length>100)throw new Error('Invalid GitLab tree listing.');entries.push(...value);
+      more=!!next||/rel="next"/.test(link)||value.length===100;if(!more)break;
+    }
+    if(more)warnings.push('GitLab tree discovery stopped at 1000 entries; the project listing may be incomplete.');
+    return {entries:entries.filter(item=>item?.type==='blob'&&item.mode!=='120000'&&validPath(item.path)),warnings};
+  }
+  async function directory(repository,ref,path,includeBoards=false){const result=await tree(repository,ref,path,false);if(result.warnings.length)throw new Error(result.warnings[0]);return result.entries.filter(item=>(includeBoards?/\.kicad_(sch|pcb)$/i:/\.kicad_sch$/i).test(item.path)&&item.path.split('/').slice(0,-1).join('/')===path).map(item=>item.path);}
+  async function inventory(repository,ref,path){scope(repository,ref,path);const snapshot=await resolve(repository,ref,path),listing=await tree(repository,snapshot.sha);return {files:listing.entries.filter(item=>root.KiCadGitHub.filePath(item.path)).sort((a,b)=>a.path.localeCompare(b.path)).map(item=>({path:item.path,size:0})),snapshotRef:snapshot.sha,warnings:listing.warnings};}
+  async function projectFile(repository,ref,path){scope(repository,ref,path);if(!root.KiCadGitHub.filePath(path))throw new Error('Unsupported project file.');const content=await file(repository,ref,path);if(content===null)throw new Error('Project file unavailable at this revision.');return {path,content};}
+  async function search(repository,ref,path){const listing=await inventory(repository,ref,path),warnings=[...listing.warnings];const drawings=listing.files.filter(item=>root.KiCadBrowserData.validPath(item.path)).sort((a,b)=>(b.path===path?1:0)-(a.path===path?1:0)),settings=listing.files.filter(item=>/\.kicad_pro$/i.test(item.path));const files=[],saved=[];let total=0;
+    for(const item of drawings.slice(0,32)){try{const content=await file(repository,listing.snapshotRef,item.path);if(content===null){warnings.push(`${item.path}: unavailable.`);continue;}const bytes=new TextEncoder().encode(content).length;if(total+bytes>24*MIB){warnings.push('Project search reached its 24 MiB source limit.');break;}total+=bytes;files.push({path:item.path,content});}catch(error){warnings.push(`${item.path}: ${error.message}`);}}
+    for(const item of settings.slice(0,8)){try{const content=await file(repository,listing.snapshotRef,item.path);if(content!==null&&new TextEncoder().encode(content).length<=MIB)saved.push({path:item.path,content});else warnings.push(`${item.path}: settings unavailable or exceed 1 MiB.`);}catch(error){warnings.push(`${item.path}: ${error.message}`);}}
+    if(drawings.length>32)warnings.push('Project search loads at most 32 drawings.');if(settings.length>8)warnings.push('Only the first eight project settings files were retrieved.');return {files,settings:saved,warnings,snapshotRef:listing.snapshotRef,totalDrawings:drawings.length};
+  }
+  async function branches(repository,ref,path){scope(repository,ref,path);const {value,next,link}=await json(`${endpoint(repository)}/branches?per_page=100&page=1`);if(!Array.isArray(value)||value.length>100)throw new Error('Invalid GitLab branch listing.');return {repository,branches:value.filter(item=>root.KiCadBrowserData.validRef(item?.name)&&SHA.test(item?.commit?.id)).map(item=>({name:item.name,sha:item.commit.id})),warnings:next||/rel="next"/.test(link)||value.length===100?['At most 100 branches shown; enter another branch manually.']:[]};}
+  async function commits(repository,ref,path){const snapshot=await resolve(repository,ref,path),query=new URLSearchParams({ref_name:snapshot.sha,path,per_page:'50',page:'1'});const {value,next,link}=await json(`${endpoint(repository)}/commits?${query}`);if(!Array.isArray(value)||value.length>50)throw new Error('Invalid GitLab commit listing.');const clean=value=>typeof value==='string'?value.replace(/[\x00-\x1f\x7f]/g,' ').slice(0,300):'';return {repository,file:path,snapshotRef:snapshot.sha,commits:value.filter(item=>SHA.test(item?.id)).map(item=>({sha:item.id,message:clean(item.title),author:clean(item.author_name),date:clean(item.authored_date)})),warnings:next||/rel="next"/.test(link)||value.length===50?['At most 50 commits shown; enter an older SHA manually.']:[]};}
+  async function compare(repository,base,head,path){scope(repository,base,path);scope(repository,head,path);const from=await resolve(repository,base,path),to=await resolve(repository,head,path);const {value}=await json(`${endpoint(repository)}/compare?${new URLSearchParams({from:from.sha,to:to.sha,straight:'true'})}`);if(!Array.isArray(value.diffs)||value.diffs.length>3000)throw new Error('Invalid or oversized GitLab comparison.');const warnings=value.compare_timeout?['GitLab comparison timed out; changed-file discovery may be incomplete.']:[];const files=value.diffs.flatMap(item=>{const old=item.old_path,newPath=item.new_path;if(item.a_mode==='120000'||item.b_mode==='120000')return [];const a=root.KiCadBrowserData.validPath(old),b=root.KiCadBrowserData.validPath(newPath);if(a&&b)return [{file:newPath,oldFile:old,status:item.deleted_file?'removed':item.new_file?'added':item.renamed_file?'renamed':'modified'}];return [...(a?[{file:old,oldFile:old,status:'removed'}]:[]),...(b?[{file:newPath,oldFile:newPath,status:'added'}]:[])];});return {files,base:from.sha,head:to.sha,warnings};}
+  root.KiCadGitLabProvider={validRepository,validPath,file,resolve,directory,inventory,projectFile,search,branches,commits,compare,response,endpoint};
+  if(typeof module==='object'&&module.exports)module.exports=root.KiCadGitLabProvider;
+})(typeof globalThis==='object'?globalThis:this);

@@ -105,3 +105,16 @@ test('sheet discovery ignores library properties, comments and text lookalikes',
  assert.deepEqual(data.sheetFiles(source),['real.kicad_sch']);
  assert.throws(()=>data.sheetFiles('(kicad_sch (sheet'),/Incomplete/);
 });
+
+
+test('nested GitLab namespaces remain provider scoped in project discovery', async () => {
+  assert.equal(data.validRepository('group/subgroup/board'), false);
+  assert.equal(data.validRepository('group/subgroup/board', 'gitlab'), true);
+  for (const value of ['group/../board','group//board','group/board?token=secret','group/board\\file']) {
+    assert.equal(data.validRepository(value, 'gitlab'), false);
+  }
+  assert.equal(data.validRepository('group/board', 'untrusted'), false);
+  const result = await data.loadProject('group/subgroup/board','main','root.kicad_sch',
+    async () => '(kicad_sch)', null, 'gitlab');
+  assert.equal(result.length, 1);
+});

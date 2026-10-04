@@ -303,3 +303,11 @@ test('root navigation resolves an initially opened child and rejects reused-pare
  const rootPath=require('../review-workspace.js').rootSheetPath,files=['root','child','other'].map(name=>({path:name+'.kicad_sch'})),link=(path,target)=>({kind:'sheet',path:path+'.kicad_sch',properties:{Sheetfile:target+'.kicad_sch'}});
  assert.equal(rootPath('child.kicad_sch',[link('root','child')],files),'root.kicad_sch');assert.equal(rootPath('child.kicad_sch',[link('root','child'),link('other','child')],files),null);assert.equal(rootPath('child.kicad_sch',[link('root','child'),link('child','root')],files),null);
 });
+
+test('GitLab viewer isolates local anchors and hides GitHub account/publication tools',async()=>{
+ const calls=[];const view=workspaceRuntime(async message=>{calls.push(message);return [];},{provider:'gitlab',repository:'group/sub/design'});view.load();await new Promise(resolve=>setImmediate(resolve));
+ assert.equal(view.get('reviewSettings').hidden,true);assert.equal(view.get('refreshGitHub').hidden,true);assert.match(view.get('commentPolicyStatus').textContent,/GitLab.*browser/);
+ view.get('newComment').click();view.get('commentText').value='Check layout';await view.get('saveComment').click();
+ const saved=calls.find(message=>message.type==='comment-save');assert.equal(saved.provider,'gitlab');assert.equal(saved.comment.anchor.provider,'gitlab');assert.equal(saved.comment.anchor.repository,'group/sub/design');
+ assert.equal(calls.some(message=>message.type.startsWith('github-')||message.type==='comment-policy-status'),false);
+});
