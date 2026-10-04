@@ -13,6 +13,9 @@ inputs:
   head:
     description: Head Git revision
     required: true
+  old-file:
+    description: Previous repository-relative drawing path when the file was renamed
+    required: false
   output:
     description: Output HTML report path
     required: false
@@ -40,6 +43,9 @@ runs:
         KICAD_HEAD: ${{ inputs.head }}
         KICAD_OUTPUT: ${{ inputs.output }}
         KICAD_LAYERS: ${{ inputs.layers }}
+        KICAD_OLD_FILE: ${{ inputs.old-file }}
       run: |
-        kicad-vizdiff diff "$KICAD_FILE" --base "$KICAD_BASE" --head "$KICAD_HEAD" --layers "$KICAD_LAYERS" --output "$KICAD_OUTPUT"
+        args=(diff "$KICAD_FILE" --base "$KICAD_BASE" --head "$KICAD_HEAD" --layers "$KICAD_LAYERS" --output "$KICAD_OUTPUT")
+        if [ -n "$KICAD_OLD_FILE" ]; then args+=(--old-file "$KICAD_OLD_FILE"); fi
+        kicad-vizdiff "${args[@]}"
         echo "report=$KICAD_OUTPUT" >> "$GITHUB_OUTPUT"

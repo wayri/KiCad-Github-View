@@ -5,15 +5,26 @@ on:
       - '**/*.kicad_sch'
       - '**/*.kicad_pcb'
   workflow_dispatch:
+    inputs:
+      base:
+        description: Base revision for a manual comparison
+        default: HEAD~1
+        type: string
+      head:
+        description: Head revision for a manual comparison
+        default: HEAD
+        type: string
 permissions:
   contents: read
 jobs:
   visual-review:
     runs-on: ubuntu-24.04
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
+          persist-credentials: false
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
@@ -25,12 +36,16 @@ jobs:
           kicad-cli version
       - name: Install visual review tool
         run: python -m pip install .
+      - name: Verify native renderer and revision comparison
+        run: python -m unittest tests.test_ci tests.test_native_render -v
       - name: Render changed designs
         env:
-          BASE_SHA: ${{ github.event.pull_request.base.sha }}
-          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha || inputs.base }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha || inputs.head }}
+          REVIEW_MERGE_BASE: ${{ github.event_name == 'pull_request' }}
         run: python scripts/ci.py
       - name: Upload visual reports
+        if: ${{ always() }}
         uses: actions/upload-artifact@v4
         with:
           name: kicad-visual-review

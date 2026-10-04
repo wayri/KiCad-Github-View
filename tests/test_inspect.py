@@ -72,6 +72,13 @@ class InspectTests(unittest.TestCase):
             self.assertEqual(sheet_object['page'], 'sensor.svg')
             child_symbols = [o for o in result['objects'] if o['type'] == 'symbol' and o['page'] == 'sensor-Power.svg']
             self.assertEqual(len(child_symbols), 1)
+            legacy = root_text.replace('Sheetname', 'Sheet name').replace('Sheetfile', 'Sheet file')
+            (root / 'sensor.kicad_sch').write_text(legacy, encoding='utf-8')
+            legacy_result = inspect(root, 'sensor.kicad_sch', ['sensor.svg', 'sensor-Power.svg'])
+            self.assertEqual(len(legacy_result['sheets']), 2)
+            self.assertEqual(legacy_result['sheets'][1]['name'], 'Power')
+            legacy_sheet = next(o for o in legacy_result['objects'] if o['type'] == 'sheet')
+            self.assertEqual(legacy_sheet['title'], 'Power')
             # A hostile Sheetfile cannot make the parser read outside a snapshot.
             (root / 'sensor.kicad_sch').write_text(root_text.replace('power.kicad_sch', '../outside.kicad_sch'), encoding='utf-8')
             self.assertEqual(len(inspect(root, 'sensor.kicad_sch')['sheets']), 1)

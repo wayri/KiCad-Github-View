@@ -84,6 +84,33 @@ def image_uri(svg, box):
     return "data:image/svg+xml;base64," + base64.b64encode(svg.encode()).decode()
 
 
+def align_sheet_pages(before, before_details, after, after_details):
+    """Pair renamed schematic pages by saved hierarchy identity, never content guesses."""
+    old_sheets, new_sheets = before_details['sheets'], after_details['sheets']
+    new_by_id, old_ids = {}, {}
+    for sheet in new_sheets:
+        new_by_id.setdefault(sheet['id'], []).append(sheet)
+    for sheet in old_sheets:
+        old_ids[sheet['id']] = old_ids.get(sheet['id'], 0) + 1
+    candidates = {}
+    for sheet in old_sheets:
+        matches = new_by_id.get(sheet['id'], [])
+        newer = matches[0] if len(matches) == 1 and old_ids[sheet['id']] == 1 else None
+        old_page, new_page = sheet.get('page'), newer.get('page') if newer else None
+        if old_page in before and new_page in after:
+            candidates.setdefault(old_page, set()).add(new_page)
+    mapping = {old: next(iter(names)) for old, names in candidates.items() if len(names) == 1}
+    final_names = [mapping.get(name, name) for name in before]
+    if len(set(final_names)) != len(final_names):
+        return before  # Ambiguous identities must not overwrite or guess page matches.
+    for item in [*before_details['objects'], *old_sheets]:
+        if 'page' in item:
+            item['page'] = mapping.get(item['page'], item['page'])
+        if 'pages' in item:
+            item['pages'] = [mapping.get(page, page) for page in item['pages']]
+    return {mapping.get(name, name): svg for name, svg in before.items()}
+
+
 def pair_pages(before, after):
     pages = []
     for name in dict.fromkeys([*before, *after]):

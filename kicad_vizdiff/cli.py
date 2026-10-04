@@ -8,7 +8,7 @@ import webbrowser
 
 from .git import VizError, root, safe_path, snapshot, run
 from .inspect import inspect
-from .render import DEFAULT_LAYERS, add_drawing_boxes, find_kicad, pair_pages, render
+from .render import DEFAULT_LAYERS, add_drawing_boxes, align_sheet_pages, find_kicad, pair_pages, render
 
 
 def write_report(output, data):
@@ -76,6 +76,7 @@ def main(argv=None):
             head_id = snapshot(repo, head, temp / "head")
             after = render(temp / "head", relative, temp / "after", executable, args.layers, args.theme)
             after_details = inspect(temp / "head", relative, list(after)) if after else {'objects': [], 'sheets': []}
+            before = align_sheet_pages(before, before_details, after, after_details)
             if not before and not after:
                 raise VizError(f"Design not found in the selected revision(s): {relative}")
             pages = add_drawing_boxes(pair_pages(before, after),

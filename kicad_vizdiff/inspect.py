@@ -201,8 +201,8 @@ def _schematic_objects(tree, sheet_id, page):
             title = props['Reference'] or props['Value'] or 'Symbol'
             point = _point(node)
         elif kind == 'sheet':
-            title = props.get('Sheetname', 'Sheet')
-            props = {'Sheetname': title, 'Sheetfile': props.get('Sheetfile', ''),
+            title = props.get('Sheetname', props.get('Sheet name', 'Sheet'))
+            props = {'Sheetname': title, 'Sheetfile': props.get('Sheetfile', props.get('Sheet file', '')),
                      **{k: v for k, v in props.items() if k not in ('Sheetname', 'Sheetfile')}}
             point = _point(node)
         elif kind in ('wire', 'bus', 'polyline'):
@@ -367,7 +367,7 @@ def inspect(project_root: Path, relative: str, pages: list[str] | None = None) -
             objects.extend(local_objects)
             for sheet_index, sheet in enumerate(_children(root_tree, 'sheet'), start=1):
                 props = _properties(sheet)
-                filename = props.get('Sheetfile')
+                filename = props.get('Sheetfile', props.get('Sheet file'))
                 if not filename or '\\' in filename or ':' in filename:
                     continue
                 candidate = (path.parent / filename).resolve()
@@ -377,7 +377,7 @@ def inspect(project_root: Path, relative: str, pages: list[str] | None = None) -
                 child_tree = _read(candidate)
                 if child_tree[0] != 'kicad_sch':
                     continue
-                visit(candidate, child_tree, child_id, props.get('Sheetname', candidate.stem), sheet_id, depth + 1)
+                visit(candidate, child_tree, child_id, props.get('Sheetname', props.get('Sheet name', candidate.stem)), sheet_id, depth + 1)
         finally:
             seen.remove(resolved)
 
