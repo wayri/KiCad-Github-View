@@ -28,15 +28,15 @@ function viewer(parameters, read) {
   const elements = new Map();
   const get = (id) => { if (!elements.has(id)) elements.set(id, new Element()); return elements.get(id); };
   get('changesPanel').hidden = true; get('changeFilter').value = 'all';
-  const calls = [], listeners = new Map();
-  vm.runInNewContext(source, { URL, URLSearchParams, Number, Map, Set, Promise,
+  const calls = [], listeners = new Map(), parentMessages=[],parent={postMessage:(message,origin)=>parentMessages.push({message,origin})};
+  vm.runInNewContext(source, { URL, URLSearchParams, Number, Map, Set, Promise, parent,
     KiCadBrowserData: data, KiCadDesignDiff: diff, KiCadViewState: viewState, KiCadPairedReview:pairedReview,
     location: { search: '?'+new URLSearchParams(parameters) },
     matchMedia: () => ({ matches: true }), addEventListener: (name, callback) => {const all=listeners.get(name)||[];all.push(callback);listeners.set(name,all);},
     chrome: { runtime: { getURL: (name) => 'chrome-extension://test-id/'+name,
       sendMessage: async (message) => { calls.push(message); return read(message); } } },
     document: { getElementById: get, createElement: (tag) => new Element(tag) } });
-  return { get, calls, message: (event) => listeners.get('message').forEach(callback=>callback(event)), click: (text) => get('toolbar').children.find((node) => node.textContent === text).click() };
+  return { get, calls, parent, parentMessages, message: (event) => listeners.get('message').forEach(callback=>callback(event)), click: (text) => get('toolbar').children.find((node) => node.textContent === text).click() };
 }
 const parameters = {repository:'wayri/board', headRepository:'fork/board', file:'new.kicad_sch',
   oldFile:'old.kicad_sch', base:'a'.repeat(40), head:'b'.repeat(40)};
@@ -207,4 +207,12 @@ test('GitLab inline shell resolves branch commits before creating provider-bound
  const frame=view.get('headDrawing').children[0],query=new URL(frame.src).searchParams;
  assert.equal(query.get('provider'),'gitlab');assert.equal(query.get('ref'),sha);assert.equal(query.get('repository'),'group/sub/board');
  assert.equal(view.get('sourceLink').textContent,'GitLab source');assert.match(view.get('sourceLink').href,/gitlab.com\/group\/sub\/board\/-\/blob/);
+});
+
+
+test('shared hierarchy relays from the current head and sheet commands only from the trusted parent',async()=>{
+ const view=viewer(parameters,({file})=>({ok:true,result:[{path:file,content:sch('1k')}]}));await tick();const head=view.get('headDrawing').children[0],base=view.get('baseDrawing').children[0],origin='chrome-extension://test-id',hierarchy={active:'new.kicad_sch',sheets:[]};
+ const event={source:head.contentWindow,origin,data:{type:'kicad-review:hierarchy',repository:'wrong',ref:'wrong',hierarchy}};
+ view.message({...event,source:base.contentWindow});view.message({...event,origin:'https://evil.test'});assert.equal(view.parentMessages.length,0);view.message(event);assert.equal(view.parentMessages[0].message.repository,'fork/board');assert.equal(view.parentMessages[0].message.ref,parameters.head);
+ const command={source:view.parent,origin,data:{type:'kicad-review:open-sheet',file:'child.kicad_sch'}};view.message({...command,source:{}});view.message({...command,origin:'https://evil.test'});view.message({...command,data:{...command.data,file:'../private.kicad_sch'}});assert.equal(head.messages.length,0);view.message(command);assert.equal(head.messages[0].message.command,'open-sheet');assert.equal(head.messages[0].message.file,'child.kicad_sch');assert.equal(base.messages.length,0);
 });

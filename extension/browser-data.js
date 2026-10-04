@@ -4,7 +4,7 @@
   const repositoryPattern = /^[A-Za-z0-9_.-]+(?:\/[A-Za-z0-9_.-]+)+$/;
   const filePattern = /\.kicad_(?:sch|pcb)$/i;
   const PROJECT_MAX_BYTES = 96 * 1024 * 1024;
-  const PROJECT_MAX_FILES = 128, PARENT_MAX_CANDIDATES = 24, READ_CONCURRENCY = 4;
+  const PROJECT_MAX_FILES = 128, PARENT_MAX_CANDIDATES = 128, READ_CONCURRENCY = 4;
   const fileByteLimit = (path) => (/\.kicad_pcb$/i.test(path) ? 64 : 8) * 1024 * 1024;
 
   function validRepository(value, provider = "github") {
@@ -134,7 +134,7 @@
             throw new Error("GitHub returned an unsafe schematic directory listing.");
           }
           candidates.add(path);
-          if (candidates.size > PARENT_MAX_CANDIDATES) throw new Error("More than 24 parent-sheet candidates; open the project root directly.");
+          if (candidates.size > PARENT_MAX_CANDIDATES) throw new Error("More than 128 parent-sheet candidates; open the project root directly.");
         }
       }
       await readBatch([...candidates]);

@@ -127,6 +127,15 @@
         const entry=add({record,kind:"wire",position:pts[0],length:0});
         for (let i=1;i<pts.length;i++) {edges.push({a:pts[i-1],b:pts[i],index:entry.index}); entry.length+=distance(pts[i-1],pts[i]);}
         for (const p of pts) anchors.push({p,index:entry.index,endpoint:true});
+      } else if (record.kind === "sheet") {
+        for (const pin of children(record.form,"pin")) {
+          const p=point(pin,"at"), name=value(pin[1]);
+          if (!p || typeof name!=="string" || !name) continue;
+          const pinUuid=field(pin,"uuid"), sheetId=record.metadata.uuid || record.id || record.key;
+          const pinRecord={...record,id:`${record.id || record.key}/pin:${pinUuid || name}`,metadata:{...record.metadata,uuid:pinUuid}};
+          const entry=add({record:pinRecord,kind:"sheet_pin",position:p,sheetPin:{sheetId,name}});
+          anchors.push({p,index:entry.index});
+        }
       } else if (LABELS.has(record.kind) || record.kind === "junction") {
         const p=point(record.form,"at");
         if (!p) continue;
@@ -162,7 +171,7 @@
       if (typeof name!=="string" || !name || name==="~") {
         warn(`${path}: power symbol ${record.label} has no usable saved net name; naming omitted.`);continue;
       }
-      powerSymbols.set(uuid,{name,pinNumber});
+      powerSymbols.set(uuid,{name,pinNumber,global:scope !== "local"});
     }
     const pins=new Map();
     for (const p of primitives) if (p.kind === "pin" && validPoint(p.connectPoint) && p.pinNumber != null) {
@@ -172,7 +181,7 @@
       if (pins.has(key)) {pins.get(key).primitives.push(p); continue;}
       const power=powerSymbols.get(owner), isPower=power && power.pinNumber===String(p.pinNumber);
       const entry=add({record,kind:"pin",position:p.connectPoint,pin:String(p.pinNumber),primitives:[p],
-        name:isPower ? power.name : null,namePriority:isPower ? 1 : undefined,power:!!isPower});
+        name:isPower ? power.name : null,namePriority:isPower ? 1 : undefined,power:!!isPower,global:!!(isPower && power.global)});
       pins.set(key,entry); anchors.push({p:p.connectPoint,index:entry.index});
     }
     if (symbols.size && !pins.size) warn(`${path}: no conductive pin metadata is available; symbol pin membership was omitted.`);
@@ -216,12 +225,15 @@
     for (const p of primitives) if (p.uuid) {if(!byUuid.has(p.uuid))byUuid.set(p.uuid,[]);byUuid.get(p.uuid).push(p);}
     const nets=[];
     for (const group of groups.values()) {
-      if (!group.some((e)=>e.kind === "wire" || e.name)) continue; // Isolated pins/junctions are not inferred nets.
+      if (!group.some((e)=>e.kind === "wire" || e.name || e.sheetPin)) continue; // Isolated pins/junctions are not inferred nets.
       const names=[...new Set(group.map((e)=>e.name).filter(Boolean))].sort();
       const preferred=group.filter((e)=>e.name).sort((a,b)=>(a.namePriority ?? 4)-(b.namePriority ?? 4)||a.name.localeCompare(b.name))[0]?.name;
-      const first=group.filter((e)=>e.kind === "wire").map((e)=>e.record.id || e.record.key).sort()[0], code=names.length ? `label:${names[0]}` : `source:${first}`;
+      const first=group.filter((e)=>e.kind === "wire" || e.sheetPin).map((e)=>e.record.id || e.record.key).sort()[0], code=names.length ? `label:${names[0]}` : `source:${first}`;
       const net=fresh(path,code,preferred || `Unnamed network (${group.find((e)=>e.kind === "wire")?.record.metadata.uuid || "wire"})`,"schematic");
       net.scope="file";net.names=names;
+      net.globalNames=[...new Set(group.filter((e)=>e.kind === "global_label" || e.global).map((e)=>e.name).filter(Boolean))].sort();
+      net.hierarchicalNames=[...new Set(group.filter((e)=>e.kind === "hierarchical_label").map((e)=>e.name))].sort();
+      net.sheetPins=group.filter((e)=>e.sheetPin).map((e)=>({...e.sheetPin}));
       if (names.length>1) warn(`${path}: connected schematic source network has multiple labels: ${names.join(", ")}.`);
       for (const entry of group) {
         const r=entry.record, uuid=r.metadata.uuid;
@@ -254,6 +266,49 @@
     nets.sort((a,b)=>a.path.localeCompare(b.path)||a.name.localeCompare(b.name)||a.code.localeCompare(b.code));
     return {nets,warnings};
   }
+  // Only loaded files from one schematic project should be supplied. Local
+  // names are never cross-sheet evidence, even when a global name matches them.
+  function relatedSchematicNets(nets, selectedId, hierarchy=[]) {
+    const limits=["Only loaded schematic files are searched.",
+      "Only unambiguous resolved sheet links are searched; cyclic hierarchy, repeated sheet instances, implicit hidden power pins and buses are not resolved; this is not a KiCad netlist."];
+    const selected=nets.find((net)=>net.id===selectedId && net.kind==="schematic");
+    if (!selected) return {matches:[],paths:[],limits};
+    const byName=new Map();
+    for (const net of nets) if(net.kind==="schematic") for(const name of net.globalNames || []) {
+      if(!byName.has(name))byName.set(name,[]);
+      byName.get(name).push(net);
+    }
+    const links=[...new Map(hierarchy.map((link)=>[JSON.stringify([link.path,link.target,link.sheetId]),link])).values()];
+    const targetCounts=new Map();
+    for(const link of links)targetCounts.set(link.target,(targetCounts.get(link.target)||0)+1);
+    const adjacent=new Map(),connect=(a,b)=> {
+      if(!adjacent.has(a.id))adjacent.set(a.id,[]);adjacent.get(a.id).push(b);
+      if(!adjacent.has(b.id))adjacent.set(b.id,[]);adjacent.get(b.id).push(a);
+    };
+    const reaches=(start,end)=> {
+      const pending=[start],seen=new Set();
+      for(let i=0;i<pending.length;i++) {
+        if(pending[i]===end)return true;
+        if(seen.has(pending[i]))continue;seen.add(pending[i]);
+        for(const link of links)if(link.path===pending[i])pending.push(link.target);
+      }
+      return false;
+    };
+    const repeated=[...targetCounts].filter(([,count])=>count>1).map(([path])=>path);
+    for(const link of links) if(targetCounts.get(link.target)===1 && !repeated.some((path)=>reaches(path,link.path)) && !reaches(link.target,link.path)) {
+      for(const parentNet of nets.filter((net)=>net.kind==="schematic" && net.path===link.path))
+        for(const pin of parentNet.sheetPins || []) if(pin.sheetId===link.sheetId)
+          for(const childNet of nets.filter((net)=>net.kind==="schematic" && net.path===link.target && (net.hierarchicalNames || []).includes(pin.name)))connect(parentNet,childNet);
+    }
+    const found=new Map([[selected.id,selected]]),queue=[selected];
+    for(let i=0;i<queue.length;i++) {
+      const candidates=[...(adjacent.get(queue[i].id)||[])];
+      for(const name of queue[i].globalNames || [])candidates.push(...(byName.get(name)||[]));
+      for(const net of candidates)if(!found.has(net.id)){found.set(net.id,net);queue.push(net);}
+    }
+    const matches=[...found.values()].sort((a,b)=>a.path.localeCompare(b.path)||a.id.localeCompare(b.id));
+    return {matches,paths:[...new Set(matches.map((net)=>net.path))],limits};
+  }
   function createBuilder() {
     // Workspace-owned connectivity snapshots. No global AST retention: changing
     // one rendered sheet rebuilds that sheet rather than reparsing the project.
@@ -278,7 +333,7 @@
     }
     function cloneNet(net) {
       return {...net,objectIds:[...net.objectIds],uuids:[...net.uuids],primitives:[...net.primitives],stats:{...net.stats},
-        members:net.members.map(member=>({...member,...(member.position?{position:{...member.position}}:{})})),...(net.names?{names:[...net.names]}:{})};
+        members:net.members.map(member=>({...member,...(member.position?{position:{...member.position}}:{})})),...(net.names?{names:[...net.names]}:{}),...(net.globalNames?{globalNames:[...net.globalNames]}:{}),...(net.hierarchicalNames?{hierarchicalNames:[...net.hierarchicalNames]}:{}),...(net.sheetPins?{sheetPins:net.sheetPins.map(pin=>({...pin}))}:{})};
     }
     function cachedBuild(files,designs=new Map()) {
       // Use the source parser's current file-count contract without parsing its
@@ -315,6 +370,6 @@
     function clear(){cache.clear();primitiveIds=new WeakMap();nextPrimitiveId=0;}
     return {build:cachedBuild,clear};
   }
-  root.KiCadNetModel={build,createBuilder};
+  root.KiCadNetModel={build,createBuilder,relatedSchematicNets};
   if(typeof module === "object" && module.exports)module.exports=root.KiCadNetModel;
 })(typeof globalThis === "object" ? globalThis : this);

@@ -144,6 +144,7 @@
     workspace=KiCadReviewWorkspace.mount({files,repository,provider,host:providerContext.host,ref,rootFile,pcb,pairedFile:params.get('pairedFile')||undefined,getCanvas:()=>canvas,currentFile,focus,openSheet,getRulerUnits:()=>preferences.rulerUnits,
 
       getDesigns:()=>designs,updateDiagnostics,
+      onHierarchy(hierarchy){if(!disposed)parent.postMessage({type:'kicad-review:hierarchy',repository,ref,hierarchy},ownOrigin);},
       onSelection(selection){if(crossApplying||!globalThis.KiCadPairedReview?.validSelection(selection))return;if(globalThis.KiCadVSCodeBridge?.selection)globalThis.KiCadVSCodeBridge.selection(selection);else parent.postMessage({type:'kicad-review:selection',selection},ownOrigin);},
       onCommentsChanged(){if(globalThis.KiCadVSCodeBridge?.onCommentsChanged)globalThis.KiCadVSCodeBridge.onCommentsChanged();else parent.postMessage({type:'kicad-review:comments-changed'},ownOrigin);},pullNumber:Number(params.get('pullNumber'))||null,pullRepository:params.get('pullRepository')||repository});
 
@@ -224,6 +225,7 @@
       if(event.source!==parent||event.origin!==ownOrigin||event.data?.type!=='kicad-review:command')return;
 
       const msg=event.data;
+      if(msg.command==='open-sheet'){workspace.followSheet?.(msg.file);return;}
       if(msg.command==='refresh-comments'){workspace.refreshComments?.();return;}
       if(msg.command==='highlight-related'){if(!scene||msg.selection?.kind==='part')related(msg.selection);return;}
       if(scene)return;

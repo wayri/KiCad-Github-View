@@ -1,6 +1,6 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const { build } = require("../net-model.js");
+const { build, relatedSchematicNets } = require("../net-model.js");
 const diff = require("../design-diff.js");
 const pcb = require("../pcb-renderer.js");
 const sch = require("../schematic-renderer.js");
@@ -155,6 +155,49 @@ const placedPower = (uuid,x,y,name="GND",id="pic_programmer:GND") =>
 const powerSource = (forms,definitions=powerDefinition(),version=20260101,path="power.kicad_sch") =>
   file(path,`(kicad_sch (version ${version}) (lib_symbols ${definitions}) ${forms})`);
 const schRendered = (files) => new Map(files.map((f)=>[f.path,sch.build(diff.parse(f.content),f.path)]));
+
+test("related sheets require exact global evidence on both networks and follow connected aliases",()=> {
+  const files=[schematic(label("a","BUS_A",0,0,"global_label"),"a.kicad_sch"),
+    schematic(label("b","BUS_A",0,0,"global_label")+label("alias","BUS_B",0,0,"global_label"),"b.kicad_sch"),
+    schematic(label("c","BUS_B",0,0,"global_label"),"c.kicad_sch"),
+    schematic(label("local","BUS_A",0,0),"local.kicad_sch"),
+    schematic(label("hier","BUS_A",0,0,"hierarchical_label"),"child.kicad_sch"),
+    schematic(label("case","bus_a",0,0,"global_label"),"case.kicad_sch")];
+  const {nets}=build(files),selected=nets.find((n)=>n.path==="a.kicad_sch");
+  const result=relatedSchematicNets(nets,selected.id);
+  assert.deepEqual(result.paths,["a.kicad_sch","b.kicad_sch","c.kicad_sch"]);
+  assert.equal(result.matches.length,3);
+  assert.match(result.limits.join(" "),/unambiguous resolved sheet links/);
+  assert.deepEqual(relatedSchematicNets(nets,nets.find((n)=>n.path==="local.kicad_sch").id).paths,["local.kicad_sch"]);
+  assert.deepEqual(relatedSchematicNets(nets,"missing").matches,[]);
+});
+
+test("related sheets join explicit global power and global labels but exclude local power",()=> {
+  const files=[powerSource(placedPower("a",0,0),powerDefinition(),20260101,"a.kicad_sch"),
+    schematic(label("g","GND",0,0,"global_label"),"b.kicad_sch"),
+    powerSource(placedPower("c",0,0),powerDefinition("pic_programmer:GND","(power local)"),20260101,"c.kicad_sch"),
+    board('(net 1 "GND")')];
+  const {nets}=build(files,schRendered(files.filter((f)=>f.path.endsWith(".kicad_sch"))));
+  assert.deepEqual(relatedSchematicNets(nets,nets.find((n)=>n.path==="a.kicad_sch").id).paths,["a.kicad_sch","b.kicad_sch"]);
+  assert.deepEqual(nets.find((n)=>n.path==="c.kicad_sch").globalNames,[]);
+  assert.deepEqual(relatedSchematicNets(nets,nets.find((n)=>n.kind==="pcb").id).matches,[]);
+});
+
+test("saved parent sheet pins join wires and exact child hierarchical labels only",()=> {
+  const parent=schematic(wire("w",[0,0],[10,0])+label("local","PARENT",0,0)+
+    '(sheet (at 10 0) (size 20 20) (uuid "sheet") (property "Sheetname" "Child") (property "Sheetfile" "child.kicad_sch") (pin "SIGNAL" input (at 10 0 180) (uuid "pin")))');
+  const child=schematic(label("h","SIGNAL",0,0,"hierarchical_label"),"child.kicad_sch");
+  const unrelated=schematic(label("l","SIGNAL",0,0),"other.kicad_sch");
+  const {nets}=build([parent,child,unrelated]),selected=nets.find((n)=>n.path===parent.path);
+  const hierarchy=[{path:parent.path,target:child.path,sheetId:"sheet"}];
+  assert.deepEqual(selected.sheetPins,[{sheetId:"sheet",name:"SIGNAL"}]);
+  assert.ok(selected.uuids.includes("pin"));
+  assert.deepEqual(relatedSchematicNets(nets,selected.id,hierarchy).paths,["child.kicad_sch","root.kicad_sch"]);
+  assert.deepEqual(relatedSchematicNets(nets,nets.find((n)=>n.path===child.path).id,hierarchy).paths,["child.kicad_sch","root.kicad_sch"]);
+  assert.deepEqual(relatedSchematicNets(nets,selected.id,[...hierarchy,{...hierarchy[0],sheetId:"second"}]).paths,["root.kicad_sch"]);
+  assert.deepEqual(relatedSchematicNets(nets,selected.id,[...hierarchy,{path:child.path,target:parent.path,sheetId:"cycle"}]).paths,["root.kicad_sch"]);
+  assert.deepEqual(relatedSchematicNets(nets,selected.id,[{...hierarchy[0],sheetId:"wrong"}]).paths,["root.kicad_sch"]);
+});
 
 function cachedHarness() {
   const fs=require('node:fs'),vm=require('node:vm'),counts={parse:0,objects:0};

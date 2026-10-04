@@ -97,6 +97,7 @@
     viewer.src = `${chrome.runtime.getURL(/\.kicad_pcb$/i.test(file) ? "pcb-viewer.html" : "schematic-viewer.html")}?${query}`;
     holder.append(viewer); frames.set(side, viewer);
   }
+  addEventListener('message',event=>{if(event.source===parent&&event.origin===origin()&&event.data?.type==='kicad-review:open-sheet'&&data.validPath(event.data.file)&&/\.kicad_sch$/i.test(event.data.file))frames.get('head')?.contentWindow?.postMessage({type:'kicad-review:command',command:'open-sheet',file:event.data.file},origin());});
   function normalizedFile(side, file) {
     return side === "base" && file === request.oldFile ? request.file : file;
   }
@@ -122,6 +123,7 @@
   });
   addEventListener('message',(event)=>{
     if(event.origin!==origin())return;const side=[...frames].find(([,frame])=>frame.contentWindow===event.source)?.[0];if(!side)return;
+    if(event.data?.type==='kicad-review:hierarchy'&&side==='head'){parent.postMessage({...event.data,repository:request.headRepository,ref:request.head},origin());return;}
     if(event.data?.type==='kicad-review:comments-changed'){
       for(const [name,frame] of frames)if(name!==side)frame.contentWindow?.postMessage({type:'kicad-review:command',command:'refresh-comments'},origin());return;
     }

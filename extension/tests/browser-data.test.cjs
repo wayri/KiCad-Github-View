@@ -75,8 +75,8 @@ test('leaf discovery falls back with a visible warning for unsafe or excessive l
   assert.match(unsafe[0].discoveryWarning, /unsafe schematic directory listing/);
   const crowded = await data.loadProject('owner/board', 'main', 'boards/sub/leaf.kicad_sch', read,
     async (_repo, _ref, directory) => directory === 'boards/sub' ?
-      Array.from({ length: 25 }, (_, index) => `boards/sub/file${index}.kicad_sch`) : []);
-  assert.match(crowded[0].discoveryWarning, /More than 24 parent-sheet candidates/);
+      Array.from({ length: 129 }, (_, index) => `boards/sub/file${index}.kicad_sch`) : []);
+  assert.match(crowded[0].discoveryWarning, /More than 128 parent-sheet candidates/);
   const deep = await data.loadProject('owner/board', 'main', 'a/b/c/d/e/f/g/h/i/leaf.kicad_sch', read,
     async () => []);
   assert.match(deep[0].discoveryWarning, /too deep/);
@@ -184,4 +184,10 @@ test('unrelated discovery candidates cannot consume the requested hierarchy byte
     async () => ['root.kicad_sch', ...unrelated]);
   assert.deepEqual(loaded.map(file => file.path), ['root.kicad_sch', 'sub/child.kicad_sch']);
   assert.match(loaded[0].discoveryWarning, /size limit/);
+});
+
+
+test('opening a leaf in a directory with more than 24 sheets retains its root and siblings',async()=>{
+ const names=Array.from({length:30},(_,i)=>`design/child${i}.kicad_sch`),root='design/main.kicad_sch';const sources=new Map(names.map(p=>[p,'(kicad_sch)']));sources.set(root,'(kicad_sch '+names.map(p=>`(sheet (property "Sheetfile" "${p.split('/').at(-1)}"))`).join(' ')+')');
+ const result=await data.loadProject('owner/board','main',names[0],async(_r,_ref,p)=>sources.get(p)??null,async(_r,_ref,d)=>d==='design'?[root,...names]:[]);assert.equal(result.length,31);assert.equal(result[0].path,root);assert.equal(result[0].discoveryWarning,undefined);
 });
