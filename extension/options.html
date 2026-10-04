@@ -37,6 +37,10 @@
     </div>
     <p id="deviceStatus" role="status" aria-live="polite"></p>
     <p id="tokenStatus" role="status" aria-live="polite"></p>
+    <label for="accessRepository">Check repository access</label>
+    <input id="accessRepository" placeholder="owner/repository or https://github.com/owner/repository" autocomplete="off" spellcheck="false">
+    <button id="testRepositoryAccess" type="button">Test repository access</button>
+    <p id="repositoryAccessStatus" role="status" aria-live="polite">Checks the connected account and repository through GitHub's API. It does not publish or change files.</p>
     <p>Tokens are encrypted with a temporary key held only in background memory. Sign out clears credentials and pending sign-in. A background restart, extension reload or browser restart requires sign-in again. Removing the extension clears its browser storage; it does not revoke GitHub authorization.</p>
     <p><a href="https://github.com/settings/applications" target="_blank" rel="noopener noreferrer">Manage or revoke GitHub app access</a> · <a href="https://github.com/settings/tokens" target="_blank" rel="noopener noreferrer">Manage manual tokens</a></p>
     <details id="advancedAuth"><summary>Advanced connection settings</summary>

@@ -4,19 +4,22 @@ const vm = require('node:vm');
 const fs = require('node:fs');
 const path = require('node:path');
 
-function optionsHarness(respond) {
+function optionsHarness(respond, protocol = 'chrome-extension:') {
   const elements = new Map();
   for (const id of ['token', 'tokenStatus', 'saveToken', 'clearToken', 'resetAuth', 'clientId',
-    'connectGitHub', 'cancelGitHub', 'deviceInstructions', 'deviceCode', 'verificationLink', 'deviceStatus', 'githubAccess', 'scopeHelp', 'signinAvailability']) {
+    'connectGitHub', 'cancelGitHub', 'deviceInstructions', 'deviceCode', 'verificationLink', 'deviceStatus', 'githubAccess', 'scopeHelp', 'signinAvailability',
+    'accessRepository','testRepositoryAccess','repositoryAccessStatus']) {
     elements.set(id, { value: '', textContent: '', disabled: false, hidden: false, href: '', listeners: new Map(),
       addEventListener(type, fn) { this.listeners.set(type, fn); } });
   }
-  const requests = [], timers = [];
-  const context = { document: { getElementById: (id) => elements.get(id) },
-    window: { addEventListener: () => {} },
+  const requests = [], timers = [], windowEvents = new Map(), documentEvents = new Map();
+  let storageListener;
+  const context = { URL, location: { protocol }, document: { getElementById: (id) => elements.get(id),
+    addEventListener: (type, fn) => documentEvents.set(type, fn) },
+    window: { addEventListener: (type, fn) => windowEvents.set(type, fn) },
     setTimeout: (fn, delay) => { timers.push({ fn, delay }); return timers.length; },
     clearTimeout: () => {},
-    chrome: { runtime: { sendMessage: async (request) => {
+    chrome: { storage: { onChanged: { addListener: fn => { storageListener = fn; } } }, runtime: { sendMessage: async (request) => {
       requests.push(request);
       return { ok: true, result: respond ? respond(request) : request.type === 'github-auth-status' ?
         { configured: false } : request.type === 'github-device-status' ?
@@ -24,8 +27,55 @@ function optionsHarness(respond) {
     } } } };
   const source = fs.readFileSync(path.join(__dirname, '..', 'options.js'), 'utf8');
   vm.runInNewContext(source, context, { filename: 'options.js' });
-  return { elements, requests, timers };
+  return { elements, requests, timers, windowEvents, documentEvents,
+    storageChanged: (changes, area) => storageListener(changes, area) };
 }
+
+test('returning from GitHub resumes pending authorization and updates connected state', async () => {
+  let connected = false;
+  const h = optionsHarness(request => request.type === 'github-auth-status' ? { configured: connected } :
+    request.type === 'github-device-status' ? { active: !connected, clientId: 'Ov23liSavedClient',
+      userCode: 'TEST-CODE', retryAfterMs: 5000 } : { state: 'connected' });
+  await new Promise(setImmediate);
+  connected = true;
+  await h.windowEvents.get('focus')();
+  assert.match(h.elements.get('tokenStatus').textContent, /GitHub connected/);
+  assert.equal(h.elements.get('connectGitHub').textContent, 'Reconnect GitHub');
+  assert.equal(h.elements.get('connectGitHub').disabled, false);
+  assert.equal(h.elements.get('deviceInstructions').hidden, true);
+  assert.equal(h.elements.get('clearToken').disabled, false);
+  assert.match(h.elements.get('signinAvailability').textContent, /GitHub is connected/);
+  assert.equal(h.elements.get('cancelGitHub').hidden, true);
+  assert.equal(h.elements.get('deviceCode').textContent, '');
+  connected = false;
+  h.storageChanged({'github-review-token':{}}, 'session');
+  await new Promise(setImmediate);
+  assert.match(h.elements.get('tokenStatus').textContent, /signed out/);
+  assert.equal(h.elements.get('clearToken').disabled, true);
+});
+
+test('worker restart is explained and local preview cannot pretend to authenticate', async () => {
+  const h = optionsHarness(request => request.type === 'github-auth-status' ?
+    {configured:false,reason:'background-restarted'} : {active:false,clientId:'Ov23liSavedClient'});
+  await new Promise(setImmediate);
+  assert.match(h.elements.get('tokenStatus').textContent, /background restarted/);
+  const local = optionsHarness(undefined, 'http:');
+  await new Promise(setImmediate);
+  assert.match(local.elements.get('signinAvailability').textContent, /Local preview only/);
+  assert.equal(local.elements.get('connectGitHub').disabled, true);
+  assert.equal(local.requests.some(request => request.type === 'github-auth-status'), false);
+});
+
+test('access check reports verified private access using the actual account', async () => {
+  const h=optionsHarness(request=>request.type==='github-access-test' ?
+    {login:'reviewer',repository:'owner/private',private:true,readable:true} :
+    request.type==='github-auth-status'?{configured:true}:{active:false,clientId:'Ov23liSavedClient'});
+  await new Promise(setImmediate);
+  h.elements.get('accessRepository').value='https://github.com/owner/private';
+  await h.elements.get('testRepositoryAccess').listeners.get('click')();
+  assert.equal(h.requests.find(r=>r.type==='github-access-test').repository,'owner/private');
+  assert.match(h.elements.get('repositoryAccessStatus').textContent, /Verified as @reviewer: private repository owner\/private is readable/);
+});
 
 test('options sends a token only on explicit save and clears the password field', async () => {
   const { elements, requests } = optionsHarness();

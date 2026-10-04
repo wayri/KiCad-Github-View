@@ -5,6 +5,44 @@ importScripts("parsing.js", "browser-data.js", "review-comments.js", "review-fil
 const SHA = /^[0-9a-f]{40}$/i;
 const REPOSITORY = /^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/;
 
+let badgeGeneration = 0;
+async function updateGitHubBadge() {
+  if (!chrome.action?.setBadgeText) return;
+  const generation = ++badgeGeneration;
+  const status = await KiCadGitHubReviewApi.tokenStatus();
+  if (generation !== badgeGeneration) return;
+  await chrome.action.setBadgeBackgroundColor({ color: status.configured ? '#238636' : '#6e7681' });
+  await chrome.action.setBadgeText({ text: status.configured ? '●' : '' });
+  await chrome.action.setTitle({ title: status.configured ?
+    'KiCad Visual Review — GitHub connected' : 'KiCad Visual Review — GitHub signed out' });
+}
+// Clear a stale connected badge when a new worker cannot unlock the old session.
+updateGitHubBadge().catch(() => {});
+chrome.storage.onChanged?.addListener((changes, area) => {
+  if (area === 'session' && ('github-review-token' in changes || 'github-device-pending' in changes)) {
+    updateGitHubBadge().catch(() => {});
+  }
+});
+
+let devicePollTimer = null;
+function scheduleDeviceCheck(delay = 5000) {
+  if (devicePollTimer !== null) clearTimeout(devicePollTimer);
+  devicePollTimer = setTimeout(async () => {
+    devicePollTimer = null;
+    try {
+      const flow = await KiCadGitHubReviewApi.deviceStatus();
+      if (!flow.active) return;
+      const result = await KiCadGitHubReviewApi.pollDevice();
+      await updateGitHubBadge();
+      if (result.state === 'pending') scheduleDeviceCheck(result.retryAfterMs);
+    } catch {
+      const flow = await KiCadGitHubReviewApi.deviceStatus().catch(() => null);
+      if (flow?.active) scheduleDeviceCheck(Math.max(5000, flow.retryAfterMs));
+    }
+  }, Math.min(20000, Math.max(1000, Number(delay) || 5000)));
+  devicePollTimer?.unref?.(); // Node test runners need not wait for an authorization timer.
+}
+
 function validRepository(value) {
   return typeof value === "string" && REPOSITORY.test(value) &&
     value.split("/").every((part) => part !== "." && part !== "..");
@@ -783,6 +821,16 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       case "github-auth-status":
         if (!viewerSender(sender) && !optionsSender(sender)) throw new Error("Only extension pages can inspect GitHub settings.");
         return KiCadGitHubReviewApi.tokenStatus();
+      case 'github-access-test': {
+        if (!optionsSender(sender)) throw new Error('Only extension options can test account access.');
+        if (!validRepository(message.repository)) throw new Error('Enter owner/repository or its GitHub URL.');
+        if (!(await KiCadGitHubReviewApi.tokenStatus()).configured) throw new Error('The extension session is signed out or expired. Sign in again before testing access.');
+        const user = await githubJson('https://api.github.com/user');
+        const repository = await githubJson(`https://api.github.com/repos/${message.repository}`);
+        if (typeof user.login !== 'string' || !validRepository(repository.full_name)) throw new Error('GitHub returned an unexpected account or repository response.');
+        return { login: user.login, repository: repository.full_name, private: Boolean(repository.private),
+          defaultBranch: repository.default_branch, readable: repository.permissions?.pull !== false };
+      }
       case "github-auth-set":
         if (!optionsSender(sender)) throw new Error("Only extension options can set a GitHub token.");
         return KiCadGitHubReviewApi.setToken(message.token);
@@ -884,7 +932,17 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         return githubFiles(message.repository, message.number, message.expectedFiles);
       default: throw new Error("Unsupported extension request.");
     }
-  })().then((result) => sendResponse({ ok: true, result }),
+  })().then(async (result) => {
+               if (message.provider !== 'gitlab' && /^github-(auth|device)-/.test(message.type)) {
+                 await updateGitHubBadge().catch(() => {});
+                 if (result?.state === 'pending') scheduleDeviceCheck(result.retryAfterMs);
+                 if (['github-auth-clear', 'github-auth-reset', 'github-device-cancel'].includes(message.type)) {
+                   if (devicePollTimer !== null) clearTimeout(devicePollTimer);
+                   devicePollTimer = null;
+                 }
+               }
+               sendResponse({ ok: true, result });
+             },
              (error) => sendResponse({ ok: false, error: error.message || String(error) }));
   return true;
 });

@@ -1,6 +1,11 @@
 "use strict";
 (() => {
   const $=id=>document.getElementById(id),status=$('gitlabStatus'),hostSelect=$('gitlabHost');
+  if (typeof location !== 'undefined' && /^https?:$/.test(location.protocol)) {
+    status.textContent='Local preview only. Connect GitLab in the installed extension’s settings.';
+    for(const id of ['gitlabHost','gitlabAddHost','gitlabRemoveHost','gitlabSaveToken','gitlabSignOut','gitlabReset','gitlabOAuth','gitlabToken','gitlabClientId']) $(id).disabled=true;
+    return;
+  }
   let oauthSupported=false;
   const send=async(type,extra={})=>{
     const reply=await chrome.runtime.sendMessage({type,provider:'gitlab',host:hostSelect.value||'https://gitlab.com',...extra});

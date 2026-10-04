@@ -23,7 +23,10 @@ global.chrome = {
     openOptionsPage: async () => { calls.optionsOpened = (calls.optionsOpened || 0) + 1; },
     onMessage: { addListener: (listener) => { messageListener = listener; } }
   },
-  action: { onClicked: { addListener: (listener) => { actionListener = listener; } } },
+  action: { onClicked: { addListener: (listener) => { actionListener = listener; } },
+    setBadgeText: async value => { calls.badge = value.text; },
+    setBadgeBackgroundColor: async value => { calls.badgeColor = value.color; },
+    setTitle: async value => { calls.actionTitle = value.title; } },
   storage: { local: storageArea(localStore), session: storageArea(sessionStore) },
   tabs: {
     create: async (options) => { calls.created.push(options); return { id: 100 + calls.created.length }; },
@@ -62,6 +65,62 @@ function withPublishingFetch(t, handler) {
     return handler(url, init);
   });
 }
+
+test('account badge reflects connection, sign-out and reset without exposing credentials', async () => {
+  const token = 'github_pat_' + 'b'.repeat(40);
+  assert.equal((await message({type:'github-auth-set',token},options)).ok, true);
+  assert.equal(calls.badge, '●');
+  assert.match(calls.actionTitle, /GitHub connected/);
+  assert.equal(calls.actionTitle.includes(token), false);
+  await message({type:'github-auth-clear'},options);
+  assert.equal(calls.badge, '');
+  assert.match(calls.actionTitle, /signed out/);
+  await message({type:'github-auth-set',token},options);
+  await message({type:'github-auth-reset'},options);
+  assert.equal(calls.badge, '');
+});
+
+test('settings verify authenticated identity and private repository access without posting', async t => {
+  const token='github_pat_'+'v'.repeat(40);
+  await message({type:'github-auth-set',token},options);
+  const requests=[];
+  withFetch(t,async(url,init)=>{
+    requests.push(url);
+    assert.equal(init.headers.Authorization,'Bearer '+token);
+    assert.equal(init.credentials,'omit');assert.equal(init.redirect,'error');
+    if(url==='https://api.github.com/user')return json({login:'reviewer'});
+    if(url==='https://api.github.com/repos/owner/private')return json({full_name:'owner/private',private:true,default_branch:'main',permissions:{pull:true}});
+    throw new Error('Unexpected URL');
+  });
+  const result=await message({type:'github-access-test',repository:'owner/private'},options);
+  assert.equal(result.ok,true);assert.equal(result.result.private,true);assert.equal(result.result.login,'reviewer');
+  assert.equal(JSON.stringify(result).includes(token),false);
+  const count=requests.length;
+  assert.equal((await message({type:'github-access-test',repository:'owner/private'},githubTab(1,'/owner/private'))).ok,false);
+  assert.equal(requests.length,count);
+  await message({type:'github-auth-clear'},options);
+  assert.match((await message({type:'github-access-test',repository:'owner/private'},options)).error,/signed out or expired/);
+});
+
+test('background finishes device authorization without an options-page poll', async t => {
+  await message({type:'github-auth-clear'},options);
+  const savedTimer=global.setTimeout, savedClear=global.clearTimeout;
+  let tick;
+  global.setTimeout=(fn,delay)=>{if(delay<30000)tick=fn;return {unref(){}};};
+  global.clearTimeout=()=>{};
+  t.after(()=>{global.setTimeout=savedTimer;global.clearTimeout=savedClear;});
+  withFetch(t,async url=>url.endsWith('/login/device/code') ?
+    json({device_code:'d'.repeat(40),user_code:'TEST-CODE',verification_uri:'https://github.com/login/device',expires_in:900,interval:5}) :
+    json({access_token:'gho_'+'s'.repeat(40),token_type:'bearer',scope:'repo'}));
+  const start=await message({type:'github-device-start',scope:'repo'},options);
+  assert.equal(start.result.state,'pending');assert.equal(typeof tick,'function');
+  sessionStore.get('github-device-pending').nextPollAt=Date.now()-1;
+  await tick();
+  assert.equal((await message({type:'github-auth-status'},options)).result.configured,true);
+  assert.equal(sessionStore.has('github-device-pending'),false);
+  assert.equal(calls.badge,'●');
+  await message({type:'github-auth-clear'},options);
+});
 
 test('global project search resolves one immutable revision and excludes symlinks and unsafe paths',async t=>{
   const requested=[];

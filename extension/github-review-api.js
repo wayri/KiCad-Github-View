@@ -23,11 +23,14 @@ const KiCadGitHubReviewApi = (() => {
   // No persistent key: copied session records cannot unlock another worker.
   // Worker suspension/restart deliberately requires authentication again.
   let vaultKey = null, deviceSecret = null, authEpoch = 0, authQueue = Promise.resolve(), initialized = false;
+  let disconnectReason = '';
   const SESSION_LIMIT = 8 * 60 * 60 * 1000;
   function authOperation(operation) {
     if (!initialized) {
       initialized = true;
       authQueue = authQueue.then(async () => {
+        if ((await chrome.storage.session.get(TOKEN_KEY))[TOKEN_KEY] ||
+            (await chrome.storage.session.get(DEVICE_KEY))[DEVICE_KEY]) disconnectReason = 'background-restarted';
         await chrome.storage.session.remove([TOKEN_KEY, TOKEN_EXPIRY_KEY, DEVICE_KEY]);
         await chrome.storage.local.remove([TOKEN_KEY, TOKEN_EXPIRY_KEY, DEVICE_KEY]);
       });
@@ -51,6 +54,7 @@ const KiCadGitHubReviewApi = (() => {
       new Uint8Array(bytes).fill(0);
       return { token, expiresAt: record.expiresAt };
     } catch {
+      disconnectReason = record.expiresAt <= Date.now() ? 'expired' : 'session-locked';
       vaultKey = null;
       await chrome.storage.session.remove([TOKEN_KEY, TOKEN_EXPIRY_KEY]);
       return null;
@@ -59,7 +63,8 @@ const KiCadGitHubReviewApi = (() => {
   async function tokenStatus() {
     return authOperation(async () => {
       const credential = await readCredential();
-      return credential ? { configured: true, expiresAt: credential.expiresAt } : { configured: false };
+      return credential ? { configured: true, expiresAt: credential.expiresAt } :
+        { configured: false, ...(disconnectReason ? { reason: disconnectReason } : {}) };
     });
   }
   async function setToken(value, lifetime = SESSION_LIMIT, expectedEpoch) {
@@ -87,6 +92,7 @@ const KiCadGitHubReviewApi = (() => {
       finally { bytes.fill(0); }
       if (expectedEpoch !== authEpoch) throw fail("Sign-in was cancelled. Start again.", true);
       vaultKey = key;
+      disconnectReason = '';
       await chrome.storage.session.set({ [TOKEN_KEY]: { version: 1, iv: Array.from(iv),
         ciphertext: Array.from(new Uint8Array(ciphertext)), expiresAt } });
       await chrome.storage.session.remove(TOKEN_EXPIRY_KEY);
@@ -103,6 +109,7 @@ const KiCadGitHubReviewApi = (() => {
     return authOperation(async () => {
       vaultKey = null;
       deviceSecret = null;
+      disconnectReason = reset ? 'reset' : 'signed-out';
       await chrome.storage.session.remove([TOKEN_KEY, TOKEN_EXPIRY_KEY, DEVICE_KEY]);
       if (reset) await chrome.storage.local.remove(CLIENT_ID_KEY);
       return { configured: false };
@@ -171,7 +178,8 @@ const KiCadGitHubReviewApi = (() => {
       await finishDevice(pending, epoch);
       return { ...configuration, active: false, expired: true };
     }
-    return { ...configuration, active: Boolean(pending), ...(pending ? safeFlow(pending) : {}) };
+    return { ...configuration, active: Boolean(pending), ...(pending ? safeFlow(pending) : {}),
+      ...(disconnectReason ? { reason: disconnectReason } : {}) };
   }
   async function startDevice(value = "", scope = "public_repo") {
     const epoch = authEpoch;

@@ -36,6 +36,7 @@ test('copied ciphertext, legacy plaintext and pending login are purged in a fres
   const copied = new Map(first.session); copied.set('github-device-pending', { deviceCode: 'secret' });
   const second = harness(copied);
   assert.equal((await second.api.tokenStatus()).configured, false);
+  assert.equal((await second.api.tokenStatus()).reason, 'background-restarted');
   assert.equal(copied.size, 0);
   const local = new Map([['github-review-token', TOKEN]]);
   const legacy = harness(new Map([['github-review-token', TOKEN]]), local);
@@ -56,6 +57,7 @@ test('expired credentials, sign-out and reset remove all authentication secrets'
   const h = harness(); await h.api.setToken(TOKEN, 1);
   await new Promise(resolve => setTimeout(resolve, 5));
   assert.equal((await h.api.tokenStatus()).configured, false);
+  assert.equal((await h.api.tokenStatus()).reason, 'expired');
   await h.api.setToken(TOKEN);
   h.session.set('github-device-pending', { deviceCode: 'secret' });
   await h.api.clearToken();
