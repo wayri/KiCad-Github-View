@@ -81,7 +81,7 @@ test('GitHub body formats user text and drawing context safely while retaining t
  const note={...sample(),threadType:'discussion',severity:'major',state:'resolved',text:'Check **spacing** | fast\n@alice <script>alert(1)</script>',tags:['placement|clearance'],mentions:['alice'],
   anchor:{...sample().anchor,repository:'owner/repo',ref:'feature/review',file:'design/a (rev)#1.kicad_pcb',kind:'footprint',reference:'J1|A',variant:'prototype'}};
  const markdown=comments.toMarkdown(note);
- assert.ok(markdown.startsWith('## KiCad visual review\n\n### Review comment\n\n'));
+ assert.ok(markdown.startsWith('## KiCad visual review\n\n### Check '));
  assert.match(markdown, /Check.*\n@alice/s);
  assert.equal(markdown.includes('<script>'),false);
  assert.ok(markdown.includes('| Destination type | Discussion |'));
@@ -170,3 +170,31 @@ test('Issue and Discussion types survive sidecar, export and GitHub marker round
  assert.equal(comments.commentType(notes[2]),null);assert.equal(comments.commentType(notes[3]),'discussion');assert.equal(comments.commentType({...notes[0],github:{source:'discussion-comment'}}),'discussion');assert.equal(comments.commentType({remoteRefs:[{kind:'issue'},{kind:'discussion'}]}),null);
  assert.deepEqual(comments.sortAndFilter(notes,{threadType:'issue'}).map(n=>n.id),['issue','old-issue']);assert.deepEqual(comments.sortAndFilter(notes,{threadType:'discussion'}).map(n=>n.id),['discussion','old-discussion']);assert.deepEqual(comments.sortAndFilter(notes,{threadType:'issue',state:'closed'}).map(n=>n.id),['issue']);assert.equal(comments.sortAndFilter(notes,{threadType:'all'}).length,5);assert.throws(()=>comments.sortAndFilter(notes,{threadType:'chat'}),/filter/);
  });
+
+test('created date filters include complete UTC days and normalize timestamp offsets without modifying notes',()=>{
+ const times=['2026-10-02T23:59:59.999Z','2026-10-03T00:00:00.000Z','2026-10-03T23:59:59.999Z','2026-10-04T00:00:00Z','2026-10-03T01:00:00+02:00','2026-10-02T23:30:00-01:00'];
+ const notes=times.map((createdAt,i)=>({...sample(),id:String(i),createdAt})),before=JSON.stringify(notes);
+ const ids=filters=>comments.sortAndFilter(notes,{order:'oldest',...filters}).map(n=>n.id);
+ assert.deepEqual(ids({createdFrom:'2026-10-03',createdTo:'2026-10-03'}),['1','5','2']);
+ assert.deepEqual(ids({createdFrom:'2026-10-04'}),['3']);
+ assert.deepEqual(ids({createdTo:'2026-10-02'}),['4','0']);
+ assert.equal(ids({createdFrom:'',createdTo:''}).length,notes.length);
+ assert.equal(JSON.stringify(notes),before);
+});
+
+test('created date restrictions validate real days and reject reversed ranges even for empty results',()=>{
+ assert.deepEqual(comments.createdDateRange('2024-02-29','2024-02-29'),{from:Date.parse('2024-02-29T00:00:00Z'),until:Date.parse('2024-03-01T00:00:00Z')});
+ assert.deepEqual(comments.createdDateRange(undefined,''),{from:undefined,until:undefined});
+ for(const invalid of ['2026-02-29','2026-02-31','2026-04-31','2026-13-01','2026-00-01','2026-10-00','2026-1-01',' 2026-10-01','2026-10-01T00:00:00Z',null,123]){
+  assert.throws(()=>comments.sortAndFilter([],{createdFrom:invalid}),/date filter/);
+  assert.throws(()=>comments.sortAndFilter([],{createdTo:invalid}),/date filter/);
+ }
+ assert.throws(()=>comments.sortAndFilter([],{createdFrom:'2026-10-04',createdTo:'2026-10-03'}),/start.*end/);
+});
+
+test('created date restrictions combine with type, state, severity, read, search and sorting using creation time only',()=>{
+ const base={...sample(),threadType:'issue',state:'resolved',severity:'major',text:'connector clearance',mentions:['alice']};
+ const notes=[{...base,id:'old',createdAt:'2026-10-01T00:00:00Z',updatedAt:'2026-10-04T00:00:00Z'}, {...base,id:'matching',createdAt:'2026-10-03T00:00:00Z',updatedAt:'2026-10-03T00:00:00Z',github:{createdAt:'2026-10-01T00:00:00Z'}}, {...base,id:'other-type',threadType:'discussion'}, {...base,id:'read'}, {...base,id:'open',state:'open'}];
+ const filters={createdFrom:'2026-10-03',createdTo:'2026-10-03',threadType:'issue',state:'closed',severity:'major',read:'unread',query:'@alice'.slice(1),order:'updated'};
+ assert.deepEqual(comments.sortAndFilter(notes,filters,n=>n.id==='read'?'2026-10-05T00:00:00Z':undefined).map(n=>n.id),['matching']);
+});

@@ -59,7 +59,7 @@ function workspaceRuntime(respond=async()=>[], hooks={}){
   const keyHandlers=new Set();
   let resizeCallback;
   const context={innerWidth:hooks.width||800,innerHeight:hooks.frameHeight||600,EventTarget,CustomEvent,Map,Set,console,crypto:require('node:crypto').webcrypto,localStorage,document:{body,getElementById:id=>{const node=elements.get(id);return node&&body.contains(node)?node:null;},createElement:tag=>new Element(tag),createElementNS:(_,tag)=>new Element(tag)},addEventListener:(type,fn)=>{if(type==='keydown')keyHandlers.add(fn);if(type==='resize')resizeCallback=fn;},removeEventListener:(type,fn)=>{if(type==='keydown')keyHandlers.delete(fn);},matchMedia:()=>({matches:true}),
-    KiCadReviewTools:require('../review-tools.js'),KiCadDesignModel:require('../design-model.js'),KiCadNetModel:require('../net-model.js'),KiCadReviewComments:require('../review-comments.js'),KiCadBrowserData:require('../browser-data.js'),KiCadOwnedCanvas:require('../owned-canvas.js'),
+    KiCadCommentCompose:{...require('../comment-compose.js'),...(hooks.compose||{})},KiCadReviewTools:require('../review-tools.js'),KiCadDesignModel:require('../design-model.js'),KiCadNetModel:require('../net-model.js'),KiCadReviewComments:require('../review-comments.js'),KiCadBrowserData:require('../browser-data.js'),KiCadOwnedCanvas:require('../owned-canvas.js'),
     KiCadPairedReview:require('../paired-review.js'),KiCadBomAnalytics:require('../bom-analytics.js'),
     chrome:{runtime:{sendMessage:async message=>({ok:true,result:await respond(message)})}},setTimeout,clearTimeout,URL,Blob};
   if(hooks.vscode)context.KiCadVSCodeContext={};
@@ -389,7 +389,7 @@ test('root navigation resolves an initially opened child and rejects reused-pare
 
 test('GitLab viewer isolates host context and exposes provider account and publication controls',async()=>{
  let notes=[];const calls=[];const view=workspaceRuntime(async message=>{calls.push(message);if(message.type==='comment-save'){notes=[message.comment];return message.comment;}if(message.type==='comment-list')return notes;if(message.type==='comment-policy-status')return{allowed:true,mode:'everyone'};return [];},{provider:'gitlab',host:'https://gitlab.example.com',repository:'group/sub/design'});view.load();await new Promise(resolve=>setImmediate(resolve));
- assert.equal(view.get('reviewSettings').hidden,false);assert.equal(view.get('showGitHub').textContent,'GitLab');assert.equal(view.get('postComment').textContent,'Post to GitLab');assert.equal(view.get('editorAccount').textContent,'GitLab account');assert.equal(view.get('repositoryIssues').href,'https://gitlab.example.com/group/sub/design/-/issues');
+ assert.equal(view.get('reviewSettings').hidden,false);assert.equal(view.get('showGitHub').textContent,'GitLab');assert.equal(view.get('postComment').textContent,'Comment');assert.equal(view.get('editorAccount').textContent,'GitLab account');assert.equal(view.get('repositoryIssues').href,'https://gitlab.example.com/group/sub/design/-/issues');
  view.get('newComment').click();view.get('commentText').value='Check layout';await view.get('saveComment').click();
  assert.match(view.get('commentList').textContent,/Publish to GitLab/);assert.doesNotMatch(view.get('commentList').textContent,/Publish to GitHub/);
  const saved=calls.find(message=>message.type==='comment-save');assert.equal(saved.provider,'gitlab');assert.equal(saved.host,'https://gitlab.example.com');assert.equal(saved.comment.anchor.provider,'gitlab');assert.equal(saved.comment.anchor.host,'https://gitlab.example.com');assert.equal(saved.comment.anchor.repository,'group/sub/design');
@@ -432,7 +432,7 @@ test('all shared viewers contain exactly one collaboration control and a distinc
  for(const file of ['pcb-viewer.html','schematic-viewer.html','revision-viewer.html']){
   const html=fs.readFileSync(path.join(__dirname,'..',file),'utf8');
   for(const id of ['showGitHub','githubPane','githubCommentType','commentDestination','reviewSettings','refreshCommentPolicy','refreshGitHub','severityFilter'])assert.equal((html.match(new RegExp(`id="${id}"`,'g'))||[]).length,1,`${file}: ${id}`);
-  assert.match(html,/<section id="githubPane" hidden>/);assert.match(html,/Comment type <select id="githubCommentType">/);assert.match(html,/Post to GitHub uploads a captured screenshot/);assert.match(html,/Use Reply to start a new anchored draft/);assert.match(html,/Ordinary messages, subscriptions and closing issues remain on GitHub/);
+  assert.match(html,/<section id="githubPane" hidden>/);assert.match(html,/Comment type <select id="githubCommentType">/);assert.match(html,/Post to GitHub uploads a captured screenshot/);assert.match(html,/Use Reply to start a new anchored draft/);assert.match(html,/Use View comments → Load thread to read ordinary messages and replies here/);
  }
 });
 
@@ -443,7 +443,7 @@ test('editor posts formatted Issue and Discussion directly and saves confirmed t
   view.get('newComment').click();view.get('commentText').value='Check connector clearance';view.get('commentSeverity').value='major';view.get('editorThreadType').value=type;view.get('editorThreadType').onchange();view.get('editorTitle').value='Connector clearance review';
   if(type==='discussion')await view.get('editorLoadCategories').click();
   view.get('editorPreview').click();assert.match(view.get('editorMarkdown').textContent,/## KiCad visual review/);assert.doesNotMatch(view.get('editorMarkdown').textContent,/kicad-review:v1/);assert.equal(calls.some(m=>m.type==='github-publish-comment'),false);
-  await view.get('postComment').click();const publication=calls.find(m=>m.type==='github-publish-comment');assert.equal(publication.destination,`new-${type}`);assert.equal(publication.title,'Connector clearance review');assert.equal(publication.comment.threadType,type);if(type==='discussion')assert.equal(publication.categoryId,'category-1');assert.equal(notes[0].remoteRefs[0].url,remoteRef.url);assert.equal(view.get('commentEditor').hidden,true);assert.match(view.get('commentStatus').textContent,/Posted to GitHub/);
+  await view.get('postComment').click();const publication=calls.find(m=>m.type==='github-publish-comment');assert.equal(publication.destination,`new-${type}`);assert.equal(publication.title,'Check connector clearance');assert.equal(publication.comment.threadType,type);if(type==='discussion')assert.equal(publication.categoryId,'category-1');assert.equal(notes[0].remoteRefs[0].url,remoteRef.url);assert.equal(view.get('commentEditor').hidden,true);assert.match(view.get('commentStatus').textContent,/Posted to GitHub/);
  }
 });
 
@@ -641,4 +641,21 @@ test('check window reports blocked 3D navigation instead of claiming a successfu
  const focused=[],view=workspaceRuntime(undefined,{navigation:true,focus:p=>focused.push(p)});view.load();
  const report={source:'board.kicad_pcb',date:'2026-10-05T00:00:00Z',kicad_version:'10.0.0',coordinate_units:'mm',violations:[{type:'clearance',description:'Clearance',severity:'error',items:[{description:'Track',pos:{x:30,y:40}}]}]};
  view.get('ruleReportFile').files=[{size:250,name:'drc.json',text:async()=>JSON.stringify(report)}];await view.get('ruleReportFile').onchange();view.workspace.setScene({setPopulation(){}});view.get('nextRule').click();assert.equal(focused.length,0);assert.match(view.get('ruleStatus').textContent,/Cannot jump.*2D/);
+});
+
+
+test('compact composer inserts an inline mention and derives title and mentions on save',async()=>{
+ let notes=[];const calls=[];const view=workspaceRuntime(async m=>{calls.push(m);if(m.type==='comment-list')return notes;if(m.type==='comment-mention-users')return{users:[{login:'wayri',name:'Reviewer'}]};if(m.type==='comment-save'){notes=[m.comment];return m.comment;}return[];});view.load();await new Promise(r=>setImmediate(r));view.get('newComment').click();
+ assert.equal(view.get('commentComposeTop').children.length,3);assert.equal(view.get('editorTitleLabel').parentElement.hidden,true);assert.equal(view.get('editorDestination').value,'issue');
+ const box=view.get('commentText');box.value='Review title\nAsk @wa';box.selectionStart=box.value.length;box.dispatchEvent(new Event('input'));await new Promise(r=>setTimeout(r,240));assert.equal(view.get('inlineMentionSuggestions').hidden,false);view.get('inlineMentionSuggestions').children[0].click();assert.equal(box.value,'Review title\nAsk @wayri ');assert.equal(view.get('inlineMentionSuggestions').hidden,true);await view.get('saveComment').click();assert.deepEqual([...notes[0].mentions],['wayri']);assert.match(view.get('commentList').textContent,/Review title/);
+});
+
+test('pasted screenshot is saved with a draft and cancelled conversions cannot contaminate another draft',async()=>{
+ let notes=[],finish;const view=workspaceRuntime(async m=>{if(m.type==='comment-list')return notes;if(m.type==='comment-save'){notes=[m.comment];return m.comment;}return[];},{compose:{normalizeCapture:()=>new Promise(r=>finish=r)}});view.load();await new Promise(r=>setImmediate(r));view.get('newComment').click();view.get('commentText').value='Evidence';
+ const paste=()=>{const event=new Event('paste',{cancelable:true});Object.defineProperty(event,'clipboardData',{value:{items:[{kind:'file',type:'image/png',getAsFile:()=>new Blob(['image'],{type:'image/png'})}]}});view.get('commentText').dispatchEvent(event);assert.equal(event.defaultPrevented,true);};paste();await view.get('saveComment').click();assert.equal(notes.length,0);assert.match(view.get('commentStatus').textContent,/Wait for/);view.get('cancelComment').click();view.get('newComment').click();finish({dataUrl:'data:image/png;base64,aGVsbG8=',width:1,height:1});await new Promise(r=>setImmediate(r));assert.equal(view.get('capturePreview').hidden,true);
+});
+
+test('thread reader shows ordinary text safely, filters dates, and prepares a reply without posting',async()=>{
+ const calls=[];const thread={kind:'discussion',number:7,title:'Design question',url:'https://github.com/wayri/fixture/discussions/7',state:'open',author:'wayri',createdAt:'2026-10-01T00:00:00Z',body:'Initial question',comments:[{id:'reply1',author:'reviewer',createdAt:'2026-10-03T12:00:00Z',body:'<script>not executable</script>',replyTo:'parent1'}],warnings:[]};const view=workspaceRuntime(async m=>{calls.push(m);if(m.type==='github-thread-read')return thread;return[];});view.load();await new Promise(r=>setImmediate(r));view.get('commentThreadKind').value='discussion';view.get('commentThreadNumber').value='7';await view.get('commentThreadLoad').click();assert.match(view.get('commentThreadMessages').textContent,/Initial question/);assert.match(view.get('commentThreadMessages').textContent,/<script>not executable/);assert.match(view.get('commentThreadMessages').textContent,/Reply to parent1/);
+ view.get('commentSettingsButton').click();assert.equal(view.get('commentSettings').hidden,false);view.get('commentCreatedFrom').value='2026-10-03';view.get('commentCreatedFrom').onchange();assert.doesNotMatch(view.get('commentThreadMessages').textContent,/Initial question/);assert.match(view.get('commentThreadMessages').textContent,/not executable/);view.get('commentThreadMessages').children[0].children.at(-1).click();assert.equal(view.get('editorDestination').value,'existing-discussion');assert.equal(view.get('editorThreadNumber').value,'7');assert.equal(calls.some(m=>m.type==='github-publish-comment'),false);
 });

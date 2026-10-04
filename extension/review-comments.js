@@ -193,7 +193,8 @@ const KiCadReviewComments = (() => {
       ["Created (UTC)", note.createdAt],
       ["Updated (UTC)", note.updatedAt]
     ];
-    const lines = ["## KiCad visual review", "", "### Review comment", "", escapedComment(note.text), "",
+    const commentLines=note.text.split(/\r\n|\r|\n/);
+    const lines = ["## KiCad visual review", "", "### "+escaped(commentLines[0]), "", escapedComment(commentLines.slice(1).join("\n")), "",
       "### Design context", "", "| Detail | Value |", "| --- | --- |",
       ...rows.map(([label, item, rawMarkdown]) => `| ${tableCell(label)} | ${rawMarkdown ? item : tableCell(item)} |`)];
     if(note.attachments?.length)for(const attachment of note.attachments)lines.push('',`![Captured drawing area (${attachment.width} × ${attachment.height})](${attachment.url})`);
@@ -264,6 +265,19 @@ const KiCadReviewComments = (() => {
     const kinds=[...new Set((note?.remoteRefs||[]).map(ref=>ref.kind).filter(kind=>['issue','discussion'].includes(kind)))];
     return kinds.length===1?kinds[0]:null;
   }
+  function createdDateRange(createdFrom, createdTo) {
+    const day = (value) => {
+      if (value === undefined || value === "") return undefined;
+      if (typeof value !== "string" || !/^\d{4}-\d\d-\d\d$/.test(value)) throw new Error("Invalid comment date filter. Use YYYY-MM-DD.");
+      const time = Date.parse(value + "T00:00:00.000Z");
+      if (!Number.isFinite(time) || new Date(time).toISOString().slice(0,10) !== value) throw new Error("Invalid comment date filter. Choose a real calendar date.");
+      return time;
+    };
+    const from = day(createdFrom), to = day(createdTo);
+    if (from !== undefined && to !== undefined && from > to) throw new Error("Comment date filter start must not follow its end.");
+    // The final UTC day is inclusive, without relying on timestamp precision.
+    return { from, until: to === undefined ? undefined : to + 86400000 };
+  }
   function sortAndFilter(notes, filters = {}, readAt = () => undefined) {
     const severity = filters.severity || "all", state = filters.state || "all", read = filters.read || "all", threadType=filters.threadType||"all";
     const order = filters.order || "severity", query = String(filters.query || "").trim().toLowerCase().slice(0, 2000);
@@ -271,10 +285,13 @@ const KiCadReviewComments = (() => {
       !["all","read","unread"].includes(read) || !["severity","severity-lowest","newest","oldest","updated","updated-oldest"].includes(order)) {
       throw new Error("Invalid comment filter.");
     }
+    const dates = createdDateRange(filters.createdFrom, filters.createdTo);
     const rank = {critical:0,major:1,minor:2,info:3};
     return [...notes].filter((note) => {
       const unread = isUnread(note, readAt(note));
-      return (threadType === "all" || commentType(note) === threadType) && (severity === "all" || (note.severity || "info") === severity) &&
+      const created = Date.parse(note.createdAt);
+      return (dates.from === undefined || created >= dates.from) && (dates.until === undefined || created < dates.until) &&
+        (threadType === "all" || commentType(note) === threadType) && (severity === "all" || (note.severity || "info") === severity) &&
         (state === "all" || (state === "closed" ? ["resolved","wont-fix"].includes(note.state) : (note.state || "open") === state)) &&
         (read === "all" || (read === "unread") === unread) &&
         (!query || [note.text,note.anchor?.reference,...(note.tags || []),...(note.mentions || [])]
@@ -288,7 +305,7 @@ const KiCadReviewComments = (() => {
     });
   }
   return { normalizeScope, normalizeAnchor, validateComment, validateAttachment, toMarkdown, fromMarkdown, parseSidecar, serializeSidecar,
-    exportComments, parseComments, receiptKey, isUnread, commentType, sortAndFilter };
+    exportComments, parseComments, receiptKey, isUnread, commentType, createdDateRange, sortAndFilter };
 })();
 
 if (typeof globalThis === "object") globalThis.KiCadReviewComments = KiCadReviewComments;

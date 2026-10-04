@@ -11,7 +11,7 @@
 
 **Interactive KiCad review inside GitHub and GitLab file pages.** Open schematics and PCB layouts as drawings, inspect saved parts and nets, compare revisions, and anchor review notes to the design. The viewer runs in the browser with our own schematic/PCB engine and the owner-authorized SPIKE 3D adapter. No KiCad installation, local companion process or rendering server is needed for the browser extension.
 
-[Download v0.12.14](https://github.com/wayri/KiCad-Github-View/releases/tag/v0.12.14) · [Install](docs/INSTALL.md) · [Comment integration](docs/COMMENTS.md) · [Git services](docs/GIT-HOSTS.md) · [Release notes](docs/releases/v0.12.14.md)
+[Download v0.12.15](https://github.com/wayri/KiCad-Github-View/releases/tag/v0.12.15) · [Install](docs/INSTALL.md) · [Comment integration](docs/COMMENTS.md) · [Git services](docs/GIT-HOSTS.md) · [Release notes](docs/releases/v0.12.15.md)
 
 Illustrated walkthroughs: [Using GitHub integration](docs/using-github-integration/README.md) · [Using GitLab integration](docs/using-gitlab-integration/README.md). Browser packages: [Firefox](docs/FIREFOX.md) · [Safari](docs/SAFARI.md).
 
@@ -69,7 +69,7 @@ Properties and analytics come from the saved source revision. Missing settings a
 
 ## Install in Chrome or Edge
 
-1. Download **`kicad-visual-review-chrome-edge-brave-opera-vivaldi-chromium-0.12.14.zip`** from [Releases](https://github.com/wayri/KiCad-Github-View/releases/tag/v0.12.14). The GitHub **Source code** archives are not the prepared extension package.
+1. Download **`kicad-visual-review-chrome-edge-brave-opera-vivaldi-chromium-0.12.15.zip`** from [Releases](https://github.com/wayri/KiCad-Github-View/releases/tag/v0.12.15). The GitHub **Source code** archives are not the prepared extension package.
 2. Extract the ZIP into a permanent folder. Select the folder containing `manifest.json`, not the ZIP itself.
 3. Open `chrome://extensions` in Chrome/Chromium or `edge://extensions` in Edge.
 4. Enable **Developer mode**, select **Load unpacked**, and choose that folder.
@@ -152,13 +152,13 @@ For detailed workflows see [search/highlights](extension/docs/search-and-highlig
 Write a review in the drawing and post it directly to a **GitHub Issue or Discussion**, selected in the comment editor. A successful post creates the selected thread or adds a reply to its thread number, then saves the GitHub link with the annotation.
 
 1. Open **Review → Comments** and create a part, point or area note. Enter your comment, severity, tags, mentions and state.
-2. Under **Post to GitHub**, choose **Issue** or **Discussion**, then **New** or **Existing**. Enter a title for a new thread or its number for a reply. Load and select a category for a new Discussion.
+2. Choose **Issue/Discussion**, **Severity** and **State** in the three colored dropdowns. The first line of the comment is its title. Type `@` for account suggestions, and paste a screenshot directly into the text box.
 3. Use **Preview GitHub Markdown** to inspect the formatted review section: comment text followed by a design-context table, exact revision/file link, object or area, severity, state, tags, mentions and timestamps.
-4. Click **Post to GitHub**. This sends the review through GitHub's API using your connected account. Confirmed posts show a linked conversation; denied or ambiguous requests report an error and retain your draft. **Save draft** is available when you want to keep a note without posting.
+4. The destination beside **Comment** defaults to **New issue**. Choose **Existing issue/discussion** and enter its number to reply; load a category for a new Discussion. Click **Comment**. This sends the review through GitHub's API using your connected account. Confirmed posts show a linked conversation; denied or ambiguous requests report an error and retain your draft. **Save draft** is available when you want to keep a note without posting.
 
-![Choose Discussion and post directly from the note editor](docs/images/integration/github-direct-discussion.jpg)
+![Simple composer with inline mention suggestions and a pasted screenshot](docs/images/integration/simple-comment-composer.png)
 
-This is the actual editor in a local fixture with a mocked category list; no remote post was made for the screenshot. Connect your account through **GitHub account**. The primary sign-in button uses the registered publisher OAuth App; [sign-in setup](docs/GITHUB-SIGNIN.md) also explains the advanced token fallback. Public and authorized private repository publication are supported, with GitHub permissions and repository policy checked. Authorized private annotation readback is supported; authorized private PR comparison is supported.
+This is the actual editor with mocked transport; no remote post was made for the screenshot. In **View comments**, load an Issue or Discussion by number, or choose **View thread** on a linked note, to read ordinary messages and replies. The gear button exposes creation-date filters in UTC. Connect your account through **GitHub account**. The primary sign-in button uses the registered publisher OAuth App; [sign-in setup](docs/GITHUB-SIGNIN.md) also explains the advanced token fallback. Public and authorized private repository publication are supported, with GitHub permissions and repository policy checked. Authorized private annotation readback is supported; authorized private PR comparison is supported.
 
 The Git-tracked `.kicad-review.json` file is an optional review record, not a prerequisite for posting. Without a connected file, confirmed links and drafts stay in browser storage. Connect/create a sidecar in a checkout to track them with Git; commit/push it with normal Git tools. Opening a drawing or choosing a destination does not post, commit or edit the design. Existing saved notes also retain **Publish to GitHub** and **Open GitHub composer** actions.
 
@@ -170,10 +170,10 @@ Read [the complete comment guide](docs/COMMENTS.md) for authentication, permissi
 
 ## VS Code installation
 
-Download **`kicad-visual-review-vscode-0.12.14.vsix`** from Releases. In VS Code run **Extensions: Install from VSIX**, select the file and run **Developer: Reload Window**. Open a KiCad project folder and use **KiCad: Open Visual Viewer** or **Reopen Editor With → KiCad Visual Review**. The **KiCad Review** explorer lists saved drawings and review sidecars.
+Download **`kicad-visual-review-vscode-0.12.15.vsix`** from Releases. In VS Code run **Extensions: Install from VSIX**, select the file and run **Developer: Reload Window**. Open a KiCad project folder and use **KiCad: Open Visual Viewer** or **Reopen Editor With → KiCad Visual Review**. The **KiCad Review** explorer lists saved drawings and review sidecars.
 
 ```sh
-code --install-extension kicad-visual-review-vscode-0.12.14.vsix --force
+code --install-extension kicad-visual-review-vscode-0.12.15.vsix --force
 ```
 
 Local notes use `.kicad-review.json` in the workspace root (or drawing directory outside a workspace). Filesystem-provider permissions still apply. The VSIX is not currently published in Visual Studio Marketplace. See [the VS Code guide](vscode-extension/README.md).
@@ -249,4 +249,4 @@ See [third-party notices](THIRD-PARTY-NOTICES.md) for distributed dependencies a
 
 Authentication protection, encryption limits and verification status are documented in [SECURITY.md](SECURITY.md). Supported Chrome sessions retain encrypted credentials through background idle; browser restart or extension reload requires sign-in again. Other browsers also lose sessions on background restart. Uninstall does not revoke GitHub authorization.
 
-Comment actions reveal a usable composer even in a short split pane or Focus view. Expand temporarily uses more drawing space; close the panel to return to the drawing. In **Mention people**, choose repository contributors/assignees (GitHub) or project members (GitLab), or search other accounts, then select a username to add it. Suggestions do not grant repository access. Paired views cross-highlight saved parts and nets, including unambiguous sheet-qualified net names; reused or ambiguous sheet instances require explicit selection.
+Comment actions reveal a usable composer even in a short split pane or Focus view. Expand temporarily uses more drawing space; close the panel to return to the drawing. Type `@` directly in the comment box to suggest repository accounts, or type at least two characters to search users; select a suggestion with the mouse or arrow keys and Enter. Suggestions do not grant repository access. Paired views cross-highlight saved parts and nets, including unambiguous sheet-qualified net names; reused or ambiguous sheet instances require explicit selection.

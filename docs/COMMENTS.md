@@ -12,7 +12,11 @@ The extension serializes its own browser-tab writes, checks whether the file cha
 
 ## Connecting GitHub
 
-Open **Review**, then the inspector's **GitHub** tab. Choose the general comment type (**Issues** or **Discussions**), then choose a new thread or an existing destination. Discussion destinations expose the repository category selector. Use **Account and review-file settings** to configure sign-in, and **Check comment policy** to inspect the repository policy. Return to **Comments** to create and save the annotation; its Issue/Discussion type is retained in exports and Git sidecars. Publishing rejects a destination that does not match that saved type. Older notes without a type use the selected destination. Linked conversations appear in the GitHub tab; replies and subscriptions remain on GitHub.
+Open **Review → Add comment**. The compact composer has three colored dropdowns: Issue/Discussion, severity and local review state. Write the title on the first line and the review on following lines. Type `@` for account suggestions (arrow keys and Enter work), or enter a username yourself. Paste PNG/JPEG/WebP screenshots directly into the box; they are normalized to a bounded PNG preview. Tags and account/Markdown controls live under **Tags and advanced options**. The destination beside **Comment** defaults to New issue. Select an existing thread and enter its number, or choose Discussion and load a category for a new discussion. **Save draft** never publishes. A saved note retains its Issue/Discussion type; publication checks type, permissions and repository policy.
+
+![Compact comment composer](images/integration/simple-comment-composer.png)
+
+The screenshot uses actual rendering and mocked transport. No live post was made.
 
 GitHub publishing is optional. Open **Options**, choose repository access and press **Sign in with GitHub**. Users approve a device code on GitHub. Public access requests `public_repo`; private access requests the broad read/write `repo` scope. From v0.11.10, the publisher App public client ID is included, so normal users do not need advanced configuration. [Publisher setup](GITHUB-SIGNIN.md) documents maintenance and custom builds. Advanced settings offer a custom client ID or a manual personal access token. A manual token must have access to the repositories you review. Issue and pull-request comments require Issues write access. Discussions require access through GitHub GraphQL. Fine-grained tokens may also need access to the target repository. GitHub decides final permissions, and denied or missing access is reported.
 
@@ -36,7 +40,7 @@ Before publishing, the extension checks the target repository's `.kicad-review-p
 
 ## Publishing a note
 
-Create and save the annotation in the drawing viewer first. Choose its GitHub destination (a new issue, an existing issue or pull request, a new discussion, or an existing discussion); for a new discussion, load and select a category. Then click **Publish to GitHub** on the note. Saving or opening a drawing never publishes automatically. The extension posts a new issue for a new issue destination, an issue comment for an existing issue or pull request, a new discussion, or a discussion comment, as appropriate.
+Use **Comment** in the composer to save and publish in one action, or save a draft first. Choose its GitHub destination (a new issue, an existing issue or pull request, a new discussion, or an existing discussion); for a new discussion, load and select a category. Then click **Publish to GitHub** on the note. Saving or opening a drawing never publishes automatically. The extension posts a new issue for a new issue destination, an issue comment for an existing issue or pull request, a new discussion, or a discussion comment, as appropriate.
 
 Published text includes the note, severity, state, tags, mentions, date, repository, revision, file, and available object/location/variant anchors. **Post to GitHub** uploads an area capture as a GitHub repository attachment and inserts its image URL into the Issue or Discussion body. Upload requires repository write access and an OAuth or personal access token. If it fails, the draft remains and no text-only post is made: fix access or remove the screenshot explicitly. A confirmed upload is reused when retrying the same image/note/destination repository. GitHub App tokens and Enterprise Server uploads are unsupported. This follows [GitHub's official attachment uploader](https://github.com/cli/cli/blob/trunk/internal/attachments/client.go).
 
@@ -48,7 +52,7 @@ The state shown on a note is local review metadata. Marking a note resolved or s
 
 ## Reading existing GitHub annotations
 
-**Load GitHub annotations** uses the connected account when available, including for authorized private repositories. Public Issue/PR reads use the anonymous REST API when signed out. Only valid markers matching the exact repository, revision and drawing become cards; ordinary messages remain on GitHub.
+**Load GitHub annotations** uses the connected account when available, including for authorized private repositories. Public Issue/PR reads use the anonymous REST API when signed out. Only valid markers matching the exact repository, revision and drawing become cards; ordinary messages do not become drawing annotations. Use the separate thread reader below for the full conversation.
 
 Select **Issue / Existing issue** and its number to read the body and up to 500 comments. Selected PRs use their body and Issue-comment conversation. Without a selected thread, refresh scans at most 200 recent Issue/PR bodies, without fetching every conversation.
 
@@ -84,3 +88,16 @@ Authorized private repositories can receive Issue/Discussion posts. The connecte
 In **Comments → View comments**, **Filter and sort comments** opens by default. Filter by Open, Closed (Resolved or Won’t fix), Skipped, an exact review state, severity, read status or text. Sort severity highest/lowest first, creation date newest/oldest first, or update date newest/oldest first. **Reset filters** restores all notes in the selected category in severity order. These choices also filter drawing annotation markers; they do not change saved review state or the remote issue status.
 
 The Comments sidebar has **Issues** and **Discussions** category tabs, each with **Add comment** and **View comments**. Issue drafts map to GitHub Issues; discussion drafts map to GitHub Discussions, with a category required for new discussions. Use an existing thread number to add to that conversation. Selecting a category sets the type of new drafts, while browsing categories preserves an existing unsaved draft’s text and type. The editor’s Thread type control can explicitly change the draft type. **All** shows both categories and older unassigned notes; legacy notes with a confirmed remote conversation are classified from that conversation. State/severity/date filters, drawing markers, unread navigation and linked conversations respect the category. Saving a draft or browsing tabs never posts to GitHub. GitLab Discussions remain conversations within an existing GitLab issue, not GitHub-style standalone Discussions.
+
+
+## Read conversations and filter creation dates
+
+In **View comments**, choose Issue or Discussion, enter a thread number, and click **Load thread**. Linked annotation cards and conversations also provide **View thread**. Authors, timestamps, the original message, ordinary comments and Discussion reply relationships appear within Comments. **Reply** prepares a new anchored draft addressed to that thread; click **Comment** to submit it. Replies append to the conversation, rather than nesting under an individual Discussion reply. Reload with **Load thread** to see other reviewers' changes. There is no live subscription or automatic remote-state synchronization.
+
+The gear button at the top exposes state, severity, read status, sort/search and **Created from / Created through** dates. Dates use UTC and include the entire final day. They filter drawing notes and loaded conversation messages; they do not restrict who can publish or alter GitHub history. Invalid or reversed ranges show an error. Reset filters clears the dates.
+
+![Conversation reader and date controls](images/integration/comment-thread-dates.png)
+
+This screenshot uses a synthetic conversation. The reader is read-only and bounded to 200 comments, 10 requests, 64 KiB of text per entry and 1 MiB total. Truncation warnings link users to the original GitHub thread. Public Issues can be read anonymously; Discussions and private threads require extension sign-in and repository access. Bodies are displayed as safe text, so arbitrary HTML and remote media cannot execute or load from a thread. GitLab ordinary thread readback is not included in this GitHub reader; GitLab revision-bound annotation readback remains available.
+
+Clipboard images must be PNG, JPEG or WebP, at most 8 MiB and 40 megapixels before normalization. Screenshot publication uses the existing authenticated attachment upload; failure retains the draft instead of silently omitting its image. Cancelling or replacing a draft discards any still-running paste conversion.

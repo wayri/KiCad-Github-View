@@ -418,6 +418,73 @@ const KiCadGitHubReviewApi = (() => {
       return readbackJson(url.href, session);
     };
   }
+
+  // Ordinary conversations are read-only and deliberately separate from drawing annotations.
+  async function readThread({repository,ref,file,kind,number,provider}={}) {
+    const scope=KiCadReviewComments.normalizeScope({repository,ref,file,provider});
+    if(scope.provider==='gitlab'||!['issue','discussion'].includes(kind)||!NUMBER(number))throw fail('Invalid GitHub thread request.',true);
+    const [owner,name]=repoParts(repository), session=await readbackSession(kind==='issue');
+    const warnings=[],comments=[],seen=new Set();let requests=0,characters=0,stopped=false;
+    const warn=m=>{if(!warnings.includes(m))warnings.push(m);};
+    const timestamp=v=>typeof v==='string'&&/^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d(?:\.\d{1,3})?Z$/.test(v)&&Number.isFinite(Date.parse(v));
+    const url=`https://github.com/${repository}/${kind==='issue'?'issues':'discussions'}/${number}`;
+    const text=v=>{
+      if(v===null||v===undefined)return '';
+      if(typeof v!=='string')throw fail('GitHub returned an invalid thread body.',true);
+      const available=Math.max(0,1024*1024-characters),limit=Math.min(65536,available);
+      if(v.length>limit)warn('Thread text was truncated at 64 KiB per entry or 1 MiB total.');
+      const encoded=new TextEncoder().encode(v), result=new TextDecoder().decode(encoded.slice(0,limit),{stream:true});if(encoded.length>limit)warn('Thread text was truncated at 64 KiB per entry or 1 MiB total.');characters+=Math.min(encoded.length,limit);if(characters>=1024*1024)stopped=true;return result;
+    };
+    const record=(v,root=false,parentId)=>{
+      const id=kind==='issue'?v?.id:v?.databaseId;
+      const createdAt=kind==='issue'?v?.created_at:v?.createdAt,updatedAt=kind==='issue'?v?.updated_at:v?.updatedAt;
+      const author=kind==='issue'?v?.user:v?.author;
+      if(!v||(!root&&!NUMBER(id))||!timestamp(createdAt)||!timestamp(updatedAt)||author!==null&&!LOGIN.test(author?.login||'')){
+        if(root)throw fail('GitHub returned invalid thread provenance.',true);
+        warn('Some thread comments had invalid provenance and were omitted.');return null;
+      }
+      return {id:root?String(number):String(id),author:author?.login||null,createdAt,updatedAt,body:text(v.body),url:root?url:url+(kind==='issue'?`#issuecomment-${id}`:`#discussioncomment-${id}`),replyTo:parentId||null};
+    };
+    const add=(v,parentId)=>{if(comments.length>=200||stopped){stopped=true;return;}const r=record(v,false,parentId);if(r&&!seen.has(r.id)){seen.add(r.id);comments.push(r);}};
+    let thread;
+    if(kind==='issue'){
+      const endpoint=`${API}/repos/${repository}/issues/${number}`;
+      const value=await readbackJson(endpoint,session);requests++;
+      if(value?.number!==number||!['open','closed'].includes(value.state)||typeof value.title!=='string'||!Number.isSafeInteger(value.comments)||value.comments<0)throw fail('GitHub returned an invalid Issue response.',true);
+      thread={kind,number,title:value.title.slice(0,1024),state:value.state,...record(value,true)};
+      for(let page=1;comments.length<200&&!stopped&&(page-1)*50<value.comments;page++){
+        const values=await readbackJson(`${endpoint}/comments?per_page=50&page=${page}`,session);requests++;
+        if(!Array.isArray(values)||values.length>50)throw fail('GitHub returned an invalid Issue comment response.',true);
+        for(const v of values)add(v);
+        if(values.length<50){if(page*50<value.comments)warn('Issue pagination ended early; some comments may be missing.');break;}
+        if(page>=4){if(value.comments>page*50)stopped=true;break;}
+      }
+    }else{
+      const fields='id databaseId body createdAt updatedAt author{login}';
+      const query=`query($owner:String!,$name:String!,$number:Int!,$cursor:String){repository(owner:$owner,name:$name){discussion(number:$number){number title closed ${fields} comments(first:50,after:$cursor){nodes{${fields} replies(first:10){nodes{${fields}} pageInfo{hasNextPage endCursor}}} pageInfo{hasNextPage endCursor}}}}}`;
+      const replyQuery=`query($id:ID!,$cursor:String){node(id:$id){... on DiscussionComment{replies(first:50,after:$cursor){nodes{${fields}} pageInfo{hasNextPage endCursor}}}}}`;
+      const next=(p,previous)=>{if(!p||typeof p.hasNextPage!=='boolean'){warn('Thread pagination was incomplete.');return null;}if(!p.hasNextPage)return null;if(typeof p.endCursor!=='string'||p.endCursor.length>1024||!p.endCursor||/[\x00-\x1f]/.test(p.endCursor)||p.endCursor===previous){warn('Thread pagination was invalid.');return null;}return p.endCursor;};
+      const replies=[],cursors=new Set();let cursor=null;
+      do{
+        const result=await readbackJson(API+'/graphql',session,{query,variables:{owner,name,number,cursor}});requests++;
+        const value=result.data?.repository?.discussion;
+        if(value?.number!==number||typeof value.title!=='string'||typeof value.closed!=='boolean'||!Array.isArray(value.comments?.nodes)||value.comments.nodes.length>50)throw fail('GitHub returned an invalid Discussion response.',true);
+        if(!thread)thread={kind,number,title:value.title.slice(0,1024),state:value.closed?'closed':'open',...record(value,true)};
+        for(const v of value.comments.nodes){add(v);if(stopped)break;if(!Array.isArray(v?.replies?.nodes)||v.replies.nodes.length>10){warn('Some Discussion replies were unavailable.');continue;}for(const r of v.replies.nodes)add(r,String(v.databaseId));const r=next(v.replies.pageInfo,null);if(r&&validId(v.id)&&NUMBER(v.databaseId))replies.push({id:v.id,parentId:String(v.databaseId),cursor:r});else if(r)warn('Some Discussion replies had invalid identifiers.');}
+        cursor=next(value.comments.pageInfo,cursor);if(cursor&&cursors.has(cursor)){warn('Thread pagination repeated.');cursor=null;}if(cursor)cursors.add(cursor);
+      }while(cursor&&!stopped&&requests<10);
+      if(cursor)stopped=true;
+      for(const task of replies){const visited=new Set();do{
+        if(stopped||requests>=10){stopped=true;break;}if(visited.has(task.cursor)){warn('Reply pagination repeated.');break;}visited.add(task.cursor);
+        const result=await readbackJson(API+'/graphql',session,{query:replyQuery,variables:{id:task.id,cursor:task.cursor}});requests++;
+        const page=result.data?.node?.replies;if(!Array.isArray(page?.nodes)||page.nodes.length>50)throw fail('GitHub returned an invalid Discussion reply response.',true);
+        for(const v of page.nodes)add(v,task.parentId);task.cursor=next(page.pageInfo,task.cursor);
+      }while(task.cursor);if(stopped)break;}
+    }
+    if(stopped)warn('Thread readback was truncated at 200 comments, 10 requests or the text limit. Open the remote thread for the complete conversation.');
+    await session.check();return {...thread,comments,warnings};
+  }
+
   async function createPullReader(repository, number) {
     repoParts(repository);
     if (!NUMBER(number)) throw fail("Invalid GitHub pull request.", true);
@@ -887,7 +954,7 @@ const KiCadGitHubReviewApi = (() => {
     }
   }
   return { tokenStatus, setToken, clearToken, resetAuth, authorizationHeaders, deviceStatus, startDevice, pollDevice, cancelDevice,
-    commentPolicyStatus, validatePolicy, categories, publish, recoverPublication, publishArgs, validRepository, createAnnotationReader, createPullReader, readDiscussionAnnotations };
+    commentPolicyStatus, validatePolicy, categories, publish, recoverPublication, publishArgs, validRepository, createAnnotationReader, createPullReader, readDiscussionAnnotations, readThread };
 })();
 
 if (typeof globalThis === "object") globalThis.KiCadGitHubReviewApi = KiCadGitHubReviewApi;

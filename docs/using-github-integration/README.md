@@ -57,7 +57,11 @@ Use **Export comments** to download portable JSON, or **Import comments** to loa
 
 ## Post directly from the note editor
 
-The comment form now includes **Thread type**, **Destination**, **Thread title** or **Thread number**, and a category selector for new Discussions. Choose Issue or Discussion here, then click **Post to GitHub** to create the selected thread or add your review to its existing thread number. **Save draft** keeps the note without posting. The separate GitHub tab remains useful for saved notes, policy checks and linked conversations.
+The composer has three colored dropdowns for Issue/Discussion, severity and state. The first comment line becomes the title. Type `@` to suggest people inline and paste a screenshot into the same box. Beside the bottom **Comment** button, the destination defaults to **New issue**; choose an existing issue/discussion and enter its number to reply. New Discussions also require a repository category. **Save draft** keeps the note without posting.
+
+![Inline mentions and pasted screenshot](../images/integration/simple-comment-composer.png)
+
+This is the actual viewer with synthetic account/transport data; no live post was made.
 
 ![Direct Discussion destination and category inside the note editor](../images/integration/github-direct-discussion.jpg)
 
@@ -91,7 +95,7 @@ This screenshot shows a saved draft and the available actions in the mocked view
 
 ## Read existing annotations
 
-In **Comments / View comments / GitHub collaboration**, choose **Issue / Existing issue** or **Discussion / Existing discussion**, enter the number, then **Load GitHub annotations**. Connected-account reads support authorized private repositories. Public Issue/PR reads work anonymously; Discussions require sign-in. Only valid markers for this exact repository, revision and drawing become cards. Selected Issues/PRs read their body and up to 500 comments; Discussions read up to 500 source records across 20 requests. Unselected scans read only 200 recent Issue/PR bodies. Cards show remote authors and times; **Reply** makes a fresh anchored draft for the same thread. Enter text and **Post to GitHub**, then refresh to see other reviewers' notes. Ordinary messages and automatic state synchronization remain outside the viewer. See [integration notes](../COMMENTS.md#reading-existing-github-annotations).
+In **Comments / View comments / GitHub collaboration**, choose **Issue / Existing issue** or **Discussion / Existing discussion**, enter the number, then **Load GitHub annotations**. Connected-account reads support authorized private repositories. Public Issue/PR reads work anonymously; Discussions require sign-in. Only valid markers for this exact repository, revision and drawing become cards. Selected Issues/PRs read their body and up to 500 comments; Discussions read up to 500 source records across 20 requests. Unselected scans read only 200 recent Issue/PR bodies. Cards show remote authors and times; **Reply** makes a fresh anchored draft for the same thread. Enter text and **Post to GitHub**, then refresh to see other reviewers' notes. Ordinary messages can be read with **View comments → Load thread**; automatic state synchronization is unavailable. See [integration notes](../COMMENTS.md#reading-existing-github-annotations).
 
 ![Reply draft retaining the drawing anchor and existing Discussion number](../images/discussion-reply-draft.png)
 
@@ -113,7 +117,7 @@ Metadata requests use only api.github.com, reject redirects and omit website coo
 
 ## Mention users and contributors
 
-In the comment editor, expand **Mention people**. Use **Contributors and assignees** for repository suggestions, or **Search other users** and enter at least two username characters. Select a result to add its `@username`; you can also type names manually. You must sign into the extension for lookup. Suggestions do not grant access and only a published mention can notify a user. Closing or switching panels preserves your draft.
+Type `@` directly in the comment box. Repository accounts are suggested initially; with two or more username characters the viewer searches other accounts. Choose a suggestion with the mouse or arrow keys and Enter; Escape dismisses it. Lookup requires extension sign-in. Usernames can also be typed manually. Saving a draft does not notify anyone; published mentions follow GitHub permissions and notification behavior.
 
 ![Comment editor with contributor picker and a selected mention](../images/integration/comment-mention-picker.png)
 
@@ -122,6 +126,17 @@ This image uses the real viewer with mocked account suggestions; it is not a liv
 ## Issue and Discussion categories
 
 Open **Comments** and select **Issues** for actionable tasks or **Discussions** for design conversations. Each category has **Add comment** and **View comments** tabs. New notes inherit the selected category, and the editor offers the matching new/existing GitHub destination. New Discussions also require a GitHub discussion category. **All** includes both and older unassigned notes. State, severity and date filters apply within the selected category; linked conversations and drawing pins follow it as well. Browsing categories does not change an existing draft’s type or publish anything. Use the editor’s **Thread type** selector to explicitly change its category, then save or post it.
-![Issue and Discussion categories with a new Discussion draft](../../images/integration/comment-categories.png)
+![Issue and Discussion categories with a new Discussion draft](../images/integration/comment-categories.png)
 
 The screenshot uses synthetic local review notes and mocked repository transport; it demonstrates the UI, not a live GitHub post.
+
+
+## Read ordinary threads and select dates
+
+In **View comments**, choose Issue/Discussion and enter its number, then **Load thread**. You can also use **View thread** on a linked note. The original message, ordinary comments, authors, dates and Discussion replies appear here. **Reply** opens the composer addressed to that thread. Reload to see colleagues' new messages; posts do not stream live.
+
+Open the gear button above the Add/View tabs. **Created from (UTC)** and **Created through (UTC)** restrict displayed notes and loaded messages, including the entire final day. Reset filters clears them. Filtering does not close or modify a remote thread.
+
+![Loaded conversation and date filter](../images/integration/comment-thread-dates.png)
+
+The screenshot is synthetic. Readback is limited to 200 comments/10 requests and bounded text; truncation warnings point to GitHub. Public Issues can be read anonymously; Discussions/private threads require authorized sign-in. Bodies are shown as safe text; remote HTML and media are not rendered.

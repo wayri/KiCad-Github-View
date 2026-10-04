@@ -970,3 +970,11 @@ test('publication recovery is restricted to the isolated viewer surface',async()
  const input={type:'github-recover-publication',comment:sampleComment(),destination:'new-issue',recoveryNumber:1};
  for(const sender of [options,githubTab(6,'/owner/board/issues/1')])assert.match((await message(input,sender)).error,/Only extension viewers/);
 });
+
+
+test('ordinary GitHub thread readback is restricted to extension viewers',async(t)=>{
+ let called=0;const before=KiCadGitHubReviewApi.readThread;KiCadGitHubReviewApi.readThread=async request=>{called++;return{kind:request.kind,number:request.number,comments:[]};};t.after(()=>{KiCadGitHubReviewApi.readThread=before;});
+ const request={type:'github-thread-read',repository:'owner/repo',ref:'main',file:'board.kicad_pcb',kind:'issue',number:42};
+ for(const sender of [options,githubTab(1,'/owner/repo/blob/main/board.kicad_pcb'),{id:'other',url:viewer.url}]){const result=await message(request,sender);assert.notEqual(result.ok,true);}
+ assert.equal(called,0);const result=await message(request);assert.equal(result.ok,true);assert.equal(result.result.number,42);assert.equal(called,1);
+});

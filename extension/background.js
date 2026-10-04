@@ -853,6 +853,9 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       case "github-device-cancel":
         if (!optionsSender(sender)) throw new Error("Only extension options can cancel GitHub sign-in.");
         return KiCadGitHubReviewApi.cancelDevice();
+      case "github-thread-read":
+        if (!viewerSender(sender)) throw new Error("Only extension viewers can read GitHub threads.");
+        return KiCadGitHubReviewApi.readThread(message);
       case "github-discussion-categories":
         if (!viewerSender(sender)) throw new Error("Only extension viewers can retrieve discussion categories.");
         return KiCadGitHubReviewApi.categories(message.repository);
