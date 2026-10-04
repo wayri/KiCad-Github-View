@@ -1,14 +1,15 @@
 """Actions comparison coverage against actual Git history and native KiCad."""
 import json
+import base64
 import re
 from pathlib import Path
 import tempfile
 import unittest
 from unittest.mock import patch
 
-from kicad_vizdiff.git import VizError, git
+from kicad_vizdiff.git import VizError, git, snapshot
 from kicad_vizdiff.render import find_kicad
-from kicad_vizdiff.cli import main
+from kicad_vizdiff.cli import main, PreparedDiff
 from scripts.ci import review
 from tests.fixtures import board, schematic
 
@@ -108,6 +109,27 @@ class ActionsReviewTests(unittest.TestCase):
             self.assertEqual(args[args.index('--theme') + 1], 'custom')
             self.assertEqual(args[args.index('--kicad-cli') + 1], 'native-cli')
 
+    def test_shared_setup_failure_retains_index_and_explicit_failure_evidence(self):
+        base, head = self.history()
+        with patch('kicad_vizdiff.cli.find_kicad', side_effect=VizError('Native fixture unavailable')):
+            self.assertEqual(main(['review', '--repo', str(self.repo), '--base', base,
+                                   '--head', head, '--output', str(self.output)]), 1)
+        evidence = json.loads((self.output / 'review.json').read_text())
+        self.assertEqual(evidence['setupError'], 'Native fixture unavailable')
+        self.assertEqual(len(evidence['files']), 4)
+        self.assertTrue(all(not record['success'] for record in evidence['files']))
+        self.assertNotIn('<a ', (self.output / 'index.html').read_text())
+
+    def test_prepared_reports_reject_different_revision_before_reading_snapshots(self):
+        base, head = self.history()
+        prepared = PreparedDiff(self.repo.resolve(), base, head, self.repo / 'before',
+                                self.repo / 'after', 'unused-native-cli', '10.0')
+        with (patch('kicad_vizdiff.cli.snapshot', side_effect=AssertionError('Unexpected snapshot')),
+              patch('kicad_vizdiff.cli.render', side_effect=AssertionError('Unexpected render'))):
+            self.assertEqual(main(['diff', 'design/sensor.kicad_pcb', '--repo', str(self.repo),
+                                   '--base', head, '--head', base], prepared=prepared), 1)
+        self.assertFalse((self.repo / '.vizdiff/index.html').exists())
+
     def test_native_reports_include_deleted_board_and_renamed_schematic(self):
         try:
             find_kicad()
@@ -119,8 +141,12 @@ class ActionsReviewTests(unittest.TestCase):
         (self.repo / 'old.kicad_sch').rename(self.repo / 'new.kicad_sch')
         (self.repo / 'removed.kicad_pcb').unlink()
         head = self.commit('Rename schematic and delete board')
-        self.assertEqual(main(['review', '--repo', str(self.repo), '--base', base,
-                               '--head', head, '--output', str(self.output)]), 0)
+        with patch('kicad_vizdiff.cli.snapshot', wraps=snapshot) as snapshots:
+            self.assertEqual(main(['review', '--repo', str(self.repo), '--base', base,
+                                   '--head', head, '--output', str(self.output)]), 0)
+        self.assertEqual(snapshots.call_count, 2)
+        for call in snapshots.call_args_list:
+            self.assertFalse(call.args[2].exists(), 'Shared snapshots must be cleaned up')
         self.assertTrue((self.output / 'new.kicad_sch.html').stat().st_size > 10000)
         self.assertTrue((self.output / 'removed.kicad_pcb.html').stat().st_size > 10000)
         source = (self.output / 'new.kicad_sch.html').read_text(encoding='utf-8')
@@ -129,3 +155,23 @@ class ActionsReviewTests(unittest.TestCase):
         self.assertEqual(data['pages'][0]['status'], 'paired')
         self.assertEqual(data['beforeSheets'][0]['page'], data['sheets'][0]['page'])
         self.assertEqual(data['beforeObjects'][0]['page'], data['objects'][0]['page'])
+        # Compare complete report data to independent single-file exports, not only counts.
+        for name, old in [('new.kicad_sch', 'old.kicad_sch'), ('removed.kicad_pcb', 'removed.kicad_pcb')]:
+            standalone = self.repo / (name + '.standalone.html')
+            self.assertEqual(main(['diff', name, '--old-file', old, '--repo', str(self.repo),
+                                   '--base', base, '--head', head, '--output', str(standalone)]), 0)
+            def payload(path):
+                data = json.loads(re.search(r'<script id="report-data" type="application/json">(.*?)</script>',
+                                           path.read_text(encoding='utf-8'), re.S)[1])
+                for page in data['pages']:
+                    for side in ('before', 'after'):
+                        if not page[side]:
+                            continue
+                        svg = base64.b64decode(page[side].split(',', 1)[1]).decode()
+                        # KiCad's non-drawing title records the wall-clock export time.
+                        svg = re.sub(r'(<title>[^<]*\bdate )\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}',
+                                     r'\1EXPORT_TIME', svg)
+                        page[side] = svg
+                return data
+            self.assertEqual(payload(self.output / (name + '.html')), payload(standalone))
+        self.assertEqual(git(self.repo, 'diff', '--name-only', head).strip(), b'')

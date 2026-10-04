@@ -1,5 +1,8 @@
 """Produce revision-bound Actions reports, including renamed and deleted drawings."""
+from contextlib import ExitStack
+from functools import partial
 import html
+import sys
 import json
 from pathlib import Path
 from urllib.parse import quote
@@ -39,9 +42,6 @@ def changed(repo, base, head):
 
 def review(base, head, output='kicad-review', repo='.', merge_base=False, renderer=None,
            layers=DEFAULT_LAYERS, theme=None, kicad_cli=None):
-    if renderer is None:
-        from .cli import main
-        renderer = main
     repo = root(Path(repo))
     base, head = resolve(repo, base), resolve(repo, head)
     if merge_base:
@@ -50,21 +50,34 @@ def review(base, head, output='kicad-review', repo='.', merge_base=False, render
     output.mkdir(parents=True, exist_ok=True)
     records = changed(repo, base, head)
     result = 0
-    for record in records:
-        # Retain the drawing extension to prevent PCB/schematic name collisions.
-        report = record['file'] + '.html'
-        target = safe_path(output, report)
-        arguments = ['diff', record['file'], '--repo', str(repo), '--old-file',
-                     record['oldFile'], '--base', base, '--head', head,
-                     '--output', str(target), '--layers', layers]
-        if theme:
-            arguments.extend(['--theme', theme])
-        if kicad_cli:
-            arguments.extend(['--kicad-cli', kicad_cli])
-        code = renderer(arguments)
-        record.update(report=report, success=code == 0)
-        result |= code
+    setup_error = None
+    with ExitStack() as resources:
+        if renderer is None and records:
+            from .cli import main, prepare_diff
+            try:
+                prepared = resources.enter_context(prepare_diff(repo, base, head, kicad_cli))
+                renderer = partial(main, prepared=prepared)
+            except (VizError, OSError, ValueError) as exc:
+                setup_error = str(exc)
+                print(f'kicad-vizdiff: {exc}', file=sys.stderr)
+                renderer = lambda arguments: 1
+        for record in records:
+            # Retain the drawing extension to prevent PCB/schematic name collisions.
+            report = record['file'] + '.html'
+            target = safe_path(output, report)
+            arguments = ['diff', record['file'], '--repo', str(repo), '--old-file',
+                         record['oldFile'], '--base', base, '--head', head,
+                         '--output', str(target), '--layers', layers]
+            if theme:
+                arguments.extend(['--theme', theme])
+            if kicad_cli:
+                arguments.extend(['--kicad-cli', kicad_cli])
+            code = renderer(arguments)
+            record.update(report=report, success=code == 0)
+            result |= code
     evidence = {'base': base, 'head': head, 'mergeBase': merge_base, 'files': records}
+    if setup_error:
+        evidence['setupError'] = setup_error
     (output / 'review.json').write_text(json.dumps(evidence, indent=2), encoding='utf-8')
     rows = []
     for record in records:

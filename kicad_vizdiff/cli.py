@@ -1,4 +1,6 @@
 import argparse
+from contextlib import contextmanager
+from dataclasses import dataclass
 from importlib.resources import files
 import json
 from pathlib import Path
@@ -9,6 +11,31 @@ import webbrowser
 from .git import VizError, root, safe_path, snapshot, run
 from .inspect import inspect
 from .render import DEFAULT_LAYERS, add_drawing_boxes, align_sheet_pages, find_kicad, pair_pages, render
+
+
+@dataclass(frozen=True)
+class PreparedDiff:
+    repo: Path
+    base: str
+    head: str
+    before: Path
+    after: Path
+    executable: str
+    version: str
+
+
+@contextmanager
+def prepare_diff(repo, base, head, kicad_cli=None):
+    """Materialize a pair of saved commits once for a bounded multi-file review."""
+    executable = find_kicad(kicad_cli)
+    version = run([executable, 'version']).decode().strip()
+    if int(version.split('.')[0]) < 9:
+        raise VizError(f'KiCad 9+ required; found {version}.')
+    with tempfile.TemporaryDirectory(prefix='kicad-vizdiff-shared-') as folder:
+        folder = Path(folder)
+        base_id = snapshot(repo, base, folder / 'base')
+        head_id = snapshot(repo, head, folder / 'head')
+        yield PreparedDiff(repo, base_id, head_id, folder / 'base', folder / 'head', executable, version)
 
 
 def write_report(output, data):
@@ -49,15 +76,17 @@ def parser():
     return p
 
 
-def main(argv=None):
+def main(argv=None, *, prepared=None):
     args = parser().parse_args(argv)
     try:
+        if prepared and args.command != 'diff':
+            raise VizError('Prepared snapshots are only available for diff reports.')
         if args.command == "review":
             from .actions import review
             return review(args.base, args.head, args.output, args.repo, args.merge_base,
                           layers=args.layers, theme=args.theme, kicad_cli=args.kicad_cli)
-        executable = find_kicad(args.kicad_cli)
-        version = run([executable, "version"]).decode().strip()
+        executable = prepared.executable if prepared else find_kicad(args.kicad_cli)
+        version = prepared.version if prepared else run([executable, "version"]).decode().strip()
         if int(version.split(".")[0]) < 9:
             raise VizError(f"KiCad 9+ required; found {version}.")
         if args.command == "doctor":
@@ -65,6 +94,9 @@ def main(argv=None):
             print(f"KiCad {version}: {executable}")
             return 0
         repo = root(Path(args.repo))
+        if prepared and (args.command != 'diff' or repo != prepared.repo or
+                         args.base != prepared.base or args.head != prepared.head):
+            raise VizError('Prepared snapshots do not match the requested repository and revisions.')
         relative = args.file.replace("\\", "/")
         old_relative = (getattr(args, "old_file", None) or relative).replace("\\", "/")
         safe_path(repo, relative)
@@ -80,15 +112,17 @@ def main(argv=None):
             before_details = {'objects': [], 'sheets': []}
             if args.command == "diff":
                 print(f"Rendering {args.base}:{old_relative}", file=sys.stderr)
-                base_id = snapshot(repo, args.base, temp / "base")
-                before = render(temp / "base", old_relative, temp / "before", executable, args.layers, args.theme)
+                before_root = prepared.before if prepared else temp / 'base'
+                base_id = prepared.base if prepared else snapshot(repo, args.base, before_root)
+                before = render(before_root, old_relative, temp / "before", executable, args.layers, args.theme)
                 if before:
-                    before_details = inspect(temp / "base", old_relative, list(before))
+                    before_details = inspect(before_root, old_relative, list(before))
             head = args.head if args.command == "diff" else args.ref
             print(f"Rendering {head}:{relative}", file=sys.stderr)
-            head_id = snapshot(repo, head, temp / "head")
-            after = render(temp / "head", relative, temp / "after", executable, args.layers, args.theme)
-            after_details = inspect(temp / "head", relative, list(after)) if after else {'objects': [], 'sheets': []}
+            after_root = prepared.after if prepared else temp / 'head'
+            head_id = prepared.head if prepared else snapshot(repo, head, after_root)
+            after = render(after_root, relative, temp / "after", executable, args.layers, args.theme)
+            after_details = inspect(after_root, relative, list(after)) if after else {'objects': [], 'sheets': []}
             before = align_sheet_pages(before, before_details, after, after_details)
             if not before and not after:
                 raise VizError(f"Design not found in the selected revision(s): {relative}")
