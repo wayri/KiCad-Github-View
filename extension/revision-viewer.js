@@ -36,7 +36,7 @@
 
     const preferenceKey=JSON.stringify(['kicad-review-preferences',...(provider==='gitlab'?['gitlab',providerContext.host]:[]),repository,rootFile]);
 
-    let preferences={uiTheme:pcb?'dark':'light',drawingTheme:pcb?'dark':'light',rulerUnits:'mm'};
+    let preferences={uiTheme:pcb?'dark':'light',drawingTheme:pcb?'dark':'light',rulerUnits:'mm',acceleration:'auto'};
 
     try{const stored=await chrome.storage?.local?.get(preferenceKey),value=stored?.[preferenceKey];if(value&&['dark','light'].includes(value.uiTheme)&&['dark','light'].includes(value.drawingTheme)&&['mm','mil'].includes(value.rulerUnits))preferences=value;}catch{}
 
@@ -50,7 +50,7 @@
 
     const designs=new Map(),host=$('drawingHost');globalThis.KiCadUIIcons?.decorate();$('frameControls').hidden=false;
 
-    canvas=KiCadOwnedCanvas.mount(host,{dark,pcb});status.remove();
+    canvas=KiCadOwnedCanvas.mount(host,{dark,pcb,acceleration:preferences.acceleration});status.remove();
 
     const currentFile=()=>canvas.document?.filename||rootFile;
 
@@ -68,7 +68,8 @@
 
     };
 
-    const originalDraw=canvas.draw.bind(canvas);canvas.draw=()=>{originalDraw();workspace?.draw();if($('viewScale'))$('viewScale').textContent=Math.round(canvas.viewport.camera.zoom/4*100)+'%';if($('drawingViewLabel'))$('drawingViewLabel').textContent=canvas.netHighlight?(canvas.highlightCount>1?`${canvas.highlightCount} highlight groups`:canvas.netHighlight.name?'Highlighted net · '+canvas.netHighlight.name:'Highlighted components'):canvas.paperVisible?(pcb?'PCB worksheet':'Schematic sheet'):'Board view';report(false);};
+    const afterFrame=()=>{workspace?.draw();if(!scene&&$('renderMode'))$('renderMode').textContent=canvas.motionActive?'2D · WebGL':'2D';host.dataset.renderBackend=canvas.motionActive?'webgl-motion':'canvas2d';if($('accelerationStatus'))$('accelerationStatus').textContent=canvas.motionFailed?'WebGL unavailable; using Canvas2D.':canvas.acceleration==='off'?'Canvas2D only.':'WebGL gesture previews on large drawings when available; source geometry is redrawn after each gesture.';if($('viewScale'))$('viewScale').textContent=Math.round(canvas.viewport.camera.zoom/4*100)+'%';if($('drawingViewLabel'))$('drawingViewLabel').textContent=canvas.netHighlight?(canvas.highlightCount>1?`${canvas.highlightCount} highlight groups`:canvas.netHighlight.name?'Highlighted net · '+canvas.netHighlight.name:'Highlighted components'):canvas.paperVisible?(pcb?'PCB worksheet':'Schematic sheet'):'Board view';report(false);};
+    const originalDraw=canvas.draw.bind(canvas);canvas.draw=()=>{originalDraw();afterFrame();};canvas.addEventListener('kicad:viewframe',afterFrame);
 
     canvas.canvas.addEventListener?.('pointermove',event=>{const rect=canvas.canvas.getBoundingClientRect(),point=canvas.viewport.camera.screen_to_world({x:event.clientX-rect.left,y:event.clientY-rect.top});if($('cursorCoords'))$('cursorCoords').textContent=`${point.x.toFixed(2)}, ${point.y.toFixed(2)} mm`;});
 
@@ -160,11 +161,12 @@
 
     const savePreferences=()=>chrome.storage?.local?.set({[preferenceKey]:preferences}).catch(error=>{$('pageSetupStatus').textContent=error.message;});
 
-    const applyTheme=()=>{dark=preferences.drawingTheme==='dark';canvas.dark=dark;scene?.setTheme(dark);document.body.dataset.uiTheme=preferences.uiTheme;$('uiTheme').value=preferences.uiTheme;$('drawingTheme').value=preferences.drawingTheme;$('rulerUnits').value=preferences.rulerUnits;$('themeButton').setAttribute('aria-pressed',String(dark));if(!scene)canvas.draw();};
+    const applyTheme=()=>{dark=preferences.drawingTheme==='dark';canvas.dark=dark;canvas.acceleration=preferences.acceleration==='off'?'off':'auto';scene?.setTheme(dark);document.body.dataset.uiTheme=preferences.uiTheme;$('uiTheme').value=preferences.uiTheme;$('drawingTheme').value=preferences.drawingTheme;$('rulerUnits').value=preferences.rulerUnits;if($('acceleration'))$('acceleration').value=canvas.acceleration;$('themeButton').setAttribute('aria-pressed',String(dark));if(!scene)canvas.draw();};
 
     $('themeButton').onclick=()=>{preferences.uiTheme=preferences.drawingTheme=dark?'light':'dark';applyTheme();savePreferences();};
 
     for(const [id,key] of [['uiTheme','uiTheme'],['drawingTheme','drawingTheme'],['rulerUnits','rulerUnits']])$(id).onchange=()=>{preferences[key]=$(id).value;applyTheme();savePreferences();};applyTheme();
+    if($('acceleration'))$('acceleration').onchange=()=>{preferences.acceleration=$('acceleration').value;applyTheme();savePreferences();};
 
     const savedPages=new Map();
 

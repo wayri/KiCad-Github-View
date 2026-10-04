@@ -14,7 +14,7 @@ ASSETS = ('step-worker-vscode.js', 'vendor/occt/occt-import-js.wasm', 'vendor/oc
     'revision-viewer.html', 'revision-viewer.css', 'revision-viewer.js',
     'ui-icons.js', 'browser-data.js', 'design-diff.js', 'design-model.js',
     'net-model.js', 'ratsnest.js', 'paired-review.js', 'project-search.js', 'rule-reports.js', 'review-navigation.js', 'view-state.js', 'review-comments.js', 'review-workspace.js', 'review-tools.js', 'repo-models.js',
-    'worksheet.js', 'schematic-renderer.js', 'pcb-renderer.js', 'owned-canvas.js',
+    'worksheet.js', 'schematic-renderer.js', 'pcb-renderer.js', 'owned-canvas.js', 'motion-webgl.js',
     'vendor/spike-board3d.bundle.js', 'vendor/SPIKE-ENGINE-NOTICE.md', 'vendor/THREE-LICENSE',
 )
 BUILD_INPUTS = ('step-decoder.js', 'step-worker.js', 'vendor/occt/occt-import-js.js')

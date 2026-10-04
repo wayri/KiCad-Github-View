@@ -21,14 +21,37 @@ test('picking uses shape geometry, tolerances and excludes frame and drill holes
 test('fit bounds exclude worksheet and include physical track width',()=>{
  const b=core.bounds([{type:'line',points:[{x:10,y:20},{x:30,y:20}],width:2},{type:'line',points:[{x:0,y:0},{x:297,y:210}],frame:true}]);assert.deepEqual(b,{x:9,y:19,w:22,h:2});
 });
-function runtime(dpr=1){
+function runtime(dpr=1,extra={}){
   const operations=[],listeners=new Map(),ctx=new Proxy({},{get:(obj,key)=>obj[key]||((...args)=>operations.push([key,...args])),set:(obj,key,value)=>{obj[key]=value;return true;}});
   const element={style:{},setAttribute(){},addEventListener:(key,fn)=>listeners.set(key,fn),removeEventListener(){},getContext:()=>ctx,getBoundingClientRect:()=>({left:0,top:0,width:800,height:600}),remove(){},setPointerCapture(){},hasPointerCapture:()=>false};
   const host={append(){},getBoundingClientRect:element.getBoundingClientRect};
-  const env={EventTarget,CustomEvent,document:{createElement:()=>element},devicePixelRatio:dpr,ResizeObserver:class{observe(){}disconnect(){}},module:{exports:{}}};
+  let created=false;const env={EventTarget,CustomEvent,document:{createElement:()=>{if(!created){created=true;return element;}return {...element,style:{}};}},devicePixelRatio:dpr,ResizeObserver:class{observe(){}disconnect(){}},module:{exports:{}},...extra};
   vm.runInNewContext(fs.readFileSync(path.join(__dirname,'../owned-canvas.js'),'utf8'),env);
   const canvas=env.KiCadOwnedCanvas.mount(host,{pcb:true,dark:true});return{canvas,element,operations,listeners};
 }
+
+test('large-board gesture previews skip repeated painting and settle back to the source camera',()=>{
+ let frame,timer,painted=0,disposed=false;const {transform}=require('../motion-webgl.js');
+ class Motion{constructor(){this.gl={MAX_TEXTURE_SIZE:1,getParameter:()=>4096};}upload(snapshot,saved){this.saved=saved;}show(current){return Boolean(transform(this.saved,current));}hide(){}dispose(){disposed=true;}}
+ const {canvas,listeners,element}=runtime(1,{KiCadMotionWebGL:{Motion,MAX_PIXELS:16000000},requestAnimationFrame:fn=>(frame=fn,1),cancelAnimationFrame:()=>{frame=null;},setTimeout:fn=>(timer=fn,1),clearTimeout:()=>{timer=null;}});
+ const primitives=Array.from({length:5000},(_,i)=>({type:'circle',x:i%100,y:Math.floor(i/100),r:.2,layer:'F.Cu'}));
+ canvas.setDocument({primitives,layers:['F.Cu']},'large.kicad_pcb');canvas.paint=()=>painted++;
+ listeners.get('pointerdown')({button:2,clientX:400,clientY:300,pointerId:1,preventDefault(){}});assert.ok(painted>0);painted=0;
+ let frames=0;canvas.addEventListener('kicad:viewframe',()=>frames++);
+ listeners.get('pointermove')({clientX:420,clientY:310});frame();assert.equal(canvas.motionActive,true);assert.equal(painted,0);assert.equal(element.style.opacity,'0');assert.equal(frames,1);
+ const camera=canvas.cameraState();listeners.get('pointerup')({pointerId:1});assert.equal(canvas.motionActive,false);assert.equal(element.style.opacity,'');assert.ok(painted>0);assert.deepEqual(canvas.cameraState(),camera);
+ listeners.get('wheel')({clientX:400,clientY:300,deltaY:-10,preventDefault(){}});frame();assert.equal(canvas.motionActive,true);timer();assert.equal(canvas.motionActive,false);
+ listeners.get('pointerdown')({button:2,clientX:400,clientY:300,pointerId:1,preventDefault(){}});listeners.get('pointermove')({clientX:420,clientY:300});frame();assert.equal(canvas.motionActive,true);canvas.motion.onLost();assert.equal(canvas.motionActive,false);assert.equal(canvas.motionFailed,true);assert.equal(element.style.opacity,'');
+ canvas.acceleration='off';assert.equal(canvas.prepareMotion(),false);canvas.dispose();assert.equal(disposed,true);assert.equal(timer,null);
+});
+
+test('WebGL initialization failure restores a visible CPU drawing',()=>{
+ let frame;class Motion{constructor(){throw Error('GPU disabled');}}
+ const {canvas,listeners,element}=runtime(1,{KiCadMotionWebGL:{Motion,MAX_PIXELS:16000000},requestAnimationFrame:fn=>(frame=fn,1),cancelAnimationFrame(){}});
+ canvas.setDocument({primitives:Array.from({length:4096},()=>({type:'circle',x:0,y:0,r:1,layer:'F.Cu'})),layers:['F.Cu']},'board.kicad_pcb');
+ listeners.get('pointerdown')({button:2,clientX:400,clientY:300,pointerId:1,preventDefault(){}});listeners.get('pointermove')({clientX:410,clientY:300});frame();
+ assert.equal(canvas.motionFailed,true);assert.equal(canvas.motionActive,false);assert.equal(element.style.opacity,'');canvas.dispose();
+});
 
 test('large-board indexing preserves paint and pick results while narrowing local searches',()=>{
  const {canvas}=runtime(),primitives=[];

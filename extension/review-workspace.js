@@ -789,7 +789,7 @@
     $("pointComment").onclick=()=>setCommentMode('point');$("areaComment").onclick=()=>setCommentMode('area');
     $("stateFilter").onchange=$("readFilter").onchange=$("commentSort").onchange=$("commentSearch").oninput=()=>{unreadCursor=-1;renderComments();draw();};
     $("nextUnread").onclick=nextUnread;
-    $("captureComment").onclick=()=>{try{const c=getCanvas();editor.capture=KiCadReviewTools.capture(c.canvas,c.viewport.camera,editor.anchor.area);capturePreview();}catch(error){$("captureStatus").textContent=error.message;}};
+    $("captureComment").onclick=()=>{try{const c=getCanvas();c.draw();editor.capture=KiCadReviewTools.capture(c.canvas,c.viewport.camera,editor.anchor.area);capturePreview();}catch(error){$("captureStatus").textContent=error.message;}};
     $("removeCapture").onclick=()=>{delete editor.capture;delete editor.attachments;capturePreview();};
     function configureEditorDestination(){
       const discussion=$("editorThreadType").value==="discussion";
