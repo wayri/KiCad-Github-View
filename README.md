@@ -6,6 +6,38 @@
 
 **Status: preview release.** Source designs are read-only: no routing, schematic editing or automatic design changes. This project is not affiliated with KiCad, GitHub or GitLab. Browser-store and VS Code Marketplace listings are not published. Public repository previews are supported; browser access to private repositories is not implemented. See the limitations below before relying on a view for engineering review.
 
+## Screenshots
+
+Actual browser captures of the shared viewer, including light and dark interfaces. These were captured in a local preview harness with mocked Git transport, not on an installed extension inside GitHub. The small sensor, hierarchy, settings and model examples are synthetic fixtures; Marble uses the public board source. Click an image to inspect it at full size. [Capture details and attribution](docs/images/README.md).
+
+| PCB layout · real Marble board | Schematic page and sheet navigator · fixture |
+| --- | --- |
+| [![Marble PCB in the dark layout viewer](docs/images/marble-layout.jpg)](docs/images/marble-layout.jpg) | [![Light schematic viewer with page border, title block and sheet hierarchy](docs/images/schematic-sheets.jpg)](docs/images/schematic-sheets.jpg) |
+
+| Net highlighting and connection properties | BOM and saved board analytics |
+| --- | --- |
+| [![Highlighted SIGNAL_IN net with pad connections and routed length](docs/images/net-highlighting.jpg)](docs/images/net-highlighting.jpg) | [![BOM and board statistics alongside the drawing](docs/images/bom-analytics.jpg)](docs/images/bom-analytics.jpg) |
+
+| Linked repository WRL model · fixture | Marble 3D · procedural component proxies |
+| --- | --- |
+| [![SPIKE 3D fixture with one successfully loaded repository model](docs/images/repository-model-3d.jpg)](docs/images/repository-model-3d.jpg) | [![Marble board preview identifying all 1006 components as procedural proxies](docs/images/marble-3d-proxies.jpg)](docs/images/marble-3d-proxies.jpg) |
+
+The WRL example verifies one real linked model. Marble's STEP/CERN-library references do not resolve to supported repository assets: its pictured component bodies are **proxies**, not real component models.
+
+| Project settings with labeled fields | Saved physical stackup |
+| --- | --- |
+| [![Read-only project settings with units and source inspection](docs/images/project-settings.jpg)](docs/images/project-settings.jpg) | [![Physical stackup diagram and layer material table](docs/images/project-stackup.jpg)](docs/images/project-stackup.jpg) |
+
+| GitHub Issues and Discussions integration | Comment editor with severity and tags |
+| --- | --- |
+| [![Dedicated GitHub collaboration tab with comment type and destination controls](docs/images/github-collaboration.jpg)](docs/images/github-collaboration.jpg) | [![Local annotation draft with severity, state, tags and mentions fields](docs/images/comment-editor.jpg)](docs/images/comment-editor.jpg) |
+
+These collaboration captures show the local UI and a mocked policy response. No GitHub issue, discussion or comment was posted for the screenshots.
+
+**Revision comparison:** linked base/head drawings and the saved-object Changes panel, using synthetic revisions.
+
+[![Side-by-side PCB revision comparison with the Changes panel](docs/images/revision-comparison.jpg)](docs/images/revision-comparison.jpg)
+
 ## What you can do
 
 | Workspace | Review capabilities |
@@ -161,3 +193,20 @@ To publish a new version, update both manifests and release documentation, commi
 Owner: Yawar ([wayri](https://github.com/wayri)). **No blanket open-source license is granted.** The owner plans a commercial integration and a separately licensed open-source GUI engine later. Public source availability does not assign that future license. See [LICENSING.md](LICENSING.md) and [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md).
 
 Report reproducible problems through [repository Issues](https://github.com/wayri/KiCad-Github-View/issues), including browser/version, public file URL or a shareable minimal fixture, expected behavior and the visible diagnostic. Exclude tokens, private files and credentials. Design/rendering limitations, Git host ports and browser ports can also be discussed there.
+
+## Engineering limits
+
+This is an experimental, read-only engineering review tool supplied without a claim of complete KiCad fidelity, electrical correctness, manufacturability or fitness for a particular purpose. Check the saved design in native KiCad and perform appropriate engineering verification before fabrication or safety-critical use. Visual differences, inferred nets, measurements, imported rule reports and 3D proxies are review aids, not design sign-off. Unsupported constructs and missing assets can affect what is visible.
+
+
+Authentication, repository permissions and service availability remain subject to GitHub/GitLab and the user's configuration. Local review state does not automatically synchronize with remote threads. Public source availability does not grant a blanket open-source license. No affiliation, endorsement, certification or warranty from KiCad, CERN, Berkeley Lab, GitHub, GitLab or OpenAI is implied.
+
+## Acknowledgements
+
+- The KiCad project and contributors provide the file-format documentation and native tools used for reference checks; this extension implements its own browser renderer.
+- Yawar's SPIKE engine supplies owner-authorized browser PCB geometry/3D integration; its provenance is recorded in [the engine notice](extension/vendor/SPIKE-ENGINE-NOTICE.md).
+- Three.js and its contributors provide WebGL rendering and model loaders under the MIT license, preserved in [THREE-LICENSE](extension/vendor/THREE-LICENSE).
+- GitHub and GitLab provide the repository and collaboration APIs used by the extension's host adapters.
+- Berkeley Lab's Marble and the White Rabbit collaboration's Switch V4 repositories provide public real-design inspection cases. Their authors retain their respective design rights; these designs are not bundled with the extension and test results do not imply endorsement.
+
+See [third-party notices](THIRD-PARTY-NOTICES.md) for distributed dependencies and [licensing status](LICENSING.md) for owner code.
