@@ -6,7 +6,7 @@ The screenshots below come from the actual shared viewer in a local harness with
 
 ## 1. Install and choose your server
 
-Install your browser's package as described in [INSTALL.md](../INSTALL.md), reload it and refresh an existing repository file tab. GitLab.com is built in. For a self-hosted server, open Options → **GitLab accounts and servers**, enter an exact HTTPS origin such as `https://gitlab.example.com`, choose **Grant server access**, and approve the browser permission prompt. Select the server before connecting an account. Instances hosted under a URL subpath such as `https://example.com/gitlab` and merge-request file cards are not supported.
+Install your browser's package as described in [INSTALL.md](../INSTALL.md), reload it and refresh an existing repository file tab. GitLab.com is built in. For a self-hosted server, open Options → **GitLab accounts and servers**, enter an exact HTTPS origin such as `https://gitlab.example.com`, choose **Grant server access**, and approve the browser permission prompt. Select the server before connecting an account. Instances hosted under a URL subpath such as `https://example.com/gitlab` are not supported. Current merge-request Changes pages have an inline changed-drawing selector; historical diff versions remain unsupported.
 
 Public viewing needs no login. Private viewing requires an extension credential with access to that project; being signed into the GitLab website alone is insufficient. Enter an expiring token and choose **Connect with token**. `read_api` may suffice for private reads; posting needs `api` and project permissions. Never put tokens into issue text, screenshots or review JSON.
 
