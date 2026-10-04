@@ -9,7 +9,8 @@ function optionsHarness(respond, protocol = 'chrome-extension:') {
   for (const id of ['token', 'tokenStatus', 'saveToken', 'clearToken', 'resetAuth', 'clientId',
     'connectGitHub', 'cancelGitHub', 'deviceInstructions', 'deviceCode', 'verificationLink', 'deviceStatus', 'githubAccess', 'scopeHelp', 'signinAvailability',
     'accessRepository','testRepositoryAccess','repositoryAccessStatus']) {
-    elements.set(id, { value: '', textContent: '', disabled: false, hidden: false, href: '', listeners: new Map(),
+    elements.set(id, { value: '', textContent: '', disabled: false, hidden: false, href: '', listeners: new Map(), attributes: new Map(),
+      setAttribute(name,value) {this.attributes.set(name,value);},
       addEventListener(type, fn) { this.listeners.set(type, fn); } });
   }
   const requests = [], timers = [], windowEvents = new Map(), documentEvents = new Map();
@@ -40,7 +41,8 @@ test('returning from GitHub resumes pending authorization and updates connected 
   connected = true;
   await h.windowEvents.get('focus')();
   assert.match(h.elements.get('tokenStatus').textContent, /GitHub connected/);
-  assert.equal(h.elements.get('connectGitHub').textContent, 'Reconnect GitHub');
+  assert.equal(h.elements.get('connectGitHub').textContent, 'Sign out of GitHub');
+  assert.equal(h.elements.get('connectGitHub').attributes.get('data-connected'), 'true');
   assert.equal(h.elements.get('connectGitHub').disabled, false);
   assert.equal(h.elements.get('deviceInstructions').hidden, true);
   assert.equal(h.elements.get('clearToken').disabled, false);
@@ -75,6 +77,23 @@ test('access check reports verified private access using the actual account', as
   await h.elements.get('testRepositoryAccess').listeners.get('click')();
   assert.equal(h.requests.find(r=>r.type==='github-access-test').repository,'owner/private');
   assert.match(h.elements.get('repositoryAccessStatus').textContent, /Verified as @reviewer: private repository owner\/private is readable/);
+});
+
+test('connected main button signs out and returns to green sign-in state', async () => {
+  let connected=true;
+  const h=optionsHarness(request=>{
+    if(request.type==='github-auth-clear')connected=false;
+    return request.type==='github-auth-status'?{configured:connected}:{active:false,clientId:'Ov23liSavedClient'};
+  });
+  await new Promise(setImmediate);
+  const button=h.elements.get('connectGitHub');
+  assert.equal(button.textContent,'Sign out of GitHub');
+  await button.listeners.get('click')();
+  assert.ok(h.requests.some(request=>request.type==='github-auth-clear'));
+  assert.equal(h.requests.some(request=>request.type==='github-device-start'),false);
+  assert.equal(button.textContent,'Sign in with GitHub');
+  assert.equal(button.attributes.get('data-connected'),'false');
+  assert.equal(button.disabled,false);
 });
 
 test('options sends a token only on explicit save and clears the password field', async () => {

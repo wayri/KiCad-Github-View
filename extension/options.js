@@ -44,7 +44,9 @@ async function refresh() {
     'Your GitHub session expired. Sign in again.';
   else if (!result.configured && result.reason === 'session-locked') statusElement.textContent =
     'Your GitHub session could not be unlocked and was cleared. Sign in again.';
-  connectButton.textContent = result.configured ? 'Reconnect GitHub' : 'Sign in with GitHub';
+  connectButton.textContent = result.configured ? 'Sign out of GitHub' : 'Sign in with GitHub';
+  connectButton.setAttribute?.('data-connected', String(Boolean(result.configured)));
+  buttonClear.hidden = true;
   buttonClear.disabled = !result.configured;
   availability.textContent = result.configured ?
     'GitHub is connected. Return to your repository and refresh its preview to use this session.' :
@@ -111,6 +113,7 @@ async function pollOnce() {
   }
 }
 connectButton.addEventListener("click", async () => {
+  if (accountConnected) { await signOut(); return; }
   connectButton.disabled = true;
   try {
     const result = await request("github-device-start", { clientId: clientInput.value.trim(), scope: accessInput.value });
@@ -143,7 +146,8 @@ buttonSave.addEventListener("click", async () => {
   } catch (error) { statusElement.textContent = error.message; }
   finally { tokenInput.value = ""; buttonSave.disabled = false; }
 });
-buttonClear.addEventListener("click", async () => {
+async function signOut() {
+  connectButton.disabled = true;
   buttonClear.disabled = true;
   try {
     stopTimer();
@@ -153,8 +157,9 @@ buttonClear.addEventListener("click", async () => {
     tokenInput.value = "";
     await refresh();
   } catch (error) { statusElement.textContent = error.message; }
-  finally { buttonClear.disabled = false; }
-});
+  finally { connectButton.disabled = false; buttonClear.disabled = !accountConnected; }
+}
+buttonClear.addEventListener("click", signOut);
 Promise.all([refresh(), demoPage ? Promise.resolve({}) : request("github-device-status")]).then(([, state]) => {
   if (demoPage) return;
   clientInput.value = state.customClientId ?? state.clientId ?? "";

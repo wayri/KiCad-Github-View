@@ -13,6 +13,7 @@
     input, select { box-sizing: border-box; width: 100%; font: inherit; padding: .55rem; }
     button { font: inherit; padding: .5rem .85rem; margin: .75rem .5rem .25rem 0; cursor: pointer; }
     #connectGitHub { background: #238636; border: 1px solid #238636; color: white; border-radius: .35rem; font-weight: 600; }
+    #connectGitHub[data-connected="true"] { background: #b42318; border-color: #b42318; }
     details { margin-top: 1.2rem; border-top: 1px solid #8886; padding-top: 1rem; } summary { cursor: pointer; font-weight: 600; }
     #deviceCode { font: bold 1.6rem/1.5 monospace; letter-spacing: .12em; } #signinAvailability { font-size: .9rem; }
     #tokenStatus { min-height: 1.5em; } p { max-width: 65ch; }
@@ -27,7 +28,7 @@
     <select id="githubAccess" aria-describedby="scopeHelp"><option value="public_repo">Public repositories</option><option value="repo">Public and private repositories</option></select>
     <p id="scopeHelp">Public access requests GitHub's <code>public_repo</code> scope. Tokens stay in this browser session.</p>
     <button id="connectGitHub" type="button">Sign in with GitHub</button>
-    <button id="clearToken" type="button">Sign out</button>
+    <button id="clearToken" type="button" hidden>Sign out</button>
     <button id="resetAuth" type="button">Reset GitHub connection</button>
     <button id="cancelGitHub" type="button" hidden>Cancel sign-in</button>
     <p id="signinAvailability" role="status"></p>
