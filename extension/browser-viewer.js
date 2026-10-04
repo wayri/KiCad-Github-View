@@ -13,6 +13,7 @@
   const $ = (id) => document.getElementById(id);
   const toolbar = $("toolbar"), comparison = $("comparison");
   const frames = new Map(), views = new Map();
+  const pendingSelections=new Map();
   let linked = Boolean(request.base && !["added", "removed"].includes(request.status));
   let manualMode = false, changes = null, loading = null;
   let pairedFile=null,crossLinked=true,pairEpoch=0;
@@ -24,7 +25,7 @@
   }
   function openPair(path){
     if(!companionValid(path)){status('Choose a schematic and a PCB from the same repository revision.',true);return;}
-    pairEpoch++;pairedFile=path;linked=false;manualMode=true;showProject('pair',request.headRepository,request.head,path);$('pairRef').textContent=request.head.slice(0,12);$('pairKind').textContent=/\.kicad_pcb$/i.test(path)?'PCB LAYOUT':'SCHEMATIC';pairView();$('pairControls').hidden=false;$('pairChooser').hidden=true;status('Cross-highlight uses saved symbol identities, unique references and exact active-sheet net names. Cameras remain independent.');
+    pairEpoch++;pairedFile=path;linked=false;manualMode=true;showProject('pair',request.headRepository,request.head,path);$('pairRef').textContent=request.head.slice(0,12);$('pairKind').textContent=/\.kicad_pcb$/i.test(path)?'PCB LAYOUT':'SCHEMATIC';pairView();$('pairControls').hidden=false;$('pairChooser').hidden=true;status('Cross-highlight uses saved symbol identities, unique references and unambiguous saved sheet-qualified net names. Cameras remain independent.');
   }
   function pairTools(){
     const split=projectControl('Split schematic + PCB',async()=>{
@@ -79,7 +80,7 @@
   }
   function showProject(side, repository, ref, file, position = null) {
     const holder = $(side + "Drawing");
-    holder.replaceChildren(); frames.delete(side); views.delete(side);
+    holder.replaceChildren(); frames.delete(side); views.delete(side);pendingSelections.delete(side);
     if (!repository || !ref || !file) {
       holder.className = "placeholder";
       holder.textContent = "This design is absent in this revision.";
@@ -112,6 +113,10 @@
     const side = [...frames].find(([, frame]) => frame.contentWindow === event.source)?.[0];
     if (!side) return;
     views.set(side, { file: event.data.file, view: event.data.view });
+    if(event.data.phase==='ready'&&pendingSelections.has(side)){
+      const selection=pendingSelections.get(side);pendingSelections.delete(side);
+      if(pairedFile&&crossLinked)frames.get(side)?.contentWindow?.postMessage({type:'kicad-review:command',command:'highlight-related',selection},origin());
+    }
     if (event.data.phase === "ready") relayView("head", "base");
     else relayView(side, side === "base" ? "head" : "base");
   });
@@ -121,7 +126,9 @@
       for(const [name,frame] of frames)if(name!==side)frame.contentWindow?.postMessage({type:'kicad-review:command',command:'refresh-comments'},origin());return;
     }
     if(!pairedFile||!crossLinked||!['head','pair'].includes(side)||event.data?.type!=='kicad-review:selection'||!globalThis.KiCadPairedReview?.validSelection(event.data.selection))return;
-    frames.get(side==='head'?'pair':'head')?.contentWindow?.postMessage({type:'kicad-review:command',command:'highlight-related',selection:event.data.selection},origin());
+    const target=side==='head'?'pair':'head';
+    if(!views.has(target)){pendingSelections.set(target,event.data.selection);return;}
+    frames.get(target)?.contentWindow?.postMessage({type:'kicad-review:command',command:'highlight-related',selection:event.data.selection},origin());
   });
   function focusChange(change) {
     if (change.before && !change.after) { manualMode = true; setMode("base"); }

@@ -175,6 +175,7 @@ test('paired review keeps same repository revision and relays only trusted selec
  assert.equal(new URL(pair.src).searchParams.get('repository'),'wayri/board');
  assert.equal(new URL(pair.src).searchParams.get('ref'),'main');
  assert.equal(view.get('pairPanel').hidden,false);
+ view.message({origin:'chrome-extension://test-id',source:pair.contentWindow,data:{type:'kicad-review:view',phase:'ready',file:'root.kicad_sch',view:{x:0,y:0,zoom:1}}});
  const selection={kind:'part',reference:'R1',path:'board.kicad_pcb',uuid:'fp'};
  view.message({origin:'chrome-extension://test-id',source:main.contentWindow,data:{type:'kicad-review:selection',selection}});
  assert.equal(pair.messages.at(-1).message.command,'highlight-related');
@@ -183,6 +184,14 @@ test('paired review keeps same repository revision and relays only trusted selec
  assert.equal(pair.messages.length,count);
  view.message({origin:'chrome-extension://test-id',source:main.contentWindow,data:{type:'kicad-review:comments-changed'}});
  assert.equal(pair.messages.at(-1).message.command,'refresh-comments');
+});
+test('paired cross-highlight waits for the companion to finish loading and retains the latest selection',()=>{
+ const view=viewer({repository:'wayri/board',file:'board.kicad_pcb',head:'main',pairedFile:'root.kicad_sch'},()=>({ok:true,result:[]}));
+ const main=view.get('headDrawing').children[0],pair=view.get('pairDrawing').children[0];
+ for(const reference of ['R1','R2'])view.message({origin:'chrome-extension://test-id',source:main.contentWindow,data:{type:'kicad-review:selection',selection:{kind:'part',reference,path:'board.kicad_pcb'}}});
+ assert.equal(pair.messages.length,0);
+ view.message({origin:'chrome-extension://test-id',source:pair.contentWindow,data:{type:'kicad-review:view',phase:'ready',file:'root.kicad_sch',view:{x:0,y:0,zoom:1}}});
+ assert.equal(pair.messages.length,1);assert.equal(pair.messages[0].message.selection.reference,'R2');
 });
 test('invalid same-kind companion is rejected without making a frame',()=>{
  const view=viewer({repository:'wayri/board',file:'board.kicad_pcb',head:'main',pairedFile:'other.kicad_pcb'},()=>({ok:true,result:[]}));

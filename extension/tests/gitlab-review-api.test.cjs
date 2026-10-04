@@ -6,7 +6,7 @@ const note = type => ({ id: 'gitlab-note', text: 'Inspect U1 clearance', threadT
 function harness({ session = new Map(), local = new Map(), route, identity, beforeSet = async () => {} } = {}) {
   const calls = [];
   const area = map => ({ get: async key => ({ [key]: map.get(key) }), set: async value => { await beforeSet(value); for (const [k, v] of Object.entries(value)) map.set(k, v); }, remove: async keys => { for (const key of [].concat(keys)) map.delete(key); }, setAccessLevel: async () => {} });
-  const ctx = vm.createContext({ URL, URLSearchParams, TextEncoder, TextDecoder, crypto: require('node:crypto').webcrypto, btoa, atob, AbortController, setTimeout, clearTimeout,
+  const ctx = vm.createContext({ URL, URLSearchParams, TextEncoder, TextDecoder, FormData, Blob, crypto: require('node:crypto').webcrypto, btoa, atob, AbortController, setTimeout, clearTimeout,
     KiCadReviewComments: comments, KiCadGitHubReviewApi: github, chrome: { storage: { session: area(session), local: area(local) }, identity }, fetch: async (url, init) => {
       calls.push({ url, init }); assert.equal(new URL(url).origin, HOST); assert.equal(init.credentials, 'omit'); assert.equal(init.redirect, 'error');
       let data = route ? await route(url, init) : undefined;
@@ -19,8 +19,9 @@ function harness({ session = new Map(), local = new Map(), route, identity, befo
         else if (url.endsWith('/notes')) data = { id: 89 };
         else if (url.endsWith('/issues')) data = { iid: 7 };
         else if (url.endsWith('/oauth/token')) data = { access_token: TOKEN, token_type: 'Bearer', scope: 'api', expires_in: 7200 };
-        else data = { id: 9, path_with_namespace: 'group/sub/project', default_branch: 'main' };
+        else data = { id: 9, path_with_namespace: 'group/sub/project', default_branch: 'main',visibility:'public' };
       }
+      if(data instanceof Response)return data;
       return typeof data === 'number' ? new Response('', { status: data }) : new Response(JSON.stringify(data), { headers: { 'content-type': 'application/json' } });
     } });
   vm.runInContext(source, ctx); return { api: ctx.KiCadGitLabReviewApi, calls, local, session };
@@ -32,6 +33,58 @@ test('GitLab vault encrypts isolated host tokens and purges across process resta
   assert.equal((await h.api.authorizationHeaders('https://unconfigured.example')).Authorization, undefined);
   await h.api.clearToken(HOST); assert.equal((await h.api.authStatus(HOST)).configured, false); assert.equal((await h.api.authStatus('https://gitlab.com')).configured, true);
   const restarted = harness({ session: h.session, local: h.local }); assert.equal((await restarted.api.authStatus('https://gitlab.com')).configured, false); assert.equal(h.session.size, 0);
+});
+
+const png=Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aOfoAAAAASUVORK5CYII=','base64');
+const captured=type=>({...note(type),capture:{mime:'image/png',width:1,height:1,dataUrl:'data:image/png;base64,'+png.toString('base64')}});
+const uploadResult=init=>({full_path:'/-/project/9/uploads/'+'a'.repeat(32)+'/'+init.body.get('file').name});
+test('GitLab publishes captures as multipart PNG uploads and Markdown links for each destination',async()=>{
+ for(const destination of ['new-issue','issue','discussion']){
+  const h=harness({route:async(url,init)=>url.endsWith('/uploads')?uploadResult(init):undefined});await h.api.setToken(HOST,TOKEN);
+  const comment=captured(destination==='discussion'?'discussion':'issue'),message={host:HOST,comment,destination,...(destination==='new-issue'?{}:{number:7})};
+  const result=await h.api.publish(message),duplicate=await h.api.publish(message),uploads=h.calls.filter(c=>c.url.endsWith('/uploads'));
+  assert.equal(uploads.length,1);assert.equal(uploads[0].init.headers['Content-Type'],undefined);assert.equal(uploads[0].init.body.get('file').type,'image/png');assert.deepEqual(Buffer.from(await uploads[0].init.body.get('file').arrayBuffer()),png);
+  const post=h.calls.find(c=>c.init.method==='POST'&&!c.url.endsWith('/uploads')),body=JSON.parse(post.init.body);assert.ok((body.body||body.description).includes(result.attachments[0].url));assert.ok(!(body.body||body.description).includes(comment.capture.dataUrl));
+  const parsed=comments.fromMarkdown(body.body||body.description);assert.equal(parsed[0].attachments[0].host,HOST);assert.equal(parsed[0].capture,undefined);assert.equal(duplicate.attachments[0].url,result.attachments[0].url);assert.equal(duplicate.duplicate,true);
+ }
+});
+test('parallel destinations share one upload and reuse the receipt after a definitive posting failure',async()=>{
+ let denied=true;const h=harness({route:async(url,init)=>{if(url.endsWith('/uploads'))return uploadResult(init);if(url.endsWith('/notes')&&denied){denied=false;return 403;}}});await h.api.setToken(HOST,TOKEN);
+ const message={host:HOST,comment:captured('issue'),destination:'issue',number:7};await assert.rejects(h.api.publish(message),/403/);
+ await Promise.all([h.api.publish(message),h.api.publish({...message,number:8})]);assert.equal(h.calls.filter(c=>c.url.endsWith('/uploads')).length,1);assert.equal(h.calls.filter(c=>c.url.endsWith('/notes')&&c.init.method==='POST').length,3);
+});
+test('concurrent first-time publications to different issues upload the same capture once',async()=>{
+ const h=harness({route:async(url,init)=>url.endsWith('/uploads')?uploadResult(init):undefined});await h.api.setToken(HOST,TOKEN);
+ const message={host:HOST,comment:captured('issue'),destination:'issue',number:7};await Promise.all([h.api.publish(message),h.api.publish({...message,number:8})]);assert.equal(h.calls.filter(c=>c.url.endsWith('/uploads')).length,1);
+});
+test('unconfirmed uploads and invalid upload URLs never post a note or repeat the upload',async()=>{
+ for(const mode of ['network','external','wrong-project','oversize',408,429,500]){
+  const h=harness({route:async(url,init)=>{if(!url.endsWith('/uploads'))return;if(typeof mode==='number')return mode;if(mode==='network')throw Error('network');if(mode==='external')return{full_path:'https://evil.example/upload.png'};if(mode==='wrong-project')return{...uploadResult(init),full_path:uploadResult(init).full_path.replace('/project/9/','/project/10/')};return new Response('x'.repeat(65537));}});await h.api.setToken(HOST,TOKEN);
+  const message={host:HOST,comment:captured('issue'),destination:'new-issue'};await assert.rejects(h.api.publish(message));await assert.rejects(h.api.publish(message),/unconfirmed/);assert.equal(h.calls.filter(c=>c.init.method==='POST').length,1);
+ }
+});
+test('definitively denied uploads can retry and older project-relative upload responses remain bounded',async()=>{
+ let denied=true;const h=harness({route:async(url,init)=>{if(!url.endsWith('/uploads'))return;if(denied){denied=false;return 403;}return{url:'/uploads/'+'a'.repeat(32)+'/'+init.body.get('file').name,markdown:'![untrusted](https://evil.example/image.png)'};}});await h.api.setToken(HOST,TOKEN);
+ const message={host:HOST,comment:captured('issue'),destination:'new-issue'};await assert.rejects(h.api.publish(message),/403/);assert.equal(h.calls.filter(c=>c.url.endsWith('/issues')&&c.init.method==='POST').length,0);
+ const result=await h.api.publish(message);assert.equal(h.calls.filter(c=>c.url.endsWith('/uploads')).length,2);assert.ok(result.attachments[0].url.startsWith(HOST+'/group/sub/project/uploads/'));
+ assert.ok(!h.calls.find(c=>c.url.endsWith('/issues')&&c.init.method==='POST').init.body.includes('evil.example'));
+});
+test('private and internal screenshots require verified media authentication before any mutation',async()=>{
+ for(const visibility of ['private','internal',undefined]){
+  const h=harness({route:async url=>url.endsWith('/projects/group%2Fsub%2Fproject')?{id:9,path_with_namespace:'group/sub/project',default_branch:'main',visibility}:undefined});await h.api.setToken(HOST,TOKEN);await assert.rejects(h.api.publish({host:HOST,comment:captured('issue'),destination:'new-issue'}),/Require authentication/);assert.equal(h.calls.filter(c=>c.init.method==='POST').length,0);
+ }
+ const h=harness({route:async(url,init)=>url.endsWith('/uploads')?uploadResult(init):url.endsWith('/projects/group%2Fsub%2Fproject')?{id:9,path_with_namespace:'group/sub/project',default_branch:'main',visibility:'private',enforce_auth_checks_on_uploads:true}:undefined});await h.api.setToken(HOST,TOKEN);assert.ok((await h.api.publish({host:HOST,comment:captured('issue'),destination:'new-issue'})).attachments.length);
+});
+test('sign-out after upload and failed receipt persistence retain uncertainty protection',async()=>{
+ for(const mode of ['signout','storage']){
+  let h,failed=false;h=harness({beforeSet:async value=>{if(mode==='storage'&&Object.entries(value).some(([key,record])=>key.startsWith('gitlab-attachment:')&&record.status==='done')&&!failed){failed=true;throw Error('disk');}},route:async(url,init)=>{if(url.endsWith('/uploads')){if(mode==='signout')await h.api.clearToken(HOST);return uploadResult(init);}}});await h.api.setToken(HOST,TOKEN);
+  const message={host:HOST,comment:captured('issue'),destination:'new-issue'};await assert.rejects(h.api.publish(message));await h.api.setToken(HOST,TOKEN);await assert.rejects(h.api.publish(message),/unconfirmed/);assert.equal(h.calls.filter(c=>c.init.method==='POST').length,1);
+ }
+});
+test('malformed PNG and a recreated project cannot reuse another project upload',async()=>{
+ let projectId=9;const h=harness({route:async(url,init)=>url.endsWith('/uploads')?uploadResult(init):url.endsWith('/projects/group%2Fsub%2Fproject')?{id:projectId,path_with_namespace:'group/sub/project',default_branch:'main',visibility:'public'}:undefined});await h.api.setToken(HOST,TOKEN);
+ const message={host:HOST,comment:captured('issue'),destination:'issue',number:7};await assert.rejects(h.api.publish({...message,comment:{...message.comment,capture:{...message.comment.capture,width:2}}}),/dimensions/);assert.equal(h.calls.filter(c=>c.init.method==='POST').length,0);
+ await h.api.publish(message);projectId=10;await assert.rejects(h.api.publish({...message,number:8}),/project/);assert.equal(h.calls.filter(c=>c.url.endsWith('/uploads')).length,1);
 });
 test('invalid origins and tokens are rejected without network traffic', async () => {
   const h = harness();
@@ -135,3 +188,8 @@ test('spoofed contributor email never authorizes publication', async () => {
   assert.equal(h.calls.filter(call => call.init.method === 'POST').length, 0);
   assert.equal(h.calls.some(call => call.url.includes('/repository/contributors?')), false);
 });
+
+ test('publication rejects project path reassignment during policy preflight and pins mutation endpoints to numeric ID',async()=>{
+ let reads=0;const moved=harness({route:async url=>url.endsWith('/projects/group%2Fsub%2Fproject')?{id:++reads===1?9:10,path_with_namespace:'group/sub/project',default_branch:'main',visibility:'public'}:undefined});await moved.api.setToken(HOST,TOKEN);await assert.rejects(moved.api.publish({host:HOST,comment:captured('issue'),destination:'new-issue'}),/changed during/);assert.equal(moved.calls.filter(c=>c.init.method==='POST').length,0);
+ const h=harness({route:async(url,init)=>url.endsWith('/uploads')?uploadResult(init):undefined});await h.api.setToken(HOST,TOKEN);await h.api.publish({host:HOST,comment:captured('issue'),destination:'new-issue'});assert.ok(h.calls.filter(c=>c.init.method==='POST').every(c=>new URL(c.url).pathname.startsWith('/api/v4/projects/9/')));
+ });

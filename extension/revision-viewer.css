@@ -152,3 +152,5 @@ body .object-row.selected{background:var(--selected);color:var(--text);border:1p
 @media(max-width:1000px){#frameControls{scrollbar-width:none}#frameControls::-webkit-scrollbar{display:none;height:0}}
 
 .compact-sidebar>:not(.sidebar-heading):not(.panel-heading):not(.sidebar-resizer):not(.sidebar-height-resizer){display:none!important}
+
+.mention-suggestions{display:grid;gap:4px;max-height:210px;overflow:auto}.mention-suggestion{justify-content:flex-start;white-space:normal;text-align:left;font-size:11px}#mentionSource,#mentionQuery{margin:5px 0}

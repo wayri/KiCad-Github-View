@@ -179,7 +179,25 @@
     $("commentsPane").replaceChildren(commentTabs,addPane,viewPane,$("commentStatus"));
     commentsSidebar.append(heading("Comments",closeComments),$("commentsPane"),legacyControls);workspaceElement.append(commentsSidebar);
     propertiesSidebar.replaceChildren(heading("Properties",$("closeInspector")),$("propertiesPane"));
-    const metadata=collapsible("Severity, state and people",['commentSeverity','commentState','commentTags','commentMentions'].map(id=>$(id).closest?.('label')||$(id)),false,'comment-metadata');$("commentEditor").insertBefore(metadata,$("commentText").closest?.('label')||$("commentText"));
+    const metadata=collapsible("Severity, state and people",['commentSeverity','commentState','commentTags'].map(id=>$(id).closest?.('label')||$(id)),false,'comment-metadata');$("commentEditor").insertBefore(metadata,$("commentText").closest?.('label')||$("commentText"));
+    const mentionPanel=make('div'),mentionQuery=make('input'),mentionSource=make('select'),mentionList=make('div'),mentionStatus=make('p');
+    mentionQuery.id='mentionQuery';mentionQuery.placeholder='Find a username or name';mentionQuery.maxLength=64;mentionQuery.setAttribute('aria-label','Find people to mention');
+    mentionSource.id='mentionSource';mentionSource.setAttribute('aria-label','Mention account source');
+    for(const [value,label]of [['repository',provider==='gitlab'?'Project members':'Contributors and assignees'],['users','Search other users']]){const option=make('option',label);option.value=value;mentionSource.append(option);}mentionSource.value='repository';
+    mentionList.id='mentionSuggestions';mentionList.className='mention-suggestions';mentionStatus.id='mentionLookupStatus';mentionStatus.className='hint';mentionStatus.setAttribute('role','status');
+    const mentionsInput=$('commentMentions'),mentionsLabel=mentionsInput.closest?.('label')||mentionsInput;let mentionTimer=null,mentionGeneration=0,mentionDisposed=false;
+    async function lookupMentions(){const run=++mentionGeneration;mentionList.replaceChildren();if(!remoteAvailable){mentionStatus.textContent='Enter @usernames manually. Account lookup is available in the browser extension.';return;}
+      if(mentionSource.value==='users'&&mentionQuery.value.trim().replace(/^@/,'').length<2){mentionStatus.textContent='Type at least two username characters.';return;}
+      mentionStatus.textContent='Finding people…';
+      try{const result=await request('comment-mention-users',{repository:options.pullRepository||repository,query:mentionQuery.value,source:mentionSource.value});if(mentionDisposed||run!==mentionGeneration)return;
+        for(const person of result.users||[]){const row=button(`@${person.login}${person.name?' · '+person.name:''} · ${(person.roles||[]).join(', ')}`,()=>{const values=mentionsInput.value.split(/[,\s]+/).map(v=>v.replace(/^@/,'')).filter(Boolean);if(!values.some(v=>v.toLowerCase()===person.login.toLowerCase())){if(values.length>=20){mentionStatus.textContent='At most 20 mentions per comment.';return;}values.push(person.login);}mentionsInput.value=values.map(v=>'@'+v).join(', ');mentionStatus.textContent=`Added @${person.login}. Notifications are sent only when posted.`;});row.className='mention-suggestion';mentionList.append(row);}
+        mentionStatus.textContent=[result.users?.length?`${result.users.length} people found.`:'No matches. You can enter a username manually.',...(result.warnings||[])].join(' ');
+      }catch(error){if(!mentionDisposed&&run===mentionGeneration)mentionStatus.textContent=error.message;}
+    }
+    const peopleGroup=collapsible('Mention people',[mentionsLabel,mentionSource,mentionQuery,mentionPanel,mentionStatus],false,'comment-people');mentionPanel.append(mentionList);peopleGroup.id='mentionPeople';
+    peopleGroup.addEventListener('toggle',()=>{if(peopleGroup.open)lookupMentions();else{mentionGeneration++;clearTimeout(mentionTimer);}});
+    mentionQuery.addEventListener('input',()=>{mentionGeneration++;clearTimeout(mentionTimer);mentionTimer=setTimeout(lookupMentions,300);});mentionSource.onchange=lookupMentions;
+    $('commentEditor').insertBefore(peopleGroup,$('commentPublishSettings'));
     const captureControls=$("commentEditor").querySelector?.('.capture-controls');if(captureControls)$("commentEditor").insertBefore(collapsible("Drawing screenshot",[captureControls],false,'comment-capture'),$("commentPublishSettings"));
     const connectionsHeading=$("netMembers").querySelector?.('h3');connectionsHeading?.remove();$("netMembers").append(collapsible("Connections",[$("netMemberList")],true,'property:connections'));
     const panelSpaceStatus=make('span');panelSpaceStatus.id='panelSpaceStatus';panelSpaceStatus.className='hint';panelSpaceStatus.hidden=true;$("selectionStatus").parentElement?.append(panelSpaceStatus);
@@ -214,7 +232,12 @@
     function showNavigator(open=true){sidebarState.navigator=open;if(open)activeSidebar="navigator";layoutSidebars();}
     function hideSidebar(name){sidebarState[name]=false;if(activeSidebar===name)activeSidebar=Object.keys(sidebarState).find(key=>sidebarState[key])||"properties";layoutSidebars();}
     function hideInspector(){sidebarState.properties=sidebarState.comments=false;layoutSidebars();}
-    function inspector(pane,tab){const name=pane==="properties"?"properties":"comments";sidebarState[name]=true;activeSidebar=name;if(tab)showCommentTab(tab);if(pane==="github"){showCommentTab("view");collaborationGroup.open=true;}layoutSidebars();}
+    function inspector(pane,tab){restoreFocusView();const name=pane==="properties"?"properties":"comments";sidebarState[name]=true;activeSidebar=name;if(tab)showCommentTab(tab);if(pane==="github"){showCommentTab("view");collaborationGroup.open=true;}layoutSidebars();
+      // An explicit comment action must reveal content, even in a short split pane.
+      if(name==='comments'&&(tab==='add'||commentsSidebar.classList.contains('compact-sidebar'))){
+        expandedSidebars.add(name);const expand=$('expandComments');if(expand){expand.textContent='Restore';expand.setAttribute('aria-pressed','true');}layoutSidebars();
+      }
+    }
     function resizeSidebar(name,panel,edge){
       const handle=make("div");handle.className="sidebar-resizer "+edge;handle.tabIndex=0;handle.setAttribute("role","separator");handle.setAttribute("aria-orientation","vertical");handle.setAttribute("aria-label",`Resize ${name} sidebar`);handle.setAttribute("aria-valuemin","220");handle.setAttribute("aria-valuemax","560");panel.append(handle);
       const setWidth=value=>{const max=Math.min(560,Math.max(220,workspaceElement.getBoundingClientRect().width-32));sidebarWidths[name]=Math.max(220,Math.min(max,value));panel.style.width=panel.style.flexBasis=sidebarWidths[name]+"px";handle.setAttribute("aria-valuenow",String(sidebarWidths[name]));layoutSidebars();};setWidth(sidebarWidths[name]);
@@ -337,7 +360,7 @@
     function selectNet(net,move=false,toggle=true){
       if(net&&$('multiHighlight').checked){if(toggle&&pinnedNets.has(net.id)){pinnedNets.delete(net.id);selectedNet=null;}else{if(pinnedNets.size>=200){notice('At most 200 networks can be highlighted.');return;}pinnedNets.set(net.id,net);selectedNet=net;}}
       else{pinnedNets.clear();pinnedClasses.clear();highlightObjects=[];selectedNet=net;}
-      selected=null;nativePick=null;connectionCursor=-1;activeConnection=null;updateHighlights();$('selectionStatus').textContent=selectedNet?`${selectedNet.name} · ${selectedNet.kind==='pcb'?'PCB net '+selectedNet.code:'sheet network'}`:'Net highlight cleared';properties();renderNets();renderObjects();if(selectedNet){inspector('properties');if(move)focusNet(selectedNet);options.onSelection?.({kind:'net',netName:selectedNet.name,path:selectedNet.path});}getCanvas()?.draw();
+      selected=null;nativePick=null;connectionCursor=-1;activeConnection=null;updateHighlights();$('selectionStatus').textContent=selectedNet?`${selectedNet.name} · ${selectedNet.kind==='pcb'?'PCB net '+selectedNet.code:'sheet network'}`:'Net highlight cleared';properties();renderNets();renderObjects();if(selectedNet){inspector('properties');if(move)focusNet(selectedNet);const qualifiedNetName=root.KiCadPairedReview?.qualifiedNetName?.(selectedNet,objects);options.onSelection?.({kind:'net',netName:selectedNet.name,path:selectedNet.path,...(qualifiedNetName?{qualifiedNetName}:{})});}getCanvas()?.draw();
     }
     function refreshNets(){const source=getCanvas()?.design;if(!source||source===netSource)return;netSource=source;const designs=options.getDesigns?.()||new Map([[currentFile(),source]]);netModel=netBuilder?netBuilder.build(files,designs):root.KiCadNetModel?root.KiCadNetModel.build(files,designs):{nets:[],warnings:[]};selectedNet=null;activeConnection=null;getCanvas()?.setNetHighlight(null);renderNets();renderNetClasses();updateHighlights();}
     function navigate(tab){navigatorTab=tab;for(const name of ["parts","sheets","nets","layers","search","rules","bom"]){$(name+"Pane").hidden=name!==tab;$("nav"+name[0].toUpperCase()+name.slice(1)).setAttribute("aria-selected",String(name===tab));}if(tab==="bom")renderBom();if(tab==="search")navigation?.renderSearch();if(tab==="rules")navigation?.renderRules();if(tab==="sheets")renderSheets();if(tab==="nets"){renderNets();$("netHelp").textContent=pcb?"Select a net to highlight its copper and inspect connections.":"Sheet-local wires, pins and explicit power symbols. Cross-sheet hierarchy and buses are not resolved.";}showNavigator(true);}
@@ -371,13 +394,15 @@
     }
     function highlightRelated(selection) {
       if (selection?.kind === "net") {
-        const matches = netModel.nets.filter((item) => item.path === (currentFile() || rootFile) && item.name === selection.netName);
-        if (matches.length !== 1) { notice(matches.length ? `Net ${selection.netName} is ambiguous on this sheet.` : `Net ${selection.netName} is not on this sheet.`); return false; }
-        selectNet(matches[0],true,false); return true;
+        const result=root.KiCadPairedReview?.relatedNet?.(netModel.nets,objects,selection,currentFile()||rootFile);
+        if(!result?.net){notice(result?.error||'The related net could not be found unambiguously.');return false;}
+        const id=result.net.id;if(result.net.path!==currentFile())openSheet(result.net.path);
+        const net=netModel.nets.find(item=>item.id===id);if(!net){notice('The related net changed while opening its sheet.');return false;}
+        notice('');selectNet(net,true,false);return true;
       }
       const result = root.KiCadPairedReview?.relatedPart?.(objects,selection) || relatedFallback(objects,selection);
       if (!result?.object) { notice(result?.error || "The related part could not be found unambiguously."); return false; }
-      notice(""); selectObject(result.object,true,true); return true;
+      notice(""); selectObject(result.object,true,true);if(!$("multiHighlight").checked)highlightObjects=[result.object];else if(!highlightObjects.some(o=>o.id===result.object.id))highlightObjects.push(result.object);updateHighlights();getCanvas()?.draw();return true;
     }
     function renderObjects() {
       const list = $("objectList"); list.replaceChildren();
@@ -495,7 +520,7 @@
       $("editorThreadType").value=editor.threadType||"issue";$("editorTitle").value="";configureEditorDestination();$("editorMarkdown").hidden=true;
       capturePreview();draw();
     }
-    function capturePreview(){const image=$("capturePreview"),source=editor?.capture?.dataUrl||editor?.attachments?.[0]?.url;image.hidden=!source;if(source){image.src=source;image.referrerPolicy='no-referrer';}else image.removeAttribute?.('src');$("removeCapture").hidden=!source;$("captureComment").disabled=!editor?.anchor.area;$("captureStatus").textContent=source?`Screenshot saved with this note.${remoteAvailable&&provider==='github'?' Post includes this image in the GitHub thread; upload requires repository write access.':` Download it to attach in a ${providerName} composer.`}`:editor?.anchor.area?'Capture the visible drawing inside this area.':'Draw an area to attach a screenshot.';}
+    function capturePreview(){const image=$("capturePreview"),source=editor?.capture?.dataUrl||editor?.attachments?.[0]?.url;image.hidden=!source;if(source){image.src=source;image.referrerPolicy='no-referrer';}else image.removeAttribute?.('src');$("removeCapture").hidden=!source;$("captureComment").disabled=!editor?.anchor.area;$("captureStatus").textContent=source?`Screenshot saved with this note.${remoteAvailable?provider==='github'?' Post includes this image in the GitHub thread; upload requires repository write access.':' Post includes this image in the GitLab thread. Private/internal projects must require authentication to view media files.':` Download it to attach in a ${providerName} composer.`}`:editor?.anchor.area?'Capture the visible drawing inside this area.':'Draw an area to attach a screenshot.';}
     function setCommentMode(mode){commentMode=commentMode===mode?null:mode;areaStart=areaEnd=null;measureMode=false;measurePoints=[];getCanvas()?.canvas.classList?.toggle("ruler-mode",false);measurePreview=rulerSnap=boardMeasure=null;$("rulerControls").hidden=true;$("measureButton").setAttribute('aria-pressed','false');for(const [id,value] of [['pointComment','point'],['areaComment','area']])$(id).setAttribute('aria-pressed',String(commentMode===value));getCanvas()?.canvas.classList?.toggle('area-mode',Boolean(commentMode));commentStatus(commentMode==='area'?'Drag a rectangle on the drawing to comment.':commentMode==='point'?'Click the drawing to place a comment.':'');draw();}
     async function refreshComments() {
       const run = ++loadId, target = scope();
@@ -755,7 +780,8 @@
     }catch(error){notice(error.message);}finally{companionButton.disabled=false;}});companionButton.id="viewOppositeDrawing";$("frameControls").append(companionButton);
     companionSelect.onchange=()=>{if(companionSelect.value)openCompanion(companionSelect.value).catch(error=>notice(error.message));};const closeChooser=button("Close",()=>{companionChooser.hidden=true;});companionChooser.append(companionSelect,companionMessage,closeChooser);document.body?.append(companionChooser);
     $("closeNavigator").onclick=()=>showNavigator(false);
-    const focusView=button('Focus view',()=>{const focused=document.body?.classList?.toggle('drawing-focused');showNavigator(false);hideInspector();focusView.textContent=focused?'Restore controls':'Focus view';});focusView.title='Maximize drawing area (Ctrl+Shift+F); Esc restores controls';$('frameControls').append(focusView);
+    function restoreFocusView(){document.body?.classList?.remove('drawing-focused');if($('focusView'))$('focusView').textContent='Focus view';}
+    const focusView=button('Focus view',()=>{const focused=document.body?.classList?.toggle('drawing-focused');showNavigator(false);hideInspector();focusView.textContent=focused?'Restore controls':'Focus view';});focusView.id='focusView';focusView.title='Maximize drawing area (Ctrl+Shift+F); Esc restores controls';$('frameControls').append(focusView);
     if(pcb&&root.KiCadRatsnest){const ratsnestButton=button('Ratsnest',()=>{showRatsnest=!showRatsnest;ratsnestButton.setAttribute('aria-pressed',String(showRatsnest));draw();if(showRatsnest)notice(`Candidate connections: ${ratsnestResult?.lines.length||0}. ${ratsnestResult?.warnings.join(' ')||''}`);});ratsnestButton.title='Read-only candidate airwires from saved copper; not native KiCad unrouted/DRC';ratsnestButton.setAttribute('aria-pressed','false');$('frameControls').append(ratsnestButton);}
     for(const name of ["parts","sheets","nets","layers","search","rules","bom"])$("nav"+name[0].toUpperCase()+name.slice(1)).onclick=()=>navigate(name);
     $("netSearch").oninput=()=>{netFilterObject=null;renderNets();};$("clearNet").onclick=()=>{netFilterObject=null;selectNet(null);};
@@ -881,7 +907,7 @@
     return {attachCanvas,draw,refreshNets,refreshComments,highlightRelated,select3D(record){nativePick=record;const object=resolveObject(objects,rootFile,record);selectObject(object,false,false,true);},
       comment3D(record){const object=resolveObject(objects,rootFile,record);if(object)editComment(null,anchor(object.position,object));else notice("This 3D object has no unambiguous saved part anchor; switch to 2D to place a comment.");},
       setScene(next){scene=next;$("highlightControls").hidden=Boolean(scene);$("highlightDnp").disabled=Boolean(scene);for(const id of ["measureButton","navNets","navLayers","pointComment","areaComment"])$(id).disabled=Boolean(scene);if(scene&&navigatorTab!=="parts")navigate("parts");if(scene){setCommentMode(null);measureMode=false;measurePoints=[];getCanvas()?.canvas.classList?.toggle("ruler-mode",false);measurePreview=rulerSnap=boardMeasure=null;$("rulerControls").hidden=true;$("measureButton").setAttribute("aria-pressed","false");$("measurementStatus").textContent="";scene.setPopulation(objects.filter((item)=>item.kind==="footprint").map((item)=>({reference:item.reference,populated:item.populated})));}draw();},
-      dispose(){loadId++;remoteLoad++;netBuilder?.clear();reviewToolsObserver?.disconnect();sidebarObserver?.disconnect();root.removeEventListener?.('resize',layoutSidebars);for(const cleanup of resizeCleanups)cleanup();root.removeEventListener?.('keydown',reviewKeydown);narrowPanels.removeEventListener?.("change",keepDrawingVisible);navigation?.dispose();attach?.dispose();}}
+      dispose(){mentionDisposed=true;mentionGeneration++;clearTimeout(mentionTimer);loadId++;remoteLoad++;netBuilder?.clear();reviewToolsObserver?.disconnect();sidebarObserver?.disconnect();root.removeEventListener?.('resize',layoutSidebars);for(const cleanup of resizeCleanups)cleanup();root.removeEventListener?.('keydown',reviewKeydown);narrowPanels.removeEventListener?.("change",keepDrawingVisible);navigation?.dispose();attach?.dispose();}}
   }
   root.KiCadReviewWorkspace={mount,resolveObject,measurement,matchesSearch,sheetTarget,sheetEntries,sheetHistory,rootSheetPath};
   if(typeof module==="object"&&module.exports)module.exports=root.KiCadReviewWorkspace;

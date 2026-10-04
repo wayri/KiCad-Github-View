@@ -6,7 +6,7 @@ const KiCadGitLabReviewApi = (() => {
   const LIMIT = 8 * 60 * 60 * 1000;
   const externalVault = typeof KiCadCredentialVault !== "undefined" && KiCadCredentialVault.supported;
   const sessionVault = host => externalVault ? KiCadCredentialVault.forProvider(`gitlab:${host}`) : null;
-  const keys = new Map(), epochs = new Map(), pending = new Map(), locks = new Map();
+  const keys = new Map(), epochs = new Map(), pending = new Map(), locks = new Map(), uploadLocks=new Map();
   let initialized = false, queue = Promise.resolve();
   const fail = (text, definitive = false) => Object.assign(new Error(text), { definitive });
   function validateHost(value = "https://gitlab.com") {
@@ -110,15 +110,24 @@ const KiCadGitLabReviewApi = (() => {
     return authStatus(host);
   }
   const base64url = bytes => btoa(String.fromCharCode(...new Uint8Array(bytes))).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/g, "");
+  async function responseText(response,limit){
+    if(Number(response.headers.get('content-length'))>limit)throw fail('GitLab response exceeds the size limit.');
+    if(!response.body?.getReader)throw fail('GitLab response cannot be read safely.');
+    const reader=response.body.getReader(),chunks=[];let total=0;
+    try{for(;;){const {value,done}=await reader.read();if(done)break;total+=value.byteLength;if(total>limit){reader.cancel().catch(()=>{});throw fail('GitLab response exceeds the size limit.');}chunks.push(value);}}
+    finally{reader.releaseLock();}
+    const bytes=new Uint8Array(total);let offset=0;for(const chunk of chunks){bytes.set(chunk,offset);offset+=chunk.byteLength;}return new TextDecoder().decode(bytes);
+  }
   async function request(host, path, { method = "GET", body, token, expectedEpoch, allow404 = false } = {}) {
     host = validateHost(host);
     if (typeof path !== "string" || !/^\/(?:api\/v4\/|oauth\/token(?:$|\?))/.test(path) || path.includes("\\") || new URL(host + path).origin !== host) throw fail("Invalid GitLab API destination.", true);
     if (expectedEpoch !== undefined && epoch(host) !== expectedEpoch) throw fail("GitLab account changed or signed out.", true);
     const headers = { Accept: "application/json", ...(token ? { Authorization: `Bearer ${token}` } : {}) };
-    if (body) headers["Content-Type"] = body instanceof URLSearchParams ? "application/x-www-form-urlencoded" : "application/json";
+    const multipart=typeof FormData==='function'&&body instanceof FormData;
+    if (body&&!multipart) headers["Content-Type"] = body instanceof URLSearchParams ? "application/x-www-form-urlencoded" : "application/json";
     const controller = new AbortController(), timer = setTimeout(() => controller.abort(), 30000);
     try {
-      const response = await fetch(host + path, { method, headers, body: body ? body instanceof URLSearchParams ? body.toString() : JSON.stringify(body) : undefined,
+      const response = await fetch(host + path, { method, headers, body: body ? multipart?body:body instanceof URLSearchParams ? body.toString() : JSON.stringify(body) : undefined,
         credentials: "omit", redirect: "error", cache: "no-store", signal: controller.signal });
       if (expectedEpoch !== undefined && epoch(host) !== expectedEpoch) throw fail("GitLab account changed or signed out.");
       if (allow404 && response.status === 404) return null;
@@ -126,9 +135,10 @@ const KiCadGitLabReviewApi = (() => {
         if (response.status === 401 && token && expectedEpoch === epoch(host)) await clearToken(host);
         throw fail(`GitLab returned HTTP ${response.status}. Check repository access and token scopes.`, response.status >= 400 && response.status < 500 && ![408, 429].includes(response.status));
       }
-      const text = await response.text(); if (text.length > 1024 * 1024) throw fail("GitLab response exceeds the size limit.");
+      const text = await responseText(response,multipart?65536:1024*1024);
+      if(expectedEpoch!==undefined&&epoch(host)!==expectedEpoch)throw fail('GitLab account changed or signed out.');
       try { return JSON.parse(text); } catch { throw fail("GitLab returned an invalid API response."); }
-    } finally { clearTimeout(timer); }
+    } finally { clearTimeout(timer);controller.abort(); }
   }
   async function startOAuth(host) {
     host = validateHost(host); const status = await authStatus(host);
@@ -168,14 +178,16 @@ const KiCadGitLabReviewApi = (() => {
     if (!Array.isArray(list) || list.length > 100 || list.some(login => typeof login !== "string" || !/^[A-Za-z0-9][A-Za-z0-9_.-]{0,99}$/.test(login))) throw fail("GitLab repository policy allowlist is malformed.", true);
     return { mode: value.commenting.mode, allowlist: [...new Set(list.map(login => login.toLowerCase()))] };
   }
-  async function commentPolicyStatus(host, repository) {
+  async function commentPolicyStatus(host, repository, expectedProjectId=null) {
     host = validateHost(host); repository = repositoryPath(repository);
     const current = epoch(host), headers = await authorizationHeaders(host), token = headers.Authorization?.slice(7);
     if (!token) return { allowed: false, reason: "Sign in to this GitLab host before posting." };
-    const path = `/api/v4/projects/${encodeURIComponent(repository)}`, options = { token, expectedEpoch: current };
+    let path = `/api/v4/projects/${encodeURIComponent(repository)}`;const options = { token, expectedEpoch: current };
     const project = await request(host, path, options);
     if (project.path_with_namespace !== repository || !Number.isSafeInteger(project.id) || project.id <= 0 ||
         typeof project.default_branch !== "string" || !project.default_branch || project.default_branch.length > 200) throw fail("GitLab project policy identity could not be verified.", true);
+    if(expectedProjectId!==null&&project.id!==expectedProjectId)throw fail('GitLab project changed during publication preflight.',true);
+    path=`/api/v4/projects/${project.id}`;
     const user = await request(host, "/api/v4/user", options);
     if (!Number.isSafeInteger(user.id) || user.id <= 0 || typeof user.username !== "string" || !/^[A-Za-z0-9_.-]{1,100}$/.test(user.username)) throw fail("GitLab account identity could not be verified.", true);
     let policy = { mode: "all", allowlist: [] }, source = "default";
@@ -201,6 +213,43 @@ const KiCadGitLabReviewApi = (() => {
     }
     return result;
   }
+  function captureBytes(capture){
+    let bytes;try{bytes=Uint8Array.from(atob(capture.dataUrl.split(',')[1]),c=>c.charCodeAt(0));}catch{throw fail('The screenshot PNG is invalid. Capture the area again.',true);}
+    const signature=[137,80,78,71,13,10,26,10];
+    if(bytes.length<33||bytes.length>196608||signature.some((v,i)=>bytes[i]!==v)||bytes[8]!==0||bytes[9]!==0||bytes[10]!==0||bytes[11]!==13||String.fromCharCode(...bytes.subarray(12,16))!=='IHDR')throw fail('The screenshot PNG is invalid or too large. Capture a smaller area again.',true);
+    const header=new DataView(bytes.buffer,bytes.byteOffset,bytes.byteLength);
+    if(header.getUint32(16)!==capture.width||header.getUint32(20)!==capture.height)throw fail('Screenshot dimensions do not match the PNG. Capture the area again.',true);
+    return bytes;
+  }
+  function checkedAttachment(value,host,repository,projectId,capture,hash){
+    const attachment=KiCadReviewComments.validateAttachment(value);
+    if(attachment.provider!=='gitlab'||attachment.host!==host||attachment.repository!==repository||attachment.projectId!==projectId||capture&&(attachment.width!==capture.width||attachment.height!==capture.height)||hash&&!attachment.url.endsWith(`/kicad-review-${hash.slice(0,20)}.png`))throw fail('GitLab screenshot attachment does not match this project or capture.');
+    return attachment;
+  }
+  async function uploadCapture(note,host,repository,projectId,token,current){
+    const bytes=captureBytes(note.capture),hash=Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',bytes)),b=>b.toString(16).padStart(2,'0')).join('');
+    const key='gitlab-attachment:'+JSON.stringify([host,repository,note.id,hash]);
+    if(uploadLocks.has(key))return checkedAttachment(await uploadLocks.get(key),host,repository,projectId,note.capture,hash);
+    const work=uploadCaptureLocked(note,host,repository,projectId,token,current,bytes,hash,key);uploadLocks.set(key,work);
+    try{return await work;}finally{uploadLocks.delete(key);}
+  }
+  async function uploadCaptureLocked(note,host,repository,projectId,token,current,bytes,hash,key){
+    const saved=(await chrome.storage.local.get(key))[key];
+    if(saved?.status==='done')return checkedAttachment(saved.attachment,host,repository,projectId,note.capture,hash);
+    if(saved?.status==='pending')throw fail('Previous screenshot upload has an unconfirmed outcome. Inspect GitLab uploads before posting again.');
+    if(typeof FormData!=='function'||typeof Blob!=='function')throw fail('Screenshot upload is unavailable in this browser. Remove the image to publish text only.',true);
+    const name=`kicad-review-${hash.slice(0,20)}.png`,body=new FormData();body.append('file',new Blob([bytes],{type:'image/png'}),name);
+    if(epoch(host)!==current)throw fail('GitLab account changed or signed out.',true);
+    await chrome.storage.local.set({[key]:{status:'pending',startedAt:new Date().toISOString()}});
+    try{
+      const result=await request(host,`/api/v4/projects/${projectId}/uploads`,{method:'POST',body,token,expectedEpoch:current});
+      // Do not use server-supplied Markdown, external URLs or signed query strings.
+      const relative=result.full_path||`/${repository}${result.url}`;
+      if(typeof relative!=='string'||!relative.startsWith('/')||relative.startsWith('//'))throw fail('GitLab did not confirm a project-bound screenshot upload.');
+      const attachment=checkedAttachment({provider:'gitlab',host,repository,projectId,url:host+relative,mime:'image/png',width:note.capture.width,height:note.capture.height},host,repository,projectId,note.capture,hash);
+      await chrome.storage.local.set({[key]:{status:'done',attachment}});return attachment;
+    }catch(error){if(error.definitive)await chrome.storage.local.remove(key);throw error;}
+  }
   async function publish(message) {
     const host = validateHost(message.host), note = KiCadReviewComments.validateComment(message.comment);
     if (note.anchor.provider !== "gitlab" || (note.anchor.host && validateHost(note.anchor.host) !== host)) throw fail("This note belongs to another Git provider or host.", true);
@@ -224,7 +273,9 @@ const KiCadGitLabReviewApi = (() => {
       if (remote?.provider !== "gitlab" || remote.host !== host || remote.repository !== repository ||
           !Number.isSafeInteger(remote.number) || remote.number <= 0 || typeof remote.url !== "string" ||
           !remote.url.startsWith(`${host}/${repository}/-/issues/${remote.number}`)) throw fail("Stored GitLab publication metadata is invalid.", true);
-      return { remoteRef: remote, duplicate: true };
+      const attachments=saved.attachments?.map(value=>KiCadReviewComments.validateAttachment(value));
+      if(attachments?.some(a=>a.provider!=='gitlab'||a.host!==host||a.repository!==repository))throw fail('Stored GitLab screenshot metadata is invalid.',true);
+      return { remoteRef: remote,...(attachments?{attachments}:{}), duplicate: true };
     }
     if (saved?.status === "pending") throw fail("Previous publication has an unconfirmed outcome. Inspect GitLab before posting again.");
     const headers = await authorizationHeaders(host), token = headers.Authorization?.slice(7);
@@ -232,20 +283,23 @@ const KiCadGitLabReviewApi = (() => {
     const path = `/api/v4/projects/${encodeURIComponent(repository)}`;
     const project = await request(host, path, { token, expectedEpoch: current });
     if (project.path_with_namespace !== repository || !Number.isSafeInteger(project.id) || project.id <= 0) throw fail("GitLab returned another project identity.", true);
-    const policy = await commentPolicyStatus(host, repository);
+    const policy = await commentPolicyStatus(host, repository,project.id);
     if (!policy.allowed) throw fail(`Repository comment policy blocked publication: ${policy.reason}`, true);
-    const body = KiCadReviewComments.toMarkdown(note);
+    if((note.capture||note.attachments?.length)&&project.visibility!=='public'&&project.enforce_auth_checks_on_uploads!==true)throw fail('GitLab image uploads can be public by URL. For a private/internal project, enable Require authentication to view media files in GitLab project settings, or remove the screenshot to post text only.',true);
+    const attachments=note.capture?[await uploadCapture(note,host,repository,project.id,token,current)]:note.attachments?.map(value=>checkedAttachment(value,host,repository,project.id));
+    const mutationPath=`/api/v4/projects/${project.id}`;
+    const body = KiCadReviewComments.toMarkdown(attachments?.length?{...note,attachments}:note);
     if (epoch(host) !== current) throw fail("GitLab account changed or signed out.", true);
-    await chrome.storage.local.set({ [key]: { status: "pending", startedAt: new Date().toISOString() } });
+    await chrome.storage.local.set({ [key]: { status: "pending", startedAt: new Date().toISOString(),...(attachments?.length?{attachments}:{}) } });
     try {
-      const endpoint = destination === "new-issue" ? `${path}/issues` : `${path}/issues/${number}/${destination === "discussion" ? "discussions" : "notes"}`;
+      const endpoint = destination === "new-issue" ? `${mutationPath}/issues` : `${mutationPath}/issues/${number}/${destination === "discussion" ? "discussions" : "notes"}`;
       const result = await request(host, endpoint, { method: "POST", token, expectedEpoch: current, body: destination === "new-issue" ? { title, description: body } : { body } });
       const issue = destination === "new-issue" ? result.iid : number;
       const noteId = destination === "discussion" ? result.notes?.[0]?.id : result.id;
       if (!Number.isSafeInteger(issue) || issue <= 0 || destination !== "new-issue" && (!Number.isSafeInteger(noteId) || noteId <= 0)) throw fail("GitLab did not confirm publication.");
       const remoteRef = { provider: "gitlab", host, repository, kind: destination === "discussion" ? "discussion" : "issue", number: issue,
         url: `${host}/${repository}/-/issues/${issue}${destination === "new-issue" ? "" : `#note_${noteId}`}`, publishedAt: new Date().toISOString() };
-      await chrome.storage.local.set({ [key]: { status: "done", remoteRef } }); return { remoteRef };
+      await chrome.storage.local.set({ [key]: { status: "done", remoteRef,...(attachments?.length?{attachments}:{}) } }); return { remoteRef,...(attachments?.length?{attachments}:{}) };
     } catch (error) { if (error.definitive) await chrome.storage.local.remove(key); throw error; }
   }
   return { validateHost, validatePolicy, authStatus, tokenStatus: authStatus, setToken, clearToken, resetAuth, authorizationHeaders, setClientId, startOAuth, commentPolicyStatus, publish };

@@ -30,7 +30,9 @@ Use **Split schematic + PCB** for paired drawings and **Git revisions** for bran
 
 ## 3. Anchor and prepare your review
 
-Open **Review → Comments**. **New note** anchors to the selected part or drawing. **Point** lets you click a location; **Area** lets you drag a rectangle. **Capture area** captures visible drawing content as a PNG, excluding viewer controls. The image remains in the local/exported note until you download and manually attach it.
+Open **Review → Comments**. **New note** anchors to the selected part or drawing. **Point** lets you click a location; **Area** lets you drag a rectangle. **Capture area** captures visible drawing content as a PNG, excluding viewer controls. The image stays in the local/exported note. **Post to GitLab** uploads the PNG to the selected project and embeds its confirmed URL in the issue or discussion. For private/internal projects, first enable **Require authentication to view media files** in GitLab project settings; otherwise image publication is blocked. This protects against GitLab’s default URL-accessible image behavior.
+
+Expand **Mention people** to find project members or search other accounts; select a result to insert its `@username`. Manual usernames remain available. Suggestions do not grant project access, and notifications only occur after remote publication.
 
 Set severity (Info, Minor, Major, Critical), local state (Open, Skipped, Resolved, Won't fix), tags, `@mentions`, and review text. Notes support up to 4,000 characters, twenty tags and twenty account mentions. GitLab usernames with underscores or dots are supported. Local mentions send no notification.
 
@@ -48,7 +50,7 @@ The current editor offers **Post to GitLab**:
 
 GitLab discussions are issue conversation threads, not standalone GitHub-style Discussions. There is no GitHub category selector. **Preview GitLab Markdown** displays the review heading and context table with severity/state, component or net, geometry, variant, repository, revision permalink, identifiers, tags, mentions and UTC times. **Save draft** saves locally without posting. **Post to GitLab**, or **Publish to GitLab** on a saved note, explicitly submits the review with your connected account and records the confirmed remote link.
 
-A failed post preserves the draft. An uncertain outcome blocks automatic retry to prevent duplicates: inspect the GitLab issue before trying again. Confirmed publications recover their saved receipt. Use the linked issue to reply, subscribe and follow notifications. Actual posted mentions notify users according to GitLab's permissions and behavior. Download the screenshot and attach it through GitLab's normal editor; API publication excludes PNG data.
+A failed post preserves the draft. An uncertain outcome blocks automatic retry to prevent duplicates: inspect the GitLab issue before trying again. Confirmed publications recover their saved receipt. Use the linked issue to reply, subscribe and follow notifications. Actual posted mentions notify users according to GitLab's permissions and behavior. Confirmed image uploads are reused if text publication is definitively rejected. An uncertain upload is protected from automatic retry. Deleting a local note does not delete the project upload, and a failed text post may leave an unreferenced image. Viewing remote private images may additionally require being signed into the GitLab website; the original local capture remains available.
 
 ![Earlier fixture saved note with local severity, tags and mentions](../images/integration/gitlab-saved-note.jpg)
 

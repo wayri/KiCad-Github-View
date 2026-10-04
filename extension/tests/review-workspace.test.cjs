@@ -58,10 +58,10 @@ function workspaceRuntime(respond=async()=>[], hooks={}){
   const receipts=new Map(),localStorage={getItem:key=>receipts.get(key)||null,setItem:(key,value)=>receipts.set(key,value),removeItem:key=>receipts.delete(key)};
   const keyHandlers=new Set();
   let resizeCallback;
-  const context={EventTarget,CustomEvent,Map,Set,console,crypto:require('node:crypto').webcrypto,localStorage,document:{body,getElementById:id=>{const node=elements.get(id);return node&&body.contains(node)?node:null;},createElement:tag=>new Element(tag),createElementNS:(_,tag)=>new Element(tag)},addEventListener:(type,fn)=>{if(type==='keydown')keyHandlers.add(fn);if(type==='resize')resizeCallback=fn;},removeEventListener:(type,fn)=>{if(type==='keydown')keyHandlers.delete(fn);},matchMedia:()=>({matches:true}),
+  const context={innerWidth:hooks.width||800,innerHeight:hooks.frameHeight||600,EventTarget,CustomEvent,Map,Set,console,crypto:require('node:crypto').webcrypto,localStorage,document:{body,getElementById:id=>{const node=elements.get(id);return node&&body.contains(node)?node:null;},createElement:tag=>new Element(tag),createElementNS:(_,tag)=>new Element(tag)},addEventListener:(type,fn)=>{if(type==='keydown')keyHandlers.add(fn);if(type==='resize')resizeCallback=fn;},removeEventListener:(type,fn)=>{if(type==='keydown')keyHandlers.delete(fn);},matchMedia:()=>({matches:true}),
     KiCadReviewTools:require('../review-tools.js'),KiCadDesignModel:require('../design-model.js'),KiCadNetModel:require('../net-model.js'),KiCadReviewComments:require('../review-comments.js'),KiCadBrowserData:require('../browser-data.js'),KiCadOwnedCanvas:require('../owned-canvas.js'),
     KiCadPairedReview:require('../paired-review.js'),KiCadBomAnalytics:require('../bom-analytics.js'),
-    chrome:{runtime:{sendMessage:async message=>({ok:true,result:await respond(message)})}},setTimeout,URL,Blob};
+    chrome:{runtime:{sendMessage:async message=>({ok:true,result:await respond(message)})}},setTimeout,clearTimeout,URL,Blob};
   if(hooks.vscode)context.KiCadVSCodeContext={};
   if(hooks.navigation){Object.assign(context,{KiCadProjectSearch:require('../project-search.js'),KiCadRuleReports:require('../rule-reports.js'),KiCadDesignDiff:diff,KiCadPCBRenderer:require('../pcb-renderer.js'),KiCadSchematicRenderer:require('../schematic-renderer.js')});vm.runInNewContext(fs.readFileSync(path.join(__dirname,'../review-navigation.js'),'utf8'),context);get('ruleSeverity').value='all';get('showRuleMarkers').checked=true;}
   canvas.setNetHighlights=(nets,options)=>{canvas.highlightNets=nets;canvas.netHighlight=nets[0]||null;canvas.netPrimitives=new Set(nets.flatMap(n=>n.primitives||[]));canvas.highlightMode=options.mode;};
@@ -105,12 +105,12 @@ test('narrow and resized paired panes show the active sidebar without losing ope
  view.resize(1600);assert.equal(view.get('commentsSidebar').hidden,false);assert.equal(view.get('designInspector').hidden,false);
  view.resize(350);assert.equal(view.get('panelSpaceStatus').hidden,false);
 });
-test('short split views preserve the drawing budget and switch panels instead of crushing them',()=>{
+test('short split views reveal comment content and switch panels instead of hiding the composer',()=>{
  const view=workspaceRuntime(undefined,{width:1600,frameHeight:500,workspaceHeight:440});
  view.get('partsButton').click();view.get('propertiesButton').click();view.get('commentsButton').click();
  assert.equal(view.get('designInspector').hidden,true);assert.equal(view.get('designNavigator').hidden,true);assert.equal(view.get('commentsSidebar').hidden,false);
  const area=1600*440-parseFloat(view.get('commentsSidebar').style.width)*parseFloat(view.get('commentsSidebar').style.height);
- assert.ok(area/(1600*500)>=.80-1e-6,'short frames retain the user requested 80% while keeping the header accessible');assert.ok(parseFloat(view.get('commentsSidebar').style.height)>=40);
+ assert.equal(view.get('commentsSidebar').classList.contains('compact-sidebar'),false);assert.equal(view.get('commentsPane').hidden,false);assert.equal(parseFloat(view.get('commentsSidebar').style.height),440);
  view.get('propertiesButton').click();assert.equal(view.get('designInspector').hidden,false);assert.equal(view.get('commentsSidebar').hidden,true);
  view.resize(350);
  const smallArea=350*440-Math.min(318,parseFloat(view.get('designInspector').style.width))*parseFloat(view.get('designInspector').style.height);
@@ -192,7 +192,7 @@ test('read receipts, lifecycle actions and creation order remain independent',as
 test('paired selection emits a bounded saved part and net; incoming highlight resolves a unique part',()=>{
  const selections=[];const view=workspaceRuntime(async()=>[],{onSelection:value=>selections.push(value)});view.load();
  view.get('objectList').children[0].click();assert.equal(selections[0].kind,'part');assert.equal(selections[0].reference,'R1');assert.equal(selections[0].uuid,'fp');assert.equal(selections[0].path,'board.kicad_pcb');
- assert.equal(view.workspace.highlightRelated({kind:'part',reference:'R1',uuid:'symbol-uuid',path:'root.kicad_sch'}),true);
+ assert.equal(view.workspace.highlightRelated({kind:'part',reference:'R1',uuid:'symbol-uuid',path:'root.kicad_sch'}),true);assert.ok(view.canvas.netPrimitives.size>0,'paired part visibly highlights its geometry');
  view.get('netList').children[0].click();assert.equal(selections.at(-1).kind,'net');assert.equal(selections.at(-1).netName,'SIGNAL');
  assert.equal(view.workspace.highlightRelated({kind:'net',netName:'NO_SUCH_NET',path:'root.kicad_sch'}),false);
 });
@@ -521,7 +521,7 @@ test('uncertain posting exposes a read-only recovery control and saves its confi
 });
 
 test('tall sidebar maximizes reading height without exceeding the obscured-area budget or losing other panel state',()=>{
- const view=workspaceRuntime(undefined,{width:1600});view.get('propertiesButton').click();view.get('commentsButton').click();view.get('addCommentTab').click();view.get('newComment').click();view.get('commentText').value='Keep this draft';
+ const view=workspaceRuntime(undefined,{width:1600});view.get('propertiesButton').click();view.get('commentsButton').click();view.get('addCommentTab').click();view.get('newComment').click();view.get('commentText').value='Keep this draft';view.get('expandComments').click();
  const comments=view.get('commentsSidebar'),before=parseFloat(comments.style.height);view.get('tallComments').click();
  assert.equal(view.get('designInspector').hidden,true);assert.equal(comments.hidden,false);assert.ok(parseFloat(comments.style.height)>before);assert.ok(parseFloat(comments.style.width)*parseFloat(comments.style.height)<=1600*600*.14+.1);assert.equal(view.get('commentText').value,'Keep this draft');assert.equal(view.get('tallComments').attributes['aria-pressed'],'true');
  view.get('tallComments').click();assert.equal(view.get('designInspector').hidden,false);assert.equal(comments.hidden,false);assert.equal(comments.style.width,'340px');assert.equal(view.get('commentText').value,'Keep this draft');
@@ -536,8 +536,27 @@ test('sidebar height resize supports keyboard, pointer cancellation and resize c
 
 test('explicit panel expansion makes short split comments usable and restores the drawing budget without losing drafts',()=>{
  const view=workspaceRuntime(undefined,{width:600,frameHeight:500,workspaceHeight:434});view.get('commentsButton').click();view.get('addCommentTab').click();view.get('newComment').click();view.get('commentText').value='Review draft survives';
- const panel=view.get('commentsSidebar'),before=parseFloat(panel.style.height);assert.ok(before<180);assert.equal(panel.classList.contains('compact-sidebar'),true);view.get('expandComments').click();assert.equal(panel.classList.contains('compact-sidebar'),false);assert.equal(panel.style.height,'434px');assert.equal(view.get('expandComments').attributes['aria-pressed'],'true');assert.equal(view.get('commentText').value,'Review draft survives');
+ const panel=view.get('commentsSidebar');assert.equal(panel.classList.contains('compact-sidebar'),false);assert.equal(panel.style.height,'434px');assert.equal(view.get('expandComments').attributes['aria-pressed'],'true');assert.equal(view.get('commentText').value,'Review draft survives');
  view.get('closeComments').click();view.get('commentsButton').click();assert.equal(panel.style.height,'434px');assert.equal(view.get('commentText').value,'Review draft survives');view.resize(1600);view.get('propertiesButton').click();assert.equal(panel.hidden,true);assert.equal(view.get('designInspector').hidden,false);view.get('commentsButton').click();assert.equal(panel.hidden,false);assert.equal(panel.style.height,'434px');view.resize(600);
- view.get('expandComments').click();assert.ok(Math.abs(parseFloat(panel.style.height)-before)<.01);assert.equal(view.get('expandComments').attributes['aria-pressed'],'false');assert.match(view.get('panelSpaceStatus').title,/temporarily reduces drawing space/);
+ view.get('expandComments').click();assert.ok(parseFloat(panel.style.height)<180);assert.equal(view.get('expandComments').attributes['aria-pressed'],'false');assert.match(view.get('panelSpaceStatus').title,/temporarily reduces drawing space/);
  const area=600*434-parseFloat(panel.style.width)*parseFloat(panel.style.height);assert.ok(area/(600*500)>=.80-1e-6);assert.ok(parseFloat(panel.style.height)>=40);
 });
+
+ test('comment actions restore focus view and reveal the editor in short panes',()=>{
+ const view=workspaceRuntime(undefined,{width:600,frameHeight:500,workspaceHeight:434});view.load();
+ view.get('focusView').click();view.get('commentsButton').click();assert.equal(view.get('commentsSidebar').hidden,false);assert.equal(view.get('commentsSidebar').classList.contains('compact-sidebar'),false);
+ view.get('focusView').click();view.key('c');assert.equal(view.get('commentsSidebar').hidden,false);assert.equal(view.get('addCommentPane').hidden,false);assert.equal(view.get('commentEditor').hidden,false);assert.equal(view.get('commentsSidebar').style.height,'434px');assert.equal(view.get('focusView').textContent,'Focus view');
+ const event=uiEvent('contextmenu',{clientX:30,clientY:30,button:2});view.canvas.canvas.dispatchEvent(event);view.get('objectMenu').children.find(b=>/Comment/.test(b.textContent)).click();assert.equal(view.get('commentEditor').hidden,false);assert.equal(view.get('commentsSidebar').classList.contains('compact-sidebar'),false);
+ });
+
+ test('mention picker inserts contributors without posting and rejects stale lookup results',async()=>{
+ let finish,calls=[];const view=workspaceRuntime(async message=>{calls.push(message);if(message.type==='comment-mention-users')return await new Promise(resolve=>finish=resolve);return[];});view.load();view.get('newComment').click();view.get('mentionSource').value='repository';const lookup=view.get('mentionSource').onchange();finish({users:[{login:'wayri',name:'Reviewer',roles:['Contributor']}],warnings:[]});await lookup;
+ const suggestions=view.get('mentionSuggestions');assert.equal(suggestions.children.length,1);suggestions.children[0].click();suggestions.children[0].click();assert.equal(view.get('commentMentions').value,'@wayri');assert.match(view.get('mentionLookupStatus').textContent,/only when posted/);assert.equal(calls.some(m=>/publish/.test(m.type)),false);
+ const pending=view.get('mentionSource').onchange();view.workspace.dispose();finish({users:[{login:'other',roles:['User']}],warnings:[]});await pending;assert.equal(suggestions.children.length,0);
+ });
+
+ test('PCB hierarchical net cross-highlight opens its saved schematic sheet and highlights refreshed geometry',()=>{
+ const files=[{path:'root.kicad_sch',content:'(kicad_sch (sheet (at 0 0) (size 10 10) (uuid "sheet-1") (property "Sheetname" "Power") (property "Sheetfile" "power.kicad_sch")))'},{path:'power.kicad_sch',content:'(kicad_sch (label "ENABLE" (at 1 1 0) (uuid "label-1")) (wire (pts (xy 1 1) (xy 10 1)) (uuid "wire-1")))'}];
+ let active=files[0].path,view;const designs=new Map();view=workspaceRuntime(async()=>[],{pcb:false,files,currentFile:()=>active,getDesigns:()=>designs,openSheet:path=>{active=path;const file=files.find(f=>f.path===path),design=require('../schematic-renderer.js').build(require('../design-diff.js').parse(file.content),path);designs.set(path,design);view.canvas.design=design;view.canvas.primitives=design.primitives;view.workspace.draw();}});view.load();
+ assert.equal(view.workspace.highlightRelated({kind:'net',path:'board.kicad_pcb',netName:'/Power/ENABLE'}),true);assert.equal(active,'power.kicad_sch');assert.equal(view.canvas.netHighlight.name,'ENABLE');assert.ok(view.canvas.netPrimitives.size>0);
+ });

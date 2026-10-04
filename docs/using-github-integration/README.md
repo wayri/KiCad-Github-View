@@ -110,3 +110,11 @@ Connect your account in extension settings with access to the base repository an
 Open the PR's **Files changed** tab and choose a KiCad file. The worker compares immutable base/head commits to obtain the merge base and retains the fork identity for head drawings and linked models. The authenticated changed-file listing is paginated up to GitHub's 3,000-file limit and checked against the same base/head/count before and after loading. A moving PR, revoked access or account change stops the comparison; reload after updates or reconnect. Missing/deleted fork metadata is reported instead of guessed.
 
 Metadata requests use only api.github.com, reject redirects and omit website cookies. Automated private/fork tests use simulated responses; live private repository and installed-browser acceptance remain pending.
+
+## Mention users and contributors
+
+In the comment editor, expand **Mention people**. Use **Contributors and assignees** for repository suggestions, or **Search other users** and enter at least two username characters. Select a result to add its `@username`; you can also type names manually. You must sign into the extension for lookup. Suggestions do not grant access and only a published mention can notify a user. Closing or switching panels preserves your draft.
+
+![Comment editor with contributor picker and a selected mention](../images/integration/comment-mention-picker.png)
+
+This image uses the real viewer with mocked account suggestions; it is not a live GitHub publication. Comment actions automatically restore controls from Focus view and expand short panes so the editor remains accessible.

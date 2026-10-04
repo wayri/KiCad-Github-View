@@ -108,3 +108,18 @@ test('GitLab readback attaches trusted remote provenance and filters other hosts
  assert.equal(result.result.notes[0].github.url,HOST+'/group/private/-/issues/9#note_71');
  assert.equal(result.result.notes[0].github.provider,'gitlab');
 });
+
+test('GitLab readback retains matching upload metadata and omits images from another project',async()=>{
+ const comments=require('../review-comments.js'),attachment={provider:'gitlab',host:HOST,repository:'group/private',projectId:19,mime:'image/png',url:HOST+'/-/project/19/uploads/'+'a'.repeat(32)+'/kicad-review-'+'b'.repeat(20)+'.png',width:1,height:1};
+ const note={id:'capture-readback',text:'Check clearance',createdAt:'2026-10-04T01:00:00Z',anchor:{provider:'gitlab',host:HOST,repository:'group/private',ref:SHA,file:'board.kicad_pcb'},attachments:[attachment]};
+ const bad={...note,id:'foreign-image',attachments:[{...attachment,projectId:20,url:attachment.url.replace('/project/19/','/project/20/')}]};
+ const h=harness(url=>new URL(url).pathname.endsWith('/issues/9/notes')?new Response(JSON.stringify([{id:71,body:comments.toMarkdown(note),author:{username:'reviewer'}},{id:72,body:comments.toMarkdown(bad)}])):new URL(url).pathname.endsWith('/issues/9')?new Response(JSON.stringify({iid:9,project_id:19,description:'',state:'opened'})):null);
+ await h.add();const result=await h.send({type:'comment-remote-list',provider:'gitlab',host:HOST,repository:'group/private',ref:SHA,file:'board.kicad_pcb',issueNumber:9});assert.equal(result.ok,true);assert.equal(result.result.notes.length,2);assert.deepEqual(JSON.parse(JSON.stringify(result.result.notes[0].attachments)),[attachment]);assert.equal(result.result.notes[1].attachments,undefined);assert.match(result.result.warnings.join(' '),/omitted/);
+});
+
+ test('mention lookup is viewer-only, authenticated and restricted to the approved GitLab host',async()=>{
+ const h=harness(url=>new URL(url).pathname.endsWith('/members/all')?new Response(JSON.stringify([{username:'team_user',name:'Team reviewer'}])):null);await h.add();
+ const query={type:'comment-mention-users',provider:'gitlab',host:HOST,repository:'group/private',source:'repository',query:'team'};
+ assert.equal((await h.send(query)).ok,false);assert.equal((await h.send(query,{id:'test',url:HOST+'/group/private/-/blob/main/board.kicad_pcb'})).ok,false);
+ await h.send({type:'gitlab-auth-set',provider:'gitlab',host:HOST,token:TOKEN},h.options);const result=await h.send(query);assert.equal(result.ok,true,result.error);assert.equal(result.result.users[0].login,'team_user');assert.ok(h.calls.filter(c=>c.url.includes('/members/all')).every(c=>new URL(c.url).origin===HOST&&c.init.headers.Authorization==='Bearer '+TOKEN));
+ });

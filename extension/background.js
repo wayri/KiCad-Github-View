@@ -1,7 +1,12 @@
 "use strict";
 
-importScripts("parsing.js", "browser-data.js", "review-comments.js", "review-file-store.js", "credential-vault.js", "github-review-api.js", "gitlab-provider.js", "gitlab-review-api.js", "gitlab-hosts.js");
+importScripts("parsing.js", "browser-data.js", "review-comments.js", "review-file-store.js", "credential-vault.js", "github-review-api.js", "gitlab-provider.js", "gitlab-review-api.js", "gitlab-hosts.js", "mention-users.js");
 
+let mentionService=null;
+function mentionUsers(message){
+  mentionService ||= KiCadMentionUsers.create({authorizationHeaders:(provider,host)=>provider==='gitlab'?KiCadGitLabReviewApi.authorizationHeaders(host):KiCadGitHubReviewApi.authorizationHeaders()});
+  return mentionService.lookup(message);
+}
 const SHA = /^[0-9a-f]{40}$/i;
 const REPOSITORY = /^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/;
 
@@ -685,7 +690,7 @@ chrome.action.onClicked.addListener((tab) => { openFromAction(tab).catch(() => {
 
 const gitlabAssetBudgets = new Map();
 async function gitlabAnnotations(api,scope){
-  const normalized=KiCadReviewComments.normalizeScope({...scope,provider:'gitlab'}),notes=[],warnings=[];
+  const normalized=KiCadReviewComments.normalizeScope({...scope,provider:'gitlab'}),notes=[],warnings=[];let projectId=null;
   const number=Number(scope.number||scope.issueNumber||scope.threadNumber);
   if(!Number.isSafeInteger(number)||number<1)return {notes,warnings:['Enter an existing GitLab issue number to read its review notes.']};
   const endpoint=normalized.host+'/api/v4/projects/'+encodeURIComponent(normalized.repository)+'/issues/'+number;
@@ -693,11 +698,12 @@ async function gitlabAnnotations(api,scope){
   const add=(text,record,isNote=false)=>{for(const note of KiCadReviewComments.fromMarkdown(text||''))if(note.anchor.provider==='gitlab'&&note.anchor.host===normalized.host&&note.anchor.repository===normalized.repository&&note.anchor.ref===normalized.ref&&note.anchor.file===normalized.file&&notes.length<100){
     const sourceId=isNote?Number(record.id):0;
     if(isNote&&(!Number.isSafeInteger(sourceId)||sourceId<1))continue;
+    if(note.attachments?.length){const attachments=note.attachments.filter(a=>a.projectId===projectId);if(attachments.length!==note.attachments.length&&!warnings.includes('Some screenshot attachments could not be bound to this GitLab issue project and were omitted.'))warnings.push('Some screenshot attachments could not be bound to this GitLab issue project and were omitted.');if(attachments.length)note.attachments=attachments;else delete note.attachments;}
     note.github={provider:'gitlab',url:issueUrl+(isNote?'#note_'+sourceId:''),source:note.threadType==='discussion'?'discussion':'issue',number,state:record.state||'posted',author:record.author?.username||''};
     notes.push(note);
   }};
   const issue=await api.response(endpoint,1024*1024);if(!issue)throw new Error('GitLab issue is unavailable or access was denied.');
-  const issueRecord=JSON.parse(new TextDecoder().decode(issue.bytes));add(issueRecord.description,issueRecord);
+  const issueRecord=JSON.parse(new TextDecoder().decode(issue.bytes));if(issueRecord.iid===number&&Number.isSafeInteger(issueRecord.project_id)&&issueRecord.project_id>0)projectId=issueRecord.project_id;add(issueRecord.description,issueRecord);
   for(let page=1;page<=5;page++){
     const response=await api.response(endpoint+'/notes?'+new URLSearchParams({per_page:'100',page:String(page)}),1024*1024);
     if(!response)throw new Error('GitLab issue notes are unavailable.');
@@ -791,6 +797,7 @@ async function gitlabDispatch(message, sender) {
     case 'comment-delete': return commentDelete({...message,provider:'gitlab',host},message.id);
     case 'comment-store-status': return {connected:false,provider:'gitlab',localOnly:true};
     case 'github-auth-status': return auth.authStatus(host);
+    case 'comment-mention-users': return mentionUsers({...message,provider:'gitlab',host});
     case 'comment-policy-status': return auth.commentPolicyStatus(host,repository);
     case 'comment-publish':
     case 'github-publish-comment': return auth.publish({...message,host,destination:message.discussion?'discussion':message.destination});
@@ -855,6 +862,9 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       case "github-publish-comment":
         if (!viewerSender(sender)) throw new Error("Only extension viewers can publish review comments.");
         return KiCadGitHubReviewApi.publish(message);
+      case "comment-mention-users":
+        if (!viewerSender(sender)) throw new Error("Only extension viewers can search mention accounts.");
+        return mentionUsers(message);
       case "comment-policy-status":
         if (!viewerSender(sender)) throw new Error("Only extension viewers can inspect repository comment policy.");
         return KiCadGitHubReviewApi.commentPolicyStatus(message.repository);

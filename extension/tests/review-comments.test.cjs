@@ -100,6 +100,13 @@ test('GitHub body formats user text and drawing context safely while retaining t
 });
 
 const attachment=()=>({provider:'github',repository:'owner/board',mime:'image/png',url:'https://github.com/user-attachments/assets/01234567-89ab-cdef-0123-456789abcdef',width:200,height:100});
+const gitlabAttachment=()=>({provider:'gitlab',host:'https://gitlab.example.org',repository:'group/sub/project',projectId:19,mime:'image/png',url:'https://gitlab.example.org/-/project/19/uploads/'+'a'.repeat(32)+'/kicad-review-'+'b'.repeat(20)+'.png',width:200,height:100});
+test('GitLab screenshot metadata round trips and rejects other project identities and unsafe URLs',()=>{
+ const a=gitlabAttachment(),note={...sample(),anchor:{...sample().anchor,provider:'gitlab',host:a.host,repository:a.repository},attachments:[a]};
+ assert.deepEqual(comments.fromMarkdown(comments.toMarkdown(note))[0].attachments,[a]);
+ for(const change of [{host:'https://another.example.org'},{repository:'group/other'},{projectId:20},{url:a.url+'?token=x'},{url:a.url+'#fragment'},{url:'https://evil.example/a.png'},{url:a.url.replace('/project/19/','/project/20/')},{url:a.url.replace('.png','.svg')}])assert.throws(()=>comments.validateComment({...note,attachments:[{...a,...change}]}),/attachment/i);
+ assert.throws(()=>comments.validateComment({...sample(),attachments:[a]}),/attachment/i);
+});
 test('published screenshots render in Markdown and round trip without embedded image bytes',()=>{
   const note={...sample(),attachments:[attachment()],capture:{mime:'image/png',width:200,height:100,dataUrl:'data:image/png;base64,iVBORw0KGgo='}};
   const body=comments.toMarkdown(note);

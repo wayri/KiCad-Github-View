@@ -25,6 +25,15 @@ const KiCadReviewComments = (() => {
     return url.origin;
   }
   function validateAttachment(value) {
+    if(value?.provider==='gitlab'){
+      const host=gitlabHost(value.host),repository=value.repository;
+      if(value.mime!=='image/png'||typeof repository!=='string'||!/^[A-Za-z0-9_.-]+(?:\/[A-Za-z0-9_.-]+)+$/.test(repository)||repository.split('/').some(p=>p==='.'||p==='..')||!Number.isSafeInteger(value.projectId)||value.projectId<=0||![value.width,value.height].every(n=>Number.isSafeInteger(n)&&n>=1&&n<=1024))throw new Error('Invalid GitLab screenshot attachment.');
+      let url;try{url=new URL(value.url);}catch{throw new Error('Invalid GitLab screenshot attachment URL.');}
+      const tail='/uploads/[a-f0-9]{32}/kicad-review-[a-f0-9]{20}\\.png';
+      const prefixes=[`/-/project/${value.projectId}`,`/${repository}`];
+      if(url.origin!==host||url.username||url.password||url.search||url.hash||!prefixes.some(prefix=>url.pathname.startsWith(prefix)&&new RegExp('^'+tail+'$').test(url.pathname.slice(prefix.length))))throw new Error('Invalid GitLab screenshot attachment URL.');
+      return {provider:'gitlab',host,repository,projectId:value.projectId,mime:'image/png',url:url.href,width:value.width,height:value.height};
+    }
     if (!value || value.provider !== 'github' || value.mime !== 'image/png' ||
         typeof value.repository !== 'string' || !REPOSITORY.test(value.repository) ||
         value.repository.split('/').some(part => part === '.' || part === '..') ||
@@ -124,8 +133,10 @@ const KiCadReviewComments = (() => {
     let capture;
     if(comment.capture!==undefined){const c=comment.capture;if(!c||c.mime!=='image/png'||typeof c.dataUrl!=='string'||c.dataUrl.length>262144||!/^data:image\/png;base64,iVBORw0KGgo[A-Za-z0-9+/]*={0,2}$/.test(c.dataUrl)||![c.width,c.height].every(n=>Number.isSafeInteger(n)&&n>=1&&n<=1024))throw new Error('Invalid annotation screenshot.');capture={mime:c.mime,dataUrl:c.dataUrl,width:c.width,height:c.height};}
     const attachments=comment.attachments??[];
-    if(!Array.isArray(attachments)||attachments.length>4||attachments.length&&comment.anchor?.provider==='gitlab')throw new Error('Invalid screenshot attachments.');
+    if(!Array.isArray(attachments)||attachments.length>4)throw new Error('Invalid screenshot attachments.');
     const validatedAttachments=attachments.map(validateAttachment);
+    const scope=normalizeScope(comment.anchor);
+    if(validatedAttachments.some(a=>scope.provider==='gitlab'?a.provider!=='gitlab'||a.host!==scope.host||a.repository!==scope.repository:a.provider!=='github'))throw new Error('Screenshot attachment belongs to another provider, host or project.');
     return { ...(threadType?{threadType}:{}), id: comment.id, text: comment.text.trim(), createdAt: comment.createdAt, updatedAt, severity, state, tags:[...new Set(tags.map(tag=>tag.trim()))],mentions,remoteRefs:refs,...(capture?{capture}:{}),...(validatedAttachments.length?{attachments:validatedAttachments}:{}),
       anchor: normalizeAnchor(comment.anchor) };
   }
