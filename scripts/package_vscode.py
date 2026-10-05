@@ -18,7 +18,7 @@ ASSETS = ('step-worker-vscode.js', 'vendor/occt/occt-import-js.wasm', 'vendor/oc
     'vendor/spike-board3d.bundle.js', 'vendor/SPIKE-ENGINE-NOTICE.md', 'vendor/THREE-LICENSE',
 )
 BUILD_INPUTS = ('step-decoder.js', 'step-worker.js', 'vendor/occt/occt-import-js.js')
-HOST_FILES = ('package.json', 'extension.js', 'webview-bridge.js', 'README.md')
+HOST_FILES = ('package.json', 'extension.js', 'webview-bridge.js', 'README.md', 'icon.png')
 
 
 def adapt_entry(source: bytes) -> bytes:
@@ -79,6 +79,7 @@ def vsix_manifest(manifest: dict) -> bytes:
   <Assets>
     <Asset Type="Microsoft.VisualStudio.Code.Manifest" Path="extension/package.json" Addressable="true" />
     <Asset Type="Microsoft.VisualStudio.Services.Content.Details" Path="extension/README.md" Addressable="true" />
+    <Asset Type="Microsoft.VisualStudio.Services.Icons.Default" Path="extension/icon.png" Addressable="true" />
   </Assets>
 </PackageManifest>
 '''.encode()
@@ -91,6 +92,7 @@ CONTENT_TYPES = b'''<?xml version="1.0" encoding="utf-8"?>
   <Default Extension="css" ContentType="text/css" />
   <Default Extension="html" ContentType="text/html" />
   <Default Extension="md" ContentType="text/markdown" />
+  <Default Extension="png" ContentType="image/png" />
   <Default Extension="xml" ContentType="application/xml" />
   <Default Extension="vsixmanifest" ContentType="text/xml" />
   <Override PartName="/extension/media/vendor/THREE-LICENSE" ContentType="text/plain" />

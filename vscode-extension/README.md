@@ -34,14 +34,14 @@ Layer navigation (0.9.1): in Explorer -> Layers, search by saved layer name, foc
 
 Ruler update (0.9.2): press M, click a start point, move the cursor for a live distance/angle/X/Y overlay, and click again to pin it. Choose geometry/grid/off snapping and grid spacing in millimetres. Geometry snapping uses only visible saved geometry, respects layer isolation, and prefers pad/pin centers and endpoints within eight screen pixels. Alt bypasses snap; Shift constrains horizontal/vertical. New measurement resets the ruler; Escape exits. Drawing measurements use the configured mm/mil display units and work in flipped 2D views. Board extents reports the axis-aligned bounding dimensions of all saved Edge.Cuts shapes, including detached panels and arcs, excluding stroke width; it does not validate a closed manufacturable outline. No board or schematic source is modified. Ruler snap/grid options are session-only; 3D measurement remains unavailable.
 
-Version 0.9.5 adds global project search, multiple component/net/net-class highlights, connection navigation and saved ERC/DRC report markers. See [search and highlight controls](../extension/docs/search-and-highlights.md).
+Version 0.9.5 adds global project search, multiple component/net/net-class highlights, connection navigation and saved ERC/DRC report markers. See [search and highlight controls](https://github.com/wayri/KiCad-Github-View/blob/main/extension/docs/search-and-highlights.md).
 
 Version 0.9.6 adds double-click/Enter subsheet navigation, Alt+Up parent navigation, E property inspection, H net highlighting, / search focus, C comments, Space recentering and a keyboard guide. Design files remain read-only; routing and schematic editing are unavailable.
 
-Version 0.10.0 adds a read-only project workspace, settings/constraint inspection, PCB stackup, file navigation and our browser Gerber/drill viewer. See [project and fabrication workspace](../extension/docs/project-workspace.md).
+Version 0.10.0 adds a read-only project workspace, settings/constraint inspection, PCB stackup, file navigation and our browser Gerber/drill viewer. See [project and fabrication workspace](https://github.com/wayri/KiCad-Github-View/blob/main/extension/docs/project-workspace.md).
 
 Version 0.11.0 adds the shared BOM / Stats and DNP controls, saved board/zone analytics and bounded regex/wildcard global search. HTML files can be selected in Project and opened in a separate static isolated preview; interactive self-contained HTML/iBOM runs in the browser extension. Drawing files stay read-only. Future KiCad generator versions display an explicit forward-preview warning.
 
-Version 0.11.1 shares the refined read-only project setup forms and tables. GitHub release packaging is documented in [the release guide](../docs/RELEASING.md).
+Version 0.11.1 shares the refined read-only project setup forms and tables. GitHub release packaging is documented in [the release guide](https://github.com/wayri/KiCad-Github-View/blob/main/docs/RELEASING.md).
 
 Version 0.11.2 opens PCB drawings from the project tree, provides saved layer details when physical stackup is absent, and simplifies project/schematic hierarchy navigation.

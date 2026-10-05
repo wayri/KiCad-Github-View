@@ -2,7 +2,7 @@
   "name": "kicad-visual-review",
   "displayName": "KiCad Visual Review",
   "description": "Read-only KiCad schematic and PCB review with properties, nets, measurements and local annotations.",
-  "version": "0.12.18",
+  "version": "0.12.19",
   "publisher": "wayri",
   "license": "UNLICENSED",
   "engines": {
@@ -166,5 +166,14 @@
   },
   "scripts": {
     "test": "node --test tests/*.test.cjs"
-  }
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/wayri/KiCad-Github-View.git"
+  },
+  "homepage": "https://github.com/wayri/KiCad-Github-View",
+  "bugs": {
+    "url": "https://github.com/wayri/KiCad-Github-View/issues"
+  },
+  "icon": "icon.png"
 }

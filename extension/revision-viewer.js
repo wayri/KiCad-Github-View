@@ -172,18 +172,20 @@
 
     const savePreferences=()=>chrome.storage?.local?.set({[preferenceKey]:preferences}).catch(error=>{$('pageSetupStatus').textContent=error.message;});
 
-    const applyTheme=()=>{dark=preferences.drawingTheme==='dark';canvas.dark=dark;canvas.acceleration=preferences.acceleration==='off'?'off':'auto';scene?.setTheme(dark);document.body.dataset.uiTheme=preferences.uiTheme;$('uiTheme').value=preferences.uiTheme;$('drawingTheme').value=preferences.drawingTheme;$('rulerUnits').value=preferences.rulerUnits;if($('acceleration'))$('acceleration').value=canvas.acceleration;$('themeButton').setAttribute('aria-pressed',String(dark));if(!scene)canvas.draw();};
+    const applyTheme=()=>{dark=preferences.drawingTheme==='dark';canvas.dark=dark;canvas.acceleration=preferences.acceleration==='off'?'off':'auto';scene?.setTheme(dark);document.body.dataset.uiTheme=preferences.uiTheme;$('uiTheme').value=preferences.uiTheme;$('drawingTheme').value=preferences.drawingTheme;$('rulerUnits').value=preferences.rulerUnits;if($('acceleration'))$('acceleration').value=canvas.acceleration;$('themeButton').setAttribute('aria-pressed',String(dark));if($('displayPreset'))$('displayPreset').value=preferences.uiTheme==='light'&&preferences.drawingTheme===(pcb?'dark':'light')?'kicad':preferences.uiTheme===preferences.drawingTheme?preferences.uiTheme:'custom';if(!scene)canvas.draw();};
 
-    $('themeButton').onclick=()=>{preferences.uiTheme=preferences.drawingTheme=dark?'light':'dark';applyTheme();savePreferences();};
+    $('themeButton').onclick=()=>{preferences.drawingTheme=dark?'light':'dark';applyTheme();savePreferences();};
 
     for(const [id,key] of [['uiTheme','uiTheme'],['drawingTheme','drawingTheme'],['rulerUnits','rulerUnits']])$(id).onchange=()=>{preferences[key]=$(id).value;applyTheme();savePreferences();};applyTheme();
     if($('acceleration'))$('acceleration').onchange=()=>{preferences.acceleration=$('acceleration').value;applyTheme();savePreferences();};
+
+    if($('displayPreset'))$('displayPreset').onchange=()=>{const preset=$('displayPreset').value;if(preset==='custom')return;preferences.uiTheme=preset==='dark'?'dark':'light';preferences.drawingTheme=preset==='kicad'?(pcb?'dark':'light'):preset;applyTheme();savePreferences();};
 
     const savedPages=new Map();
 
     function populatePage(){const page=canvas.design.page,title=page.titleBlock||{};for(const id of ['pageWidth','pageHeight'])$(id).disabled=Boolean(KiCadReviewTools.papers[page.format]);$('pageFormat').value=KiCadReviewTools.papers[page.format]?page.format:'User';$('pageWidth').value=page.width;$('pageHeight').value=page.height;$('pagePortrait').checked=page.height>page.width;for(const key of ['Title','Company','Date','Rev'])$('page'+key).value=title[key.toLowerCase()]||'';for(let i=0;i<9;i++)$('pageComment'+i).value=title.comments?.[i]||'';$('pageSetupStatus').textContent='Display settings for '+currentFile();}
 
-    $('settingsButton').onclick=()=>{populatePage();$('viewerSettings').hidden=!$('viewerSettings').hidden;};$('closeSettings').onclick=()=>{$('viewerSettings').hidden=true;};
+    const closeSettings=()=>{$('viewerSettings').hidden=true;$('settingsButton').setAttribute('aria-expanded','false');$('settingsButton').focus?.();};$('settingsButton').setAttribute('aria-controls','viewerSettings');$('settingsButton').setAttribute('aria-expanded','false');$('settingsButton').onclick=()=>{if(!$('viewerSettings').hidden){closeSettings();return;}populatePage();$('viewerSettings').hidden=false;$('settingsButton').setAttribute('aria-expanded','true');$('displayPreset')?.focus?.();};$('closeSettings').onclick=closeSettings;
 
     $('pageFormat').onchange=()=>{const size=KiCadReviewTools.papers[$('pageFormat').value];if(size){$('pageWidth').value=size[0];$('pageHeight').value=size[1];}for(const id of ['pageWidth','pageHeight'])$(id).disabled=Boolean(size);};
 
@@ -251,6 +253,7 @@
       if(event.composedPath().some(node=>node?.isContentEditable||/^(INPUT|TEXTAREA|SELECT)$/.test(node?.tagName||''))||event.ctrlKey||event.altKey||event.metaKey)return;
       if(scene){if(event.key.toLowerCase()==='f'||event.key==='Home'){event.preventDefault();scene.fit?.(event.key==='Home');}else if(['+','='].includes(event.key)){event.preventDefault();scene.zoom?.(1.25);}else if(['-','_'].includes(event.key)){event.preventDefault();scene.zoom?.(.8);}return;}
 
+      if(event.key==='Escape'&&!$('viewerSettings').hidden){event.preventDefault();closeSettings();return;}
       if(event.key==='Escape'&&canvas.focusedLayer){canvas.restoreLayers();layers();canvas.draw();}else if(['[',']'].includes(event.key)&&pcb){const choices=canvas.design.layers||[],index=choices.indexOf(canvas.focusedLayer||canvas.activeLayer);if(choices.length){event.preventDefault();canvas.focusLayer(choices[(index+(event.key===']'?1:-1)+choices.length)%choices.length],$('layerFocusMode').value||'dim');layers();canvas.draw();}}else if(event.shiftKey&&event.key.toLowerCase()==='f'&&canvas.focusedLayer){event.preventDefault();$('fitLayer').click();}else if(['+','='].includes(event.key)){event.preventDefault();zoom(1.25);}else if(['-','_'].includes(event.key)){event.preventDefault();zoom(1/1.25);}else if(event.key.toLowerCase()==='f'){event.preventDefault();fit('drawing');}else if(event.key==='Home'){event.preventDefault();fit('page');}else if(event.key.toLowerCase()==='d'){event.preventDefault();$('themeButton').click();}
 
     });

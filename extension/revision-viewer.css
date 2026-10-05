@@ -153,6 +153,38 @@ body .object-row.selected{background:var(--selected);color:var(--text);border:1p
 
 .compact-sidebar>:not(.sidebar-heading):not(.panel-heading):not(.sidebar-resizer):not(.sidebar-height-resizer){display:none!important}
 
+/* KiCad-style view toolbar and separate inspection tool strip. */
+#frameControls{min-height:40px;padding:4px 8px;gap:7px}
+#frameControls button{min-height:30px;font-size:11px;border-radius:3px}
+#frameControls .tool-group{gap:2px;padding-right:7px}
+#frameControls .drawing-title{max-width:220px}
+#frameControls .ref-badge,#frameControls .mode-badge{display:none}
+#activeSheet{font-size:10px;max-width:190px}
+.top-sheet-navigation #sheetSelect{min-height:30px;font-size:11px;width:170px}
+.top-sheet-navigation button{min-height:30px;width:29px}
+#drawingTools{order:10;flex:0 0 40px;width:40px;display:flex;flex-direction:column;align-items:center;gap:5px;padding:7px 3px;background:var(--panel);border-left:1px solid var(--line);overflow-y:auto;overflow-x:hidden}
+#drawingTools button{width:32px;min-height:32px;padding:6px;border:1px solid transparent;border-radius:3px;background:transparent;flex-shrink:0;position:relative}
+#drawingTools .button-label{position:absolute;clip-path:inset(50%);width:1px;height:1px;overflow:hidden;white-space:nowrap}
+#drawingTools button:hover{background:var(--raised);border-color:var(--line)}
+#drawingTools button[aria-pressed=true],#drawingTools button[aria-expanded=true]{background:var(--selected);border-color:var(--accent);color:var(--accent)}
+#drawingTools .ui-icon{width:18px;height:18px;flex-basis:18px}
+#drawingTools #settingsButton{margin-top:auto}
+#reviewWorkspace{--tool-strip-width:40px}
+#designInspector.review-sidebar,#commentsSidebar.review-sidebar{right:var(--tool-strip-width)}
+#reviewWorkspace.two-sidebars #designInspector.review-sidebar{right:calc(var(--comments-sidebar-width,340px) + var(--tool-strip-width))}
+.viewer-settings{top:48px;right:52px;max-height:calc(100% - 68px)}
+.viewer-settings .panel-heading button{width:32px;min-height:32px;flex-shrink:0}.viewer-settings{font-size:13px}
+.review-page-settings{border-top:1px solid var(--line);padding-top:10px}.review-page-settings>summary{cursor:pointer;font-size:13px;font-weight:600;padding:4px 0}.review-page-fields{display:grid;gap:10px;padding-top:10px}.review-page-fields>h3{display:none}
+.navigator-tabs button{min-height:34px;font-size:12px;gap:5px;border-radius:0}
+.navigator-pane{gap:10px}.navigator-pane input,.navigator-pane select{font-size:12px}
+.sidebar-heading h2{font-size:13px}.property-group dl{font-size:12px;line-height:1.5}
+.sidebar-heading button,#designNavigator>.panel-heading button{width:auto;min-width:26px;padding:4px 6px;flex-shrink:0;font-size:11px}
+.review-sidebar input,.review-sidebar select,.review-sidebar textarea{font-size:13px}
+.review-sidebar button{border-radius:4px}
+.review-sidebar h3{letter-spacing:.04em}
+.drawing-focused #drawingTools{display:none!important}
+@media(max-width:720px){#reviewWorkspace{--tool-strip-width:36px}#frameControls{gap:3px;padding:3px 5px}#frameControls button{padding:4px;min-width:29px}.top-sheet-navigation #sheetSelect{width:130px}#drawingTools{flex-basis:36px;width:36px;padding:5px 1px}.viewer-settings{right:42px;width:calc(100% - 54px)}}
+
 .mention-suggestions{display:grid;gap:4px;max-height:210px;overflow:auto}.mention-suggestion{justify-content:flex-start;white-space:normal;text-align:left;font-size:11px}#mentionSource,#mentionQuery{margin:5px 0}
 
 .comment-filter-fields{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:0 8px}.comment-filter-fields select{font-size:11px}#commentFilters .comment-tools{margin:8px 0}

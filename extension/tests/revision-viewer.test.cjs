@@ -5,7 +5,7 @@ const tick=()=>new Promise(resolve=>setImmediate(resolve)),plain=value=>JSON.par
 async function revision(query='',extraFiles=[],options={}){
  const listeners=new Map(),canvasListeners=new Map(),controls=new Map(),reports=[],calls={board:0,page:0,draw:0,disposed:0,attach:0};
  class Element{constructor(){this.attributes={};this.children=[];this.hidden=false;this.dataset={viewer:'auto'};this.isConnected=true;this.classList={add(){}};this.style={};}setAttribute(k,v){this.attributes[k]=String(v);}append(...children){this.children.push(...children);}remove(){}replaceChildren(){this.children=[];}click(){return this.onclick?.();}}
- const get=id=>{if(!controls.has(id))controls.set(id,new Element());return controls.get(id);};
+ const get=id=>{if(!controls.has(id)){const element=new Element();if(id==='viewerSettings')element.hidden=true;controls.set(id,element);}return controls.get(id);};
  const camera=new core.Camera(800,600),parent={postMessage:(data,origin)=>reports.push({data,origin})};
  const canvas={canvas:new Element(),viewport:{camera},document:null,visibleLayers:new Set(),addEventListener:(type,callback)=>canvasListeners.set(type,callback),resize(){},draw(){calls.draw++;},dispose(){calls.disposed++;},
   setDocument(design,file){this.design=design;this.document={filename:file};this.zoom_to_board();this.draw();},
@@ -49,6 +49,7 @@ test('active sheet identity is used in reports and received view filtering',asyn
 test('zoom limits keep the camera finite and pagehide disposes owned UI resources',async()=>{const v=await revision();const center=plain(v.camera.center);v.get('zoomIn').click();assert.equal(v.camera.center.x,center.x);v.camera.zoom=9999;v.key('+');assert.equal(v.camera.zoom,10000);v.camera.zoom=.0011;v.key('-');assert.equal(v.camera.zoom,.001);v.hide();assert.equal(v.calls.disposed,2);});
 
  test('independent UI and drawing themes and ruler units persist through controls',async()=>{const v=await revision();v.get('uiTheme').value='dark';v.get('uiTheme').onchange();assert.equal(v.context.document.body.dataset.uiTheme,'dark');assert.equal(v.canvas.dark,false);v.get('drawingTheme').value='dark';v.get('drawingTheme').onchange();assert.equal(v.canvas.dark,true);v.get('rulerUnits').value='mil';v.get('rulerUnits').onchange();assert.equal(v.get('rulerUnits').value,'mil');});
+ test('canvas theme shortcut preserves interface theme and explicit presets choose native canvas by drawing type',async()=>{const v=await revision();v.get('uiTheme').value='dark';v.get('uiTheme').onchange();v.key('d');assert.equal(v.context.document.body.dataset.uiTheme,'dark');assert.equal(v.canvas.dark,true);v.get('displayPreset').value='kicad';v.get('displayPreset').onchange();assert.equal(v.context.document.body.dataset.uiTheme,'light');assert.equal(v.canvas.dark,false);const board=await revision('',[],{pcb:true});board.get('displayPreset').value='kicad';board.get('displayPreset').onchange();assert.equal(board.context.document.body.dataset.uiTheme,'light');assert.equal(board.canvas.dark,true);});
  test('review page setup builds portrait worksheet and restores source page',async()=>{const v=await revision();v.get('settingsButton').click();v.get('pageFormat').value='A3';v.get('pagePortrait').checked=true;v.get('pageTitle').value='Review';v.get('applyPage').click();assert.equal(v.canvas.design.page.width,297);assert.equal(v.canvas.design.page.height,420);assert.equal(v.canvas.design.page.titleBlock.title,'Review');assert.ok(v.canvas.design.primitives.some(p=>p.frame));v.get('resetPage').click();assert.equal(v.canvas.design.page.height,210);});
 
 test('paired selection relay validates parent and suppresses cross-highlight echoes',async()=>{
@@ -72,3 +73,5 @@ test('3D mode reuses successful model assets across toggles and clears them on p
  assert.equal(v.calls.assetRequests[0].repository,'wayri/board');assert.equal(v.calls.assetRequests[0].ref,'main');assert.equal(v.calls.assetRequests[0].file,'models/part.wrl');
  v.hide();await v.calls.modelOptions.loadAsset('models/part.wrl');assert.equal(v.calls.assetRequests.length,2);
 });
+
+test('view settings exposes expanded state and Escape closes it without changing the drawing',async()=>{const v=await revision();v.get('settingsButton').click();assert.equal(v.get('viewerSettings').hidden,false);assert.equal(v.get('settingsButton').attributes['aria-expanded'],'true');assert.equal(v.key('Escape'),true);assert.equal(v.get('viewerSettings').hidden,true);assert.equal(v.get('settingsButton').attributes['aria-expanded'],'false');assert.equal(v.canvas.design.page.width,297);});

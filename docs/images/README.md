@@ -48,3 +48,5 @@ Visual inspection confirms these views loaded in the local harness. It does not 
 `integration/sheet-net-hierarchy.png` captures v0.12.17 shared outer/inner sheet trees and gold cross-sheet net badges on 2026-10-05. Saved root and Power drawings are synthetic local fixtures; Git transport is mocked. Outer-tree navigation was exercised without recreating the viewer, and SIGNAL_IN remained selected. No installed extension/private-account acceptance is implied.
 
 The PNG `integration/loading-marble.png` was captured on 2026-10-05 from the actual schematic viewer loading the public Marble hierarchy through local fixture transport at port 8788. It shows the production loading surface while fetching and discovering sheets. No login or external publication occurred. See [performance evidence](../PERFORMANCE.md).
+
+`integration/kicad-controls-themes.png` captures the production v0.12.19 schematic viewer in its dark display preset with the compact top controls, inspection strip and collapsed drawing-sheet overrides. Captured on 2026-10-05 using the synthetic hierarchy fixture and local mock transport at port 8788; no account or remote publication was used.
