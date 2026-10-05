@@ -13,7 +13,7 @@
   function mount(options){
     const doc=options.holder.ownerDocument,request={...options.request};let epoch=0,disposed=false;
     const make=(tag,text)=>{const n=doc.createElement(tag);if(text!==undefined)n.textContent=text;return n;};
-    const detail=make('details');detail.className='revision-picker';const summary=make('summary','Git revisions');detail.append(summary);
+    const detail=make('details');detail.className='revision-picker';const summary=make('summary','Compare commits');detail.append(summary);
     const panel=make('div');panel.className='revision-picker-panel';detail.append(panel);
     const note=make('p','Browse branches and commits touching this drawing. Selecting refs does not change source files.');panel.append(note);
     const rows={};

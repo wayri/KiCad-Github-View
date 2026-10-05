@@ -4,9 +4,10 @@
 
 (() => {
 
-  const params=new URLSearchParams(location.search),repository=params.get('repository'),rootFile=params.get('file');let ref=params.get('ref');
+  const params=new URLSearchParams(location.search),repository=params.get('repository'),requestedFile=params.get('file');let rootFile=requestedFile,ref=params.get('ref');
 
   const provider=params.get('provider')||'github',providerContext=provider==='gitlab'?{provider,host:params.get('host')||'https://gitlab.com'}:{};const send=message=>chrome.runtime.sendMessage({...message,...providerContext});
+  if(params.get('workspace')==='1')document.body.dataset.workspace='true';
   const status=document.getElementById('status'),pcb=/\.kicad_pcb$/i.test(rootFile||'');
 
   const loading=globalThis.KiCadLoading?.indicator(document.body);
@@ -37,6 +38,10 @@
 
     const files=reply.result;if(!Array.isArray(files)||!files.some(file=>file.path===rootFile))throw new Error('No KiCad file at this revision.');
 
+    if(!pcb){const resolvedRoot=KiCadBrowserData.rootSheetPath(files,requestedFile);if(resolvedRoot)rootFile=resolvedRoot;else if(files.length&&!files.some(file=>file.discoveryWarning))files[0].discoveryWarning='The saved schematic hierarchy has no unambiguous root. Choose a sheet in the navigator.';}
+    const focusedEntry=params.has('focusX')&&params.has('focusY')&&['focusX','focusY'].every(key=>Number.isFinite(Number(params.get(key)))&&Math.abs(Number(params.get(key)))<=1e6);
+    const initialFile=focusedEntry?requestedFile:rootFile;
+
     const preferenceKey=JSON.stringify(['kicad-review-preferences',...(provider==='gitlab'?['gitlab',providerContext.host]:[]),repository,rootFile]);
 
     let preferences={uiTheme:pcb?'dark':'light',drawingTheme:pcb?'dark':'light',rulerUnits:'mm',acceleration:'auto'};
@@ -49,17 +54,17 @@
 
     loading?.show('Preparing saved objects and drawing geometry…');
     const prepare=()=>({model:KiCadDesignModel.buildProject(files)});
-    const prepared=globalThis.KiCadLoading?await KiCadLoading.run('drawing',{files,rootFile,pcb},prepare,{signal:loadController?.signal,onStage:stage=>loading.show(stage)}):prepare();
+    const prepared=globalThis.KiCadLoading?await KiCadLoading.run('drawing',{files,rootFile:initialFile,pcb},prepare,{signal:loadController?.signal,onStage:stage=>loading.show(stage)}):prepare();
     if(disposed)return;
     if(prepared.rules)Object.defineProperty(prepared.model,'_rules',{value:new Map(prepared.rules)});
 
     if($('refBadge')){$('refBadge').textContent=ref.length>20?ref.slice(0,17)+'…':ref;$('refBadge').title=ref;}
 
-    const designs=new Map(prepared.design?[[rootFile,prepared.design]]:[]),host=$('drawingHost');globalThis.KiCadUIIcons?.decorate();$('frameControls').hidden=false;
+    const designs=new Map(prepared.design?[[initialFile,prepared.design]]:[]),host=$('drawingHost');globalThis.KiCadUIIcons?.decorate();$('frameControls').hidden=false;
 
     canvas=KiCadOwnedCanvas.mount(host,{dark,pcb,acceleration:preferences.acceleration});status.remove();
 
-    const currentFile=()=>canvas.document?.filename||rootFile;
+    const currentFile=()=>canvas.document?.filename||initialFile;
 
     const report=force=>{
 
@@ -158,7 +163,7 @@
       onSelection(selection){if(crossApplying||!globalThis.KiCadPairedReview?.validSelection(selection))return;if(globalThis.KiCadVSCodeBridge?.selection)globalThis.KiCadVSCodeBridge.selection(selection);else parent.postMessage({type:'kicad-review:selection',selection},ownOrigin);},
       onCommentsChanged(){if(globalThis.KiCadVSCodeBridge?.onCommentsChanged)globalThis.KiCadVSCodeBridge.onCommentsChanged();else parent.postMessage({type:'kicad-review:comments-changed'},ownOrigin);},pullNumber:Number(params.get('pullNumber'))||null,pullRepository:params.get('pullRepository')||repository});
 
-    workspace.attachCanvas(canvas);openSheet(rootFile);loading?.hide();
+    workspace.attachCanvas(canvas);openSheet(initialFile);loading?.hide();
 
     $('frameControls').hidden=false;label('fitDrawing',pcb?'Fit board':'Fit drawing');
 

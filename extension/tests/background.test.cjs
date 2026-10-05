@@ -56,6 +56,83 @@ function withFetch(t, handler) {
   global.fetch = handler;
   t.after(() => { global.fetch = before; });
 }
+
+test('schematic project discovery uses one complete repository tree and pins scattered source reads', async t => {
+  const sources = new Map([
+    ['design/main.kicad_sch', '(kicad_sch (sheet (property "Sheetfile" "../shared/leaf.kicad_sch")) (sheet (property "Sheetfile" "../modules/io.kicad_sch")))'],
+    ['shared/leaf.kicad_sch', '(kicad_sch)'],
+    ['modules/io.kicad_sch', '(kicad_sch)'],
+    ['unrelated/project.kicad_sch', '(kicad_sch)']
+  ]);
+  const calls = [];
+  withFetch(t, async (url, init) => {
+    calls.push(url);
+    if (url.includes('/git/commits/')) {assert.ok(url.endsWith(sha('a')));return json({sha:sha('a'),tree:{sha:sha('b')}});}
+    if (url.includes('/commits/')) {assert.equal(init.headers.Accept,'application/vnd.github.sha');return new Response(sha('a'));}
+    if (url.includes('/git/trees/')) return json({truncated:false,tree:[...sources.keys()].map(path=>({path,type:'blob',mode:'100644'})).concat({path:'symlink.kicad_sch',type:'blob',mode:'120000'})});
+    assert.equal(new URL(url).searchParams.get('ref'),sha('a'));
+    const path=decodeURIComponent(new URL(url).pathname.split('/contents/')[1]);
+    assert.ok(sources.has(path),path);return new Response(sources.get(path));
+  });
+  const result=await message({type:'project',repository:'owner/board',ref:'feature/sheets',file:'shared/leaf.kicad_sch'});
+  assert.equal(result.ok,true,result.error);
+  assert.deepEqual(result.result.map(file=>file.path),['design/main.kicad_sch','shared/leaf.kicad_sch','modules/io.kicad_sch']);
+  assert.equal(calls.filter(url=>url.includes('/commits/')&&!url.includes('/git/commits/')).length,1);
+  assert.equal(calls.filter(url=>url.includes('/git/commits/')).length,1);
+  assert.equal(calls.filter(url=>url.includes('/git/trees/')).length,1);
+  assert.equal(result.result[0].discoveryWarning,undefined);
+});
+
+test('truncated schematic repository inventory preserves requested hierarchy with an explicit diagnostic', async t => {
+  const calls=[];withFetch(t,async (url,init)=>{
+    calls.push(url);
+    if(url.includes('/git/commits/'))return json({sha:sha('a'),tree:{sha:sha('b')}});
+    if(url.includes('/commits/')){assert.equal(init.headers.Accept,'application/vnd.github.sha');return new Response(sha('a'));}
+    if(url.includes('/git/trees/'))return json({truncated:true,tree:[]});
+    assert.equal(new URL(url).searchParams.get('ref'),sha('a'));
+    return new Response('(kicad_sch)');
+  });
+  const result=await message({type:'project',repository:'owner/board',ref:'main',file:'shared/leaf.kicad_sch'});
+  assert.equal(result.ok,true,result.error);assert.deepEqual(result.result.map(file=>file.path),['shared/leaf.kicad_sch']);
+  assert.match(result.result[0].discoveryWarning,/incomplete schematic repository tree/);assert.equal(calls.length,4);
+});
+
+test('schematic inventory rejects oversized transport bodies and unsafe repository paths before source reads', async t => {
+  withFetch(t,async()=>new Response('{}',{headers:{'content-length':String(16*1024*1024+1)}}));
+  await assert.rejects(background.githubSchematicInventory('owner/board',sha('a'),sha('b')),/size limit/);
+  global.fetch=async()=>new Response(' '.repeat(16*1024*1024+1));
+  await assert.rejects(background.githubSchematicInventory('owner/board',sha('a'),sha('b')),/size limit/);
+  global.fetch=async()=>json({truncated:false,tree:[{path:'../escape.kicad_sch',type:'blob',mode:'100644'}]});
+  await assert.rejects(background.githubSchematicInventory('owner/board',sha('a'),sha('b')),/unsafe schematic repository listing/);
+});
+
+test('large commit patches do not participate in revision resolution or pinned schematic metadata',async t=>{
+  const calls=[],patch='x'.repeat(2*1024*1024);let patchReads=0;
+  withFetch(t,async(url,init)=>{
+    calls.push(url);
+    if(url.includes('/git/commits/')){assert.ok(url.endsWith(sha('a')));assert.equal(init.headers.Accept,'application/vnd.github+json');return json({sha:sha('a'),tree:{sha:sha('b')}});}
+    if(url.includes('/commits/')){if(init.headers.Accept==='application/vnd.github.sha')return new Response(sha('a')+'\n');patchReads++;return json({sha:sha('a'),commit:{tree:{sha:sha('b')}},files:[{patch}]});}
+    if(url.includes('/git/trees/'))return json({truncated:false,tree:[{path:'root.kicad_sch',type:'blob',mode:'100644'}]});
+    assert.equal(new URL(url).searchParams.get('ref'),sha('a'));return new Response('(kicad_sch)');
+  });
+  const resolved=await background.revisionResolve('owner/board','large-change','root.kicad_sch');assert.equal(resolved.sha,sha('a'));
+  const loaded=await message({type:'project',repository:'owner/board',ref:resolved.sha,file:'root.kicad_sch'});
+  assert.equal(loaded.ok,true,loaded.error);assert.equal(loaded.result[0].discoveryWarning,undefined);
+  assert.equal(patchReads,0);assert.equal(calls.length,4);
+  assert.equal(calls.filter(url=>url.includes('/commits/')&&!url.includes('/git/commits/')).length,1);
+});
+
+test('SHA media and Git commit metadata reject malformed identities and mismatched pinned commits',async t=>{
+  let body=sha('b');withFetch(t,async()=>new Response(body));
+  await assert.rejects(background.revisionResolve('owner/board',sha('a'),'root.kicad_sch'),/stable revision/);
+  for(body of ['not-a-sha',JSON.stringify(sha('a')),sha('a')+' extra'])await assert.rejects(background.revisionResolve('owner/board','main','root.kicad_sch'),/stable revision/);
+  body=' '.repeat(129);await assert.rejects(background.revisionResolve('owner/board','main','root.kicad_sch'),/size limit/);
+  const calls=[];global.fetch=async url=>{calls.push(url);return json({sha:sha('b'),tree:{sha:sha('c')}});};
+  const mismatch=await message({type:'project',repository:'owner/board',ref:sha('a'),file:'root.kicad_sch'});
+  assert.equal(mismatch.ok,false);assert.match(mismatch.error,/stable schematic revision/);assert.equal(calls.length,1);assert.match(calls[0],/\/git\/commits\//);
+  global.fetch=async()=>json({sha:sha('a'),tree:{sha:'not-a-tree'}});
+  assert.equal((await message({type:'project',repository:'owner/board',ref:sha('a'),file:'root.kicad_sch'})).ok,false);
+});
 function withPublishingFetch(t, handler) {
   withFetch(t, (url, init) => {
     const match = /^https:\/\/api\.github\.com\/repos\/([A-Za-z0-9_.-]+)\/([A-Za-z0-9_.-]+)$/.exec(url);
@@ -871,7 +948,7 @@ test('revision listings validate exact viewer senders, paths and repository befo
  assert.equal(urls.length,0);
 });
 test('file commit listing pins moving branch to SHA and remains in requested fork repository',async(t)=>{
- const urls=[];withFetch(t,async url=>{urls.push(url);if(url.includes('/commits/'))return json({sha:sha('a')});return json([{sha:sha('b'),commit:{message:'Change pads\nDetails',author:{name:'Yawar',date:'2026-10-04T10:00:00Z'}}}]);});
+ const urls=[];withFetch(t,async (url,init)=>{urls.push(url);if(url.includes('/commits/')){assert.equal(init.headers.Accept,'application/vnd.github.sha');return new Response(sha('a'));}return json([{sha:sha('b'),commit:{message:'Change pads\nDetails',author:{name:'Yawar',date:'2026-10-04T10:00:00Z'}}}]);});
  const reply=await message({type:'revision-commits',repository:'fork/board',ref:'feature/board',file:'pcb/board name.kicad_pcb'});assert.equal(reply.ok,true);assert.equal(reply.result.repository,'fork/board');assert.equal(reply.result.snapshotRef,sha('a'));assert.equal(reply.result.commits[0].message,'Change pads');
  assert.match(urls[0],/repos\/fork\/board\/commits\/feature%2Fboard$/);const query=new URL(urls[1]).searchParams;assert.equal(query.get('sha'),sha('a'));assert.equal(query.get('path'),'pcb/board name.kicad_pcb');assert.equal(query.get('per_page'),'50');assert.equal(urls.length,2);
 });
@@ -919,7 +996,7 @@ test('PCB raw byte cap rejects oversized headers; schematics retain their smalle
 
 test('drawing and project reads use the configured account only on the exact GitHub API host', async t => {
   sessionStore.clear(); const token='test-credential-'.repeat(3);await KiCadGitHubReviewApi.setToken(token);t.after(()=>sessionStore.clear());
-  withFetch(t,async (url,init)=>{assert.equal(new URL(url).origin,'https://api.github.com');assert.equal(init.headers.Authorization,`Bearer ${token}`);assert.equal(init.redirect,'error');return url.includes('/contents/')?new Response('(kicad_pcb)'):json({sha:sha('a')});});
+  withFetch(t,async (url,init)=>{assert.equal(new URL(url).origin,'https://api.github.com');assert.equal(init.headers.Authorization,`Bearer ${token}`);assert.equal(init.redirect,'error');if(url.includes('/contents/'))return new Response('(kicad_pcb)');assert.equal(init.headers.Accept,'application/vnd.github.sha');return new Response(sha('a'));});
   assert.equal(await background.githubFile('wayri/board','main','board.kicad_pcb'),'(kicad_pcb)');
   assert.equal((await background.revisionResolve('wayri/board','main','board.kicad_pcb')).sha,sha('a'));
 });

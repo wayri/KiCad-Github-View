@@ -112,7 +112,7 @@
     view.originalHidden = original?.hidden ?? false;
     let loaded = false, showingCode = false, runId = 0;
     const query = parse.viewerParams(requestBody);
-    const viewerURL = `${chrome.runtime.getURL(/\.kicad_(sch|pcb)$/i.test(requestBody.file)?"browser-viewer.html":"project-viewer.html")}?${query}`;
+    const viewerURL = `${chrome.runtime.getURL(/\.kicad_(sch|pcb|pro|prl)$/i.test(requestBody.file)?"browser-viewer.html":"project-viewer.html")}?${query}`;
     const showCode = button("Show source", "code-toggle", () => {
       showingCode = !showingCode;
       if (original) original.hidden = !showingCode && loaded;

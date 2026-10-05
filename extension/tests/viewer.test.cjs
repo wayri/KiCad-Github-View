@@ -18,6 +18,8 @@ function viewer(parameters, read) {
       this.classList = { toggle: () => {} }; this.messages = [];
       this.contentWindow = { postMessage: (message, origin) => this.messages.push({message, origin}) };
     }
+    set id(value) { this._id=value; elements.set(value,this); }
+    get id() { return this._id; }
     append(...children) { this.children.push(...children); }
     replaceChildren(...children) { this.children = children; }
     addEventListener(type, handler) { this.listeners[type] = handler; }
@@ -30,7 +32,7 @@ function viewer(parameters, read) {
   get('changesPanel').hidden = true; get('changeFilter').value = 'all';
   const calls = [], listeners = new Map(), parentMessages=[],parent={postMessage:(message,origin)=>parentMessages.push({message,origin})};
   vm.runInNewContext(source, { URL, URLSearchParams, Number, Map, Set, Promise, parent,
-    KiCadBrowserData: data, KiCadDesignDiff: diff, KiCadViewState: viewState, KiCadPairedReview:pairedReview,
+    KiCadGitHub: require('../parsing.js'), KiCadBrowserData: data, KiCadDesignDiff: diff, KiCadViewState: viewState, KiCadPairedReview:pairedReview,
     location: { search: '?'+new URLSearchParams(parameters) },
     matchMedia: () => ({ matches: true }), addEventListener: (name, callback) => {const all=listeners.get(name)||[];all.push(callback);listeners.set(name,all);},
     chrome: { runtime: { getURL: (name) => 'chrome-extension://test-id/'+name,
@@ -215,4 +217,53 @@ test('shared hierarchy relays from the current head and sheet commands only from
  const event={source:head.contentWindow,origin,data:{type:'kicad-review:hierarchy',repository:'wrong',ref:'wrong',hierarchy}};
  view.message({...event,source:base.contentWindow});view.message({...event,origin:'https://evil.test'});assert.equal(view.parentMessages.length,0);view.message(event);assert.equal(view.parentMessages[0].message.repository,'fork/board');assert.equal(view.parentMessages[0].message.ref,parameters.head);
  const command={source:view.parent,origin,data:{type:'kicad-review:open-sheet',file:'child.kicad_sch'}};view.message({...command,source:{}});view.message({...command,origin:'https://evil.test'});view.message({...command,data:{...command.data,file:'../private.kicad_sch'}});assert.equal(head.messages.length,0);view.message(command);assert.equal(head.messages[0].message.command,'open-sheet');assert.equal(head.messages[0].message.file,'child.kicad_sch');assert.equal(base.messages.length,0);
+});
+
+
+test('primary workspace tabs retain drawings while project settings are open', async () => {
+ const view=viewer({...parameters,base:''},()=>({ok:false,error:'unexpected read'}));
+ const frame=view.get('headDrawing').children[0];
+ const tab=name=>view.get('workspaceTabs').children.find(button=>button.textContent===name);
+ assert.deepEqual(view.get('workspaceTabs').children.map(button=>button.textContent),['Project','Schematic','Layout']);
+ tab('Project').click();assert.equal(view.get('comparison').hidden,true);
+ const project=view.get('projectWorkspace').children[0];assert.equal(new URL(project.src).searchParams.get('projectOnly'),'1');
+ tab('Schematic').click();assert.equal(view.get('comparison').hidden,false);assert.equal(view.get('headDrawing').children[0],frame);
+ tab('Project').click();assert.equal(view.get('projectWorkspace').children[0],project);assert.equal(view.calls.length,0);
+});
+
+test('layout tab uses lazy repository inventory and preserves both drawing frames', async () => {
+ const view=viewer({...parameters,base:''},()=>({ok:true,result:{files:[{path:'boards/board.kicad_pcb'}]}}));
+ const frame=view.get('headDrawing').children[0],tabs=view.get('workspaceTabs').children;
+ tabs.find(button=>button.textContent==='Layout').click();await tick();
+ assert.equal(view.calls[0].type,'project-inventory');assert.equal(view.calls[0].repository,'fork/board');
+ const pair=view.get('pairDrawing').children[0];assert.equal(new URL(pair.src).searchParams.get('file'),'boards/board.kicad_pcb');
+ assert.equal(view.get('headPanel').hidden,true);assert.equal(view.get('pairPanel').hidden,false);
+ tabs.find(button=>button.textContent==='Schematic').click();tabs.find(button=>button.textContent==='Layout').click();await tick();
+ assert.equal(view.get('headDrawing').children[0],frame);assert.equal(view.get('pairDrawing').children[0],pair);assert.equal(view.calls.length,1);
+});
+
+test('project entry opens settings without a nested drawing and accepts only its own drawing commands', async () => {
+ const view=viewer({...parameters,base:'',file:'design/board.kicad_pro',oldFile:'design/board.kicad_pro'},()=>({ok:true,result:{files:[{path:'design/board.kicad_sch'},{path:'other.kicad_sch'}]}}));
+ assert.equal(view.get('headDrawing').children.length,0);const project=view.get('projectWorkspace').children[0];
+ view.message({origin:'chrome-extension://test-id',source:{},data:{type:'kicad-review:project-drawing',file:'other.kicad_sch'}});assert.equal(view.get('headDrawing').children.length,0);
+ view.get('workspaceTabs').children.find(button=>button.textContent==='Schematic').click();await tick();
+ assert.equal(new URL(view.get('headDrawing').children[0].src).searchParams.get('file'),'design/board.kicad_sch');
+ view.message({origin:'https://evil.test',source:project.contentWindow,data:{type:'kicad-review:project-drawing',file:'other.kicad_sch'}});assert.equal(new URL(view.get('headDrawing').children[0].src).searchParams.get('file'),'design/board.kicad_sch');
+});
+
+test('ambiguous drawings need a choice and late discovery cannot reopen a hidden workspace', async () => {
+ let resolve;const view=viewer({...parameters,base:''},()=>new Promise(done=>resolve=done));
+ const tabs=view.get('workspaceTabs').children;tabs.find(button=>button.textContent==='Layout').click();
+ tabs.find(button=>button.textContent==='Project').click();resolve({ok:true,result:{files:[{path:'a.kicad_pcb'},{path:'b.kicad_pcb'}]}});await tick();assert.equal(view.get('pairDrawing').children.length,0);assert.equal(view.get('comparison').hidden,true);
+ tabs.find(button=>button.textContent==='Layout').click();await tick();assert.equal(view.get('pairDrawing').children.length,0);assert.equal(view.get('companionSelect').children.length,3);
+ view.get('companionSelect').value='b.kicad_pcb';view.get('companionSelect').listeners.change();assert.equal(new URL(view.get('pairDrawing').children[0].src).searchParams.get('file'),'b.kicad_pcb');
+});
+
+test('project tab receives cached schematic hierarchy only after its trusted ready message',()=>{
+ const view=viewer({...parameters,base:''},()=>({ok:false})),frame=view.get('headDrawing').children[0];
+ view.message({origin:'chrome-extension://test-id',source:frame.contentWindow,data:{type:'kicad-review:hierarchy',hierarchy:{active:'new.kicad_sch'}}});
+ view.get('workspaceTabs').children.find(button=>button.textContent==='Project').click();const project=view.get('projectWorkspace').children[0];
+ view.message({origin:'chrome-extension://test-id',source:{},data:{type:'kicad-review:project-ready'}});assert.equal(project.messages.length,0);
+ view.message({origin:'chrome-extension://test-id',source:project.contentWindow,data:{type:'kicad-review:project-ready'}});assert.equal(project.messages[0].message.type,'kicad-review:hierarchy');assert.equal(project.messages[0].message.repository,'fork/board');
+ view.message({origin:'chrome-extension://test-id',source:project.contentWindow,data:{type:'kicad-review:project-sheet',file:'child.kicad_sch'}});assert.equal(frame.messages.at(-1).message.command,'open-sheet');assert.equal(view.get('comparison').hidden,false);
 });

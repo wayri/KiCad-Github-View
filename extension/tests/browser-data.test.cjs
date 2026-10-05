@@ -191,3 +191,61 @@ test('opening a leaf in a directory with more than 24 sheets retains its root an
  const names=Array.from({length:30},(_,i)=>`design/child${i}.kicad_sch`),root='design/main.kicad_sch';const sources=new Map(names.map(p=>[p,'(kicad_sch)']));sources.set(root,'(kicad_sch '+names.map(p=>`(sheet (property "Sheetfile" "${p.split('/').at(-1)}"))`).join(' ')+')');
  const result=await data.loadProject('owner/board','main',names[0],async(_r,_ref,p)=>sources.get(p)??null,async(_r,_ref,d)=>d==='design'?[root,...names]:[]);assert.equal(result.length,31);assert.equal(result[0].path,root);assert.equal(result[0].discoveryWarning,undefined);
 });
+
+test('repository inventory discovers transitive parents in scattered folders using safe relative links', async () => {
+  const files = new Map([
+    ['design/main/root.kicad_sch', '(kicad_sch (sheet (property "Sheetfile" "../../electronics/power/middle.kicad_sch")) (sheet (property "Sheetfile" "../../shared/io.kicad_sch")))'],
+    ['electronics/power/middle.kicad_sch', '(kicad_sch (sheet (property "Sheetfile" "../../shared/deep/leaf.kicad_sch")))'],
+    ['shared/deep/leaf.kicad_sch', '(kicad_sch)'],
+    ['shared/io.kicad_sch', '(kicad_sch)'],
+    ['other/root.kicad_sch', '(kicad_sch)']
+  ]);
+  const read = async (_repository, ref, path) => { assert.equal(ref, 'snapshot'); return files.get(path) ?? null; };
+  const loaded = await data.loadProject('owner/board', 'snapshot', 'shared/deep/leaf.kicad_sch', read,
+    async () => { throw new Error('Full inventory should replace directory scanning'); }, 'github', async () => [...files.keys()]);
+  assert.deepEqual(loaded.map(file => file.path), [...files.keys()].slice(0, 2).concat('shared/io.kicad_sch', 'shared/deep/leaf.kicad_sch'));
+  assert.equal(data.rootSheetPath(loaded, 'shared/deep/leaf.kicad_sch'), 'design/main/root.kicad_sch');
+  assert.equal(loaded[0].discoveryWarning, undefined);
+});
+
+test('root selection accepts converging parent branches and never guesses between multiple roots or cycles', async () => {
+  const root = {path: 'roots/main.kicad_sch', content: '(kicad_sch (sheet (property "Sheetfile" "../a/middle.kicad_sch")) (sheet (property "Sheetfile" "../b/middle.kicad_sch")))'};
+  const left = {path: 'a/middle.kicad_sch', content: '(kicad_sch (sheet (property "Sheetfile" "../shared/leaf.kicad_sch")))'};
+  const right = {path: 'b/middle.kicad_sch', content: '(kicad_sch (sheet (property "Sheetfile" "../shared/leaf.kicad_sch")))'};
+  const leaf = {path: 'shared/leaf.kicad_sch', content: '(kicad_sch)'};
+  assert.equal(data.rootSheetPath([root, left, right, leaf], leaf.path), root.path);
+  const ambiguous = [left, right, leaf];
+  assert.equal(data.rootSheetPath(ambiguous, leaf.path), null);
+  const read = async (_repository, _ref, path) => ambiguous.find(file => file.path === path)?.content ?? null;
+  const loaded = await data.loadProject('owner/board', 'snapshot', leaf.path, read, null, 'github', async () => ambiguous.map(file => file.path));
+  assert.equal(loaded.length, 3); assert.match(loaded[0].discoveryWarning, /multiple roots or a parent cycle/);
+  const cycle = [left, {...leaf, content: '(kicad_sch (sheet (property "Sheetfile" "../a/middle.kicad_sch")))'}];
+  assert.equal(data.rootSheetPath(cycle, leaf.path), null);
+  const cyclic = await data.loadProject('owner/board', 'snapshot', leaf.path,
+    async (_repository, _ref, path) => cycle.find(file => file.path === path)?.content ?? null,
+    null, 'github', async () => cycle.map(file => file.path));
+  assert.equal(cyclic.length, 2); assert.match(cyclic[0].discoveryWarning, /parent cycle/);
+  const rootedCycle = [...cycle, {path: 'root.kicad_sch', content: '(kicad_sch (sheet (property "Sheetfile" "shared/leaf.kicad_sch")))'}];
+  const retained = await data.loadProject('owner/board', 'snapshot', leaf.path,
+    async (_repository, _ref, path) => rootedCycle.find(file => file.path === path)?.content ?? null,
+    null, 'github', async () => rootedCycle.map(file => file.path));
+  assert.equal(retained.length, 3); assert.equal(data.rootSheetPath(retained, leaf.path), null);
+  assert.equal(retained[0].path, leaf.path); assert.match(retained[0].discoveryWarning, /parent cycle/);
+});
+
+test('repository parent inventory is bounded and unsafe links never authorize reads outside the repository', async () => {
+  const reads = [];
+  const read = async (_repository, _ref, path) => { reads.push(path); return '(kicad_sch (sheet (property "Sheetfile" "../../escape.kicad_sch")))'; };
+  const loaded = await data.loadProject('owner/board', 'snapshot', 'folder/root.kicad_sch', read,
+    null, 'github', async () => ['folder/root.kicad_sch']);
+  assert.deepEqual(reads, ['folder/root.kicad_sch']); assert.equal(loaded.length, 1);
+  const excessive = await data.loadProject('owner/board', 'snapshot', 'root.kicad_sch', async () => '(kicad_sch)',
+    null, 'github', async () => Array.from({length: 129}, (_, index) => `folder/sheet${index}.kicad_sch`));
+  assert.match(excessive[0].discoveryWarning, /More than 128/);
+  const unsafe = await data.loadProject('owner/board', 'snapshot', 'root.kicad_sch', async () => '(kicad_sch)',
+    null, 'github', async () => ['../outside.kicad_sch']);
+  assert.match(unsafe[0].discoveryWarning, /unsafe schematic repository listing/);
+  const unavailable = await data.loadProject('owner/board', 'snapshot', 'root.kicad_sch', async (_repo, _ref, path) => path === 'root.kicad_sch' ? '(kicad_sch)' : null,
+    null, 'github', async () => ['root.kicad_sch', 'unavailable.kicad_sch']);
+  assert.match(unavailable[0].discoveryWarning, /Parent-sheet source unavailable/);
+});

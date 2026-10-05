@@ -27,6 +27,22 @@ test('GitLab project hierarchy retrieval uses immutable revision and subgroup na
  const result=await message({type:'project',provider:'gitlab',repository:'group/sub/board',ref:'feature/pcb',file:'board.kicad_pcb'},tab);assert.equal(result.ok,true,result.error);assert.equal(result.result[0].content,'(kicad_pcb)');assert.ok(calls.every(url=>url.startsWith('https://gitlab.com/api/v4/projects/group%2Fsub%2Fboard/')));
 });
 
+test('GitLab leaf discovery finds roots across folders from one pinned recursive tree',async t=>{
+ const previous=global.fetch,sha='a'.repeat(40),calls=[];
+ const sources=new Map([
+  ['design/main.kicad_sch','(kicad_sch (sheet (property "Sheetfile" "../shared/leaf.kicad_sch")))'],
+  ['shared/leaf.kicad_sch','(kicad_sch)'],['another/root.kicad_sch','(kicad_sch)']
+ ]);
+ global.fetch=async url=>{calls.push(url);if(url.includes('/commits/'))return new Response(JSON.stringify({id:sha}));const parsed=new URL(url);assert.equal(parsed.searchParams.get('ref'),sha);
+  if(url.includes('/tree?')){assert.equal(parsed.searchParams.get('recursive'),'true');return new Response(JSON.stringify([...sources.keys()].map(path=>({path,type:'blob',mode:'100644'}))));}
+  const path=decodeURIComponent(parsed.pathname.split('/files/')[1].replace(/\/raw$/,''));assert.ok(sources.has(path));return new Response(sources.get(path));
+ };t.after(()=>global.fetch=previous);
+ const result=await message({type:'project',provider:'gitlab',repository:'group/sub/board',ref:'feature/sheets',file:'shared/leaf.kicad_sch'});
+ assert.equal(result.ok,true,result.error);assert.deepEqual(result.result.map(file=>file.path),['design/main.kicad_sch','shared/leaf.kicad_sch']);
+ assert.equal(calls.filter(url=>url.includes('/tree?')).length,1);assert.equal(calls.filter(url=>url.includes('/commits/')).length,1);
+ assert.equal(result.result[0].discoveryWarning,undefined);
+});
+
 
 test('GitLab saved rule reports are pinned to the resolved drawing revision',async t=>{
  const previous=global.fetch,sha='c'.repeat(40),calls=[];global.fetch=async url=>{calls.push(url);if(url.includes('/commits/'))return new Response(JSON.stringify({id:sha}));assert.equal(new URL(url).searchParams.get('ref'),sha);return new Response('{"violations":[]}');};t.after(()=>global.fetch=previous);

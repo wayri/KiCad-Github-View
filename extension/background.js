@@ -159,6 +159,51 @@ async function githubDirectory(repository, ref, directory, includeBoards = false
     .map((item) => item.path);
 }
 
+async function githubDiscoveryText(url, limit, accept='application/vnd.github+json') {
+  const response=await githubResponse(url,{Accept:accept});
+  if(!response)throw new Error('GitHub revision was not found (HTTP 404), or your extension account lacks private repository access. Check the exact revision and sign in with private repository access in extension settings.');
+  if(Number(response.headers.get('content-length'))>limit){await response.body?.cancel();throw new Error('GitHub schematic discovery response exceeds its size limit.');}
+  const reader=response.body.getReader(),chunks=[];let length=0,timedOut=false;
+  const timeout=setTimeout(()=>{timedOut=true;reader.cancel().catch(()=>{});},30000);
+  try{
+    while(true){const {done,value}=await reader.read();if(done)break;length+=value.byteLength;if(length>limit){await reader.cancel();throw new Error('GitHub schematic discovery response exceeds its size limit.');}chunks.push(value);}
+    if(timedOut)throw new Error('GitHub schematic discovery timed out.');
+    const bytes=new Uint8Array(length);let offset=0;for(const chunk of chunks){bytes.set(chunk,offset);offset+=chunk.byteLength;}
+    return new TextDecoder().decode(bytes);
+  }finally{clearTimeout(timeout);}
+}
+
+async function githubDiscoveryJson(url, limit) { return JSON.parse(await githubDiscoveryText(url,limit)); }
+
+async function githubResolvedSha(repository,ref) {
+  // SHA media omits changed-file patches, which can dwarf the design itself.
+  const sha=(await githubDiscoveryText(`https://api.github.com/repos/${repository}/commits/${encodeURIComponent(ref)}`,128,'application/vnd.github.sha')).trim();
+  if(!SHA.test(sha)||SHA.test(ref)&&sha.toLowerCase()!==ref.toLowerCase())throw new Error('GitHub did not resolve a stable revision.');
+  return sha.toLowerCase();
+}
+
+async function githubSchematicSnapshot(repository,ref) {
+  const sha=SHA.test(ref)?ref.toLowerCase():await githubResolvedSha(repository,ref);
+  const commit=await githubDiscoveryJson(`https://api.github.com/repos/${repository}/git/commits/${sha}`,1024*1024);
+  if(!SHA.test(commit?.sha)||commit.sha.toLowerCase()!==sha||!SHA.test(commit?.tree?.sha))throw new Error('GitHub did not resolve a stable schematic revision.');
+  return {sha,treeSha:commit.tree.sha};
+}
+
+async function githubSchematicInventory(repository, ref, treeSha) {
+  if (!KiCadBrowserData.validRepository(repository) || !SHA.test(ref || '') || !SHA.test(treeSha || '')) {
+    throw new Error('A pinned GitHub commit and tree are required for schematic discovery.');
+  }
+  const listing = await githubDiscoveryJson(`https://api.github.com/repos/${repository}/git/trees/${treeSha}?recursive=1`,16*1024*1024);
+  if (!Array.isArray(listing?.tree) || listing.tree.length > 100000 || listing.truncated) {
+    throw new Error('GitHub returned an incomplete schematic repository tree.');
+  }
+  const files = listing.tree.filter(item => item?.type === 'blob' && item.mode !== '120000' &&
+    typeof item.path === 'string' && /\.kicad_sch$/i.test(item.path)).map(item => item.path);
+  if (files.some(path => !KiCadBrowserData.validPath(path))) throw new Error('GitHub returned an unsafe schematic repository listing.');
+  if (files.length > KiCadBrowserData.PROJECT_MAX_FILES) throw new Error('More than 128 parent-sheet candidates; open the project root directly.');
+  return files.sort();
+}
+
 async function drawingFiles(repository, ref, file) {
   if (!KiCadBrowserData.validRepository(repository) || !KiCadBrowserData.validRef(ref) ||
       !KiCadBrowserData.validPath(file)) throw new Error("Invalid GitHub drawing location.");
@@ -181,9 +226,7 @@ function revisionScope(repository,ref,file){
 }
 async function revisionResolve(repository,ref,file){
   revisionScope(repository,ref,file);
-  const {value}=await revisionJson(`https://api.github.com/repos/${repository}/commits/${encodeURIComponent(ref)}`);
-  if(!SHA.test(value?.sha))throw new Error('GitHub did not resolve a stable revision.');
-  return {repository,ref,sha:value.sha};
+  return {repository,ref,sha:await githubResolvedSha(repository,ref)};
 }
 async function revisionBranches(repository,ref,file){
   revisionScope(repository,ref,file);
@@ -746,7 +789,7 @@ async function gitlabDispatch(message, sender) {
     }
     case 'project': {
       const snapshot=await api.resolve(repository,ref,file);
-      return KiCadBrowserData.loadProject(repository,snapshot.sha,file,api.file,api.directory,'gitlab');
+      return KiCadBrowserData.loadProject(repository,snapshot.sha,file,api.file,api.directory,'gitlab',api.schematics);
     }
     case 'project-inventory': return api.inventory(repository,ref,file);
     case 'project-file': return api.projectFile(repository,ref,file);
@@ -932,6 +975,12 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       case "project": {
         if (optionsSender(sender)) throw new Error("Options cannot load KiCad projects.");
         const { repository, ref, file } = message;
+        if (/\.kicad_sch$/i.test(file || '')) {
+          revisionScope(repository,ref,file);
+          const snapshot=await githubSchematicSnapshot(repository,ref);
+          return KiCadBrowserData.loadProject(repository,snapshot.sha,file,githubFile,githubDirectory,'github',
+            () => githubSchematicInventory(repository,snapshot.sha,snapshot.treeSha));
+        }
         return KiCadBrowserData.loadProject(repository, ref, file, githubFile, githubDirectory);
       }
       case "githubPull":
@@ -958,7 +1007,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 });
 
 if (typeof module === "object" && module.exports) {
-  module.exports = { githubFile, githubPull, githubFiles, githubDirectory, drawingFiles, openViewerWindow,
+  module.exports = { githubFile, githubPull, githubFiles, githubDirectory, githubSchematicInventory, drawingFiles, openViewerWindow,
     githubAsset, designChanges, senderAllowed, viewerSender, optionsSender, openFromAction,
     commentList, commentSave, commentDelete, openCommentDraft, claimCommentDraft,
     acknowledgeCommentDraft, githubAnnotations, revisionBranches,revisionCommits,revisionResolve };

@@ -10,7 +10,7 @@ async function revision(query='',extraFiles=[],options={}){
  const canvas={canvas:new Element(),viewport:{camera},document:null,visibleLayers:new Set(),addEventListener:(type,callback)=>canvasListeners.set(type,callback),resize(){},draw(){calls.draw++;},dispose(){calls.disposed++;},
   setDocument(design,file){this.design=design;this.document={filename:file};this.zoom_to_board();this.draw();},
   zoom_to_board(){calls.board++;camera.bbox={x:92,y:192,w:16,h:16};},zoom_to_page(){calls.page++;camera.bbox={x:0,y:0,w:297,h:210};}};
- const initialFile=options.pcb?'board.kicad_pcb':'root.kicad_sch';
+ const initialFile=options.file||(options.pcb?'board.kicad_pcb':'root.kicad_sch');
  const context={URL,URLSearchParams,console,location:{search:'?repository=wayri/board&ref=main&file='+initialFile+query},parent,
   document:{getElementById:get,body:new Element(),createElement:()=>new Element(),head:new Element()},
   chrome:{runtime:{getURL:name=>'chrome-extension://ours/'+name,sendMessage:async message=>{if(message.type==='repo-asset'){(calls.assetRequests||=[]).push(message);return{ok:true,result:{base64:'AAAA'}};}return{ok:true,result:[{path:initialFile,content:options.pcb?'(kicad_pcb)':'(kicad_sch)'},...extraFiles]};}}},
@@ -20,6 +20,7 @@ async function revision(query='',extraFiles=[],options={}){
   SpikeBoard3D:{mountBoard3D(_pane,_source,config){calls.modelOptions=config;return{dispose(){},setTheme(){}};}},
   KiCadOwnedCanvas:{mount:()=>canvas},KiCadReviewWorkspace:{mount:options=>{calls.workspaceOptions=options;return {draw(){},setScene(){},attachCanvas(){calls.attach++;},dispose(){calls.disposed++;},highlightRelated(selection){calls.related=selection;options.onSelection?.(selection);},refreshComments(){calls.refreshed=(calls.refreshed||0)+1;},options};}},
   addEventListener:(type,callback)=>listeners.set(type,callback)};
+ if(options.worker)context.KiCadLoading={indicator:()=>({show(){},hide(){},dispose(){}}),paint:async()=>{},run:async(_job,payload,prepare)=>{calls.workerPayload=payload;return {...prepare(),design:context.KiCadSchematicRenderer.build()};}};
  vm.runInNewContext(fs.readFileSync(path.join(__dirname,'../revision-viewer.js'),'utf8'),context);await tick();
  return{canvas,camera,calls,get,reports,parent,context,viewframe(){canvasListeners.get('kicad:viewframe')();},message(data,source=parent,origin='chrome-extension://ours'){listeners.get('message')({source,origin,data});},key(key,nodes=[],modifiers={}){let prevented=false;listeners.get('keydown')({key,composedPath:()=>nodes,preventDefault(){prevented=true;},...modifiers});return prevented;},hide(){listeners.get('pagehide')();}};
 }
@@ -34,6 +35,29 @@ test('owned dedicated viewer mounts fetched designs and accepts only trusted par
  v.message({type:'kicad-review:command',command:'fit-page'});assert.equal(v.calls.page,1);
  v.message({type:'kicad-review:command',command:'focus',position:{x:50,y:70}});assert.equal(v.camera.center.x,50);assert.equal(v.camera.center.y,70);
  const before=v.calls.draw;v.message({type:'kicad-review:command',command:'fit-page'},{},'chrome-extension://ours');v.message({type:'kicad-review:command',command:'fit-page'},v.parent,'https://github.com');assert.equal(v.calls.draw,before);
+});
+test('opening a child sheet initially prepares and displays its unambiguous scattered-folder root', async () => {
+ const root={path:'design/main.kicad_sch',content:'(kicad_sch (sheet (property "Sheetfile" "../shared/child.kicad_sch")))'};
+ const v=await revision('',[root],{file:'shared/child.kicad_sch',worker:true});
+ assert.equal(v.canvas.document.filename,root.path);assert.equal(v.calls.workspaceOptions.rootFile,root.path);
+ assert.equal(v.calls.workerPayload.rootFile,root.path);
+ assert.equal(v.reports[0].data.file,root.path);
+ v.calls.workspaceOptions.openSheet('shared/child.kicad_sch');assert.equal(v.canvas.document.filename,'shared/child.kicad_sch');
+});
+test('ambiguous schematic roots preserve the requested sheet with a visible diagnostic', async () => {
+ const parents=['first/root.kicad_sch','second/root.kicad_sch'].map(path=>({path,content:'(kicad_sch (sheet (property "Sheetfile" "../shared/child.kicad_sch")))'}));
+ const v=await revision('',parents,{file:'shared/child.kicad_sch'});
+ assert.equal(v.canvas.document.filename,'shared/child.kicad_sch');
+ assert.match(v.calls.workspaceOptions.files[0].discoveryWarning,/no unambiguous root/);
+});
+test('saved change focus opens the requested child while hierarchy home retains its actual root', async () => {
+ const root={path:'design/main.kicad_sch',content:'(kicad_sch (sheet (property "Sheetfile" "../shared/child.kicad_sch")))'};
+ const v=await revision('&focusX=250&focusY=300',[root],{file:'shared/child.kicad_sch',worker:true});
+ assert.equal(v.canvas.document.filename,'shared/child.kicad_sch');assert.equal(v.calls.workspaceOptions.rootFile,root.path);
+ assert.equal(v.calls.workerPayload.rootFile,'shared/child.kicad_sch');
+ assert.equal(v.camera.center.x,250);assert.equal(v.camera.center.y,300);
+ const invalid=await revision('&focusX=Infinity&focusY=300',[root],{file:'shared/child.kicad_sch'});
+ assert.equal(invalid.canvas.document.filename,root.path);
 });
 test('focus rejects nonfinite, excessive and nonnumeric positions',async()=>{const v=await revision();const before=plain(v.camera.bbox);for(const position of [{x:NaN,y:2},{x:1000001,y:1},{x:'50',y:70},{x:1}])v.message({type:'kicad-review:command',command:'focus',position});assert.deepEqual(plain(v.camera.bbox),before);});
 test('keyboard shortcuts ignore editable paths and modifiers',async()=>{const v=await revision();for(const key of ['f','Home','d','+']){assert.equal(v.key(key,[{tagName:'INPUT'}]),false);assert.equal(v.key(key,[{isContentEditable:true}]),false);assert.equal(v.key(key,[],{ctrlKey:true}),false);}assert.equal(v.key('Home'),true);assert.equal(v.calls.page,1);assert.equal(v.key('d'),true);assert.equal(v.canvas.dark,true);});

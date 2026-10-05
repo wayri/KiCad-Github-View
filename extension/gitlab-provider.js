@@ -36,6 +36,13 @@
     return {entries:entries.filter(item=>item?.type==='blob'&&item.mode!=='120000'&&validPath(item.path)),warnings};
   }
   async function directory(repository,ref,path,includeBoards=false){const result=await tree(repository,ref,path,false);if(result.warnings.length)throw new Error(result.warnings[0]);return result.entries.filter(item=>(includeBoards?/\.kicad_(sch|pcb)$/i:/\.kicad_sch$/i).test(item.path)&&item.path.split('/').slice(0,-1).join('/')===path).map(item=>item.path);}
+  async function schematics(repository,ref){
+    if(!validRepository(repository)||!SHA.test(ref||''))throw new Error('A pinned GitLab commit is required for schematic discovery.');
+    const listing=await tree(repository,ref);if(listing.warnings.length)throw new Error(listing.warnings[0]);
+    const files=listing.entries.filter(item=>/\.kicad_sch$/i.test(item.path)).map(item=>item.path);
+    if(files.length>root.KiCadBrowserData.PROJECT_MAX_FILES)throw new Error('More than 128 parent-sheet candidates; open the project root directly.');
+    return files.sort();
+  }
   async function inventory(repository,ref,path){scope(repository,ref,path);const snapshot=await resolve(repository,ref,path),listing=await tree(repository,snapshot.sha);return {files:listing.entries.filter(item=>root.KiCadGitHub.filePath(item.path)).sort((a,b)=>a.path.localeCompare(b.path)).map(item=>({path:item.path,size:0})),snapshotRef:snapshot.sha,warnings:listing.warnings};}
   async function projectFile(repository,ref,path){scope(repository,ref,path);if(!root.KiCadGitHub.filePath(path))throw new Error('Unsupported project file.');const content=await file(repository,ref,path);if(content===null)throw new Error('Project file unavailable at this revision.');return {path,content};}
   async function search(repository,ref,path){const listing=await inventory(repository,ref,path),warnings=[...listing.warnings];const drawings=listing.files.filter(item=>root.KiCadBrowserData.validPath(item.path)).sort((a,b)=>(b.path===path?1:0)-(a.path===path?1:0)),settings=listing.files.filter(item=>/\.kicad_pro$/i.test(item.path));const files=[],saved=[];let total=0;
@@ -112,7 +119,7 @@
     return {base:refs.base_sha,head:refs.head_sha,baseTip:refs.start_sha,headRepository,files,
       warnings:['Changed drawings are identified from complete commit trees. Only unique byte-identical moves are recognized as renames; edited or ambiguous moves appear as added/removed.']};
   }
-  return {validRepository,validPath,file,resolve,directory,inventory,projectFile,search,branches,commits,compare,mergeRequest,response,endpoint};
+  return {validRepository,validPath,file,resolve,directory,schematics,inventory,projectFile,search,branches,commits,compare,mergeRequest,response,endpoint};
   }
   root.KiCadGitLabProvider={...forHost(),forHost};
   if(typeof module==='object'&&module.exports)module.exports=root.KiCadGitLabProvider;

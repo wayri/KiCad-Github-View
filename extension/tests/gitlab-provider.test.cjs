@@ -34,6 +34,14 @@ test('GitLab permits larger PCB source but retains schematic and other-file byte
   await assert.rejects(api.file('group/board', 'main', 'large.kicad_sch'), /size limit/);
 });
 
+test('GitLab schematic inventory requires a pinned commit and rejects incomplete or excessive discoveries',async t=>{
+ await assert.rejects(api.schematics('group/board','main'),/pinned GitLab commit/);
+ let pages=0;transport(t,async()=>{pages++;return json([] ,{'x-next-page':String(pages+1)});});
+ await assert.rejects(api.schematics('group/board',sha),/incomplete/);assert.equal(pages,10);
+ global.fetch=async url=>{const page=Number(new URL(url).searchParams.get('page'));return json(Array.from({length:page===1?100:29},(_,index)=>({path:`sheet${(page-1)*100+index}.kicad_sch`,type:'blob',mode:'100644'})));};
+ await assert.rejects(api.schematics('group/board',sha),/More than 128/);
+});
+
 test('GitLab limited comparison recovers omitted drawings from immutable complete trees',async t=>{
  const head='b'.repeat(40),blob=id=>id.repeat(40),entry=(path,id,mode='100644')=>({path,id:blob(id),type:'blob',mode});
  const before=[entry('unchanged.kicad_pcb','1'),entry('modified.kicad_pcb','2'),entry('old.kicad_sch','3'),entry('deleted.kicad_sch','4'),entry('edited-old.kicad_sch','5'),entry('becomes-link.kicad_pcb','6')];

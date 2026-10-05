@@ -207,3 +207,15 @@ body .object-row.selected{background:var(--selected);color:var(--text);border:1p
 .sheet-open.net-sheet-match{border-color:#ccac30;background:#b8952025;color:var(--text)}.sheet-net-badge{color:#d8b83c;margin-left:auto;font-size:12px}.sheet-open.net-sheet-match .sheet-name{font-weight:650}
 
 .loading-surface{position:fixed;inset:0;z-index:10000;display:flex;align-items:center;justify-content:center;gap:22px;background:rgba(14,23,29,.84);color:#f5fbff;pointer-events:none}.loading-surface[hidden]{display:none}.loading-surface>div{max-width:min(440px,70vw)}.loading-surface strong{font-size:23px}.loading-surface p{font-size:15px;margin:10px 0}.loading-surface small{color:#b6ccdb;font-size:12px}.loading-spinner{flex:none;width:56px;height:56px;border:5px solid #496473;border-top-color:#55d4ee;border-radius:50%;animation:kicad-loading-spin .8s linear infinite;will-change:transform}@keyframes kicad-loading-spin{to{transform:rotate(360deg)}}@media(prefers-reduced-motion:reduce){.loading-spinner{animation:none;border-top-color:#55d4ee}}
+
+/* The outer three-tab workspace owns project and drawing switches. */
+body[data-workspace="true"] #projectButton,body[data-workspace="true"] #viewOppositeDrawing{display:none}
+
+/* Keep tree rows visible inside the floating explorer's drawing-area budget. */
+#designNavigator .navigator-tabs{display:flex;flex-wrap:nowrap;overflow-x:auto;flex-shrink:0;gap:0}
+#designNavigator .navigator-tabs button{flex:0 0 auto;min-height:30px;padding:5px 8px}
+#sheetsPane .sheet-navigation:empty{display:none}
+#sheetsPane{gap:6px;padding:10px}
+#sheetHelp{display:none}
+#sheetCount{margin:0;font-size:11px;line-height:16px}
+#sheetList{min-height:90px}

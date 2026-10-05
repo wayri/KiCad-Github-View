@@ -66,7 +66,32 @@
   return names;
 }
 
-  async function loadProject(repository, ref, file, readFile, listDirectory = null, provider = "github") {
+  // Resolve saved sheet links, never names or directory proximity. Every ancestor
+  // must be acyclic and all parent branches must converge on one root.
+  function rootSheetPath(files, start) {
+    if (files.length > PROJECT_MAX_FILES) return null;
+    const sources = new Map(files.filter(file => /\.kicad_sch$/i.test(file.path)).map(file => [file.path, file.content]));
+    if (!sources.has(start)) return null;
+    const parents = new Map([...sources.keys()].map(path => [path, new Set()]));
+    for (const [path, content] of sources) for (const name of sheetFiles(content)) {
+      const target = childPath(path, name);
+      if (sources.has(target)) parents.get(target).add(path);
+    }
+    const state = new Map(), roots = new Set();
+    function visit(path) {
+      if (state.get(path) === 1) return false;
+      if (state.get(path) === 2) return true;
+      state.set(path, 1);
+      const incoming = parents.get(path);
+      if (!incoming.size) roots.add(path);
+      for (const parent of incoming) if (!visit(parent)) return false;
+      state.set(path, 2);
+      return true;
+    }
+    return visit(start) && roots.size === 1 ? [...roots][0] : null;
+  }
+
+  async function loadProject(repository, ref, file, readFile, listDirectory = null, provider = "github", listSchematics = null) {
     if (!validRepository(repository, provider) || !validPath(file) || !validRef(ref)) {
       throw new Error("Invalid GitHub project location.");
     }
@@ -117,11 +142,22 @@
     if (await read(file) === null) throw new Error(`KiCad file was not returned by ${provider === "gitlab" ? "GitLab" : "GitHub"} (HTTP 404): ${repository}, revision ${ref}, path ${file}. The file may be missing or repository access may be unavailable. ${provider === "gitlab" ? "Sign in to the matching GitLab server in extension settings and check your project access." : "GitHub website sign-in does not sign the extension in. Connect an account with private repository access or a token with this repository's Contents read permission in extension settings."}`);
     let roots = [file];
     let discoveryWarning = null;
-    if (/\.kicad_sch$/i.test(file) && listDirectory) {
+    if (/\.kicad_sch$/i.test(file) && (listDirectory || listSchematics)) {
       try {
+      const candidates = new Set([file]);
+      if (listSchematics) {
+        const listing = await listSchematics(repository, ref);
+        if (!Array.isArray(listing)) throw new Error("Provider returned an incomplete schematic repository listing.");
+        if (listing.length > PARENT_MAX_CANDIDATES) throw new Error("More than 128 parent-sheet candidates; open the project root directly.");
+        for (const path of listing) {
+          if (!validPath(path) || !/\.kicad_sch$/i.test(path)) throw new Error("Provider returned an unsafe schematic repository listing.");
+          candidates.add(path);
+          if (candidates.size > PARENT_MAX_CANDIDATES) throw new Error("More than 128 parent-sheet candidates; open the project root directly.");
+        }
+        if (!listing.includes(file)) throw new Error("The schematic repository listing omitted the requested drawing.");
+      } else {
       const parts = file.split("/");
       if (parts.length > 9) throw new Error("Schematic path is too deep for bounded parent-sheet discovery.");
-      const candidates = new Set([file]);
       for (let index = parts.length - 1; index >= 0; index--) {
         const directory = parts.slice(0, index).join("/");
         const listing = await listDirectory(repository, ref, directory);
@@ -137,7 +173,9 @@
           if (candidates.size > PARENT_MAX_CANDIDATES) throw new Error("More than 128 parent-sheet candidates; open the project root directly.");
         }
       }
+      }
       await readBatch([...candidates]);
+      for (const path of candidates) if (cache.get(path) === null) throw new Error(`Parent-sheet source unavailable: ${path}`);
       const edges = new Map();
       for (const path of candidates) {
         const content = cache.get(path);
@@ -149,12 +187,14 @@
         return false;
       };
       const ancestors = new Set([...candidates].filter((path) => cache.get(path) !== null && reachesLeaf(path)));
-      const childAncestors = new Set();
-      for (const path of ancestors) {
-        for (const child of edges.get(path) || []) if (ancestors.has(child)) childAncestors.add(child);
+      const root = rootSheetPath([...ancestors].map(path => ({path, content: cache.get(path)})), file);
+      if (root) roots = [root];
+      else {
+        // Keep discovery evidence and all parent branches available for explicit
+        // navigation when there is no defensible single root.
+        roots = [file, ...[...ancestors].filter(path => path !== file).sort()];
+        discoveryWarning = "The saved schematic hierarchy has multiple roots or a parent cycle. No unambiguous root sheet could be selected; choose a sheet in the navigator.";
       }
-      roots = [...ancestors].filter((path) => !childAncestors.has(path)).sort();
-      if (!roots.length) roots = [file];
       const reachable = new Set(), remaining = [...roots];
       while (remaining.length) {
         const path = remaining.pop(); if (reachable.has(path)) continue; reachable.add(path);
@@ -211,6 +251,6 @@
     return { load, clear };
   }
 
-  root.KiCadBrowserData = { validRepository, validRef, validPath, childPath, sheetFiles, loadProject, createModelAssetCache, fileByteLimit, PROJECT_MAX_BYTES, PROJECT_MAX_FILES, READ_CONCURRENCY };
+  root.KiCadBrowserData = { validRepository, validRef, validPath, childPath, sheetFiles, rootSheetPath, loadProject, createModelAssetCache, fileByteLimit, PROJECT_MAX_BYTES, PROJECT_MAX_FILES, READ_CONCURRENCY };
   if (typeof module === "object" && module.exports) module.exports = root.KiCadBrowserData;
 })(typeof globalThis === "object" ? globalThis : this);
