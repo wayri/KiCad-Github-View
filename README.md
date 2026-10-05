@@ -11,11 +11,11 @@
 
 **Interactive KiCad review inside GitHub and GitLab file pages.** Open schematics and PCB layouts as drawings, inspect saved parts and nets, compare revisions, and anchor review notes to the design. The viewer runs in the browser with our own schematic/PCB engine and the owner-authorized SPIKE 3D adapter. No KiCad installation, local companion process or rendering server is needed for the browser extension.
 
-[Download v0.12.20](https://github.com/wayri/KiCad-Github-View/releases/tag/v0.12.20) · [Install](docs/INSTALL.md) · [Comment integration](docs/COMMENTS.md) · [Git services](docs/GIT-HOSTS.md) · [Release notes](docs/releases/v0.12.20.md)
+[Download v0.12.21](https://github.com/wayri/KiCad-Github-View/releases/tag/v0.12.21) · [Install](docs/INSTALL.md) · [Comment integration](docs/COMMENTS.md) · [Git services](docs/GIT-HOSTS.md) · [Release notes](docs/releases/v0.12.21.md)
 
 The workspace has **Project · Schematic · Layout** tabs, with **Split view** and **Compare commits** on the same row. Schematics automatically open their saved root; navigate with the hierarchy tree, double-click sheet symbols, or use the top Back / Forward / Up / Root icons. Parent discovery follows saved links across repository folders, with diagnostics for incomplete or ambiguous hierarchies.
 
-![Root schematic navigation and compact workspace](docs/images/integration/root-workspace-navigation.png)
+![Pinned explorer and auto-hide side tabs](docs/images/integration/pinned-auto-hide-panes.png)
 
 This screenshot uses a synthetic drawing and local mock transport.
 
@@ -80,7 +80,7 @@ Properties and analytics come from the saved source revision. Missing settings a
 
 ## Install in Chrome or Edge
 
-1. Download **`kicad-visual-review-chrome-edge-brave-opera-vivaldi-chromium-0.12.20.zip`** from [Releases](https://github.com/wayri/KiCad-Github-View/releases/tag/v0.12.20). The GitHub **Source code** archives are not the prepared extension package.
+1. Download **`kicad-visual-review-chrome-edge-brave-opera-vivaldi-chromium-0.12.21.zip`** from [Releases](https://github.com/wayri/KiCad-Github-View/releases/tag/v0.12.21). The GitHub **Source code** archives are not the prepared extension package.
 2. Extract the ZIP into a permanent folder. Select the folder containing `manifest.json`, not the ZIP itself.
 3. Open `chrome://extensions` in Chrome/Chromium or `edge://extensions` in Edge.
 4. Enable **Developer mode**, select **Load unpacked**, and choose that folder.
@@ -92,10 +92,10 @@ The drawing toolbar contains the active sheet selector, Back/Forward/Up/Root nav
 
 Project drawing previews now open in focused mode by default, hiding the outer project tree and setup headers. **Show project controls** brings them back without reloading the drawing or losing a draft; **Close preview** returns to the project. A local 1707 × 960 check measured 80.3% unobscured drawing across the complete project viewer with a Comments panel open; at that height, the toolbar switches between Properties and Comments to keep the active panel usable. This used the actual renderer with mocked transport.
 
-Since v0.12.9, the viewer includes **Tall / Wide** controls to Properties, Comments and the explorer. Tall mode narrows the active panel and gives it more reading height without changing the drawing-area budget. Drag the bottom edge to resize its height; keyboard Home/End sets minimum/maximum height and arrow keys adjust it. Resize keys leave the drawing zoom unchanged. In short split panes, **Expand** temporarily uses full panel height for comfortable reading/editing; **Restore** returns to the drawing-area budget. Closing, switching panels or restoring retains the draft. This explicit reading mode reduces unobscured drawing space. At 600 x 500, a local renderer check retained 82.3% drawing space with the compact sidebar header visible; Expand provided 434 pixels of reading height. In compact-header mode the hidden panel body is removed from keyboard/accessibility navigation until expanded. The toolbar remains horizontally scrollable without a separate scrollbar row. These measurements used mocked transport. A local 1707 x 960 renderer check increased Comments from 343 to 531 pixels high while retaining 86.0% unobscured drawing area inside the viewer. This used mocked transport; it does not prove every installed host layout.
+Explorer, Properties and Comments use side tabs with **Pin / Unpin** and collapse arrows. Hover or click a side tab to reveal its full-height pane. Unpinned panes auto-hide after leaving or when interacting with the drawing; focused inputs and resizing remain accessible. Pin one or several panes to keep them beside the drawing. Properties and Comments share the right dock vertically when both are pinned. Width resizing and unsaved drafts are retained; pin choices last for the mounted viewer session.
 
 
-Panel heights adapt to target 86% of each drawing frame unobscured, including its toolbar and footer. When several panels would become too short, the viewer shows the active panel and lets you switch with the toolbar; closing panels restores the full canvas. Narrow split toolbars use icons with accessible labels, and split review keeps one compact header. Local browser verification at 1707 × 960 measured 86.0% with Properties and Comments open in a single viewer and 80.6% across a schematic/PCB split with one panel open in each pane. These are viewer-area measurements using the real renderer and mocked transport, not guarantees for the entire GitHub page or every window size. Small views show a space warning; **Focus view** hides panels. Installed-browser verification remains necessary.
+Auto-hidden panes leave the drawing area available apart from narrow side tabs and tools. Pinning reserves readable side space, with at least 35% of available dock width retained for the drawing when several panes are pinned. **Focus view** hides the docks. This replaces the former small-panel area budget and Expand/Tall modes.
 
 ![Compact toolbar and independent review sidebars, using an original synthetic schematic fixture](docs/images/viewport-sidebars.jpg)
 
@@ -183,10 +183,10 @@ Read [the complete comment guide](docs/COMMENTS.md) for authentication, permissi
 
 ## VS Code installation
 
-Download **`kicad-visual-review-vscode-0.12.20.vsix`** from Releases. In VS Code run **Extensions: Install from VSIX**, select the file and run **Developer: Reload Window**. Open a KiCad project folder and use **KiCad: Open Visual Viewer** or **Reopen Editor With → KiCad Visual Review**. The **KiCad Review** explorer lists saved drawings and review sidecars.
+Download **`kicad-visual-review-vscode-0.12.21.vsix`** from Releases. In VS Code run **Extensions: Install from VSIX**, select the file and run **Developer: Reload Window**. Open a KiCad project folder and use **KiCad: Open Visual Viewer** or **Reopen Editor With → KiCad Visual Review**. The **KiCad Review** explorer lists saved drawings and review sidecars.
 
 ```sh
-code --install-extension kicad-visual-review-vscode-0.12.20.vsix --force
+code --install-extension kicad-visual-review-vscode-0.12.21.vsix --force
 ```
 
 Local notes use `.kicad-review.json` in the workspace root (or drawing directory outside a workspace). Filesystem-provider permissions still apply. The VSIX is not currently published in Visual Studio Marketplace. See [the VS Code guide](vscode-extension/README.md).
@@ -262,4 +262,4 @@ See [third-party notices](THIRD-PARTY-NOTICES.md) for distributed dependencies a
 
 Authentication protection, encryption limits and verification status are documented in [SECURITY.md](SECURITY.md). Supported Chrome sessions retain encrypted credentials through background idle; browser restart or extension reload requires sign-in again. Other browsers also lose sessions on background restart. Uninstall does not revoke GitHub authorization.
 
-Comment actions reveal a usable composer even in a short split pane or Focus view. Expand temporarily uses more drawing space; close the panel to return to the drawing. Type `@` directly in the comment box to suggest repository accounts, or type at least two characters to search users; select a suggestion with the mouse or arrow keys and Enter. Suggestions do not grant repository access. Paired views cross-highlight saved parts and nets, including unambiguous sheet-qualified net names; reused or ambiguous sheet instances require explicit selection.
+Comment actions reveal a usable composer even in a short split pane or Focus view. The full-height pane can auto-hide or remain pinned; collapse it to return to the drawing. Type `@` directly in the comment box to suggest repository accounts, or type at least two characters to search users; select a suggestion with the mouse or arrow keys and Enter. Suggestions do not grant repository access. Paired views cross-highlight saved parts and nets, including unambiguous sheet-qualified net names; reused or ambiguous sheet instances require explicit selection.

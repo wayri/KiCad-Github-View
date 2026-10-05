@@ -152,7 +152,7 @@
     // This also applies to project, paired and VS Code viewers without copied markup.
     const workspaceElement=$("reviewWorkspace"), sidebarState={properties:false,comments:false,navigator:false};
     const sidebarWidths={properties:300,comments:340,navigator:260};let activeSidebar="properties",commentTab="view",commentCategory="all";
-    const sectionState=new Map(),resizeCleanups=[],sidebarHeights={properties:null,comments:null,navigator:null},tallSidebars=new Map(),expandedSidebars=new Set();
+    const sectionState=new Map(),resizeCleanups=[],pinnedSidebars=new Set(),dockButtons=new Map(),hideTimers=new Map(),hoveredSidebars=new Set(),draggingSidebars=new Set();let dockDisposed=false;
     function collapsible(title,nodes,open=true,key=title){
       const details=make("details");details.className="sidebar-section";details.open=sectionState.has(key)?sectionState.get(key):open;
       details.append(make("summary",title),...nodes.filter(Boolean));details.addEventListener("toggle",()=>sectionState.set(key,details.open));return details;
@@ -289,64 +289,72 @@
     for(const id of ["propertiesButton","commentsButton"]){$(id).setAttribute("aria-controls",id==="propertiesButton"?"designInspector":"commentsSidebar");}
     function showCommentTab(tab){commentTab=tab;addPane.hidden=tab!=="add";viewPane.hidden=tab!=="view";for(const [node,name]of [[addTab,"add"],[viewTab,"view"]]){node.setAttribute("aria-selected",String(tab===name));node.tabIndex=tab===name?0:-1;}}
     commentTabs.addEventListener("keydown",event=>{if(!['ArrowLeft','ArrowRight','Home','End'].includes(event.key))return;event.preventDefault();const tab=event.key==="Home"?"add":event.key==="End"?"view":commentTab==="add"?"view":"add";showCommentTab(tab);(tab==="add"?addTab:viewTab).focus();});showCommentTab("view");
+    const paneNames={navigator:'Explorer',properties:'Properties',comments:'Comments'};
+    const paneIds={navigator:'designNavigator',properties:'designInspector',comments:'commentsSidebar'};
+    function cancelAutoHide(name){clearTimeout(hideTimers.get(name));hideTimers.delete(name);}
     function layoutSidebars(){
       const width=workspaceElement.getBoundingClientRect().width||root.innerWidth||800;
-      const required=Object.keys(sidebarState).reduce((sum,name)=>sum+(sidebarState[name]?sidebarWidths[name]:0),480);
-      const workspaceHeight=workspaceElement.getBoundingClientRect().height||600,frameHeight=document.body?.getBoundingClientRect().height||root.innerHeight||workspaceHeight;
-      // Target 86% of the entire viewer; retain a usable header in short panes.
-      const totalArea=width*frameHeight,panelBudget=Math.max(0,Math.min(totalArea*.14,width*workspaceHeight-totalArea*.86));
-      const requestedWidth=Object.keys(sidebarState).reduce((sum,name)=>sum+(sidebarState[name]?Math.min(sidebarWidths[name],Math.max(0,width-32)):0),0);
-      // Switch panels rather than squeezing several into unusably short strips.
-      const overlay=Object.keys(sidebarState).some(name=>sidebarState[name]&&expandedSidebars.has(name))||tallSidebars.has(activeSidebar)||width<required||(requestedWidth>0&&panelBudget/requestedWidth<180);workspaceElement.classList.toggle("sidebar-overlays",overlay);
-      workspaceElement.classList.toggle("two-sidebars",!overlay&&sidebarState.properties&&sidebarState.comments);workspaceElement.style.setProperty("--comments-sidebar-width",sidebarWidths.comments+"px");
-      const visiblePanels=[];
-      for(const [name,id,buttonId]of [["properties","designInspector","propertiesButton"],["comments","commentsSidebar","commentsButton"],["navigator","designNavigator","partsButton"]]){
-        const visible=sidebarState[name]&&(!overlay||activeSidebar===name);$(id).hidden=!visible;$(buttonId).setAttribute("aria-pressed",String(visible));$(buttonId).setAttribute("aria-expanded",String(visible));
-        if(visible)visiblePanels.push({name,panel:$(id)});
+      const height=workspaceElement.getBoundingClientRect().height||600;
+      const rightPinned=['properties','comments'].filter(name=>sidebarState[name]&&pinnedSidebars.has(name));
+      const leftPinned=sidebarState.navigator&&pinnedSidebars.has('navigator');
+      const requestedLeft=leftPinned?sidebarWidths.navigator:0,requestedRight=Math.max(0,...rightPinned.map(name=>sidebarWidths[name]));
+      // Pinned panes share the right dock; preserve at least 35% for the drawing.
+      const available=Math.max(0,width-88),requested=requestedLeft+requestedRight;
+      const scale=requested?Math.min(1,available*.65/requested):1;
+      const leftWidth=Math.round(requestedLeft*scale),rightWidth=Math.round(requestedRight*scale);
+      workspaceElement.classList.toggle('docked-sidebars',true);
+      workspaceElement.classList.toggle('sidebar-overlays',false);workspaceElement.classList.toggle('two-sidebars',false);
+      workspaceElement.style.setProperty('--pinned-left-width',leftWidth+'px');workspaceElement.style.setProperty('--pinned-right-width',rightWidth+'px');
+      for(const [name,id,buttonId]of [['properties','designInspector','propertiesButton'],['comments','commentsSidebar','commentsButton'],['navigator','designNavigator','partsButton']]){
+        const panel=$(id),visible=sidebarState[name],pinned=pinnedSidebars.has(name);
+        panel.hidden=!visible;panel.classList.toggle('pinned-sidebar',pinned);panel.classList.toggle('auto-hide-sidebar',!pinned);
+        $(buttonId).setAttribute('aria-pressed',String(visible));$(buttonId).setAttribute('aria-expanded',String(visible));
+        const dock=dockButtons.get(name);if(dock){dock.setAttribute('aria-expanded',String(visible));dock.setAttribute('aria-pressed',String(visible));dock.title='Open '+paneNames[name]+(pinned?' (pinned)':' (auto-hide)');}
+        const pin=$('pin'+name[0].toUpperCase()+name.slice(1));if(pin){pin.setAttribute('aria-pressed',String(pinned));pin.textContent=pinned?'Unpin':'Pin';pin.title=pinned?'Unpin to auto-hide this pane':'Pin this pane open';}
+        if(!visible)continue;
+        let panelWidth=Math.min(sidebarWidths[name],Math.max(120,width-88)),top=0,panelHeight=height;
+        if(pinned){panelWidth=name==='navigator'?leftWidth:rightWidth;if(name!=='navigator'){const index=rightPinned.indexOf(name);panelHeight=height/rightPinned.length;top=index*panelHeight;}}
+        panel.style.width=panelWidth+'px';panel.style.flexBasis=panelWidth+'px';panel.style.height=panelHeight+'px';panel.style.top=top+'px';panel.style.bottom='auto';
+        panel.style.left=name==='navigator'?'24px':'auto';panel.style.right=name==='navigator'?'auto':'calc(var(--tool-strip-width,40px) + 24px)';
       }
-      const visibleWidth=visiblePanels.reduce((sum,item)=>sum+Math.min(sidebarWidths[item.name],Math.max(0,width-32)),0);
-      const budgetHeight=visibleWidth?panelBudget/visibleWidth:workspaceHeight,panelHeight=Math.min(workspaceHeight,Math.max(40,budgetHeight));
-      for(const {name,panel}of visiblePanels){
-        const expanded=expandedSidebars.has(name),maxHeight=expanded?workspaceHeight:panelHeight;
-        const height=sidebarHeights[name]===null||expanded?maxHeight:Math.min(maxHeight,Math.max(Math.min(180,maxHeight),sidebarHeights[name]));panel.style.height=height+'px';panel.classList.toggle('expanded-sidebar',expanded);panel.classList.toggle('compact-sidebar',height<180&&!expanded);
-        const handle=panel.querySelector('.sidebar-height-resizer');if(handle){handle.setAttribute('aria-valuemin',String(Math.round(Math.min(180,maxHeight))));handle.setAttribute('aria-valuemax',String(Math.round(maxHeight)));handle.setAttribute('aria-valuenow',String(Math.round(height)));}
-      }
-      panelSpaceStatus.hidden=!visiblePanels.length||budgetHeight>=180||expandedSidebars.has(activeSidebar);panelSpaceStatus.title='Small view: use Tall for more reading height, or Expand for a full-height panel. Expand temporarily reduces drawing space.';panelSpaceStatus.textContent=panelSpaceStatus.hidden?'':'Panel access: Tall or Expand.';
-      $("commentsPane").hidden=commentsSidebar.hidden;
+      panelSpaceStatus.hidden=true;$("commentsPane").hidden=commentsSidebar.hidden;
     }
-    function showNavigator(open=true){sidebarState.navigator=open;if(open)activeSidebar="navigator";layoutSidebars();}
-    function hideSidebar(name){sidebarState[name]=false;if(activeSidebar===name)activeSidebar=Object.keys(sidebarState).find(key=>sidebarState[key])||"properties";layoutSidebars();}
-    function hideInspector(){sidebarState.properties=sidebarState.comments=false;layoutSidebars();}
-    function inspector(pane,tab){restoreFocusView();const name=pane==="properties"?"properties":"comments";sidebarState[name]=true;activeSidebar=name;if(tab)showCommentTab(tab);if(pane==="github"){showCommentTab("view");collaborationGroup.open=true;}layoutSidebars();
-      // An explicit comment action must reveal content, even in a short split pane.
-      if(name==='comments'&&(tab==='add'||commentsSidebar.classList.contains('compact-sidebar'))){
-        expandedSidebars.add(name);const expand=$('expandComments');if(expand){expand.textContent='Restore';expand.setAttribute('aria-pressed','true');}layoutSidebars();
+    function activatePane(name){for(const other of Object.keys(sidebarState))if(other!==name&&!pinnedSidebars.has(other))hideSidebar(other);}
+    function showNavigator(open=true){if(open)activatePane('navigator');cancelAutoHide('navigator');sidebarState.navigator=open;if(open)activeSidebar='navigator';layoutSidebars();}
+    function hideSidebar(name){cancelAutoHide(name);sidebarState[name]=false;if(activeSidebar===name)activeSidebar=Object.keys(sidebarState).find(key=>sidebarState[key])||'properties';layoutSidebars();}
+    function hideInspector(){hideSidebar('properties');hideSidebar('comments');}
+    function inspector(pane,tab){restoreFocusView();const name=pane==='properties'?'properties':'comments';activatePane(name);cancelAutoHide(name);sidebarState[name]=true;activeSidebar=name;if(tab)showCommentTab(tab);if(pane==='github'){showCommentTab('view');collaborationGroup.open=true;}layoutSidebars();}
+    function autoHide(name){
+      if(dockDisposed)return;cancelAutoHide(name);if(pinnedSidebars.has(name))return;
+      hideTimers.set(name,setTimeout(()=>{hideTimers.delete(name);const panel=$(paneIds[name]);if(!pinnedSidebars.has(name)&&!hoveredSidebars.has(name)&&!draggingSidebars.has(name)&&!panel.contains(document.activeElement))hideSidebar(name);},350));
+    }
+    function revealDock(name){
+      cancelAutoHide(name);if(!pinnedSidebars.has(name))for(const other of Object.keys(sidebarState))if(other!==name&&!pinnedSidebars.has(other))hideSidebar(other);
+      if(name==='navigator')showNavigator();else inspector(name);
+    }
+    for(const [edge,names]of [['left',['navigator']],['right',['properties','comments']]]){
+      const rail=make('nav');rail.className='sidebar-dock '+edge;rail.setAttribute('aria-label',edge==='left'?'Explorer dock':'Inspection dock');workspaceElement.append(rail);
+      for(const name of names){
+        const tab=button(paneNames[name],()=>revealDock(name));tab.id='dock'+name[0].toUpperCase()+name.slice(1);tab.className='dock-tab';tab.setAttribute('aria-controls',paneIds[name]);tab.setAttribute('aria-expanded','false');dockButtons.set(name,tab);rail.append(tab);
+        tab.addEventListener('pointerenter',()=>{hoveredSidebars.add(name);revealDock(name);});tab.addEventListener('pointerleave',()=>{hoveredSidebars.delete(name);autoHide(name);});tab.addEventListener('focus',()=>cancelAutoHide(name));tab.addEventListener('blur',()=>autoHide(name));
+        const panel=$(paneIds[name]),header=panel.querySelector(name==='navigator'?'.panel-heading':'.sidebar-heading');
+        const pin=button('Pin',()=>{if(pinnedSidebars.has(name))pinnedSidebars.delete(name);else pinnedSidebars.add(name);cancelAutoHide(name);layoutSidebars();});pin.id='pin'+name[0].toUpperCase()+name.slice(1);pin.setAttribute('aria-label','Pin '+paneNames[name]+' pane');pin.setAttribute('aria-pressed','false');header?.insertBefore(pin,header.children[header.children.length-1]);
+        const close=name==='navigator'?$('closeNavigator'):name==='properties'?$('closeInspector'):closeComments;close.textContent=edge==='left'?'‹':'›';close.setAttribute('data-icon',edge==='left'?'back':'forward');close.title='Collapse '+paneNames[name]+' to the side';close.setAttribute('aria-label','Collapse '+paneNames[name]+' pane to the side');
+        panel.addEventListener('pointerenter',()=>{hoveredSidebars.add(name);cancelAutoHide(name);});panel.addEventListener('pointerleave',()=>{hoveredSidebars.delete(name);autoHide(name);});panel.addEventListener('focusin',()=>cancelAutoHide(name));panel.addEventListener('focusout',()=>autoHide(name));
       }
     }
+    const hideUnpinned=()=>{for(const name of Object.keys(sidebarState))if(!pinnedSidebars.has(name))hideSidebar(name);};
+    $('drawingHost').addEventListener('pointerdown',hideUnpinned);resizeCleanups.push(()=>{dockDisposed=true;for(const name of hideTimers.keys())cancelAutoHide(name);$('drawingHost').removeEventListener('pointerdown',hideUnpinned);});
     function resizeSidebar(name,panel,edge){
       const handle=make("div");handle.className="sidebar-resizer "+edge;handle.tabIndex=0;handle.setAttribute("role","separator");handle.setAttribute("aria-orientation","vertical");handle.setAttribute("aria-label",`Resize ${name} sidebar`);handle.setAttribute("aria-valuemin","220");handle.setAttribute("aria-valuemax","560");panel.append(handle);
       const setWidth=value=>{const max=Math.min(560,Math.max(220,workspaceElement.getBoundingClientRect().width-32));sidebarWidths[name]=Math.max(220,Math.min(max,value));panel.style.width=panel.style.flexBasis=sidebarWidths[name]+"px";handle.setAttribute("aria-valuenow",String(sidebarWidths[name]));layoutSidebars();};setWidth(sidebarWidths[name]);
       let drag=null;
-      handle.addEventListener("pointerdown",event=>{if(event.button!==0)return;event.preventDefault();drag={x:event.clientX,width:sidebarWidths[name],id:event.pointerId};handle.setPointerCapture?.(event.pointerId);handle.classList.toggle("resizing",true);});
+      handle.addEventListener("pointerdown",event=>{if(event.button!==0)return;event.preventDefault();cancelAutoHide(name);draggingSidebars.add(name);drag={x:event.clientX,width:sidebarWidths[name],id:event.pointerId};handle.setPointerCapture?.(event.pointerId);handle.classList.toggle("resizing",true);});
       handle.addEventListener("pointermove",event=>{if(drag&&event.pointerId===drag.id)setWidth(drag.width+(event.clientX-drag.x)*(edge==="left"?-1:1));});
-      const stop=()=>{drag=null;handle.classList.toggle("resizing",false);};for(const type of ["pointerup","pointercancel","lostpointercapture"])handle.addEventListener(type,stop);
+      const stop=()=>{drag=null;draggingSidebars.delete(name);handle.classList.toggle("resizing",false);};for(const type of ["pointerup","pointercancel","lostpointercapture"])handle.addEventListener(type,stop);
       handle.addEventListener("keydown",event=>{if(!['ArrowLeft','ArrowRight','Home','End'].includes(event.key))return;event.preventDefault();event.stopPropagation();setWidth(event.key==="Home"?220:event.key==="End"?560:sidebarWidths[name]+(event.key==="ArrowLeft"?-1:1)*(edge==="left"?-1:1)*(event.shiftKey?40:10));});resizeCleanups.push(stop);
     }
     resizeSidebar("properties",propertiesSidebar,"left");resizeSidebar("comments",commentsSidebar,"left");resizeSidebar("navigator",$("designNavigator"),"right");
-    function addPanelSizing(name,panel,header){
-      const expand=button('Expand',()=>{if(expandedSidebars.has(name))expandedSidebars.delete(name);else{expandedSidebars.add(name);activeSidebar=name;}expand.textContent=expandedSidebars.has(name)?'Restore':'Expand';expand.setAttribute('aria-pressed',String(expandedSidebars.has(name)));layoutSidebars();});
-      expand.id='expand'+name[0].toUpperCase()+name.slice(1);expand.title='Use full panel height for reading; Restore returns to the drawing-area budget';expand.setAttribute('aria-label',`Toggle expanded ${name} sidebar`);expand.setAttribute('aria-pressed','false');header?.insertBefore(expand,header.children[header.children.length-1]);
-      const tall=button('Tall',()=>{if(tallSidebars.has(name)){sidebarWidths[name]=tallSidebars.get(name);tallSidebars.delete(name);}else{tallSidebars.set(name,sidebarWidths[name]);sidebarWidths[name]=220;sidebarHeights[name]=null;activeSidebar=name;}
-        panel.style.width=panel.style.flexBasis=sidebarWidths[name]+'px';const widthHandle=panel.querySelector('.sidebar-resizer');widthHandle?.setAttribute('aria-valuenow',String(sidebarWidths[name]));tall.textContent=tallSidebars.has(name)?'Wide':'Tall';tall.setAttribute('aria-pressed',String(tallSidebars.has(name)));layoutSidebars();});
-      tall.id='tall'+name[0].toUpperCase()+name.slice(1);tall.title='Use a narrow, taller panel while retaining drawing area';tall.setAttribute('aria-label',`Toggle tall ${name} sidebar`);tall.setAttribute('aria-pressed','false');header?.insertBefore(tall,header.children[header.children.length-1]);
-      const handle=make('div');handle.className='sidebar-height-resizer';handle.tabIndex=0;handle.setAttribute('role','separator');handle.setAttribute('aria-orientation','horizontal');handle.setAttribute('aria-label',`Resize ${name} sidebar height`);panel.append(handle);let drag=null;
-      const setHeight=value=>{if(expandedSidebars.has(name)){expandedSidebars.delete(name);expand.textContent='Expand';expand.setAttribute('aria-pressed','false');}sidebarHeights[name]=value;layoutSidebars();};
-      handle.addEventListener('pointerdown',event=>{if(event.button!==0)return;event.preventDefault();drag={y:event.clientY,height:parseFloat(panel.style.height)||180,id:event.pointerId};handle.setPointerCapture?.(event.pointerId);handle.classList.toggle('resizing',true);});
-      handle.addEventListener('pointermove',event=>{if(drag&&event.pointerId===drag.id)setHeight(drag.height+event.clientY-drag.y);});
-      const stop=()=>{drag=null;handle.classList.toggle('resizing',false);};for(const type of ['pointerup','pointercancel','lostpointercapture'])handle.addEventListener(type,stop);
-      handle.addEventListener('keydown',event=>{if(!['ArrowUp','ArrowDown','Home','End'].includes(event.key))return;event.preventDefault();event.stopPropagation();setHeight(event.key==='End'?null:event.key==='Home'?180:(parseFloat(panel.style.height)||180)+(event.key==='ArrowUp'?-1:1)*(event.shiftKey?40:10));});resizeCleanups.push(stop);
-    }
-    addPanelSizing('properties',propertiesSidebar,propertiesSidebar.querySelector('.sidebar-heading'));addPanelSizing('comments',commentsSidebar,commentsSidebar.querySelector('.sidebar-heading'));addPanelSizing('navigator',$('designNavigator'),$('designNavigator').querySelector('.panel-heading'));
     const sidebarObserver=root.ResizeObserver?new root.ResizeObserver(layoutSidebars):null;sidebarObserver?.observe(workspaceElement);root.addEventListener?.("resize",layoutSidebars);
     function propertySection(title,entries,collapsed=false){
       const values=Object.entries(entries).filter(([,value])=>value!==undefined&&value!==null);if(!values.length)return;

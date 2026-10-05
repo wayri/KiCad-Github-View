@@ -219,3 +219,15 @@ body[data-workspace="true"] #projectButton,body[data-workspace="true"] #viewOppo
 #sheetHelp{display:none}
 #sheetCount{margin:0;font-size:11px;line-height:16px}
 #sheetList{min-height:90px}
+
+/* Side docks: transient panes auto-hide; pinned panes remain beside the canvas. */
+#reviewWorkspace.docked-sidebars{padding-left:calc(24px + var(--pinned-left-width,0px));padding-right:calc(var(--tool-strip-width,40px) + 24px + var(--pinned-right-width,0px))}
+#reviewWorkspace.docked-sidebars #drawingTools{position:absolute;top:0;right:0;bottom:0;box-sizing:border-box}
+.sidebar-dock{position:absolute;top:0;bottom:0;width:24px;z-index:9;display:flex;flex-direction:column;align-items:center;gap:4px;background:var(--panel);border:1px solid var(--line);padding:4px 0}
+.sidebar-dock.left{left:0}.sidebar-dock.right{right:var(--tool-strip-width,40px)}
+.sidebar-dock .dock-tab{writing-mode:vertical-rl;min-width:22px;width:22px;min-height:70px;padding:9px 3px;border-radius:3px;font-size:11px;background:transparent;border:1px solid transparent;flex-shrink:0}
+.sidebar-dock .dock-tab[aria-expanded=true]{background:var(--selected);color:var(--accent);border-color:var(--accent)}
+#reviewWorkspace.docked-sidebars #designNavigator,#reviewWorkspace.docked-sidebars .review-sidebar{max-width:none;min-height:0;z-index:10;border:1px solid var(--line);border-radius:0;box-shadow:0 5px 18px #0005;transition:none}
+#reviewWorkspace.docked-sidebars .pinned-sidebar{box-shadow:none}
+.sidebar-heading button[aria-pressed=true],.panel-heading button[aria-pressed=true]{background:var(--selected);color:var(--accent);border-color:var(--accent)}
+.drawing-focused .sidebar-dock{display:none!important}.drawing-focused #reviewWorkspace.docked-sidebars{padding:0}

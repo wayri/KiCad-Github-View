@@ -71,7 +71,7 @@ function workspaceRuntime(respond=async()=>[], hooks={}){
   workspace.attachCanvas(canvas);
   function load(){designs.set(file.path,design);canvas.design=design;canvas.primitives=design.primitives;workspace.draw();}
   function key(value,extra={}){const event={key:value,target:canvas.canvas,composedPath:()=>[],preventDefault(){this.defaultPrevented=true;},...extra};for(const fn of keyHandlers)fn(event);return event;}
-  return{get,workspace,canvas,design,load,receipts,key,resize(width){hooks.width=width;resizeCallback?.();}};
+  return{get,workspace,canvas,design,load,receipts,key,document:context.document,resize(width){hooks.width=width;resizeCallback?.();}};
 }
 test('workspace initializes net geometry after the drawing loads without a file-path change',()=>{
   const view=workspaceRuntime();assert.equal(view.get('netList').children.length,0);view.load();assert.equal(view.get('netCount').textContent,'1 net');
@@ -85,36 +85,27 @@ test('part inspector groups saved properties and offers only connected net selec
 });
 
 function uiEvent(type,values){const event=new Event(type,{cancelable:true});Object.assign(event,values);return event;}
-test('Properties and Comments are independent collapsible sidebars with bounded obscured area',()=>{
+test('pinned properties and comments share the side dock and collapse independently',()=>{
  const view=workspaceRuntime(undefined,{width:1600});view.load();
- assert.equal(view.get('designInspector').hidden,true);assert.equal(view.get('commentsSidebar').hidden,true);assert.equal(view.get('designNavigator').hidden,true);
- view.get('propertiesButton').click();view.get('commentsButton').click();
+ assert.equal(view.get('designInspector').hidden,true);assert.equal(view.get('commentsSidebar').hidden,true);
+ view.get('propertiesButton').click();view.get('pinProperties').click();view.get('commentsButton').click();view.get('pinComments').click();
  assert.equal(view.get('designInspector').hidden,false);assert.equal(view.get('commentsSidebar').hidden,false);
  assert.equal(view.get('commentsPane').parentElement.id,'commentsSidebar');assert.equal(view.get('propertiesPane').parentElement.id,'designInspector');
- assert.equal(view.get('reviewWorkspace').classList.contains('two-sidebars'),true);
- const obscured=(parseFloat(view.get('designInspector').style.width)+parseFloat(view.get('commentsSidebar').style.width))*parseFloat(view.get('commentsSidebar').style.height);
- assert.ok(obscured<=1600*600*.18+1,'panels together obscure at most 18% of the frame');
- view.get('closeInspector').click();assert.equal(view.get('designInspector').hidden,true);assert.equal(view.get('commentsSidebar').hidden,false);
- assert.equal(view.get('propertiesButton').attributes['aria-expanded'],'false');assert.equal(view.get('commentsButton').attributes['aria-expanded'],'true');
- view.get('closeComments').click();assert.equal(view.get('commentsSidebar').hidden,true);
+ assert.equal(view.get('designInspector').style.height,'300px');assert.equal(view.get('commentsSidebar').style.top,'300px');assert.equal(view.get('reviewWorkspace').style['--pinned-right-width'],'340px');
+ view.get('closeInspector').click();assert.equal(view.get('designInspector').hidden,true);assert.equal(view.get('commentsSidebar').style.height,'600px');
+ assert.equal(view.get('dockProperties').attributes['aria-expanded'],'false');view.get('dockProperties').click();assert.equal(view.get('designInspector').hidden,false);assert.equal(view.get('pinProperties').attributes['aria-pressed'],'true');
+ view.workspace.dispose();
 });
-test('narrow and resized paired panes show the active sidebar without losing open state',()=>{
- const view=workspaceRuntime(undefined,{width:1600});view.get('propertiesButton').click();view.get('commentsButton').click();view.resize(600);
- assert.equal(view.get('designInspector').hidden,true);assert.equal(view.get('commentsSidebar').hidden,false);assert.equal(view.get('reviewWorkspace').classList.contains('sidebar-overlays'),true);
- view.get('propertiesButton').click();assert.equal(view.get('commentsSidebar').hidden,true);assert.equal(view.get('designInspector').hidden,false);
- view.resize(1600);assert.equal(view.get('commentsSidebar').hidden,false);assert.equal(view.get('designInspector').hidden,false);
- view.resize(350);assert.equal(view.get('panelSpaceStatus').hidden,false);
+test('narrow views retain usable full-height transient panes and drafts across resizing',()=>{
+ const view=workspaceRuntime(undefined,{width:600,frameHeight:500,workspaceHeight:440});view.get('newComment').click();view.get('commentText').value='Keep draft';
+ assert.equal(view.get('commentsSidebar').style.height,'440px');view.get('propertiesButton').click();assert.equal(view.get('commentsSidebar').hidden,true);
+ view.resize(350);view.get('dockComments').click();assert.equal(view.get('commentsSidebar').hidden,false);assert.equal(view.get('commentText').value,'Keep draft');assert.equal(view.get('reviewWorkspace').style['--pinned-right-width'],'0px');
+ view.workspace.dispose();
 });
-test('short split views reveal comment content and switch panels instead of hiding the composer',()=>{
- const view=workspaceRuntime(undefined,{width:1600,frameHeight:500,workspaceHeight:440});
- view.get('partsButton').click();view.get('propertiesButton').click();view.get('commentsButton').click();
- assert.equal(view.get('designInspector').hidden,true);assert.equal(view.get('designNavigator').hidden,true);assert.equal(view.get('commentsSidebar').hidden,false);
- const area=1600*440-parseFloat(view.get('commentsSidebar').style.width)*parseFloat(view.get('commentsSidebar').style.height);
- assert.equal(view.get('commentsSidebar').classList.contains('compact-sidebar'),false);assert.equal(view.get('commentsPane').hidden,false);assert.equal(parseFloat(view.get('commentsSidebar').style.height),440);
- view.get('propertiesButton').click();assert.equal(view.get('designInspector').hidden,false);assert.equal(view.get('commentsSidebar').hidden,true);
- view.resize(350);
- const smallArea=350*440-Math.min(318,parseFloat(view.get('designInspector').style.width))*parseFloat(view.get('designInspector').style.height);
- assert.ok(smallArea/(350*500)>=.80-1e-6,'the accessible header preserves at least 80% in this short frame');
+test('unpinned panes collapse on drawing interaction while pinned panes remain open',()=>{
+ const view=workspaceRuntime();view.get('partsButton').click();view.get('pinNavigator').click();view.get('commentsButton').click();
+ view.get('drawingHost').dispatchEvent(new Event('pointerdown'));assert.equal(view.get('designNavigator').hidden,false);assert.equal(view.get('commentsSidebar').hidden,true);
+ view.get('dockComments').click();assert.equal(view.get('commentsSidebar').hidden,false);assert.equal(view.get('designNavigator').hidden,false);view.workspace.dispose();
 });
 test('switching comment subtabs and collapsing a sidebar preserve an unsaved draft and never publish',async()=>{
  const calls=[];const view=workspaceRuntime(async message=>{calls.push(message);return[];},{width:1600});view.load();view.get('newComment').click();view.get('commentText').value='Unsaved review';
@@ -520,28 +511,23 @@ test('uncertain posting exposes a read-only recovery control and saves its confi
  const recovery=calls.find(m=>m.type==='github-recover-publication');assert.equal(recovery.recoveryNumber,19);assert.equal(recovery.destination,'new-issue');assert.equal(calls.filter(m=>m.type==='github-publish-comment').length,1);assert.equal(notes[0].remoteRefs[0].url,ref.url);assert.match(view.get('commentStatus').textContent,/Recovered link to/);assert.equal(view.get('postComment').parentElement.querySelector('.publication-recovery'),null);
 });
 
-test('tall sidebar maximizes reading height without exceeding the obscured-area budget or losing other panel state',()=>{
- const view=workspaceRuntime(undefined,{width:1600});view.get('propertiesButton').click();view.get('commentsButton').click();view.get('addCommentTab').click();view.get('newComment').click();view.get('commentText').value='Keep this draft';view.get('expandComments').click();
- const comments=view.get('commentsSidebar'),before=parseFloat(comments.style.height);view.get('tallComments').click();
- assert.equal(view.get('designInspector').hidden,true);assert.equal(comments.hidden,false);assert.ok(parseFloat(comments.style.height)>before);assert.ok(parseFloat(comments.style.width)*parseFloat(comments.style.height)<=1600*600*.14+.1);assert.equal(view.get('commentText').value,'Keep this draft');assert.equal(view.get('tallComments').attributes['aria-pressed'],'true');
- view.get('tallComments').click();assert.equal(view.get('designInspector').hidden,false);assert.equal(comments.hidden,false);assert.equal(comments.style.width,'340px');assert.equal(view.get('commentText').value,'Keep this draft');
+test('auto-hide preserves focused comment input, hides after leaving, and restores its draft',async()=>{
+ const view=workspaceRuntime();view.get('newComment').click();view.get('commentText').value='Unsaved draft';view.document.activeElement=view.get('commentText');
+ view.get('commentsSidebar').dispatchEvent(new Event('pointerleave'));await new Promise(resolve=>setTimeout(resolve,380));assert.equal(view.get('commentsSidebar').hidden,false);
+ view.document.activeElement=null;view.get('commentsSidebar').dispatchEvent(new Event('focusout'));await new Promise(resolve=>setTimeout(resolve,380));assert.equal(view.get('commentsSidebar').hidden,true);
+ view.get('dockComments').dispatchEvent(new Event('pointerenter'));view.get('dockComments').click();assert.equal(view.get('commentsSidebar').hidden,false);assert.equal(view.get('commentText').value,'Unsaved draft');
+ view.get('dockComments').dispatchEvent(new Event('pointerleave'));view.get('commentsSidebar').dispatchEvent(new Event('pointerenter'));await new Promise(resolve=>setTimeout(resolve,380));assert.equal(view.get('commentsSidebar').hidden,false);view.workspace.dispose();
 });
-test('sidebar height resize supports keyboard, pointer cancellation and resize clamping without changing drafts',()=>{
- const view=workspaceRuntime(undefined,{width:1600});view.get('commentsButton').click();view.get('tallComments').click();const panel=view.get('commentsSidebar'),handle=panel.querySelector('.sidebar-height-resizer');
- const key=value=>{const event=new Event('keydown');Object.defineProperty(event,'key',{value});handle.dispatchEvent(event);};
- key('Home');assert.equal(panel.style.height,'180px');key('ArrowDown');assert.equal(panel.style.height,'190px');key('End');assert.ok(parseFloat(panel.style.height)>190);assert.equal(handle.attributes['aria-orientation'],'horizontal');
- const pointer=(type,y)=>{const event=new Event(type);Object.assign(event,{button:0,pointerId:2,clientY:y});handle.dispatchEvent(event);};pointer('pointerdown',600);pointer('pointermove',300);assert.equal(panel.style.height,'300px');pointer('pointercancel',300);pointer('pointermove',100);assert.equal(panel.style.height,'300px');
- view.resize(350);assert.ok(parseFloat(panel.style.width)*parseFloat(panel.style.height)<=350*600*.14+.1);assert.equal(handle.attributes['aria-valuenow'],String(Math.round(parseFloat(panel.style.height))));
+test('pinning prevents pending auto-hide; unpinning resumes it and disposal cancels timers',async()=>{
+ const view=workspaceRuntime();view.get('dockNavigator').click();view.get('designNavigator').dispatchEvent(new Event('pointerleave'));view.get('pinNavigator').click();await new Promise(resolve=>setTimeout(resolve,380));assert.equal(view.get('designNavigator').hidden,false);
+ view.get('pinNavigator').click();view.get('designNavigator').dispatchEvent(new Event('pointerleave'));await new Promise(resolve=>setTimeout(resolve,380));assert.equal(view.get('designNavigator').hidden,true);
+ view.get('dockNavigator').click();view.get('designNavigator').dispatchEvent(new Event('pointerleave'));view.workspace.dispose();await new Promise(resolve=>setTimeout(resolve,380));assert.equal(view.get('designNavigator').hidden,false);
 });
-
-test('explicit panel expansion makes short split comments usable and restores the drawing budget without losing drafts',()=>{
- const view=workspaceRuntime(undefined,{width:600,frameHeight:500,workspaceHeight:434});view.get('commentsButton').click();view.get('addCommentTab').click();view.get('newComment').click();view.get('commentText').value='Review draft survives';
- const panel=view.get('commentsSidebar');assert.equal(panel.classList.contains('compact-sidebar'),false);assert.equal(panel.style.height,'434px');assert.equal(view.get('expandComments').attributes['aria-pressed'],'true');assert.equal(view.get('commentText').value,'Review draft survives');
- view.get('closeComments').click();view.get('commentsButton').click();assert.equal(panel.style.height,'434px');assert.equal(view.get('commentText').value,'Review draft survives');view.resize(1600);view.get('propertiesButton').click();assert.equal(panel.hidden,true);assert.equal(view.get('designInspector').hidden,false);view.get('commentsButton').click();assert.equal(panel.hidden,false);assert.equal(panel.style.height,'434px');view.resize(600);
- view.get('expandComments').click();assert.ok(parseFloat(panel.style.height)<180);assert.equal(view.get('expandComments').attributes['aria-pressed'],'false');assert.match(view.get('panelSpaceStatus').title,/temporarily reduces drawing space/);
- const area=600*434-parseFloat(panel.style.width)*parseFloat(panel.style.height);assert.ok(area/(600*500)>=.80-1e-6);assert.ok(parseFloat(panel.style.height)>=40);
+test('three pinned panes retain drawing width and reuse width resizing',()=>{
+ const view=workspaceRuntime(undefined,{width:600});for(const name of ['Navigator','Properties','Comments']){view.get('dock'+name).click();view.get('pin'+name).click();}
+ const panel=view.get('commentsSidebar'),handle=panel.querySelector('.sidebar-resizer');handle.dispatchEvent(uiEvent('keydown',{key:'ArrowLeft',shiftKey:false}));
+ const reserved=parseFloat(view.get('reviewWorkspace').style['--pinned-left-width'])+parseFloat(view.get('reviewWorkspace').style['--pinned-right-width']);assert.ok(reserved<=(600-64)*.65+1);assert.equal(panel.style.height,'300px');assert.equal(view.get('pinComments').attributes['aria-pressed'],'true');view.workspace.dispose();
 });
-
  test('comment actions restore focus view and reveal the editor in short panes',()=>{
  const view=workspaceRuntime(undefined,{width:600,frameHeight:500,workspaceHeight:434});view.load();
  view.get('focusView').click();view.get('commentsButton').click();assert.equal(view.get('commentsSidebar').hidden,false);assert.equal(view.get('commentsSidebar').classList.contains('compact-sidebar'),false);
