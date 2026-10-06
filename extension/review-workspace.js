@@ -804,18 +804,38 @@
           const label = svg("text",{x:p.x+14,y:p.y-12,fill:"#aa5c13","font-size":12,"paint-order":"stroke",stroke:"#fff","stroke-width":3}); label.textContent = `Variant: ${item.properties.Value || ""}`; overlay.append(label);
         }
       }
-      const rulerPoints=measurePoints.length===1&&measurePreview?[measurePoints[0],measurePreview]:measurePoints;
-      if(rulerPoints.length===2){const a=screen(rulerPoints[0]),b=screen(rulerPoints[1]);if(a&&b){
+      const angleMode=$('rulerKind').value==='angle',required=angleMode?3:2;
+      const rulerPoints=measurePreview&&measurePoints.length&&measurePoints.length<required?[...measurePoints,measurePreview]:measurePoints;
+      const labelBoxes=[];
+      const label=(x,y,value)=>{const box=$('drawingHost').getBoundingClientRect(),width=value.length*7+12,height=24;
+        x=Math.max(7,Math.min(x,box.width-width-1));y=Math.max(18,Math.min(y,box.height-9));
+        for(let i=0;i<6&&labelBoxes.some(b=>x-6<b.x+b.width&&x+width-6>b.x&&y-16<b.y+height&&y+8>b.y);i++)y=Math.max(18,Math.min(y+(i<3?26:-52),box.height-9));
+        labelBoxes.push({x:x-6,y:y-16,width});overlay.append(svg('rect',{x:x-6,y:y-16,width,height,rx:4,class:'ruler-label-background'}));
+        const text=svg('text',{x,y,'font-size':12,'font-family':'system-ui, sans-serif',class:'ruler-label-text'});text.textContent=value;overlay.append(text);
+      };
+      if(angleMode&&rulerPoints.length>=2){const projected=rulerPoints.map(screen);if(projected.every(Boolean)){
+        const [a,v,b]=projected;
+        overlay.append(svg('path',{d:`M ${a.x} ${a.y} L ${v.x} ${v.y}`+(b?` L ${b.x} ${b.y}`:''),fill:'none',stroke:'#28a3cf','stroke-width':2,'stroke-dasharray':measurePoints.length<3?'5 3':'none'}));
+        for(const p of projected)overlay.append(svg('circle',{cx:p.x,cy:p.y,r:4,fill:'none',stroke:'#28a3cf','stroke-width':2}));
+        if(b){const result=KiCadReviewTools.angle(...rulerPoints);if(result){
+          const start=Math.atan2(a.y-v.y,a.x-v.x),end=Math.atan2(b.y-v.y,b.x-v.x),delta=Math.atan2(Math.sin(end-start),Math.cos(end-start)),radius=Math.min(36,Math.hypot(a.x-v.x,a.y-v.y)*.35,Math.hypot(b.x-v.x,b.y-v.y)*.35);
+          const at=t=>({x:v.x+radius*Math.cos(t),y:v.y+radius*Math.sin(t)}),from=at(start),to=at(start+delta);
+          overlay.append(svg('path',{d:`M ${from.x} ${from.y} A ${radius} ${radius} 0 0 ${delta>=0?1:0} ${to.x} ${to.y}`,fill:'none',stroke:'#28a3cf','stroke-width':2}));
+          const mid=start+delta/2;label(v.x+(radius+14)*Math.cos(mid),v.y+(radius+14)*Math.sin(mid),result.text);
+          $('measurementStatus').textContent=(measurePoints.length<3?'Live angle - ':'Pinned angle - ')+result.text;
+        }else $('measurementStatus').textContent='Angle needs two non-zero arms. Choose distinct points.';}
+      }}
+      if(!angleMode&&rulerPoints.length===2){const a=screen(rulerPoints[0]),b=screen(rulerPoints[1]);if(a&&b){
         if(boardMeasure)overlay.append(svg('rect',{x:Math.min(a.x,b.x),y:Math.min(a.y,b.y),width:Math.abs(b.x-a.x),height:Math.abs(b.y-a.y),fill:'none',stroke:'#28a3cf','stroke-width':1,'stroke-dasharray':'4 4'}));
         overlay.append(svg('path',{d:`M ${a.x} ${a.y} L ${b.x} ${a.y} L ${b.x} ${b.y}`,fill:'none',stroke:'#28a3cf','stroke-width':1,'stroke-dasharray':'3 4'}));
         overlay.append(svg('line',{x1:a.x,y1:a.y,x2:b.x,y2:b.y,stroke:'#28a3cf','stroke-width':2,'stroke-dasharray':measurePoints.length===1?'5 3':'none'}));
         for(const p of [a,b])overlay.append(svg('path',{d:`M ${p.x-5} ${p.y} h 10 M ${p.x} ${p.y-5} v 10`,stroke:'#28a3cf','stroke-width':2}));
-        const label=(x,y,value)=>{const box=$('drawingHost').getBoundingClientRect();x=Math.max(8,Math.min(x,box.width-value.length*7-8));y=Math.max(18,Math.min(y,box.height-12));const text=svg('text',{x,y,fill:'#006ca8',stroke:'#fff','stroke-width':3,'paint-order':'stroke','font-size':12});text.textContent=value;overlay.append(text);};
+
         const units=options.getRulerUnits?.()||'mm',result=KiCadReviewTools.ruler(...rulerPoints,units),factor=units==='mil'?1000/25.4:1;
         label((a.x+b.x)/2+8,(a.y+b.y)/2-8,boardMeasure?`${(boardMeasure.width*factor).toFixed(3)} x ${(boardMeasure.height*factor).toFixed(3)} ${units}`:`${(result.distance*factor).toFixed(3)} ${units} / ${result.angle.toFixed(1)} deg`);label((a.x+b.x)/2,a.y-12,`X: ${(Math.abs(result.dx)*factor).toFixed(3)} ${units}`);label(b.x+12,(a.y+b.y)/2,`Y: ${(Math.abs(result.dy)*factor).toFixed(3)} ${units}`);
         $('measurementStatus').textContent=(boardMeasure?'Board extents - ':measurePoints.length===1?'Live - ':'Pinned - ')+result.text;
       }}
-      if(measureMode&&rulerSnap&&measurePoints.length<2){const p=screen(rulerSnap.point);if(p){overlay.append(svg('circle',{cx:p.x,cy:p.y,r:6,fill:'none',stroke:rulerSnap.kind==='free'?'#28a3cf':'#d48100','stroke-width':2}));}}
+      if(measureMode&&rulerSnap&&measurePoints.length<required){const p=screen(rulerSnap.point);if(p){overlay.append(svg('circle',{cx:p.x,cy:p.y,r:6,fill:'none',stroke:rulerSnap.kind==='free'?'#28a3cf':'#d48100','stroke-width':2}));}}
       function areaRect(value,color){const a=screen({x:value.x,y:value.y}),b=screen({x:value.x+value.width,y:value.y+value.height});if(a&&b)overlay.append(svg('rect',{x:Math.min(a.x,b.x),y:Math.min(a.y,b.y),width:Math.abs(b.x-a.x),height:Math.abs(b.y-a.y),fill:color+'18',stroke:color,'stroke-width':2,'stroke-dasharray':'6 3'}));}
       for(const note of visibleNotes())if(note.anchor.area)areaRect(note.anchor.area,severityColors[note.severity||'info']);
       if(editor?.anchor.area&&editor.anchor.file===active&&!$('commentEditor').hidden)areaRect(editor.anchor.area,'#218bd0');
@@ -861,7 +881,7 @@
       const c=getCanvas(),at=point(event);if(!at)return null;
       const pitch=Number($('rulerPitch').value);if(!Number.isFinite(pitch)||pitch<.001||pitch>100){$('rulerSnapStatus').textContent='Grid spacing must be 0.001-100 mm';return null;}
       const primitives=(c.design?.primitives||[]).filter(p=>(!p.layer||c.visibleLayers.has(p.layer))&&(!c.focusedLayer||c.layerFocusMode!=='isolate'||p.layer===c.focusedLayer||p.layer==='Edge.Cuts'));
-      rulerSnap=KiCadReviewTools.snap(at,primitives,{mode:$('rulerSnap').value||'geometry-grid',pitch,zoom:c.viewport.camera.zoom,origin:measurePoints.length===1?measurePoints[0]:null,constrain:event.shiftKey,bypass:event.altKey,arcThrough:KiCadOwnedCanvas.arcThrough});
+      rulerSnap=KiCadReviewTools.snap(at,primitives,{mode:$('rulerSnap').value||'geometry-grid',pitch,zoom:c.viewport.camera.zoom,origin:measurePoints.length&&measurePoints.length<($('rulerKind').value==='angle'?3:2)?measurePoints.at(-1):null,constrain:event.shiftKey,bypass:event.altKey,arcThrough:KiCadOwnedCanvas.arcThrough});
       $('rulerSnapStatus').textContent=`${rulerSnap.kind} - ${rulerSnap.point.x.toFixed(4)}, ${rulerSnap.point.y.toFixed(4)} mm`+(rulerSnap.constrained?' - axis constrained':'');return rulerSnap.point;
     }
     function attachCanvas(canvas) {
@@ -872,14 +892,14 @@
         if(ignoreClick){ignoreClick=false;event.preventDefault();event.stopImmediatePropagation();return;}
         if(commentMode==='point'){event.preventDefault();event.stopImmediatePropagation();const at=point(event);if(at){setCommentMode(null);editComment(null,anchor(at,null));}return;}
         if (!measureMode) return; event.preventDefault();event.stopImmediatePropagation();const at=rulerPoint(event);if(!at)return;
-        if(measurePoints.length>=2)measurePoints=[];measurePoints.push(at);measurePreview=null;boardMeasure=null;
-        const result=measurePoints.length===2&&measurement(...measurePoints);
-        $("measurementStatus").textContent=result?KiCadReviewTools.ruler(...measurePoints,options.getRulerUnits?.()||'mm').text:"Choose the second measurement point.";draw();
+        const angleMode=$('rulerKind').value==='angle',required=angleMode?3:2;
+        if(measurePoints.length>=required)measurePoints=[];measurePoints.push(at);measurePreview=null;boardMeasure=null;
+        $('measurementStatus').textContent=angleMode?(measurePoints.length===1?'Choose the angle vertex.':measurePoints.length===2?'Choose the second arm endpoint.':''):'Choose the second measurement point.';draw();
       };
       const down=(event)=>{if(event.button===0&&commentMode==='area'){event.preventDefault();event.stopImmediatePropagation();areaStart=point(event);areaEnd=areaStart;canvas.canvas.setPointerCapture?.(event.pointerId);draw();}else if(event.button===2)rightDown={x:event.clientX,y:event.clientY,moved:false};};
-      const move=(event)=>{pointerWorld=point(event);if(measureMode&&event.buttons!==2&&event.buttons!==4){const at=rulerPoint(event);if(at){measurePreview=measurePoints.length===1?at:null;draw();}}if(areaStart&&commentMode==='area'){areaEnd=point(event);draw();}if(rightDown&&event.buttons===2&&Math.hypot(event.clientX-rightDown.x,event.clientY-rightDown.y)>4)rightDown.moved=true;};
+      const move=(event)=>{pointerWorld=point(event);if(measureMode&&event.buttons!==2&&event.buttons!==4){const at=rulerPoint(event);if(at){measurePreview=measurePoints.length&&measurePoints.length<($('rulerKind').value==='angle'?3:2)?at:null;draw();}}if(areaStart&&commentMode==='area'){areaEnd=point(event);draw();}if(rightDown&&event.buttons===2&&Math.hypot(event.clientX-rightDown.x,event.clientY-rightDown.y)>4)rightDown.moved=true;};
       const up=(event)=>{if(!areaStart||commentMode!=='area')return;event.preventDefault();event.stopImmediatePropagation();const a=areaStart,b=point(event);canvas.canvas.releasePointerCapture?.(event.pointerId);ignoreClick=true;try{const area=KiCadReviewTools.area(a,b);setCommentMode(null);editComment(null,{...anchor({x:area.x+area.width/2,y:area.y+area.height/2},null),area});}catch(error){areaStart=areaEnd=null;commentStatus(error.message,true);draw();}};
-      const leave=()=>{pointerWorld=null;if(measureMode&&measurePoints.length<2){measurePreview=rulerSnap=null;$("rulerSnapStatus").textContent="Move over the drawing to preview";draw();}};
+      const leave=()=>{pointerWorld=null;if(measureMode&&measurePoints.length<($('rulerKind').value==='angle'?3:2)){measurePreview=rulerSnap=null;$("rulerSnapStatus").textContent="Move over the drawing to preview";draw();}};
       const cancel=()=>{measurePreview=null;rulerSnap=null;areaStart=areaEnd=null;ignoreClick=false;draw();};
       const doubleClick=event=>{if(pcb||scene||measureMode||commentMode||event.button>0)return;const item=objectAt(point(event));if(item?.kind==='sheet'){event.preventDefault();openSubsheet(item);}};
       canvas.addEventListener("kicad:select",selection);canvas.canvas.addEventListener('dblclick',doubleClick);
@@ -996,10 +1016,11 @@
       try{if(file.size>1024*1024)throw new Error("Variant file exceeds 1 MiB.");const next=KiCadDesignModel.parseVariantConfig(await file.text(),file.name);installConfig(next);if(chrome.storage?.local)await chrome.storage.local.set({[variantKey]:next});}
       catch(error){notice(error.message);}finally{$("variantFile").value="";}
     };
-    $("measureButton").onclick=()=>{if(commentMode)setCommentMode(null);measureMode=!measureMode;measurePoints=[];measurePreview=rulerSnap=boardMeasure=null;$("rulerControls").hidden=!measureMode;getCanvas()?.canvas.classList?.toggle("ruler-mode",measureMode);$("measureBoard").hidden=!pcb;if(measureMode)getCanvas().gridPitch=Number($("rulerPitch").value)||1;$("measureButton").setAttribute("aria-pressed",String(measureMode));$("measurementStatus").textContent=measureMode?"Click a start point, move to preview, then click to finish.":"";draw();};
+    $("measureButton").onclick=()=>{if(commentMode)setCommentMode(null);measureMode=!measureMode;measurePoints=[];measurePreview=rulerSnap=boardMeasure=null;$("rulerControls").hidden=!measureMode;getCanvas()?.canvas.classList?.toggle("ruler-mode",measureMode);$("measureBoard").hidden=!pcb;if(measureMode)getCanvas().gridPitch=Number($("rulerPitch").value)||1;$("measureButton").setAttribute("aria-pressed",String(measureMode));$("measurementStatus").textContent=measureMode?($('rulerKind').value==='angle'?'Click first arm endpoint, vertex, then second arm endpoint.':'Click a start point, move to preview, then click to finish.'):"";draw();};
+    $('rulerKind').onchange=()=>{measurePoints=[];measurePreview=rulerSnap=boardMeasure=null;$('measurementStatus').textContent=$('rulerKind').value==='angle'?'Click first arm endpoint, vertex, then second arm endpoint.':'Click a start point';draw();};
     $('clearRuler').onclick=()=>{measurePoints=[];measurePreview=rulerSnap=boardMeasure=null;$('measurementStatus').textContent='Click a start point';$('rulerSnapStatus').textContent='Click a start point';draw();};
     $('rulerSnap').onchange=()=>{measurePreview=rulerSnap=null;draw();};$('rulerPitch').onchange=()=>{const pitch=Number($('rulerPitch').value);if(!Number.isFinite(pitch)||pitch<.001||pitch>100){$('rulerSnapStatus').textContent='Grid spacing must be 0.001-100 mm';return;}getCanvas().gridPitch=pitch;measurePreview=rulerSnap=null;getCanvas().draw();};
-    $('measureBoard').onclick=()=>{const extent=KiCadReviewTools.boardExtents(getCanvas()?.design?.primitives,KiCadOwnedCanvas.arcThrough);if(!extent){$('measurementStatus').textContent='No saved Edge.Cuts geometry to measure';return;}boardMeasure=extent;measurePoints=[{x:extent.x,y:extent.y},{x:extent.x+extent.width,y:extent.y+extent.height}];measurePreview=rulerSnap=null;draw();$('rulerSnapStatus').textContent='Saved outline bounding extents (not DRC validation)';};
+    $('measureBoard').onclick=()=>{$('rulerKind').value='distance';const extent=KiCadReviewTools.boardExtents(getCanvas()?.design?.primitives,KiCadOwnedCanvas.arcThrough);if(!extent){$('measurementStatus').textContent='No saved Edge.Cuts geometry to measure';return;}boardMeasure=extent;measurePoints=[{x:extent.x,y:extent.y},{x:extent.x+extent.width,y:extent.y+extent.height}];measurePreview=rulerSnap=null;draw();$('rulerSnapStatus').textContent='Saved outline bounding extents (not DRC validation)';};
     const reviewKeydown=event=>{
       if(event.defaultPrevented||event.repeat||event.composedPath().some(node=>node?.isContentEditable||/^(INPUT|TEXTAREA|SELECT)$/.test(node?.tagName||'')))return;
       if(event.key==='Escape'){$('objectMenu').hidden=true;extraControls.hidden=companionChooser.hidden=true;controlsButton.setAttribute('aria-expanded','false');document.body?.classList?.remove('drawing-focused');focusView.textContent='Focus view';if(commentMode)setCommentMode(null);if(selectedNet||pinnedNets.size||pinnedClasses.size||highlightObjects.length)clearHighlights();if(measureMode)$('measureButton').click();return;}

@@ -63,5 +63,6 @@
   return{x,y,width,height};
  }
  function ruler(a,b,units='mm'){const dx=b.x-a.x,dy=b.y-a.y,distance=Math.hypot(dx,dy),angle=Math.atan2(dy,dx)*180/Math.PI,factor=units==='mil'?1000/25.4:1;return{dx,dy,distance,angle,text:`${(distance*factor).toFixed(3)} ${units} · ΔX ${(dx*factor).toFixed(3)} · ΔY ${(dy*factor).toFixed(3)} · ${angle.toFixed(1)}°`};}
- root.KiCadReviewTools={papers,area,page,crop,capture,ruler,snap,boardExtents};if(typeof module==='object'&&module.exports)module.exports=root.KiCadReviewTools;
+ function angle(a,v,b){if(![a,v,b].every(valid))return null;const ax=a.x-v.x,ay=a.y-v.y,bx=b.x-v.x,by=b.y-v.y;if(Math.hypot(ax,ay)<1e-9||Math.hypot(bx,by)<1e-9)return null;const degrees=Math.atan2(Math.abs(ax*by-ay*bx),ax*bx+ay*by)*180/Math.PI;return{degrees,text:`${degrees.toFixed(1)}°`};}
+ root.KiCadReviewTools={papers,area,page,crop,capture,ruler,angle,snap,boardExtents};if(typeof module==='object'&&module.exports)module.exports=root.KiCadReviewTools;
 })(globalThis);

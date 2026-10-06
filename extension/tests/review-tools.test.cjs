@@ -32,3 +32,14 @@ test('captured PNG persists in sidecar without inflating a GitHub marker or inje
  const p=tools.snap({x:.3,y:1.03},[arc],{mode:'geometry',zoom:100,arcThrough});assert.equal(p.kind,'arc edge');assert.ok(Math.abs(Math.hypot(p.point.x,p.point.y)-1)<1e-10);
  assert.deepEqual(tools.boardExtents([arc],arcThrough),{x:-1,y:0,width:2,height:1});assert.deepEqual(tools.boardExtents([{type:'circle',layer:'Edge.Cuts',x:10,y:20,r:5,width:2},{...arc,layer:'F.Cu'}],arcThrough),{x:5,y:15,width:10,height:10});assert.equal(tools.boardExtents([{...arc,hidden:true}],arcThrough),null);
  });
+
+test('three-point angle is orientation independent and rejects zero arms',()=>{
+ const v={x:10,y:20};
+ assert.equal(tools.angle({x:12,y:20},v,{x:10,y:23}).degrees,90);
+ assert.equal(tools.angle({x:10,y:23},v,{x:12,y:20}).degrees,90);
+ assert.equal(tools.angle({x:8,y:20},v,{x:12,y:20}).degrees,180);
+ assert.equal(tools.angle({x:12,y:20},v,{x:14,y:20}).degrees,0);
+ assert.ok(Math.abs(tools.angle({x:12,y:20},v,{x:12,y:22}).degrees-45)<1e-9);
+ assert.equal(tools.angle(v,v,{x:12,y:20}),null);
+ assert.equal(tools.angle({x:Infinity,y:20},v,{x:12,y:20}),null);
+});

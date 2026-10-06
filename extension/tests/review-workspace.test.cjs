@@ -650,3 +650,16 @@ test('thread reader shows ordinary text safely, filters dates, and prepares a re
 test('net highlighting badges only related sheets and publishes the shared hierarchy',()=>{
  const content=(global)=>`(kicad_sch (version 20250114) (global_label "${global}" (at 0 0) (uuid "g")) (wire (pts (xy 0 0) (xy 10 0)) (uuid "w")))`,files=[{path:'root.kicad_sch',content:content('SUPPLY')},{path:'child.kicad_sch',content:content('SUPPLY')},{path:'unrelated.kicad_sch',content:content('OTHER')}];let snapshot;const view=workspaceRuntime(async()=>[],{pcb:false,files,onHierarchy:value=>snapshot=value});view.load();view.get('netList').children[0].click();const rows=view.get('sheetList').children[1].children,marked=rows.filter(r=>r.children.some(n=>n.className.includes('net-sheet-match')));assert.equal(marked.length,2);assert.equal(typeof view.workspace.followSheet,'function');assert.equal(view.workspace.followSheet('missing.kicad_sch'),false);assert.deepEqual([...snapshot.highlighted].sort(),['child.kicad_sch','root.kicad_sch']);assert.match(view.get('propertyList').textContent,/Matching sheets/);view.get('clearHighlights').click();assert.equal(snapshot.highlighted.length,0);
 });
+
+test('angle ruler previews, pins, resets and uses opaque label backgrounds',()=>{
+ const view=workspaceRuntime();view.load();const fire=(type,props)=>{const e=new Event(type,{cancelable:true});Object.assign(e,props);view.canvas.canvas.dispatchEvent(e);};
+ view.get('rulerSnap').value='off';view.get('rulerKind').value='angle';view.get('measureButton').click();
+ fire('click',{clientX:440,clientY:300});assert.match(view.get('measurementStatus').textContent,/vertex/);
+ fire('click',{clientX:400,clientY:300});fire('pointermove',{buttons:0,clientX:400,clientY:340});assert.match(view.get('measurementStatus').textContent,/Live angle.*90.0/);
+ fire('click',{clientX:400,clientY:340});assert.match(view.get('measurementStatus').textContent,/Pinned angle.*90.0/);
+ fire('pointermove',{buttons:0,clientX:480,clientY:350});assert.match(view.get('measurementStatus').textContent,/Pinned angle.*90.0/);
+ assert.ok(view.get('reviewOverlay').children.some(n=>n.attributes.class==='ruler-label-background'));
+ view.get('rulerKind').value='distance';view.get('rulerKind').onchange();assert.doesNotMatch(view.get('reviewOverlay').textContent,/90.0/);
+ fire('click',{clientX:400,clientY:300});fire('click',{clientX:440,clientY:300});assert.match(view.get('measurementStatus').textContent,/Pinned.*10.000/);
+ assert.equal(view.get('reviewOverlay').children.filter(n=>n.attributes.class==='ruler-label-background').length,3);
+});

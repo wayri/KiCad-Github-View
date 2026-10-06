@@ -231,3 +231,5 @@ body[data-workspace="true"] #projectButton,body[data-workspace="true"] #viewOppo
 #reviewWorkspace.docked-sidebars .pinned-sidebar{box-shadow:none}
 .sidebar-heading button[aria-pressed=true],.panel-heading button[aria-pressed=true]{background:var(--selected);color:var(--accent);border-color:var(--accent)}
 .drawing-focused .sidebar-dock{display:none!important}.drawing-focused #reviewWorkspace.docked-sidebars{padding:0}
+
+.ruler-label-background{fill:var(--panel);stroke:var(--accent);stroke-width:1}.ruler-label-text{fill:var(--text);font-weight:600}
