@@ -1,19 +1,19 @@
-# Store publishing for 0.12.22
+# Store publishing for 0.12.23
 
 This is the manual first-listing procedure for the Chromium browser extension and the VS Code extension. The repository's packaging code builds and audits downloadable files; it deliberately does not sign in to a store, create a listing, or publish one.
 
 ## Build the exact submissions
 
-Use a clean checkout whose `extension/manifest.json` and `vscode-extension/package.json` both say `0.12.22`. Run the release builder from the repository root:
+Use a clean checkout whose `extension/manifest.json` and `vscode-extension/package.json` both say `0.12.23`. Run the release builder from the repository root:
 
 ```powershell
-python scripts/release.py --tag v0.12.22 --output dist/release-0.12.22
+python scripts/release.py --tag v0.12.23 --output dist/release-0.12.23
 ```
 
-The command requires the checked-out commit to be the local `v0.12.22` tag, a clean working tree, reviewed `docs/releases/v0.12.22.md`, and passing Python and JavaScript checks. It then audits each archive against the explicit package inventories and writes hashes. Upload only these two results:
+The command requires the checked-out commit to be the local `v0.12.23` tag, a clean working tree, reviewed `docs/releases/v0.12.23.md`, and passing Python and JavaScript checks. It then audits each archive against the explicit package inventories and writes hashes. Upload only these two results:
 
-- Chrome Web Store: `dist/release-0.12.22/kicad-visual-review-chrome-edge-brave-opera-vivaldi-chromium-0.12.22.zip`
-- Visual Studio Marketplace: `dist/release-0.12.22/kicad-visual-review-vscode-0.12.22.vsix`
+- Chrome Web Store: `dist/release-0.12.23/kicad-visual-review-chrome-edge-brave-opera-vivaldi-chromium-0.12.23.zip`
+- Visual Studio Marketplace: `dist/release-0.12.23/kicad-visual-review-vscode-0.12.23.vsix`
 
 Check both names in `SHA256SUMS.txt`, retain `release-manifest.json`, and install each artifact locally for a final smoke test. Do not upload the Firefox, Safari, guides, web-app, GitHub-App, or STEP-source ZIP in place of the Chromium ZIP.
 
@@ -22,7 +22,7 @@ For an untagged packaging check, `python scripts/package_extension.py` writes th
 ## Chrome Web Store
 
 1. Sign in to the [Chrome Web Store Developer Dashboard](https://chrome.google.com/webstore/devconsole). Register the publishing Google account, accept the agreement, pay Google's one-time registration fee, and enable 2-Step Verification. Both registration and 2-Step Verification are prerequisites in Google's current documentation: [register a developer account](https://developer.chrome.com/docs/webstore/register/) and [program policies](https://developer.chrome.com/docs/webstore/program-policies/policies).
-2. Choose **New item**, upload `kicad-visual-review-chrome-edge-brave-opera-vivaldi-chromium-0.12.22.zip`, and complete the listing. The package is the required ZIP with `manifest.json` at its root; see [Prepare your extension](https://developer.chrome.com/docs/webstore/prepare/) and [Publish in the Chrome Web Store](https://developer.chrome.com/docs/webstore/publish/).
+2. Choose **New item**, upload `kicad-visual-review-chrome-edge-brave-opera-vivaldi-chromium-0.12.23.zip`, and complete the listing. The package is the required ZIP with `manifest.json` at its root; see [Prepare your extension](https://developer.chrome.com/docs/webstore/prepare/) and [Publish in the Chrome Web Store](https://developer.chrome.com/docs/webstore/publish/).
 3. Use the product name and single purpose represented by the manifest: read-only visual review of KiCad schematic, PCB, project, fabrication, and revision data on supported GitHub/GitLab pages. Supply an accurate description, category, 128 px icon, screenshots, support/homepage links, and distribution settings. Store screenshots must show the extension as shipped; label any synthetic or mocked account state rather than presenting it as live acceptance.
 4. Explain every requested permission in the Privacy tab, including `storage`, `offscreen`, `identity`, `scripting`, the fixed GitHub/GitLab hosts, and optional user-approved HTTPS GitLab servers. Remove a permission from the package if it cannot be justified by a shipped feature; Google requires the narrowest necessary permissions.
 5. Publish an accessible privacy policy and make the dashboard disclosures match the extension's behavior. Follow Google's [privacy-field guide](https://developer.chrome.com/docs/webstore/cws-dashboard-privacy/) and [User Data FAQ](https://developer.chrome.com/docs/webstore/program-policies/user-data-faq/).
@@ -42,10 +42,10 @@ Before submission, run an installed Chrome smoke test of the public-board path a
 
 ## Visual Studio Marketplace
 
-The Marketplace identity is fixed by `vscode-extension/package.json`: publisher `wayri`, extension name `kicad-visual-review`, version `0.12.22`. The Microsoft/Azure DevOps account doing the upload must own or be a member of the existing **wayri** publisher. Do not change the publisher merely to bypass ownership; either use that publisher account or arrange publisher membership/transfer through the owner.
+The Marketplace identity is fixed by `vscode-extension/package.json`: publisher `wayri`, extension name `kicad-visual-review`, version `0.12.23`. The Microsoft/Azure DevOps account doing the upload must own or be a member of the existing **wayri** publisher. Do not change the publisher merely to bypass ownership; either use that publisher account or arrange publisher membership/transfer through the owner.
 
 1. Sign in to the [Visual Studio Marketplace publisher management page](https://marketplace.visualstudio.com/manage) and select the `wayri` publisher.
-2. Choose **New extension → Visual Studio Code**, select `kicad-visual-review-vscode-0.12.22.vsix`, review the generated listing, and upload it. Microsoft's official guide documents both this manual route and `vsce`: [Publishing Extensions](https://code.visualstudio.com/api/working-with-extensions/publishing-extension).
+2. Choose **New extension → Visual Studio Code**, select `kicad-visual-review-vscode-0.12.23.vsix`, review the generated listing, and upload it. Microsoft's official guide documents both this manual route and `vsce`: [Publishing Extensions](https://code.visualstudio.com/api/working-with-extensions/publishing-extension).
 3. After processing, install the Marketplace version in a clean VS Code profile. Open a local `.kicad_sch` and `.kicad_pcb`, exercise the custom editor and **KiCad Review** Explorer view, save a test annotation sidecar, and confirm the source drawings remain unchanged. Also test a web extension host such as `github.dev` if that surface is advertised.
 
 The VSIX is structurally packageable, uses the same audited `extension.js` entry point for `main` and `browser`, declares VS Code `^1.95.0`, and includes a README. The first public listing still has specific metadata gaps to resolve before upload:
@@ -66,7 +66,7 @@ Create and validate both initial listings manually first so their immutable stor
 
 ## Readiness checklist
 
-- [ ] `v0.12.22` points to the clean checked-out commit and both manifests say `0.12.22`.
+- [ ] `v0.12.23` points to the clean checked-out commit and both manifests say `0.12.23`.
 - [ ] Full release command passes; the two exact artifacts match `SHA256SUMS.txt`.
 - [ ] Chromium ZIP is installed and tested on the pinned public Marble board.
 - [ ] Optional authentication, sign-out, and explicit publication are tested where those features are advertised.

@@ -128,8 +128,13 @@ export function mountBoard3D(container, source, options = {}) {
   const controls = new OrbitControls(camera, renderer.domElement);
   controls.enableDamping = true; controls.dampingFactor = 0.1; controls.screenSpacePanning = true;
   controls.minDistance = Math.max(2, extent * .04); controls.maxDistance = extent * 8;
-  scene.add(new THREE.HemisphereLight(0xe6f5ff, 0x263d39, 2.2));
-  const sun = new THREE.DirectionalLight(0xffffff, 2.7); sun.position.set(extent * .6, -extent * .3, extent); scene.add(sun);
+  // Neutral fill keeps side walls readable; equal opposing keys illuminate
+  // either board face without a dark underside or a one-corner hotspot.
+  scene.add(new THREE.AmbientLight(0xffffff, 1.8));
+  for (const side of [1, -1]) {
+    const key = new THREE.DirectionalLight(0xffffff, 1.2);
+    key.position.set(0, 0, side * extent); scene.add(key);
+  }
   const boardGroup = new THREE.Group(); scene.add(boardGroup);
   const copperGroups = new Map(), pickables = [];
   const groupFor = (layer) => {
@@ -151,7 +156,7 @@ export function mountBoard3D(container, source, options = {}) {
     const z = layer === "F.Cu" ? top + .025 : bottom - .025;
     const tracks = board.tracks.filter((item) => item.layer === layer);
     const trackMesh = makeInstanced(groupFor(layer), new THREE.PlaneGeometry(1, 1),
-      new THREE.MeshStandardMaterial({ color, metalness: .65, roughness: .32, side: THREE.DoubleSide }), tracks,
+      new THREE.MeshStandardMaterial({ color, metalness: .4, roughness: .58, side: THREE.DoubleSide }), tracks,
       (object, track) => {
         const a = world(track.start), b = world(track.end);
         const length = Math.hypot(b[0] - a[0], b[1] - a[1]);
@@ -163,7 +168,7 @@ export function mountBoard3D(container, source, options = {}) {
     if (trackMesh) pickables.push(trackMesh);
     const pads = board.pads.filter((item) => item.layer === layer || item.layers?.includes(layer));
     const padMesh = makeInstanced(groupFor(layer), new THREE.BoxGeometry(1, 1, .04),
-      new THREE.MeshStandardMaterial({ color: layerThreeColor(layer), metalness: .72, roughness: .28 }), pads,
+      new THREE.MeshStandardMaterial({ color: layerThreeColor(layer), metalness: .4, roughness: .58 }), pads,
       (object, pad) => {
         const [x, y] = world(pad.at);
         object.position.set(x, y, z); object.rotation.set(0, 0, pad.rotation * Math.PI / 180);
@@ -183,7 +188,7 @@ export function mountBoard3D(container, source, options = {}) {
     }
   }
   const viaMesh = makeInstanced(boardGroup, new THREE.CylinderGeometry(.5, .5, 1, 16).rotateX(Math.PI / 2),
-    new THREE.MeshStandardMaterial({ color: 0xd0ac56, metalness: .8, roughness: .3 }), board.vias,
+    new THREE.MeshStandardMaterial({ color: 0xd0ac56, metalness: .5, roughness: .58 }), board.vias,
     (object, via) => { const [x, y] = world(via.at); object.position.set(x, y, 0); object.rotation.set(0, 0, 0);
       object.scale.set(Math.max(.2, via.size), Math.max(.2, via.size), thickness + .08); },
     viewportSceneIdentity("via-barrel", "through", "vias"));
