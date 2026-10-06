@@ -253,7 +253,7 @@
 
         if(dim&&this.isolateNet&&!p.hole&&p.layer!=='Edge.Cuts')continue;
 
-        this.paint(p,{color:matches&&!p.hole?(this.pcb?'#ffe18b':this.dark?'#78d5ff':'#006ca8'):null,opacity:Math.min(dim&&!p.hole&&this.highlightMode!=='bright'&&p.layer!=='Edge.Cuts'?(this.pcb?.16:.28):1,layerDim&&!p.hole?.18:1)});
+        this.paint(p,{color:matches&&!p.hole?(this.pcb?'#ffe18b':this.dark?'#78d5ff':'#006ca8'):this.netClassColors?.get(p)||null,opacity:Math.min(dim&&!p.hole&&this.highlightMode!=='bright'&&p.layer!=='Edge.Cuts'?(this.pcb?.16:.28):1,layerDim&&!p.hole?.18:1)});
 
       }
 
@@ -263,7 +263,7 @@
 
     paint(p,style={}){
 
-      const ctx=this.ctx,c=this.viewport.camera;ctx.save();let color=style.color||(p.kind==='pad'&&p.padType==='thru_hole'?'#d6bf73':p.color)||'#819baa';if(p.hole)color=this.paperVisible?this.paperColor():this.background();else if(!this.pcb&&this.dark){const map={'#000000':'#ccd6d5','#840000':'#ef827b','#008400':'#73ce91','#000080':'#96b7ea','#a0a0a0':'#657d89'};color=map[color.toLowerCase()]||color;}
+      const ctx=this.ctx,c=this.viewport.camera;ctx.save();let color=style.color||(p.kind==='pad'&&p.padType==='thru_hole'?'#d6bf73':p.color)||'#819baa';if(p.hole)color=this.paperVisible?this.paperColor():this.background();else if(!style.color&&!this.pcb&&this.dark){const map={'#000000':'#ccd6d5','#840000':'#ef827b','#008400':'#73ce91','#000080':'#96b7ea','#a0a0a0':'#657d89'};color=map[color.toLowerCase()]||color;}
 
       ctx.strokeStyle=color;ctx.fillStyle=p.fill==='background'?(this.paperVisible?this.paperColor():this.background()):color;ctx.globalAlpha=Math.max(0,Math.min(1,(Number.isFinite(p.opacity)?p.opacity:1)*(style.opacity??1)));ctx.lineWidth=Math.max(.65,(p.width||.15)*c.zoom);ctx.lineCap='round';ctx.lineJoin='round';
 

@@ -102,7 +102,7 @@
       }
     }
     updateAssociations();renderRules();
-    return {query(value){$('projectSearch').value=value;return renderSearch();},loadProject,renderSearch,renderRules,updateAssociations,draw,dispose(){disposed=true;epoch++;reportEpoch++;}};
+    return {setClasses(classes){classSettings=classes;index=buildIndex(searchObjects.length?searchObjects:currentObjects(),searchNets.length?searchNets:options.getNets(),classes);options.setNetClasses?.(classes);},query(value){$('projectSearch').value=value;return renderSearch();},loadProject,renderSearch,renderRules,updateAssociations,draw,dispose(){disposed=true;epoch++;reportEpoch++;}};
   }
   root.KiCadReviewNavigation={mount};
   if(typeof module==='object'&&module.exports)module.exports=root.KiCadReviewNavigation;

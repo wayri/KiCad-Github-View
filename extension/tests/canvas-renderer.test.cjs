@@ -149,3 +149,8 @@ test('canvas click forwards Ctrl, Shift and Command additive-selection intent',(
  for(const modifier of ['ctrlKey','shiftKey','metaKey']){listeners.get('click')({clientX:10,clientY:20,[modifier]:true});assert.equal(detail.multi,true);}
  listeners.get('click')({clientX:10,clientY:20});assert.equal(detail.multi,false);
 });
+
+test('net-class draw colors leave source primitives unchanged and yield to selection highlighting',()=>{
+ const {canvas}=runtime(),p={type:'circle',x:10,y:10,r:1,layer:'F.Cu',kind:'pad',color:'#ff0000'},painted=[];canvas.setDocument({layers:['F.Cu'],primitives:[p]},'board.kicad_pcb');canvas.paint=(primitive,style)=>painted.push(style.color);canvas.netClassColors=new Map([[p,'rgba(0,150,220,1)']]);canvas.draw();assert.equal(painted.at(-1),'rgba(0,150,220,1)');assert.equal(p.color,'#ff0000');
+ canvas.setNetHighlight({primitives:[p]});canvas.draw();assert.equal(painted.at(-1),'#ffe18b');canvas.setNetHighlight(null);canvas.netClassColors=new Map();canvas.draw();assert.equal(painted.at(-1),null);
+});

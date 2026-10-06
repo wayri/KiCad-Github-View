@@ -121,3 +121,9 @@ test('implicit class names survive saved assignments while malformed settings an
  for(const value of ['{','{}',JSON.stringify({net_settings:{classes:{}}}),'x'.repeat(1024*1024+1)])assert.throws(()=>parseNetClasses(value));
  const broken=classConfig({netclass_assignments:{VCC:4}});assert.equal(broken.incomplete,true);assert.ok(broken.warnings.some(w=>w.includes('invalid explicit')));
 });
+
+test('saved net-class colors use separate views, priority, Default fallback and validated channels',()=>{
+ const api=require('../project-search.js'),config=api.parseNetClasses(JSON.stringify({net_settings:{classes:[{name:'Default',pcb_color:'rgba(80, 90, 100, 1)',schematic_color:'rgba(0, 0, 0, 0)'},{name:'Power',priority:1,pcb_color:'rgba(220, 30, 40, 1)',schematic_color:'#00aa55'},{name:'Fast',priority:0,pcb_color:'rgba(0, 0, 0, 0)',schematic_color:'rgba(30, 90, 240, 0.8)'}],netclass_assignments:{VCC:['Power','Fast']}}}));
+ assert.equal(api.netClassColor('VCC',config,true),'rgba(220,30,40,1)');assert.equal(api.netClassColor('VCC',config,false),'rgba(30,90,240,0.8)');assert.equal(api.netClassColor('OTHER',config,true),'rgba(80,90,100,1)');assert.equal(api.netClassColor('OTHER',config,false),null);
+ for(const value of ['rgba(999,0,0,1)','rgba(0,0,0,-1)','url(https://example.com)','var(--color)','rgba(0,0,0,0)'])assert.equal(api.savedColor(value),null);
+});

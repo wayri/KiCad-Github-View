@@ -15,6 +15,17 @@
   // Saved schema: KiCad common/project/net_settings.cpp (schema 3/4/5).
   // Search class membership, not native effective rule values. Explicit labels and
   // matching patterns compose; priority orders constituents rather than replacing them.
+  function savedColor(value) {
+    if(typeof value!=='string'||value.length>80)return null;
+    const rgba=value.trim().match(/^rgba?\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)(?:\s*,\s*(0(?:\.\d+)?|1(?:\.0+)?|\.\d+))?\s*\)$/i);
+    if(rgba){const rgb=rgba.slice(1,4).map(Number),a=rgba[4]===undefined?1:Number(rgba[4]);return rgb.every(n=>n<=255)&&a>0&&a<=1?`rgba(${rgb.join(',')},${a})`:null;}
+    const hex=value.trim().match(/^#([0-9a-f]{6})([0-9a-f]{2})?$/i);if(hex){const a=hex[2]?parseInt(hex[2],16)/255:1;return a>0?`rgba(${[0,2,4].map(i=>parseInt(hex[1].slice(i,i+2),16)).join(',')},${a})`:null;}return null;
+  }
+  function netClassColor(name,config,pcb=false) {
+    const names=netClasses(name,config);if(!names.length)return null;
+    const field=pcb?'pcbColor':'schematicColor';
+    for(const className of [...names,'Default']){const color=config.classes.find(c=>c.name===className)?.[field];if(color)return color;}return null;
+  }
   function parseNetClasses(text) {
     if(typeof text!=="string" || text.length>1024*1024)throw new Error("Project settings must be text under 1 MiB.");
     let project;try{project=JSON.parse(text);}catch{throw new Error("Project settings JSON is malformed.");}
@@ -28,7 +39,7 @@
     for(const [index,item] of settings.classes.entries()) {
       if(!safe(item?.name)){warnings.add("An invalid net class definition was omitted.");incomplete=true;continue;}
       if(classes.some(c=>c.name===item.name))throw new Error("Project has duplicate net class names.");
-      classes.push({name:item.name,priority:item.name==="Default"?Number.MAX_SAFE_INTEGER:Number.isFinite(item.priority)?item.priority:index});
+      classes.push({name:item.name,pcbColor:savedColor(item.pcb_color),schematicColor:savedColor(item.schematic_color),priority:item.name==="Default"?Number.MAX_SAFE_INTEGER:Number.isFinite(item.priority)?item.priority:index});
       if(item.nets!==undefined){warnings.add("Legacy per-class nets are not interpreted; resave the project in current KiCad.");incomplete=true;}
     }
     if(!classes.some(c=>c.name==="Default"))classes.push({name:"Default",priority:Number.MAX_SAFE_INTEGER});
@@ -263,6 +274,6 @@
     results.sort((a,b)=>b.score-a.score||order(a.path,b.path)||order(a.id,b.id));
     return {results:results.slice(0,limit),total:results.length,truncated:results.length>limit,error:null,warnings};
   }
-  const api={LIMITS,compile,createIndex,search,parseNetClasses,netClasses};root.KiCadProjectSearch=api;
+  const api={LIMITS,compile,createIndex,search,parseNetClasses,netClasses,savedColor,netClassColor};root.KiCadProjectSearch=api;
   if(typeof module==="object" && module.exports)module.exports=api;
 })(typeof globalThis==="object"?globalThis:this);
