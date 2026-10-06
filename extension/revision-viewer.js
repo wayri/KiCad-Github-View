@@ -80,7 +80,8 @@
 
     };
 
-    const afterFrame=()=>{workspace?.draw();if(!scene&&$('renderMode'))$('renderMode').textContent=canvas.motionActive?'2D · WebGL':'2D';host.dataset.renderBackend=canvas.motionActive?'webgl-motion':'canvas2d';if($('accelerationStatus'))$('accelerationStatus').textContent=canvas.motionFailed?'WebGL unavailable; using Canvas2D.':canvas.acceleration==='off'?'Canvas2D only.':'WebGL gesture previews on large drawings when available; source geometry is redrawn after each gesture.';if($('viewScale'))$('viewScale').textContent=Math.round(canvas.viewport.camera.zoom/4*100)+'%';if($('drawingViewLabel'))$('drawingViewLabel').textContent=canvas.netHighlight?(canvas.highlightCount>1?`${canvas.highlightCount} highlight groups`:canvas.netHighlight.name?'Highlighted net · '+canvas.netHighlight.name:'Highlighted components'):canvas.paperVisible?(pcb?'PCB worksheet':'Schematic sheet'):'Board view';report(false);};
+    let syncFloatingLayers=()=>{};
+    const afterFrame=()=>{syncFloatingLayers();workspace?.draw();if(!scene&&$('renderMode'))$('renderMode').textContent=canvas.motionActive?'2D · WebGL':'2D';host.dataset.renderBackend=canvas.motionActive?'webgl-motion':'canvas2d';if($('accelerationStatus'))$('accelerationStatus').textContent=canvas.motionFailed?'WebGL unavailable; using Canvas2D.':canvas.acceleration==='off'?'Canvas2D only.':'WebGL gesture previews on large drawings when available; source geometry is redrawn after each gesture.';if($('viewScale'))$('viewScale').textContent=Math.round(canvas.viewport.camera.zoom/4*100)+'%';if($('drawingViewLabel'))$('drawingViewLabel').textContent=canvas.netHighlight?(canvas.highlightCount>1?`${canvas.highlightCount} highlight groups`:canvas.netHighlight.name?'Highlighted net · '+canvas.netHighlight.name:'Highlighted components'):canvas.paperVisible?(pcb?'PCB worksheet':'Schematic sheet'):'Board view';report(false);};
     const originalDraw=canvas.draw.bind(canvas);canvas.draw=()=>{originalDraw();afterFrame();};canvas.addEventListener('kicad:viewframe',afterFrame);
 
     canvas.canvas.addEventListener?.('pointermove',event=>{const rect=canvas.canvas.getBoundingClientRect(),point=canvas.viewport.camera.screen_to_world({x:event.clientX-rect.left,y:event.clientY-rect.top});if($('cursorCoords'))$('cursorCoords').textContent=`${point.x.toFixed(2)}, ${point.y.toFixed(2)} mm`;});
@@ -94,10 +95,39 @@
     };
 
     const layerList=$('layerList');
+    // An overlay keeps layer switching available without opening an explorer pane.
+    const floatingLayers=document.createElement('div'),floatingButtons=new Map();
+    floatingLayers.id='floatingLayerSelector';floatingLayers.className='floating-layer-selector';
+    floatingLayers.setAttribute('role','group');floatingLayers.setAttribute('aria-label','PCB layer selector');
+    floatingLayers.hidden=true;if(pcb)host.append(floatingLayers);
+    let floatingSignature='';
+    syncFloatingLayers=()=>{
+      const copper=(canvas.design?.layers||[]).filter(layer=>layer.endsWith('.Cu'));
+      floatingLayers.hidden=!pcb||Boolean(scene)||!copper.length;if(floatingLayers.hidden)return;
+      const signature=JSON.stringify(copper);
+      if(signature!==floatingSignature){
+        floatingSignature=signature;floatingLayers.replaceChildren();floatingButtons.clear();
+        const add=(name,title,action,color)=>{
+          const button=document.createElement('button');button.type='button';button.title=title;
+          button.setAttribute('aria-label',title);button.dataset.layer=name;
+          if(color){const swatch=document.createElement('span');swatch.className='layer-swatch';swatch.style.background=color;button.append(swatch);}
+          const label=document.createElement('span');label.textContent=name;button.append(label);
+          button.onclick=()=>{if(scene)return;action();layers();canvas.draw();};
+          floatingButtons.set(name,button);floatingLayers.append(button);
+        };
+        for(const layer of copper)add(layer,'Show only '+layer,()=>{canvas.focusLayer(layer,'isolate');$('layerFocusMode').value='isolate';},KiCadPCBRenderer.colorFor?.(layer)||'#8c9cab');
+        add('All','Show all saved board layers',()=>canvas.layerPreset('all'));
+        add('Overview','Restore layer view before focusing',()=>canvas.restoreLayers());
+      }
+      for(const [name,button] of floatingButtons){
+        const selected=name==='All'?!canvas.focusedLayer&&(canvas.design.layers||[]).every(layer=>canvas.visibleLayers.has(layer)):name==='Overview'?!canvas.focusedLayer&&!canvas.layerSnapshot:canvas.focusedLayer===name;
+        button.setAttribute('aria-pressed',String(selected));
+      }
+    };
 
     function layers(){
 
-      if(!layerList)return;layerList.replaceChildren();$('layerPanel').hidden=!pcb;
+      syncFloatingLayers();if(!layerList)return;layerList.replaceChildren();$('layerPanel').hidden=!pcb;
 
       const query=($('layerSearch').value||'').trim().toLowerCase();
 
@@ -224,9 +254,9 @@
 
           scene=engine.mountBoard3D(pane,files.find(file=>file.path===rootFile).content,{dark,boardPath:rootFile,loadAsset:modelAssetCache.load,onSelect:record=>workspace?.select3D(record),onComment:record=>workspace?.comment3D(record)});
 
-          workspace.setScene(scene);$('drawingLegend').hidden=true;lock(true);mode.setAttribute('aria-pressed','true');if($('renderMode'))$('renderMode').textContent='3D';
+          workspace.setScene(scene);syncFloatingLayers();$('drawingLegend').hidden=true;lock(true);mode.setAttribute('aria-pressed','true');if($('renderMode'))$('renderMode').textContent='3D';
 
-        }catch(error){scene?.dispose();scene=null;pane.hidden=true;canvas.canvas.hidden=false;workspace.setScene(null);$('engineNotice').textContent=error.message;$('engineNotice').hidden=false;updateDiagnostics();}
+        }catch(error){scene?.dispose();scene=null;pane.hidden=true;canvas.canvas.hidden=false;workspace.setScene(null);syncFloatingLayers();$('engineNotice').textContent=error.message;$('engineNotice').hidden=false;updateDiagnostics();}
 
         finally{busy=false;mode.disabled=false;}
 

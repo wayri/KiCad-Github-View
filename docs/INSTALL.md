@@ -1,19 +1,19 @@
-# Install KiCad GitHub View v0.12.27
+# Install KiCad GitHub View v0.12.28
 
-Download packages from [the v0.12.27 release](https://github.com/wayri/KiCad-Github-View/releases/tag/v0.12.27). The browser viewer needs no Python, KiCad installation or rendering server. Use a desktop browser with the required extension APIs. Public files work without account setup. Private GitHub file, project and supported model reads require an extension token with access to that repository; website sign-in alone does not authorize the extension. Private GitLab project, file and model reads require an account connected to the selected GitLab server. Authorized private GitHub annotation readback is supported; authorized private PR comparison is supported.
+Download packages from [the v0.12.28 release](https://github.com/wayri/KiCad-Github-View/releases/tag/v0.12.28). The browser viewer needs no Python, KiCad installation or rendering server. Use a desktop browser with the required extension APIs. Public files work without account setup. Private GitHub file, project and supported model reads require an extension token with access to that repository; website sign-in alone does not authorize the extension. Private GitLab project, file and model reads require an account connected to the selected GitLab server. Authorized private GitHub annotation readback is supported; authorized private PR comparison is supported.
 
 ## Choose a package
 
 | Download | Use |
 | --- | --- |
-| `kicad-visual-review-chrome-edge-brave-opera-vivaldi-chromium-0.12.27.zip` | Chrome, Edge, Brave, Opera, Vivaldi and other desktop Chromium browsers |
-| `kicad-visual-review-firefox-0.12.27.zip` | Unsigned Firefox 128+ development extension |
-| `kicad-visual-review-safari-0.12.27.zip` | Safari 16.4+ macOS development payload and conversion helper |
-| `kicad-visual-review-guides-0.12.27.zip` | Illustrated GitHub and GitLab guides and documentation |
-| `kicad-visual-review-step-source-0.12.27.zip` | Pinned STEP dependency sources, licenses and rebuild recipe |
-| `kicad-visual-review-vscode-0.12.27.vsix` | Read-only KiCad editors inside VS Code |
-| `kicad-visual-review-app-web-0.12.27.zip` | Optional standalone hosted viewer payload |
-| `kicad-visual-review-github-app-0.12.27.zip` | Optional GitHub App service/deployment sources |
+| `kicad-visual-review-chrome-edge-brave-opera-vivaldi-chromium-0.12.28.zip` | Chrome, Edge, Brave, Opera, Vivaldi and other desktop Chromium browsers |
+| `kicad-visual-review-firefox-0.12.28.zip` | Unsigned Firefox 128+ development extension |
+| `kicad-visual-review-safari-0.12.28.zip` | Safari 16.4+ macOS development payload and conversion helper |
+| `kicad-visual-review-guides-0.12.28.zip` | Illustrated GitHub and GitLab guides and documentation |
+| `kicad-visual-review-step-source-0.12.28.zip` | Pinned STEP dependency sources, licenses and rebuild recipe |
+| `kicad-visual-review-vscode-0.12.28.vsix` | Read-only KiCad editors inside VS Code |
+| `kicad-visual-review-app-web-0.12.28.zip` | Optional standalone hosted viewer payload |
+| `kicad-visual-review-github-app-0.12.28.zip` | Optional GitHub App service/deployment sources |
 | `SHA256SUMS.txt` and `release-manifest.json` | Package integrity checks and source/version evidence |
 | `COMMENTS.md` and `GIT-HOSTS.md` | Comment workflow and service compatibility |
 
@@ -25,7 +25,7 @@ GitHub's automatically generated **Source code** ZIP/tarball contains the projec
 2. Open that folder and confirm `manifest.json` is directly inside it. Do not select the ZIP, its parent folder, or a nested source repository root.
 3. Enter `chrome://extensions` in the browser address bar.
 4. Enable **Developer mode**, then select **Load unpacked**.
-5. Choose the folder containing `manifest.json`. The extension card should show **KiCad Visual Review for GitHub and GitLab** and version **0.12.27**.
+5. Choose the folder containing `manifest.json`. The extension card should show **KiCad Visual Review for GitHub and GitLab** and version **0.12.28**.
 6. Open the card's **Details** if needed and allow site access for `github.com` and `gitlab.com`. The background worker also reads GitHub's API through the declared permission.
 7. Open or refresh a public `.kicad_sch` or `.kicad_pcb` file page on a supported website. Use the normal repository file page, not the raw download endpoint.
 8. Pin the extension in the toolbar if desired. Its button or `Alt+Shift+K` focuses the inline preview.
@@ -74,10 +74,10 @@ GitLab supports subgroup namespaces and authorized private projects. In Options 
 
 ## VS Code
 
-Download the VSIX. Run **Extensions: Install from VSIX**, choose `kicad-visual-review-vscode-0.12.27.vsix`, then run **Developer: Reload Window**. Open a saved project folder and choose **KiCad: Open Visual Viewer** or **Reopen Editor With → KiCad Visual Review**. The KiCad Review explorer lists saved drawings and sidecars.
+Download the VSIX. Run **Extensions: Install from VSIX**, choose `kicad-visual-review-vscode-0.12.28.vsix`, then run **Developer: Reload Window**. Open a saved project folder and choose **KiCad: Open Visual Viewer** or **Reopen Editor With → KiCad Visual Review**. The KiCad Review explorer lists saved drawings and sidecars.
 
 ```sh
-code --install-extension kicad-visual-review-vscode-0.12.27.vsix --force
+code --install-extension kicad-visual-review-vscode-0.12.28.vsix --force
 ```
 
 The custom editor uses the workspace filesystem provider. Native notes use the Git-trackable `.kicad-review.json` sidecar, without token publication or native revision comparison. HTML previews are static in VS Code. The web entry point exists, but actual github.dev installation and filesystem behavior need separate hosted validation. See [the VS Code guide](../vscode-extension/README.md).
