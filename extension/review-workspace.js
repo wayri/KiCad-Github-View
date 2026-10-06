@@ -918,6 +918,34 @@
     const topSheets=make("nav");topSheets.id="topSheetNavigation";topSheets.className="top-sheet-navigation";topSheets.setAttribute("aria-label","Active sheet and history");topSheets.hidden=pcb;
     topSheets.append($("sheetLabel"),...['sheetBack','sheetForward','sheetUp','sheetHome'].map(id=>{const node=$(id);node.classList.toggle("icon-only",true);return node;}));$("frameControls").append(topSheets);
     const extraControls=make("div");extraControls.id="extraReviewControls";extraControls.className="review-control-popover";extraControls.hidden=true;extraControls.append($("variantBar"),$("highlightControls"),$("shortcutHelp"),$("diagnostics"));document.body?.append(extraControls);
+    const searchBox=make('div');searchBox.className='universal-search';
+    const searchInput=make('input');searchInput.id='universalSearch';searchInput.type='search';searchInput.placeholder='Search parts, nets, sheets…';searchInput.setAttribute('aria-label','Search parts, nets and sheets');searchInput.setAttribute('role','combobox');searchInput.setAttribute('aria-autocomplete','list');searchInput.setAttribute('aria-expanded','false');searchInput.setAttribute('aria-controls','universalSearchResults');
+    const searchPopup=make('div');searchPopup.id='universalSearchResults';searchPopup.className='universal-search-popup';searchPopup.hidden=true;
+    const searchList=make('div');searchList.setAttribute('role','listbox');searchList.setAttribute('aria-label','Drawing search results');
+    const searchStatus=make('p');searchStatus.className='hint';searchStatus.setAttribute('role','status');
+    let searchTimer=null,searchRows=[],searchActive=-1;
+    function closeSearch(){searchPopup.hidden=true;searchInput.setAttribute('aria-expanded','false');searchInput.removeAttribute?.('aria-activedescendant');}
+    function positionSearch(){const box=searchInput.getBoundingClientRect();searchPopup.style.left=`${Math.max(4,Math.min(box.left,root.innerWidth-330))}px`;searchPopup.style.top=`${(box.bottom??box.top+30)+4}px`;}
+    function activeSearch(index){searchActive=index;searchRows.forEach((row,i)=>row.setAttribute('aria-selected',String(i===index)));if(index>=0){searchInput.setAttribute('aria-activedescendant',searchRows[index].id);searchRows[index].scrollIntoView?.({block:'nearest'});}}
+    function renderUniversalSearch(result,query){
+      searchInput.value=query;if(searchPopup.hidden&&document.activeElement!==searchInput)return;searchList.replaceChildren();searchRows=[];searchActive=-1;searchInput.removeAttribute?.('aria-activedescendant');
+      const add=(label,detail,action)=>{const row=button('',event=>{action(event);closeSearch();});row.id=`universalResult${searchRows.length}`;row.setAttribute('role','option');row.setAttribute('aria-selected','false');row.append(make('strong',label),make('small',detail));row.onpointerdown=event=>event.preventDefault();searchRows.push(row);searchList.append(row);};
+      const term=query.trim().toLowerCase();
+      if(term){for(const file of files.filter(file=>file.path.toLowerCase().includes(term)).slice(0,4))add(file.path.split('/').pop(),file.path,event=>openSheet(file.path));
+        for(const match of result.results.slice(0,20-searchRows.length)){const object=match.object;add(object.label||object.reference||object.kind,`${object.kind} · ${object.path}`,event=>selectSearchObject(object,Boolean($('multiHighlight').checked),event));}}
+      searchStatus.textContent=result.error||(!term?'Search references, values, nets or sheet names.':`${result.total} object matches · ${searchRows.length} results shown`);
+      positionSearch();searchPopup.hidden=false;searchInput.setAttribute('aria-expanded','true');
+    }
+    function runSearch(){clearTimeout(searchTimer);searchTimer=null;searchPopup.hidden=false;if(navigation)navigation.query(searchInput.value);else{searchStatus.textContent='Project search is unavailable in this viewer.';positionSearch();searchPopup.hidden=false;searchInput.setAttribute('aria-expanded','true');}}
+    const searchAll=button('Search entire project',async()=>{searchAll.disabled=true;searchStatus.textContent='Loading project drawings…';try{await navigation?.loadProject();searchStatus.textContent=$('projectSearchStatus').textContent;}finally{searchAll.disabled=false;}});searchAll.id='universalSearchAll';
+    searchInput.oninput=()=>{clearTimeout(searchTimer);searchTimer=setTimeout(runSearch,120);};searchInput.onfocus=runSearch;
+    searchInput.onkeydown=event=>{if(event.key==='Escape'){event.preventDefault();event.stopPropagation();clearTimeout(searchTimer);closeSearch();}else if(event.key==='ArrowDown'||event.key==='ArrowUp'){event.preventDefault();if(searchPopup.hidden||searchTimer)runSearch();if(searchRows.length)activeSearch((searchActive+(event.key==='ArrowDown'?1:-1)+searchRows.length)%searchRows.length);}else if(event.key==='Enter'){event.preventDefault();if(searchTimer){clearTimeout(searchTimer);searchTimer=null;runSearch();}searchRows[Math.max(0,searchActive)]?.onclick(event);}};
+    searchPopup.onkeydown=event=>{if(event.key==='Escape'){event.preventDefault();event.stopPropagation();closeSearch();searchInput.focus();closeSearch();}};
+    const searchOutside=event=>{if(!searchBox.contains(event.target)&&!searchPopup.contains(event.target))closeSearch();};document.body.addEventListener('pointerdown',searchOutside);
+    const searchBlur=()=>setTimeout(()=>{if(!searchBox.contains(document.activeElement)&&!searchPopup.contains(document.activeElement))closeSearch();},0);searchBox.addEventListener('focusout',searchBlur);searchPopup.addEventListener('focusout',searchBlur);
+    searchBox.append(searchInput);searchPopup.append(searchStatus,searchList,searchAll);document.body.append(searchPopup);$('frameControls').insertBefore(searchBox,$('frameControls').firstChild||$('frameControls').children[0]);
+    $('frameControls').addEventListener('scroll',closeSearch);root.addEventListener?.('resize',closeSearch);
+    resizeCleanups.push(()=>{clearTimeout(searchTimer);document.body.removeEventListener('pointerdown',searchOutside);root.removeEventListener?.('resize',closeSearch);$('frameControls').removeEventListener('scroll',closeSearch);searchPopup.remove();searchBox.remove();});
     const controlsButton=button("Review tools",()=>{extraControls.hidden=!extraControls.hidden;controlsButton.setAttribute("aria-expanded",String(!extraControls.hidden));});controlsButton.id="reviewToolsButton";controlsButton.title="Assembly variants and highlight controls";controlsButton.setAttribute("aria-controls",extraControls.id);controlsButton.setAttribute("aria-expanded","false");$("frameControls").append(controlsButton);
     const updateReviewToolsHint=()=>{const hasNotes=!$("diagnostics").hidden;controlsButton.textContent=hasNotes?'Review tools · notes':'Review tools';controlsButton.title='Assembly variants, highlights and keyboard guide'+(hasNotes?' · '+$("diagnosticCount").textContent:'');};
     const reviewToolsObserver=root.MutationObserver?new root.MutationObserver(updateReviewToolsHint):null;reviewToolsObserver?.observe($("diagnostics"),{attributes:true,childList:true,subtree:true,characterData:true});updateReviewToolsHint();
@@ -1030,7 +1058,7 @@
       if(event.ctrlKey||event.altKey||event.metaKey)return;
       const key=event.key.toLowerCase();
       if(key==='e'){event.preventDefault();if(scene){properties();inspector('properties');}else inspectPointer();}
-      else if(key==='/'){event.preventDefault();navigate('search');$('projectSearch').focus();}
+      else if(key==='/'){event.preventDefault();searchInput.focus();}
       else if((key==='h'||key==='`'||key==='~'||event.code==='Backquote')&&!scene){event.preventDefault();highlightPointerNet();}
       else if(key==='c'){event.preventDefault();const item=objectAt(pointerWorld)||selected;editComment(null,item?anchor(item.position,item):pointerWorld?anchor(pointerWorld,null):null);}
       else if(key==='m'&&!scene){event.preventDefault();$('measureButton').click();}
@@ -1046,7 +1074,7 @@
     narrowPanels.addEventListener?.("change", keepDrawingVisible);
     if(root.KiCadReviewNavigation&&root.KiCadProjectSearch&&root.KiCadRuleReports)navigation=root.KiCadReviewNavigation.mount({
       repository,ref,rootFile,request,getFiles:()=>files,getObjects:()=>objects,getNets:()=>netModel.nets,currentFile,
-      is3D:()=>Boolean(scene),redraw:draw,showRules:showRuleWindow,onRuleReportLoaded:()=>{reportSources.open=false;showRuleWindow();},selectSearchObject,highlightSearchObjects,
+      onSearchResults:renderUniversalSearch,is3D:()=>Boolean(scene),redraw:draw,showRules:showRuleWindow,onRuleReportLoaded:()=>{reportSources.open=false;showRuleWindow();},selectSearchObject,highlightSearchObjects,
       isHighlighted:o=>o.kind==='net'?highlightedNets().some(n=>n.path===o.path&&n.name===o.netName):o.kind==='netclass'?pinnedClasses.has(JSON.stringify([o.path,o.className])):highlightObjects.some(item=>item.id===o.id),setMultiHighlight:on=>{if(!on){const keep=selectedNet||highlightedNets()[0];pinnedNets.clear();pinnedClasses.clear();selectedNet=keep||null;highlightObjects=keep?[]:highlightObjects.slice(0,1);activeConnection=null;connectionCursor=-1;updateHighlights();renderObjects();emitHighlightGroup();renderNets();renderNetClasses();navigation?.renderSearch();}},
       setNetClasses:config=>{classConfig=config;pinnedClasses.clear();renderNetClasses();updateHighlights();},
       followSheet,

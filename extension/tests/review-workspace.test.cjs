@@ -291,7 +291,7 @@ test('review shortcuts inspect pointer, highlight net, focus search, respect typ
  const focused=[],messages=[],view=workspaceRuntime(async request=>{messages.push(request.type);return[];},{navigation:true,query:()=>[{bbox:{context:{uuid:'pad'}}}],focus:p=>focused.push(p)});view.load();
  view.get('designInspector').hidden=true;view.key('e',{ctrlKey:true});assert.equal(view.get('designInspector').hidden,true);view.key('e',{composedPath:()=>[{tagName:'TEXTAREA'}]});assert.equal(view.get('designInspector').hidden,true);
  const move=new Event('pointermove');Object.assign(move,{clientX:400,clientY:300,buttons:0});view.canvas.canvas.dispatchEvent(move);view.key('e');assert.equal(view.get('selectedName').textContent,'R1 pad 1');assert.equal(view.get('designInspector').hidden,false);
- view.key('h');assert.equal(view.canvas.netHighlight.name,'SIGNAL');view.key(' ');assert.equal(focused[0].x,0);assert.equal(focused[0].y,0);view.key('/');assert.equal(view.get('navSearch').attributes['aria-selected'],'true');view.key('?');assert.equal(view.get('shortcutHelp').open,true);
+ view.key('h');assert.equal(view.canvas.netHighlight.name,'SIGNAL');view.key(' ');assert.equal(focused[0].x,0);assert.equal(focused[0].y,0);view.key('/');assert.equal(view.get('universalSearch').focused,true);view.key('?');assert.equal(view.get('shortcutHelp').open,true);
  for(const key of ['`','~']){view.get('clearHighlights').click();view.key(key);assert.equal(view.canvas.netHighlight.name,'SIGNAL');view.get('clearHighlights').click();view.key(key,{composedPath:()=>[{tagName:'INPUT'}]});assert.equal(view.canvas.netHighlight,null);}
  for(const key of ['r','Delete','Backspace','x','g'])assert.equal(view.key(key).defaultPrevented,undefined);
  const count=messages.length;view.workspace.dispose();view.key('c');assert.equal(messages.length,count);
@@ -662,4 +662,19 @@ test('angle ruler previews, pins, resets and uses opaque label backgrounds',()=>
  view.get('rulerKind').value='distance';view.get('rulerKind').onchange();assert.doesNotMatch(view.get('reviewOverlay').textContent,/90.0/);
  fire('click',{clientX:400,clientY:300});fire('click',{clientX:440,clientY:300});assert.match(view.get('measurementStatus').textContent,/Pinned.*10.000/);
  assert.equal(view.get('reviewOverlay').children.filter(n=>n.attributes.class==='ruler-label-background').length,3);
+});
+
+test('toolbar search jumps to parts and nets without opening explorer or fetching on input',async()=>{
+ const requests=[],view=workspaceRuntime(async request=>{requests.push(request.type);return[];},{navigation:true});view.load();
+ const input=view.get('universalSearch');view.document.activeElement=input;assert.equal(input.parentElement.parentElement.id,'frameControls');input.value='R1';input.onfocus();
+ assert.equal(view.get('designNavigator').hidden,true);assert.match(view.get('universalSearchResults').textContent,/R1/);
+ input.onkeydown({key:'ArrowDown',preventDefault(){}});assert.equal(input.attributes['aria-activedescendant'],'universalResult0');input.onkeydown({key:'Enter',preventDefault(){}});
+ assert.equal(view.get('selectedName').textContent,'R1');assert.equal(view.get('universalSearchResults').hidden,true);
+ input.value='SIGNAL';input.oninput();await new Promise(resolve=>setTimeout(resolve,150));input.onkeydown({key:'Enter',preventDefault(){}});assert.equal(view.canvas.netHighlight.name,'SIGNAL');
+ assert.equal(requests.includes('project-search-files'),false);view.workspace.dispose();
+});
+test('schematic toolbar search offers loaded sheet links and Escape leaves highlights intact',()=>{
+ const file={path:'root.kicad_sch',content:'(kicad_sch (version 20250114) (uuid "root"))'},opened=[],view=workspaceRuntime(async()=>[],{navigation:true,pcb:false,files:[file],openSheet:path=>opened.push(path)});view.load();
+ const input=view.get('universalSearch');input.value='root';input.onfocus();assert.match(view.get('universalSearchResults').textContent,/root.kicad_sch/);input.onkeydown({key:'Enter',preventDefault(){}});assert.deepEqual(opened,['root.kicad_sch']);
+ input.onfocus();let stopped=false;input.onkeydown({key:'Escape',preventDefault(){},stopPropagation(){stopped=true;}});assert.equal(stopped,true);assert.equal(view.get('universalSearchResults').hidden,true);view.workspace.dispose();
 });

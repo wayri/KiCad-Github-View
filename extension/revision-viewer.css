@@ -233,3 +233,7 @@ body[data-workspace="true"] #projectButton,body[data-workspace="true"] #viewOppo
 .drawing-focused .sidebar-dock{display:none!important}.drawing-focused #reviewWorkspace.docked-sidebars{padding:0}
 
 .ruler-label-background{fill:var(--panel);stroke:var(--accent);stroke-width:1}.ruler-label-text{fill:var(--text);font-weight:600}
+
+/* Toolbar search stays accessible; its popup escapes the scrolling toolbar. */
+.universal-search{flex:0 0 205px;min-width:150px}.universal-search input{height:30px;min-height:30px;padding:4px 8px;font-size:11px;background:var(--surface);border-color:var(--line)}
+.universal-search-popup{position:fixed;z-index:60;width:min(390px,calc(100vw - 8px));max-height:min(360px,60vh);overflow:auto;padding:8px;background:var(--panel);color:var(--text);border:1px solid var(--line);border-radius:5px;box-shadow:0 8px 26px #0006}.universal-search-popup .hint{padding:3px 5px 7px}.universal-search-popup [role=option]{display:flex;flex-direction:column;align-items:flex-start;text-align:left;width:100%;margin:3px 0;white-space:normal;overflow-wrap:anywhere;background:var(--surface)}.universal-search-popup [role=option] small{color:var(--muted);font-size:10px}.universal-search-popup [aria-selected=true]{background:var(--selected);border-color:var(--accent)}#universalSearchAll{width:100%;margin-top:7px}@media(max-width:720px){.universal-search{flex-basis:170px}}

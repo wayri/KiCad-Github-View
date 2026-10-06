@@ -37,6 +37,7 @@
         $('projectResults').append(row);
       }
       $('projectIndexWarnings').textContent=[...indexNotes,...(result.warnings||[])].join(' ');
+      options.onSearchResults?.(result,$('projectSearch').value);return result;
     }
     async function loadProject(){
       if(searchBusy)return;searchBusy=true;const ticket=++epoch;$('loadProjectSearch').disabled=true;status('Loading repository/workspace drawings at one source revision…');
@@ -101,7 +102,7 @@
       }
     }
     updateAssociations();renderRules();
-    return {renderSearch,renderRules,updateAssociations,draw,dispose(){disposed=true;epoch++;reportEpoch++;}};
+    return {query(value){$('projectSearch').value=value;return renderSearch();},loadProject,renderSearch,renderRules,updateAssociations,draw,dispose(){disposed=true;epoch++;reportEpoch++;}};
   }
   root.KiCadReviewNavigation={mount};
   if(typeof module==='object'&&module.exports)module.exports=root.KiCadReviewNavigation;
