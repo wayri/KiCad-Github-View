@@ -10,6 +10,7 @@ import { layerThreeColor } from "@spike/layerPalette";
 import { trackCapsuleDimensions } from "@spike/trackGeometry";
 import { viewportSceneIdentity } from "@spike/viewportScenePolicy";
 import { populationMask, uniqueComponentIndexes } from "./componentState.mjs";
+import { footprintProxies } from "./footprintProxies.mjs";
 
 const STYLE = `
   :host{display:block;width:100%;height:100%;font:12px/1.4 system-ui,-apple-system,"Segoe UI",sans-serif;
@@ -93,7 +94,7 @@ export function mountBoard3D(container, source, options = {}) {
   const inspector = document.createElement("div"); inspector.className = "inspector"; inspector.hidden = true;
   const menu = document.createElement("div"); menu.className = "menu"; menu.hidden = true;
   const notice = document.createElement("div"); notice.className = "notice";
-  notice.textContent = "SPIKE 3D · footprint boxes remain where linked model geometry is unavailable.";
+  notice.textContent = "SPIKE 3D · bounded footprint stand-ins appear where linked model geometry is unavailable.";
   stage.append(canvasHost, hint, inspector, menu); shell.append(bar, stage, notice); shadow.append(style, shell); container.append(host);
 
   const title = document.createElement("strong"); title.className = "title"; title.textContent = "SPIKE 3D";
@@ -165,7 +166,7 @@ export function mountBoard3D(container, source, options = {}) {
       new THREE.MeshStandardMaterial({ color: layerThreeColor(layer), metalness: .72, roughness: .28 }), pads,
       (object, pad) => {
         const [x, y] = world(pad.at);
-        object.position.set(x, y, z); object.rotation.set(0, 0, -pad.rotation * Math.PI / 180);
+        object.position.set(x, y, z); object.rotation.set(0, 0, pad.rotation * Math.PI / 180);
         object.scale.set(Math.max(.15, pad.width), Math.max(.15, pad.height), 1);
       }, viewportSceneIdentity("copper-pad", layer, "pads"));
     if (padMesh) pickables.push(padMesh);
@@ -188,12 +189,13 @@ export function mountBoard3D(container, source, options = {}) {
     viewportSceneIdentity("via-barrel", "through", "vias"));
   if (viaMesh) pickables.push(viaMesh);
   const parts = new THREE.Group(); boardGroup.add(parts);
+  const proxyPoses = footprintProxies(board);
   const componentMesh = makeInstanced(parts, new THREE.BoxGeometry(1, 1, 1),
     new THREE.MeshStandardMaterial({ color: 0xdee5d9, metalness: .08, roughness: .72 }), board.components,
-    (object, part) => { const [x, y] = world(part.at); const below = part.layer?.startsWith("B.");
+    (object, part) => { const pose = proxyPoses.get(part); const [x, y] = world(pose?.at || part.at); const below = part.layer?.startsWith("B.");
       object.position.set(x, y, below ? bottom - 1.1 : top + 1.1);
-      object.rotation.set(0, 0, -part.rotation * Math.PI / 180);
-      object.scale.set(Math.max(.6, part.width), Math.max(.6, part.height), 2.1); },
+      object.rotation.set(0, 0, pose?.rotation || 0);
+      object.scale.set(pose?.width || 0, pose?.height || 0, pose ? 2.1 : 0); },
     viewportSceneIdentity("component", "F.Fab", "proxies"));
   if (componentMesh) pickables.push(componentMesh);
   const componentIndexes = uniqueComponentIndexes(board.components);
@@ -216,7 +218,7 @@ export function mountBoard3D(container, source, options = {}) {
   function showModelDiagnostics() {
     const resolved = loadedModelIndexes.size;
     const problems = modelDiagnostics.length;
-    notice.textContent = `Real model geometry: ${resolved}/${board.components.length} footprints · ${board.components.length-resolved} without linked geometry (procedural proxies)`
+    notice.textContent = `Real model geometry: ${resolved}/${board.components.length} footprints · ${board.components.length-resolved} without linked geometry (bounded stand-ins where usable footprint bounds exist)`
       + (problems ? ` · ${problems} diagnostic samples: ${modelDiagnostics.slice(0, 3).join(" | ")}${problems>3?` | +${problems-3} more`:""}` : "");
     notice.title = modelDiagnostics.join("\n");
   }
@@ -335,7 +337,7 @@ export function mountBoard3D(container, source, options = {}) {
 
   const raycaster = new THREE.Raycaster(), pointer = new THREE.Vector2();
   let selected = null, down = null;
-  const highlight = new THREE.Mesh(new THREE.BoxGeometry(1.04, 1.04, 1.04),
+  const highlight = new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1),
     new THREE.MeshBasicMaterial({ color: initialDark ? 0xffdf7d : 0x9b5500,
       wireframe: true, depthTest: false, depthWrite: false }));
   highlight.matrixAutoUpdate = false;
