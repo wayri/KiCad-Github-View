@@ -172,10 +172,10 @@ test('selecting a root change after subsheet navigation returns each drawing to 
 
 
 test('paired review keeps same repository revision and relays only trusted selections',async()=>{
- const view=viewer({repository:'wayri/board',file:'board.kicad_pcb',head:'main',pairedFile:'root.kicad_sch'},()=>({ok:true,result:[]}));
+ const view=viewer({repository:'wayri/board',file:'board.kicad_pcb',head:'a'.repeat(40),pairedFile:'root.kicad_sch'},()=>({ok:true,result:[]}));
  const main=view.get('headDrawing').children[0],pair=view.get('pairDrawing').children[0];
  assert.equal(new URL(pair.src).searchParams.get('repository'),'wayri/board');
- assert.equal(new URL(pair.src).searchParams.get('ref'),'main');
+ assert.equal(new URL(pair.src).searchParams.get('ref'),'a'.repeat(40));
  assert.equal(view.get('pairPanel').hidden,false);
  view.message({origin:'chrome-extension://test-id',source:pair.contentWindow,data:{type:'kicad-review:view',phase:'ready',file:'root.kicad_sch',view:{x:0,y:0,zoom:1}}});
  const selection={kind:'part',reference:'R1',path:'board.kicad_pcb',uuid:'fp'};
@@ -188,7 +188,7 @@ test('paired review keeps same repository revision and relays only trusted selec
  assert.equal(pair.messages.at(-1).message.command,'refresh-comments');
 });
 test('paired cross-highlight waits for the companion to finish loading and retains the latest selection',()=>{
- const view=viewer({repository:'wayri/board',file:'board.kicad_pcb',head:'main',pairedFile:'root.kicad_sch'},()=>({ok:true,result:[]}));
+ const view=viewer({repository:'wayri/board',file:'board.kicad_pcb',head:'a'.repeat(40),pairedFile:'root.kicad_sch'},()=>({ok:true,result:[]}));
  const main=view.get('headDrawing').children[0],pair=view.get('pairDrawing').children[0];
  for(const reference of ['R1','R2'])view.message({origin:'chrome-extension://test-id',source:main.contentWindow,data:{type:'kicad-review:selection',selection:{kind:'part',reference,path:'board.kicad_pcb'}}});
  assert.equal(pair.messages.length,0);
@@ -196,7 +196,7 @@ test('paired cross-highlight waits for the companion to finish loading and retai
  assert.equal(pair.messages.length,1);assert.equal(pair.messages[0].message.selection.reference,'R2');
 });
 test('invalid same-kind companion is rejected without making a frame',()=>{
- const view=viewer({repository:'wayri/board',file:'board.kicad_pcb',head:'main',pairedFile:'other.kicad_pcb'},()=>({ok:true,result:[]}));
+ const view=viewer({repository:'wayri/board',file:'board.kicad_pcb',head:'a'.repeat(40),pairedFile:'other.kicad_pcb'},()=>({ok:true,result:[]}));
  assert.equal(view.get('pairDrawing').children.length,0);
  assert.match(view.get('status').textContent,/Invalid companion/);
 });
@@ -266,4 +266,17 @@ test('project tab receives cached schematic hierarchy only after its trusted rea
  view.message({origin:'chrome-extension://test-id',source:{},data:{type:'kicad-review:project-ready'}});assert.equal(project.messages.length,0);
  view.message({origin:'chrome-extension://test-id',source:project.contentWindow,data:{type:'kicad-review:project-ready'}});assert.equal(project.messages[0].message.type,'kicad-review:hierarchy');assert.equal(project.messages[0].message.repository,'fork/board');
  view.message({origin:'chrome-extension://test-id',source:project.contentWindow,data:{type:'kicad-review:project-sheet',file:'child.kicad_sch'}});assert.equal(frame.messages.at(-1).message.command,'open-sheet');assert.equal(view.get('comparison').hidden,false);
+});
+
+test('split selection supersedes delayed workspace discovery and late split failures',async()=>{
+ let resolveInventory,rejectSplit;const view=viewer({...parameters,base:''},message=>message.type==='project-inventory'?new Promise(done=>resolveInventory=done):new Promise((_,reject)=>rejectSplit=reject));
+ view.get('workspaceTabs').children.find(b=>b.textContent==='Layout').click();view.get('projectTools').children.find(b=>b.textContent==='Split view').click();view.get('companionPath').value='manual.kicad_pcb';view.get('pairChooser').children.find(b=>b.textContent==='Open pair').click();
+ resolveInventory({ok:true,result:{files:[{path:'other.kicad_pcb'}]}});rejectSplit(Error('Old lookup failed'));await tick();assert.equal(new URL(view.get('pairDrawing').children[0].src).searchParams.get('file'),'manual.kicad_pcb');assert.doesNotMatch(view.get('status').textContent,/Old lookup/);assert.equal(view.get('splitView').attributes['aria-pressed'],'true');
+});
+test('Project tab cancels a delayed split lookup',async()=>{
+ let resolve;const view=viewer({...parameters,base:''},()=>new Promise(done=>resolve=done));view.get('projectTools').children.find(b=>b.textContent==='Split view').click();view.get('workspaceTabs').children.find(b=>b.textContent==='Project').click();resolve({ok:true,result:{files:['board.kicad_pcb']}});await tick();assert.equal(view.get('pairDrawing').children.length,0);assert.equal(view.get('comparison').hidden,true);
+});
+test('GitHub branch is resolved once before main, companion and project reads',async()=>{
+ const sha='d'.repeat(40),view=viewer({repository:'wayri/board',head:'main',file:'board.kicad_pcb',pairedFile:'root.kicad_sch'},message=>({ok:true,result:message.type==='revision-resolve'?{sha}:{files:[]}}));assert.equal(view.get('headDrawing').children.length,0);await tick();assert.equal(view.calls.filter(m=>m.type==='revision-resolve').length,1);
+ for(const id of ['headDrawing','pairDrawing'])assert.equal(new URL(view.get(id).children[0].src).searchParams.get('ref'),sha);view.get('workspaceTabs').children.find(b=>b.textContent==='Project').click();assert.equal(new URL(view.get('projectWorkspace').children[0].src).searchParams.get('ref'),sha);
 });

@@ -90,3 +90,7 @@ test('primary project tab shows settings without embedding a second drawing shel
  await view.get('fileTree').children.find(n=>n.textContent==='board.kicad_pcb').onclick();assert.equal(view.get('drawingPreview').children.length,0);assert.equal(view.bodyClasses.has('focus-drawing'),false);
  await view.get('openDesign').onclick();assert.equal(view.parentMessages.at(-1).message.type,'kicad-review:project-drawing');assert.equal(view.parentMessages.at(-1).message.file,'board.kicad_pcb');assert.equal(view.parentMessages.at(-1).origin,'https://viewer.test');
 });
+
+test('header project search filters saved settings and constraints as well as project paths',async()=>{
+ const view=runtime(async()=>JSON.stringify({board:{design_settings:{rules:{min_clearance:0.2,min_track_width:0.25}}}}));await tick();view.get('projectSearch').value='clearance';view.get('projectSearch').oninput();assert.match(view.get('settingSections').textContent,/clearance/i);assert.doesNotMatch(view.get('settingSections').textContent,/Min track width/);assert.match(view.get('constraintSections').textContent,/clearance/i);view.get('projectSearch').value='never-matches';view.get('projectSearch').oninput();assert.match(view.get('constraintSections').textContent,/No matching/);view.get('projectSearch').value='';view.get('projectSearch').oninput();assert.match(view.get('constraintSections').textContent,/Track width/i);
+});

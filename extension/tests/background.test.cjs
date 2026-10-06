@@ -1055,3 +1055,7 @@ test('ordinary GitHub thread readback is restricted to extension viewers',async(
  for(const sender of [options,githubTab(1,'/owner/repo/blob/main/board.kicad_pcb'),{id:'other',url:viewer.url}]){const result=await message(request,sender);assert.notEqual(result.ok,true);}
  assert.equal(called,0);const result=await message(request);assert.equal(result.ok,true);assert.equal(result.result.number,42);assert.equal(called,1);
 });
+
+test('trusted project viewer resolves project settings branches while rejecting unsafe paths',async(t)=>{
+ let reads=0;withFetch(t,async url=>{reads++;assert.match(url,/repos\/owner\/board\/commits\/main$/);return new Response(sha('a'));});const args={type:'revision-resolve',repository:'owner/board',ref:'main',file:'design/board.kicad_pro'};const result=await message(args);assert.equal(result.ok,true);assert.equal(result.result.sha,sha('a'));assert.equal((await message({...args,file:'../board.kicad_pro'})).ok,false);assert.equal(reads,1);
+});

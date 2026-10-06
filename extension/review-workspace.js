@@ -155,7 +155,7 @@
     const sectionState=new Map(),resizeCleanups=[],pinnedSidebars=new Set(),dockButtons=new Map(),hideTimers=new Map(),hoveredSidebars=new Set(),draggingSidebars=new Set();let dockDisposed=false;
     function collapsible(title,nodes,open=true,key=title){
       const details=make("details");details.className="sidebar-section";details.open=sectionState.has(key)?sectionState.get(key):open;
-      details.append(make("summary",title),...nodes.filter(Boolean));details.addEventListener("toggle",()=>sectionState.set(key,details.open));return details;
+      details.append(make("summary",title),...nodes.filter(Boolean));details.addEventListener("toggle",()=>{if(!key.startsWith("property:")||!propertySearch.value.trim())sectionState.set(key,details.open);});return details;
     }
     const commentsSidebar=make("aside");commentsSidebar.id="commentsSidebar";commentsSidebar.className="review-sidebar";commentsSidebar.hidden=true;commentsSidebar.setAttribute("aria-label","Drawing comments");
     const propertiesSidebar=$("designInspector");propertiesSidebar.className="review-sidebar";propertiesSidebar.setAttribute("aria-label","Selection properties");
@@ -356,6 +356,20 @@
     }
     resizeSidebar("properties",propertiesSidebar,"left");resizeSidebar("comments",commentsSidebar,"left");resizeSidebar("navigator",$("designNavigator"),"right");
     const sidebarObserver=root.ResizeObserver?new root.ResizeObserver(layoutSidebars):null;sidebarObserver?.observe(workspaceElement);root.addEventListener?.("resize",layoutSidebars);
+    const propertySearch=make('input');propertySearch.id='propertySearch';propertySearch.type='search';propertySearch.placeholder='Search names, values, connections…';propertySearch.setAttribute('aria-label','Search selected properties');propertySearch.disabled=true;
+    const propertySearchStatus=make('p');propertySearchStatus.id='propertySearchStatus';propertySearchStatus.className='hint';propertySearchStatus.setAttribute('role','status');propertySearchStatus.hidden=true;
+    const propertySearchBar=make('div');propertySearchBar.className='property-searchbar';propertySearchBar.append(propertySearch,propertySearchStatus);$('propertiesPane').insertBefore(propertySearchBar,$('propertyList'));
+    const propertyOpenState=new WeakMap();
+    function filterProperties(){
+      const query=propertySearch.value.trim().toLowerCase();propertySearch.disabled=!selected&&!selectedNet;let matches=0;
+      for(const section of $('propertyList').children){const heading=section.children[0]?.textContent||'',headingMatch=Boolean(query&&heading.toLowerCase().includes(query));let found=!query||headingMatch;
+        const dl=section.querySelector('dl');if(dl){const fields=[...dl.children];for(let i=0;i<fields.length;i+=2){const key=fields[i],value=fields[i+1];if(!value)continue;const visible=!query||headingMatch||(key.textContent+' '+value.textContent).toLowerCase().includes(query);key.hidden=value.hidden=!visible;if(visible){found=true;matches++;}}}else{found=!query||section.textContent.toLowerCase().includes(query);if(found)matches++;}
+        section.hidden=!found;if(section.tagName==='DETAILS'){if(query){if(!propertyOpenState.has(section))propertyOpenState.set(section,section.open);if(found)section.open=true;}else if(propertyOpenState.has(section)){section.open=propertyOpenState.get(section);propertyOpenState.delete(section);}}
+      }
+      for(const row of $('netMemberList').children){const visible=!query||row.textContent.toLowerCase().includes(query);row.hidden=!visible;if(visible&&selectedNet)matches++;}
+      $('netMembers').hidden=!selectedNet||![...$('netMemberList').children].some(row=>!row.hidden);propertySearchStatus.hidden=!query;propertySearchStatus.textContent=matches?`${matches} matching fields or connections`:'No matching properties or connections.';
+    }
+    propertySearch.oninput=filterProperties;
     function propertySection(title,entries,collapsed=false){
       const values=Object.entries(entries).filter(([,value])=>value!==undefined&&value!==null);if(!values.length)return;
       const dl=make("dl");
@@ -367,6 +381,7 @@
     function setSelectionIcon(kind){if(root.KiCadUIIcons)$("selectionIcon").replaceChildren(root.KiCadUIIcons.icon(kind));}
     function netsForObject(object){if(!object)return[];return netModel.nets.filter(net=>net.path===object.path&&(net.objectIds.includes(object.id)||(["footprint","symbol"].includes(object.kind)&&net.primitives.some(p=>p.ownerUuid===object.uuid))));}
     function properties() {
+      try {
       $("propertyList").replaceChildren();$("selectionSummary").replaceChildren();$("netMemberList").replaceChildren();$("netMembers").hidden=true;$("selectObjectNet").hidden=true;
       $("selectedName").textContent=selectedNet?.name||selected?.label||"Select an object";
       $("selectedKind").textContent=selectedNet?`${selectedNet.kind==="pcb"?"PCB net":"Sheet network"} · ${selectedNet.path}`:selected?`${selected.kind} · ${selected.path}`:"Click a component, copper item or net to inspect it.";
@@ -409,6 +424,7 @@
           if(selected.saved.truncated||selected.saved.library?.truncated||count>12000)tree.append(make('p','Saved settings exceed the inspection limit; consult the source file for the remaining settings.'));
         };search.oninput=render;render();$("propertyList").append(section);
       }
+      } finally {filterProperties();}
     }
     function renderNets(){
       const list=$("netList"),highlighted=new Set(highlightedNets().map(n=>n.id));list.replaceChildren();const query=$("netSearch").value.trim().toLowerCase(),path=currentFile()||rootFile,linked=netFilterObject?new Set(netsForObject(objects.find(o=>o.id===netFilterObject)).map(n=>n.id)):null;

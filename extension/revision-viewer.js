@@ -30,7 +30,7 @@
 
     const kind=document.body.dataset.viewer;if(kind&&kind!=='auto'&&kind!==(pcb?'pcb':'schematic'))throw new Error('This file belongs in the other dedicated viewer.');
 
-    if(provider==='gitlab'&&!/^[a-f0-9]{40}$/i.test(ref)){const resolved=await send({type:'revision-resolve',repository,ref,file:rootFile});if(!resolved?.ok||!/^[a-f0-9]{40}$/i.test(resolved.result?.sha||''))throw new Error(resolved?.error||'GitLab revision could not be resolved.');ref=resolved.result.sha;}
+    if(!globalThis.KiCadVSCodeContext&&!/^[a-f0-9]{40}$/i.test(ref)){const resolved=await send({type:'revision-resolve',repository,ref,file:rootFile});if(!resolved?.ok||!/^[a-f0-9]{40}$/i.test(resolved.result?.sha||''))throw new Error(resolved?.error||'Git revision could not be resolved.');ref=resolved.result.sha;}
     loading?.show('Fetching drawing files and discovering sheets…');
     const reply=await send({type:'project',repository,ref,file:rootFile});
 

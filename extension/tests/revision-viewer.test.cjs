@@ -13,7 +13,7 @@ async function revision(query='',extraFiles=[],options={}){
  const initialFile=options.file||(options.pcb?'board.kicad_pcb':'root.kicad_sch');
  const context={URL,URLSearchParams,console,location:{search:'?repository=wayri/board&ref=main&file='+initialFile+query},parent,
   document:{getElementById:get,body:new Element(),createElement:()=>new Element(),head:new Element()},
-  chrome:{runtime:{getURL:name=>'chrome-extension://ours/'+name,sendMessage:async message=>{if(message.type==='repo-asset'){(calls.assetRequests||=[]).push(message);return{ok:true,result:{base64:'AAAA'}};}return{ok:true,result:[{path:initialFile,content:options.pcb?'(kicad_pcb)':'(kicad_sch)'},...extraFiles]};}}},
+  chrome:{runtime:{getURL:name=>'chrome-extension://ours/'+name,sendMessage:async message=>{(calls.requests||=[]).push(message);if(message.type==='revision-resolve')return{ok:true,result:{sha:'a'.repeat(40)}};if(message.type==='repo-asset'){(calls.assetRequests||=[]).push(message);return{ok:true,result:{base64:'AAAA'}};}return{ok:true,result:[{path:initialFile,content:options.pcb?'(kicad_pcb)':'(kicad_sch)'},...extraFiles]};}}},
   KiCadPairedReview:require('../paired-review.js'),KiCadReviewTools:require('../review-tools.js'),KiCadWorksheet:require('../worksheet.js'),KiCadBrowserData:require('../browser-data.js'),KiCadDesignModel:require('../design-model.js'),KiCadDesignDiff:require('../design-diff.js'),KiCadViewState:viewState,
   KiCadSchematicRenderer:{build:()=>({primitives:[],layers:[],page:{width:297,height:210},warnings:[]})},
   KiCadPCBRenderer:{build:()=>({primitives:[],layers:[],page:{width:297,height:210},warnings:[]})},
@@ -94,8 +94,12 @@ test('3D mode reuses successful model assets across toggles and clears them on p
  await v.calls.modelOptions.loadAsset('models/part.wrl');
  await v.get('mode3d').click();await v.get('mode3d').click();
  await v.calls.modelOptions.loadAsset('models/part.wrl');assert.equal(v.calls.assetRequests.length,1);
- assert.equal(v.calls.assetRequests[0].repository,'wayri/board');assert.equal(v.calls.assetRequests[0].ref,'main');assert.equal(v.calls.assetRequests[0].file,'models/part.wrl');
+ assert.equal(v.calls.assetRequests[0].repository,'wayri/board');assert.equal(v.calls.assetRequests[0].ref,'a'.repeat(40));assert.equal(v.calls.assetRequests[0].file,'models/part.wrl');
  v.hide();await v.calls.modelOptions.loadAsset('models/part.wrl');assert.equal(v.calls.assetRequests.length,2);
 });
 
 test('view settings exposes expanded state and Escape closes it without changing the drawing',async()=>{const v=await revision();v.get('settingsButton').click();assert.equal(v.get('viewerSettings').hidden,false);assert.equal(v.get('settingsButton').attributes['aria-expanded'],'true');assert.equal(v.key('Escape'),true);assert.equal(v.get('viewerSettings').hidden,true);assert.equal(v.get('settingsButton').attributes['aria-expanded'],'false');assert.equal(v.canvas.design.page.width,297);});
+
+test('remote viewer pins branch before loading drawings and passes the same commit to review tools',async()=>{
+ const v=await revision();assert.equal(v.calls.requests[0].type,'revision-resolve');assert.equal(v.calls.requests.find(m=>m.type==='project').ref,'a'.repeat(40));assert.equal(v.calls.workspaceOptions.ref,'a'.repeat(40));
+});

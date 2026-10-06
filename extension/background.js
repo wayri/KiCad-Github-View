@@ -222,7 +222,7 @@ async function revisionJson(url){
   return {value:JSON.parse(text),next:/rel="next"/.test(response.headers.get('link')||'')};
 }
 function revisionScope(repository,ref,file){
-  if(!KiCadBrowserData.validRepository(repository)||!KiCadBrowserData.validRef(ref)||!KiCadBrowserData.validPath(file)||file.length>500||/[\\:\x00-\x1f\x7f]/.test(file))throw new Error('Invalid drawing revision location.');
+  if(!KiCadBrowserData.validRepository(repository)||!KiCadBrowserData.validRef(ref)||!KiCadGitHub.filePath(file)||file.length>500||/[\\:\x00-\x1f\x7f]/.test(file))throw new Error('Invalid drawing revision location.');
 }
 async function revisionResolve(repository,ref,file){
   revisionScope(repository,ref,file);
