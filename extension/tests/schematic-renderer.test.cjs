@@ -136,6 +136,27 @@ test("bare and list effect flags hide fields and style text without treating no 
   assert.deepEqual([visible.bold, visible.italic], [false, false]);
 });
 
+test("placed symbol and sheet properties respect saved direct hide flags", () => {
+  const source = `(kicad_sch (lib_symbols (symbol "Demo:Visibility"))
+    (symbol (lib_id "Demo:Visibility") (at 30 40) (unit 1) (uuid "part")
+      (property "Reference" "U1" (at 30 35) (effects (font (size 1 1))))
+      (property "Value" "direct-atom" (at 30 45) hide (effects (font (size 1 1))))
+      (property "Footprint" "direct-list" (at 30 47) (hide) (effects (font (size 1 1))))
+      (property "Datasheet" "direct-yes" (at 30 49) (hide yes) (effects (font (size 1 1))))
+      (property "Description" "direct-no" (at 30 51) (hide no) (effects (font (size 1 1))))
+      (property "Note" "hide" (at 30 53) (effects (font (size 1 1)))))
+    (sheet (at 70 70) (size 20 10) (uuid "sheet")
+      (property "Sheetname" "sheet-hidden" (at 70 65) (hide yes) (effects (font (size 1 1))))
+      (property "Sheetfile" "sheet-visible" (at 70 67) (hide no) (effects (font (size 1 1))))))`;
+  const text = render(source).primitives.filter((item) => item.type === "text").map((item) => item.text);
+  for (const hidden of ["direct-atom", "direct-list", "direct-yes", "sheet-hidden"]) {
+    assert.equal(text.includes(hidden), false, hidden);
+  }
+  for (const visible of ["U1", "direct-no", "hide", "sheet-visible"]) {
+    assert.equal(text.includes(visible), true, visible);
+  }
+});
+
 test("resistor body and pin/wire joins agree with KiCad 10 native SVG coordinates", () => {
   // Reference: kicad-cli sch export svg of the saved sensor.kicad_sch fixture.
   const source = `(kicad_sch (paper "A4")

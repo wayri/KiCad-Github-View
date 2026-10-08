@@ -17,8 +17,15 @@
   const points = (node) => children(child(node, "pts"), "xy").map((xy) => ({ x: num(xy[1]), y: num(xy[2]) }));
   const uuid = (node) => String(field(node, "uuid") || field(node, "tstamp") || "");
   const hasAtom = (node, atom) => Array.isArray(node) && node.some((part) => !Array.isArray(part) && value(part) === atom);
-  const hidden = (node) => !!child(node, "hide") || hasAtom(node,"hide") ||
-    !!child(child(node, "effects"), "hide") || hasAtom(child(node,"effects"),"hide");
+  const hasFlag = (node, name) => Array.isArray(node) && node.some((part) => {
+    if (Array.isArray(part) && kind(part) === name) {
+      const state = value(part[1]);
+      return state === undefined || state === true || state === "yes" || state === "true" || state === 1;
+    }
+    return !Array.isArray(part) && !(part && typeof part === "object") && part === name;
+  });
+  const hidden = (node) => hasFlag(node, "hide") || hasFlag(child(node, "effects"), "hide") ||
+    hasFlag(child(child(node, "effects"), "font"), "hide");
   const rotation = (node) => num(child(node, "at")?.[3]);
   const PI = Math.PI;
   const toRadians = (degrees) => degrees * PI / 180;
@@ -143,6 +150,7 @@
         const justification = justify?.slice(1).map((part) => String(value(part))) || [];
         if (at && content != null) push({ type:"text", text:String(content), ...transform(at),
           size:num(fontSize?.[2],1), angle:-rotation(node), width:.15,
+          property:type==="property"?String(value(node[1])):type==="fp_text"&&value(node[1])==="reference"?"Reference":type==="fp_text"&&value(node[1])==="value"?"Value":undefined,
           bold:hasAtom(font,"bold") || !!child(font,"bold"),
           italic:hasAtom(font,"italic") || !!child(font,"italic"),
           align:justification.includes("left") ? "left" : justification.includes("right") ? "right" : "center",

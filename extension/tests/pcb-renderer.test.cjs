@@ -115,6 +115,29 @@ test('hidden text stays hidden; visible text carries native style and screen ang
   assert.equal(primitives.some((p) => p.text === 'SECRET'), false);
 });
 
+test('footprint properties respect direct and effect hide states', () => {
+  const source = `(kicad_pcb (version 20241229) (paper "A4")
+    (layers (0 "F.Cu" signal) (37 "F.SilkS" user))
+    (footprint "Demo:Visibility" (layer "F.Cu") (at 20 30) (uuid "part")
+      (property "Reference" "direct-atom" (at 0 0) hide (layer "F.SilkS") (effects (font (size 1 1))))
+      (property "Value" "effect-no" (at 0 2) (layer "F.SilkS") (effects (font (size 1 1)) (hide no))))
+    (footprint "Demo:Visible" (layer "F.Cu") (at 40 30) (uuid "visible")
+      (property "Reference" "direct-no" (at 0 0) (hide no) (layer "F.SilkS") (effects (font (size 1 1))))
+      (property "Value" "direct-yes" (at 0 2) (hide yes) (layer "F.SilkS") (effects (font (size 1 1)))))
+    (footprint "Demo:More" (layer "F.Cu") (at 60 30) (uuid "more")
+      (property "Reference" "direct-list" (at 0 0) (hide) (layer "F.SilkS") (effects (font (size 1 1))))
+      (property "Value" "effect-yes" (at 0 2) (layer "F.SilkS") (effects (font (size 1 1)) (hide yes))))
+    (footprint "Demo:Text" (layer "F.Cu") (at 80 30) (uuid "text")
+      (property "Reference" "hide" (at 0 0) (layer "F.SilkS") (effects (font (size 1 1))))))`;
+  const text = build(parse(source)).primitives.filter((item) => item.type === 'text').map((item) => item.text);
+  for (const hidden of ['direct-atom', 'direct-yes', 'direct-list', 'effect-yes']) {
+    assert.equal(text.includes(hidden), false, hidden);
+  }
+  for (const visible of ['direct-no', 'effect-no', 'hide']) {
+    assert.equal(text.includes(visible), true, visible);
+  }
+});
+
 test('custom circle anchor and saved line, arc, rectangle primitives retain pad identity', () => {
   const source = board.replace('(pad "1" thru_hole rect (at 10 0) (size 4 2) (drill 1) (layers "*.Cu") (uuid "p1"))',
     `(pad "1" smd custom (at 10 0) (size 1 1) (layers "F.Cu")

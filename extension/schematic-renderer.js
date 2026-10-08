@@ -47,7 +47,7 @@
         const state = value(item[1]);
         return state === undefined || state === true || state === "yes" || state === "true" || state === 1;
       }
-      return value(item) === name;
+      return !Array.isArray(item) && !(item && typeof item === "object") && item === name;
     });
   }
   function transform(origin = { x: 0, y: 0 }, angle = 0, mirror = "", library = false) {
@@ -61,7 +61,7 @@
   }
   function isHidden(node) {
     const effects = typeOf(node) === "effects" ? node : form(node, "effects");
-    return hasFlag(effects, "hide") || hasFlag(form(effects, "font"), "hide");
+    return hasFlag(node, "hide") || hasFlag(effects, "hide") || hasFlag(form(effects, "font"), "hide");
   }
   function fontSize(node, fallback = 1.27) {
     const effects = typeOf(node) === "effects" ? node : form(node, "effects");

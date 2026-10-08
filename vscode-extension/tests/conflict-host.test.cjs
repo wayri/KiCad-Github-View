@@ -1,14 +1,15 @@
 const test=require('node:test'),assert=require('node:assert/strict'),{createHost}=require('../conflict-host.js'),merge=require('../../extension/merge-conflicts.js');
 class Uri {constructor(path,scheme='file'){this.path=path;this.scheme=scheme;this.authority='';this.query='';this.fragment='';}toString(){return `${this.scheme}://${this.path}`;}with(changes){return Object.assign(new Uri(this.path,this.scheme),this,changes);}static parse(text){const i=text.indexOf('://');return new Uri(text.slice(i+3),text.slice(0,i));}static joinPath(u,...parts){return u.with({path:u.path.replace(/\/$/,'')+'/'+parts.join('/')});}}
 const conflict='(kicad_sch\n<<<<<<< HEAD\n(version 20250101)\n=======\n(version 20260101)\n>>>>>>> branch\n)';
-function harness(){
- const root=new Uri('/repo'),uri=Uri.joinPath(root,'drawing.kicad_sch'),entries=new Map([[root.toString(),{type:2,data:new Uint8Array()}],[uri.toString(),{type:1,data:new TextEncoder().encode(conflict)}]]),writes=[],reads=[],staged=[];
+function harness(options={}){
+ const root=new Uri('/repo'),uri=Uri.joinPath(root,'drawing.kicad_sch'),entries=new Map([[root.toString(),{type:2,data:new Uint8Array()}],[uri.toString(),{type:1,data:new TextEncoder().encode(options.source||conflict)}]]),writes=[],reads=[],staged=[],requested=[];
+ const repository={rootUri:root,state:{HEAD:{name:'main',commit:options.head},refs:options.refs||[],mergeChanges:options.unmerged===false?[]:[{uri}]},async getCommit(ref){requested.push(ref);if(!options.commits||!options.commits[ref])throw new Error('Unknown commit');return options.commits[ref];},async add(paths){staged.push(paths);}};
  let receive,dispose;const panel={webview:{options:{},html:'',onDidReceiveMessage(fn){receive=fn;return {dispose(){}};},async postMessage(reply){panel.reply=reply;}},onDidDispose(fn){dispose=fn;}};
- const vscode={Uri,FileType:{File:1,SymbolicLink:64},ViewColumn:{Active:1},workspace:{isTrusted:true,textDocuments:[],fs:{async stat(u){const e=entries.get(u.toString());if(!e){const error=new Error('Missing');error.code='FileNotFound';throw error;}return {type:e.type,size:e.data.length};},async readFile(u){reads.push(u.toString());return entries.get(u.toString()).data.slice();},async writeFile(u,data){writes.push(u.toString());entries.set(u.toString(),{type:1,data});}}},window:{createWebviewPanel(){return panel;},async showWarningMessage(_m,_options,action){return action;},async showSaveDialog(){return Uri.joinPath(root,'drawing-resolved.kicad_sch');}},extensions:{getExtension(){return {isActive:true,exports:{getAPI(){return {repositories:[{rootUri:root,state:{HEAD:{name:'main'}},async add(paths){staged.push(paths);}}]};}}};}}};
+ const vscode={Uri,FileType:{File:1,SymbolicLink:64},ViewColumn:{Active:1},workspace:{isTrusted:true,textDocuments:[],fs:{async stat(u){const e=entries.get(u.toString());if(!e){const error=new Error('Missing');error.code='FileNotFound';throw error;}return {type:e.type,size:e.data.length};},async readFile(u){reads.push(u.toString());return entries.get(u.toString()).data.slice();},async writeFile(u,data){writes.push(u.toString());entries.set(u.toString(),{type:1,data});}}},window:{createWebviewPanel(){return panel;},async showWarningMessage(_m,_options,action){return action;},async showSaveDialog(){return Uri.joinPath(root,'drawing-resolved.kicad_sch');}},extensions:{getExtension(){return {isActive:true,exports:{getAPI(){return {repositories:[repository]};}}};}}};
  const sameScope=(u,b)=>u.scheme===b.scheme&&u.authority===b.authority&&u.path.startsWith(b.path+'/');
  const host=createHost(vscode,merge,{sameScope,projectScope(){return {boundary:root,rootFile:'drawing.kicad_sch'};},secret(){return 'a'.repeat(48);},async conflictHTML(){return '<html></html>';}});
  let id=0;const send=async(request,token='a'.repeat(48))=>{panel.reply=null;receive({channel:'kicad-vscode:v1',token,id:++id,request});for(let i=0;i<20&&!panel.reply;i++)await new Promise(r=>setImmediate(r));return panel.reply?.reply;};
- return {host,vscode,panel,entries,uri,root,writes,reads,staged,send,close(){dispose();}};
+ return {host,vscode,panel,entries,uri,root,writes,reads,staged,requested,send,close(){dispose();}};
 }
 test('accept current saves exact validated original after explicit confirmation and stages separately',async()=>{const h=harness();await h.host.open(h.uri,{extensionUri:new Uri("/extension")});assert.equal((await h.send({type:'conflict-load'})).result.git.branch,'main');assert.deepEqual(h.writes,[]);assert.equal((await h.send({type:'conflict-save',mode:'original',choices:'current'})).ok,true);assert.equal(new TextDecoder().decode(h.entries.get(h.uri.toString()).data),merge.resolve(conflict,'current'));assert.equal(h.staged.length,0);assert.equal((await h.send({type:'conflict-stage'})).result.staged,true);assert.deepEqual(h.staged,[['/repo/drawing.kicad_sch']]);});
 test('copy preserves original and rejects arbitrary text or URI writes and existing destination',async()=>{const h=harness();await h.host.open(h.uri,{extensionUri:new Uri("/extension")});assert.equal((await h.send({type:'conflict-save',mode:'original',choices:'current',text:'oops'})).ok,false);assert.equal((await h.send({type:'conflict-save',mode:'copy',choices:'incoming'})).ok,true);assert.equal(new TextDecoder().decode(h.entries.get(h.uri.toString()).data),conflict);assert.equal((await h.send({type:'conflict-stage'})).ok,false);assert.equal((await h.send({type:'conflict-save',mode:'copy',choices:'current'})).ok,false);assert.equal(h.writes.length,1);});
@@ -20,3 +21,39 @@ test('invalid chosen state and unexpected root cannot be saved while valid alter
 test('UTF-8 BOM is retained in resolved file and exact bytes permit staging',async()=>{const h=harness(),encoded=new TextEncoder().encode(conflict),data=new Uint8Array(encoded.length+3);data.set([239,187,191]);data.set(encoded,3);h.entries.get(h.uri.toString()).data=data;await h.host.open(h.uri,{extensionUri:new Uri('/extension')});assert.equal((await h.send({type:'conflict-save',mode:'original',choices:'incoming'})).ok,true);assert.deepEqual(Array.from(h.entries.get(h.uri.toString()).data.slice(0,3)),[239,187,191]);assert.equal((await h.send({type:'conflict-stage'})).ok,true);});
 
 test('workspace trust revoked during staging confirmation prevents Git writes',async()=>{const h=harness();await h.host.open(h.uri,{extensionUri:new Uri('/extension')});await h.send({type:'conflict-save',mode:'original',choices:'incoming'});h.vscode.window.showWarningMessage=async(_m,_o,a)=>{h.vscode.workspace.isTrusted=false;return a;};assert.equal((await h.send({type:'conflict-stage'})).ok,false);assert.equal(h.staged.length,0);});
+
+const headHash='a'.repeat(40),incomingHash='b'.repeat(40);
+const marked=(current,incoming)=>`(kicad_sch\n<<<<<<< ${current}\n(version 20250101)\n=======\n(version 20260101)\n>>>>>>> ${incoming}\n)`;
+const commit=(hash,date)=>({hash,commitDate:new Date(date)});
+test('merge markers resolve HEAD and named repository ref, then identify the newer commit date',async()=>{
+ const h=harness({source:marked('HEAD','feature'),head:headHash,refs:[{name:'feature',commit:incomingHash}],commits:{[headHash]:commit(headHash,'2026-09-02T00:00:00Z'),[incomingHash]:commit(incomingHash,'2026-09-01T00:00:00Z')}});
+ await h.host.open(h.uri,{extensionUri:new Uri('/extension')});const git=(await h.send({type:'conflict-load'})).result.git;
+ assert.deepEqual(git.current,{hash:headHash,date:'2026-09-02T00:00:00.000Z',label:'HEAD'});
+ assert.deepEqual(git.incoming,{hash:incomingHash,date:'2026-09-01T00:00:00.000Z',label:'feature'});
+ assert.equal(git.latest,'current');assert.deepEqual(h.requested,[headHash,incomingHash]);
+});
+test('rebase marker SHA resolves incoming commit even when HEAD is older',async()=>{
+ const h=harness({source:marked('HEAD',incomingHash.slice(0,12)+' (rebased subject)'),head:headHash,commits:{[headHash]:commit(headHash,'2026-09-01T00:00:00Z'),[incomingHash.slice(0,12)]:commit(incomingHash,'2026-09-02T00:00:00Z')}});
+ await h.host.open(h.uri,{extensionUri:new Uri('/extension')});const git=(await h.send({type:'conflict-load'})).result.git;
+ assert.equal(git.incoming.hash,incomingHash);assert.equal(git.latest,'incoming');assert.deepEqual(h.requested,[headHash,incomingHash.slice(0,12)]);
+});
+test('missing, ambiguous, inconsistent or unverified refs keep latest unknown',async()=>{
+ const cases=[
+  {source:marked('HEAD','feature'),head:headHash,commits:{[headHash]:commit(headHash,'2026-09-01T00:00:00Z')}},
+  {source:marked('HEAD','feature'),head:headHash,refs:[{name:'feature',commit:incomingHash},{name:'feature',commit:headHash}],commits:{[headHash]:commit(headHash,'2026-09-01T00:00:00Z')}},
+  {source:marked('HEAD',incomingHash.slice(0,12)),head:headHash,commits:{[headHash]:commit(headHash,'2026-09-01T00:00:00Z'),[incomingHash.slice(0,12)]:commit(headHash,'2026-09-02T00:00:00Z')}},
+  {source:marked('HEAD','feature')+'\n'+marked('HEAD','other'),head:headHash,commits:{[headHash]:commit(headHash,'2026-09-01T00:00:00Z')}}
+ ];
+ for(const options of cases){const h=harness(options);await h.host.open(h.uri,{extensionUri:new Uri('/extension')});const git=(await h.send({type:'conflict-load'})).result.git;assert.equal(git.latest,null);assert.equal(git.incoming,null);}
+});
+test('equal or absent commit timestamps cannot establish newer side',async()=>{
+ for(const incomingDate of ['2026-09-01T00:00:00Z',null,undefined]){
+  const h=harness({source:marked('HEAD','feature'),head:headHash,refs:[{name:'feature',commit:incomingHash}],commits:{[headHash]:commit(headHash,'2026-09-01T00:00:00Z'),[incomingHash]:{hash:incomingHash,commitDate:incomingDate?new Date(incomingDate):incomingDate}}});
+  await h.host.open(h.uri,{extensionUri:new Uri('/extension')});assert.equal((await h.send({type:'conflict-load'})).result.git.latest,null);
+ }
+});
+test('markers outside a reported Git merge conflict carry no commit provenance',async()=>{
+ const h=harness({source:marked('HEAD','feature'),unmerged:false,head:headHash,refs:[{name:'feature',commit:incomingHash}],commits:{[headHash]:commit(headHash,'2026-09-01T00:00:00Z'),[incomingHash]:commit(incomingHash,'2026-09-02T00:00:00Z')}});
+ await h.host.open(h.uri,{extensionUri:new Uri('/extension')});const git=(await h.send({type:'conflict-load'})).result.git;
+ assert.equal(git.current,null);assert.equal(git.incoming,null);assert.equal(git.latest,null);assert.deepEqual(h.requested,[]);
+});

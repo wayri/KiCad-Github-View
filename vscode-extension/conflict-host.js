@@ -2,6 +2,36 @@
 // Provider-only I/O: never executes Git or project programs.
 const CHANNEL="kicad-vscode:v1",LIMIT=8*1024*1024;
 const sameBytes=(a,b)=>a.length===b.length&&a.every((v,i)=>v===b[i]);
+const hashPattern=/^[0-9a-f]{40}(?:[0-9a-f]{24})?$/i;
+function markerLabel(conflicts,side){
+ const labels=[...new Set(conflicts.map(c=>c[side+"Label"].trim()))];
+ return labels.length===1&&labels[0]?labels[0]:null;
+}
+function markerRef(label,repo){
+ if(!label)return null;
+ const abbreviated=/^([0-9a-f]{7,64})(?: \(.+\))?$/i.exec(label);
+ if(abbreviated)return {ref:abbreviated[1],prefix:abbreviated[1].toLowerCase()};
+ if(label==="HEAD")return hashPattern.test(repo.state?.HEAD?.commit||"")?{ref:repo.state.HEAD.commit,hash:repo.state.HEAD.commit.toLowerCase()}:null;
+ if(!/^[A-Za-z0-9_][A-Za-z0-9_./-]*$/.test(label)||label.includes("..")||label.endsWith("/")||label.endsWith(".lock"))return null;
+ const refs=(repo.state?.refs||[]).filter(r=>r.name===label||`refs/heads/${r.name}`===label||`refs/remotes/${r.name}`===label);
+ return refs.length===1&&hashPattern.test(refs[0].commit||"")?{ref:refs[0].commit,hash:refs[0].commit.toLowerCase()}:null;
+}
+async function commitForMarker(repo,label){
+ const identity=markerRef(label,repo);if(!identity||typeof repo.getCommit!=="function")return null;
+ try{
+  const commit=await repo.getCommit(identity.ref),hash=commit?.hash?.toLowerCase(),when=commit?.commitDate;
+  if(!hashPattern.test(hash||"")||(identity.hash&&hash!==identity.hash)||(identity.prefix&&!hash.startsWith(identity.prefix)))return null;
+  const date=when instanceof Date?when:null,timestamp=date?.getTime();
+  return Number.isFinite(timestamp)?{hash,date:date.toISOString(),label}:null;
+ }catch{return null;}
+}
+async function gitMetadata(repo,conflicts,uri){
+ if(!repo)return null;
+ if(!(repo.state?.mergeChanges||[]).some(change=>change.uri?.toString()===uri.toString()))return {branch:repo.state?.HEAD?.name||"Detached HEAD",current:null,incoming:null,latest:null};
+ const [current,incoming]=await Promise.all(["current","incoming"].map(side=>commitForMarker(repo,markerLabel(conflicts,side))));
+ const latest=current&&incoming&&current.hash!==incoming.hash&&current.date!==incoming.date?(current.date>incoming.date?"current":"incoming"):null;
+ return {branch:repo.state?.HEAD?.name||"Detached HEAD",current,incoming,latest};
+}
 function createHost(vscode,merge,helpers) {
  let actionQueue=Promise.resolve();
  const dirty=uri=>(vscode.workspace.textDocuments||[]).some(d=>d.uri.toString()===uri.toString()&&d.isDirty);
@@ -30,7 +60,7 @@ function createHost(vscode,merge,helpers) {
   const analysis=merge.analyze(source,{expectedRoot});if(!analysis.count)throw new Error("The selected file has no unresolved Git conflict markers.");
   panel=panel||vscode.window.createWebviewPanel("kicadVisualReview.conflicts","KiCad: Resolve Git Conflict",vscode.ViewColumn.Active,{enableScripts:true,retainContextWhenHidden:true});
   panel.webview.options={enableScripts:true,localResourceRoots:[context.extensionUri,vscode.Uri.joinPath(context.extensionUri,"media")]};
-  const session={token:helpers.secret(),lastId:0,disposed:false},repo=await gitRepository(uri);let savedOriginal=false,savedBytes=null,queue=Promise.resolve();
+  const session={token:helpers.secret(),lastId:0,disposed:false},repo=await gitRepository(uri),git=await gitMetadata(repo,analysis.conflicts,uri);let savedOriginal=false,savedBytes=null,queue=Promise.resolve();
   const checkOriginal=async()=>{if(dirty(uri)||!sameBytes(bytes,await boundedRead(uri,scope.boundary))||dirty(uri))throw new Error("Source changed or has unsaved edits; reopen conflict review. Nothing was written.");};
   async function guardCopy(destination) {
     const parts=destination.path.slice(scope.boundary.path.replace(/\/$/,"").length+1).split("/");
@@ -38,7 +68,7 @@ function createHost(vscode,merge,helpers) {
     try {await vscode.workspace.fs.stat(destination);throw new Error("Copy destination already exists; choose a new filename.");}catch(e){if(!["FileNotFound","EntryNotFound"].includes(e.code))throw e;}
   }
   async function dispatch(request){
-   if(request.type==="conflict-load")return {path:scope.rootFile,source,canStage:!!repo&&vscode.workspace.isTrusted===true,git:repo?{branch:repo.state?.HEAD?.name||"Detached HEAD"}:null};
+   if(request.type==="conflict-load")return {path:scope.rootFile,source,canStage:!!repo&&vscode.workspace.isTrusted===true,git};
    if(request.type==="conflict-save"){
     if(vscode.workspace.isTrusted!==true)throw new Error("Trust this workspace before saving resolved files.");
     if(!["current","incoming"].includes(request.choices)||!["copy","original"].includes(request.mode)||Object.keys(request).some(k=>!["type","choices","mode"].includes(k)))throw new Error("Invalid conflict resolution request.");
