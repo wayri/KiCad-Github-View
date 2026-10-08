@@ -1,0 +1,28 @@
+plugins {
+    id 'com.android.application'
+}
+
+android {
+    namespace 'dev.kicadvizdiff.android'
+    compileSdk 36
+
+    defaultConfig {
+        applicationId 'dev.kicadvizdiff.android'
+        minSdk 26
+        targetSdk 36
+        versionCode 28
+        versionName '1.25'
+        testInstrumentationRunner 'dev.kicadvizdiff.android.LibraryInstrumentation'
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+}
+
+dependencies {
+    implementation 'androidx.webkit:webkit:1.17.0'
+    implementation 'androidx.browser:browser:1.9.0'
+}
+

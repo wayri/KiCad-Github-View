@@ -13,6 +13,39 @@ spec.loader.exec_module(release)
 
 
 class ReleaseTests(unittest.TestCase):
+    def test_android_binary_asset_audit_rejects_stale_missing_and_duplicate_entries(self):
+        with tempfile.TemporaryDirectory() as folder:
+            path = Path(folder) / 'app.apk'
+            expected = {'index.html': b'current', 'viewer.js': b'script'}
+            def fixture(entries):
+                with zipfile.ZipFile(path, 'w') as archive:
+                    for name, content in entries:
+                        archive.writestr(name, content)
+            fixture([('assets/viewer/' + name, content) for name, content in expected.items()] + [('classes.dex', b'native')])
+            release.audit_android_payload(path, expected, 'assets/viewer/')
+            fixture([('assets/viewer/index.html', b'old'), ('assets/viewer/viewer.js', b'script')])
+            with self.assertRaisesRegex(ValueError, 'package/source mismatch'):
+                release.audit_android_payload(path, expected, 'assets/viewer/')
+            fixture([('assets/viewer/index.html', b'current')])
+            with self.assertRaisesRegex(ValueError, 'inventory'):
+                release.audit_android_payload(path, expected, 'assets/viewer/')
+            import warnings
+            with warnings.catch_warnings():
+                warnings.simplefilter('ignore', UserWarning)
+                fixture([('assets/viewer/index.html', b'current')] * 2)
+            with self.assertRaisesRegex(ValueError, 'Duplicate'):
+                release.audit_android_payload(path, expected, 'assets/viewer/')
+
+    def test_android_release_names_are_separate_version_and_explicit_signing(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            (root / 'android-app/app').mkdir(parents=True)
+            (root / 'android-app/app/build.gradle').write_text("versionName '1.24'")
+            self.assertEqual(release.android_names(root), {
+                'kicad-visual-review-android-phone-tablet-1.24-development.apk',
+                'kicad-visual-review-android-1.24-unsigned.aab',
+                'kicad-visual-review-android-source-1.24.zip'})
+
     def test_guides_archive_retains_relative_image_paths_and_is_deterministic(self):
         with tempfile.TemporaryDirectory() as folder:
             root = Path(folder)

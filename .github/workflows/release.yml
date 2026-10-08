@@ -20,7 +20,7 @@ concurrency:
 jobs:
   build:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 40
     outputs:
       tag: ${{ steps.tag.outputs.tag }}
       commit: ${{ steps.commit.outputs.commit }}
@@ -62,10 +62,21 @@ jobs:
           package-manager-cache: false
       - name: Install Python test dependencies
         run: python -m pip install '.[github]'
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: android-actions/setup-android@v3
+      - name: Install pinned Android SDK components
+        run: sdkmanager 'platforms;android-36' 'build-tools;36.1.0'
+      - name: Stage Android assets and build phone/tablet packages
+        run: |
+          python scripts/package_android.py
+          bash android-app/gradlew -p android-app --no-daemon assembleDebug lintDebug bundleRelease
       - name: Run gates and tests, verify tag versions, build release assets
         env:
           RELEASE_TAG: ${{ steps.tag.outputs.tag }}
-        run: python scripts/release.py --tag "$RELEASE_TAG" --output dist/release
+        run: python scripts/release.py --tag "$RELEASE_TAG" --android --output dist/release
       - uses: actions/upload-artifact@v7
         with:
           name: release-${{ steps.tag.outputs.tag }}
@@ -98,6 +109,10 @@ jobs:
         run: |
           REMOTE_SHA=$(gh api "repos/$GH_REPO/commits/$RELEASE_TAG" --jq .sha)
           test "$REMOTE_SHA" = "$RELEASE_SHA"
+          if gh release view "$RELEASE_TAG" --repo "$GH_REPO" >/dev/null 2>&1; then
+            echo "Release already exists for this verified source tag; preserving its uploaded assets."
+            exit 0
+          fi
           gh release create "$RELEASE_TAG" dist/release/* \
             --repo "$GH_REPO" --verify-tag --prerelease \
             --title "KiCad Visual Review $RELEASE_TAG" \

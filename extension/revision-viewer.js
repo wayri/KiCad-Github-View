@@ -100,20 +100,28 @@
     floatingLayers.id='floatingLayerSelector';floatingLayers.className='floating-layer-selector';
     floatingLayers.setAttribute('role','group');floatingLayers.setAttribute('aria-label','PCB layer selector');
     floatingLayers.hidden=true;if(pcb)host.append(floatingLayers);
-    let floatingSignature='';
+    let floatingSignature='',floatingToggle=null;
+    const compactLayerBar=!globalThis.KiCadAndroidUI;
+    if(compactLayerBar)addEventListener('pointerdown',event=>{if(!floatingLayers.contains(event.target)&&floatingToggle){floatingLayers.classList.remove('layers-expanded');floatingToggle.setAttribute('aria-expanded','false');}});
     syncFloatingLayers=()=>{
       const copper=(canvas.design?.layers||[]).filter(layer=>layer.endsWith('.Cu'));
       floatingLayers.hidden=!pcb||Boolean(scene)||!copper.length;if(floatingLayers.hidden)return;
       const signature=JSON.stringify(copper);
       if(signature!==floatingSignature){
         floatingSignature=signature;floatingLayers.replaceChildren();floatingButtons.clear();
+        const layerOptions=document.createElement('div');
+        if(compactLayerBar){
+          layerOptions.className='compact-layer-options';floatingToggle=document.createElement('button');floatingToggle.type='button';floatingToggle.className='compact-layer-toggle';floatingToggle.setAttribute('aria-label','Choose PCB layers');floatingToggle.setAttribute('aria-expanded','false');floatingToggle.textContent='Layers';
+          floatingToggle.onclick=()=>{const expanded=floatingToggle.getAttribute('aria-expanded')!=='true';floatingToggle.setAttribute('aria-expanded',String(expanded));floatingLayers.classList.toggle('layers-expanded',expanded);};
+          floatingLayers.classList.remove('layers-expanded');floatingLayers.append(floatingToggle,layerOptions);
+        }
         const add=(name,title,action,color)=>{
           const button=document.createElement('button');button.type='button';button.title=title;
           button.setAttribute('aria-label',title);button.dataset.layer=name;
           if(color){const swatch=document.createElement('span');swatch.className='layer-swatch';swatch.style.background=color;button.append(swatch);}
           const label=document.createElement('span');label.textContent=name;button.append(label);
-          button.onclick=()=>{if(scene)return;action();layers();canvas.draw();};
-          floatingButtons.set(name,button);floatingLayers.append(button);
+          button.onclick=()=>{if(scene)return;action();layers();canvas.draw();if(floatingToggle){floatingLayers.classList.remove('layers-expanded');floatingToggle.setAttribute('aria-expanded','false');}};
+          floatingButtons.set(name,button);(compactLayerBar?layerOptions:floatingLayers).append(button);
         };
         for(const layer of copper)add(layer,'Show only '+layer,()=>{canvas.focusLayer(layer,'isolate');$('layerFocusMode').value='isolate';},KiCadPCBRenderer.colorFor?.(layer)||'#8c9cab');
         add('All','Show all saved board layers',()=>canvas.layerPreset('all'));
@@ -123,6 +131,7 @@
         const selected=name==='All'?!canvas.focusedLayer&&(canvas.design.layers||[]).every(layer=>canvas.visibleLayers.has(layer)):name==='Overview'?!canvas.focusedLayer&&!canvas.layerSnapshot:canvas.focusedLayer===name;
         button.setAttribute('aria-pressed',String(selected));
       }
+      if(floatingToggle)floatingToggle.textContent=canvas.focusedLayer||'Layers';
     };
 
     function layers(){

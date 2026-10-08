@@ -183,10 +183,10 @@ Read [the complete comment guide](docs/COMMENTS.md) for authentication, permissi
 
 ## VS Code installation
 
-Download **`kicad-visual-review-vscode-0.12.28.vsix`** from Releases. In VS Code run **Extensions: Install from VSIX**, select the file and run **Developer: Reload Window**. Open a KiCad project folder and use **KiCad: Open Visual Viewer** or **Reopen Editor With → KiCad Visual Review**. The **KiCad Review** explorer lists saved drawings and review sidecars.
+Download **`kicad-visual-review-vscode-0.12.30.vsix`** from Releases. In VS Code run **Extensions: Install from VSIX**, select the file and run **Developer: Reload Window**. Open a KiCad project folder and use **KiCad: Open Visual Viewer** or **Reopen Editor With → KiCad Visual Review**. The **KiCad Review** explorer lists saved drawings and review sidecars.
 
 ```sh
-code --install-extension kicad-visual-review-vscode-0.12.28.vsix --force
+code --install-extension kicad-visual-review-vscode-0.12.30.vsix --force
 ```
 
 Local notes use `.kicad-review.json` in the workspace root (or drawing directory outside a workspace). Filesystem-provider permissions still apply. The VSIX is not currently published in Visual Studio Marketplace. See [the VS Code guide](vscode-extension/README.md).
@@ -267,3 +267,12 @@ Comment actions reveal a usable composer even in a short split pane or Focus vie
 3D stand-ins use saved fabrication outlines, then courtyard or pad bounds. They are centred on that geometry and follow front/back rotation without model offsets or guessed size padding. Closed body outlines constrain boxes internally; missing or ambiguous bounds omit the stand-in. These boxes remain approximate visual aids, not mechanical models.
 
 Measurement labels have opaque theme-aware backplates. For a three-point angle, press **M**, choose **Angle (3 points)**, then click the first arm endpoint, vertex and second arm endpoint. The third click pins the smaller angle (0–180°); **New measurement** restarts it and **Esc** exits. Available in schematic and PCB 2D views.
+
+## Android phone and tablet app
+
+The [Android hybrid app](android-app/README.md) packages the same viewer
+with native file and folder pickers, touch pan/pinch zoom, shared project tabs,
+and local review notes. One APK adapts to phones and tablets. Build its assets
+with `python scripts/package_android.py`, then build the Android project with
+Gradle. Development APKs require device testing and release signing before store
+publication. Android supports native GitHub and GitLab accounts, public/private project imports, self-hosted GitLab, commit comparison and explicit review publication with screenshots. Drafts stay local until published.

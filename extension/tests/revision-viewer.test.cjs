@@ -4,7 +4,7 @@ const viewState=require('../view-state.js'),core=require('../owned-canvas.js');
 const tick=()=>new Promise(resolve=>setImmediate(resolve)),plain=value=>JSON.parse(JSON.stringify(value));
 async function revision(query='',extraFiles=[],options={}){
  const listeners=new Map(),canvasListeners=new Map(),controls=new Map(),reports=[],calls={board:0,page:0,draw:0,disposed:0,attach:0};
- class Element{constructor(){this.attributes={};this.children=[];this.hidden=false;this.dataset={viewer:'auto'};this.isConnected=true;this.classList={add(){}};this.style={};}setAttribute(k,v){this.attributes[k]=String(v);}append(...children){this.children.push(...children);}remove(){}replaceChildren(){this.children=[];}click(){return this.onclick?.();}}
+ class Element{constructor(){this.attributes={};this.children=[];this.hidden=false;this.dataset={viewer:'auto'};this.isConnected=true;this.classList={add(){},remove(){},toggle(){}};this.style={};}setAttribute(k,v){this.attributes[k]=String(v);}getAttribute(k){return this.attributes[k]??null;}append(...children){this.children.push(...children);}remove(){}replaceChildren(){this.children=[];}click(){return this.onclick?.();}}
  const get=id=>{if(!controls.has(id)){const element=new Element();if(id==='viewerSettings')element.hidden=true;controls.set(id,element);}return controls.get(id);};
  const camera=new core.Camera(800,600),parent={postMessage:(data,origin)=>reports.push({data,origin})};
  const canvas={canvas:new Element(),viewport:{camera},document:null,visibleLayers:new Set(),addEventListener:(type,callback)=>canvasListeners.set(type,callback),resize(){},draw(){calls.draw++;},dispose(){calls.disposed++;},
@@ -108,11 +108,11 @@ test('remote viewer pins branch before loading drawings and passes the same comm
 test('floating saved copper layer selector isolates, shows all and restores the previous view',async()=>{
  const v=await revision('',[],{pcb:true,layers:['F.Cu','In1.Cu','In2.Cu','B.Cu','Edge.Cuts']});
  const bar=v.get('drawingHost').children.find(child=>child.id==='floatingLayerSelector');
- assert.ok(bar);assert.equal(bar.hidden,false);assert.deepEqual(bar.children.map(button=>button.dataset.layer),['F.Cu','In1.Cu','In2.Cu','B.Cu','All','Overview']);
+ assert.ok(bar);assert.equal(bar.hidden,false);const toggle=bar.children[0],buttons=bar.children[1].children;assert.equal(toggle.attributes['aria-expanded'],'false');toggle.click();assert.equal(toggle.attributes['aria-expanded'],'true');assert.deepEqual(buttons.map(button=>button.dataset.layer),['F.Cu','In1.Cu','In2.Cu','B.Cu','All','Overview']);
  v.canvas.visibleLayers=new Set(['F.Cu','Edge.Cuts']);
- bar.children[1].click();assert.equal(v.canvas.focusedLayer,'In1.Cu');assert.equal(v.canvas.layerFocusMode,'isolate');assert.equal(bar.children[1].attributes['aria-pressed'],'true');
- bar.children[4].click();assert.deepEqual([...v.canvas.visibleLayers],v.canvas.design.layers);assert.equal(v.canvas.focusedLayer,null);
- bar.children[5].click();assert.deepEqual([...v.canvas.visibleLayers],['F.Cu','Edge.Cuts']);assert.equal(v.canvas.layerSnapshot,null);
+ buttons[1].click();assert.equal(toggle.attributes['aria-expanded'],'false');assert.equal(toggle.textContent,'In1.Cu');assert.equal(v.canvas.focusedLayer,'In1.Cu');assert.equal(v.canvas.layerFocusMode,'isolate');assert.equal(buttons[1].attributes['aria-pressed'],'true');
+ buttons[4].click();assert.deepEqual([...v.canvas.visibleLayers],v.canvas.design.layers);assert.equal(v.canvas.focusedLayer,null);
+ buttons[5].click();assert.deepEqual([...v.canvas.visibleLayers],['F.Cu','Edge.Cuts']);assert.equal(v.canvas.layerSnapshot,null);
  await v.get('mode3d').click();assert.equal(bar.hidden,true);await v.get('mode3d').click();assert.equal(bar.hidden,false);
  const schematic=await revision();assert.equal(schematic.get('drawingHost').children.some(child=>child.id==='floatingLayerSelector'),false);
 });

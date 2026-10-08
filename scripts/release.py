@@ -12,6 +12,7 @@ import shutil
 import subprocess
 import sys
 import zipfile
+import xml.etree.ElementTree as ET
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -134,7 +135,89 @@ def package_guides(output: Path, root: Path = ROOT):
     return output
 
 
-def build(output: Path, tag: str | None = None):
+def android_version(root: Path = ROOT) -> str:
+    source = (root / 'android-app/app/build.gradle').read_text(encoding='utf-8')
+    match = re.search(r"versionName\s+['\"]([0-9]+\.[0-9]+(?:\.[0-9]+)?)['\"]", source)
+    if not match:
+        raise ValueError('Missing numeric Android versionName.')
+    return match.group(1)
+
+
+def android_names(root: Path = ROOT) -> set[str]:
+    version = android_version(root)
+    return {f'kicad-visual-review-android-phone-tablet-{version}-development.apk',
+            f'kicad-visual-review-android-{version}-unsigned.aab',
+            f'kicad-visual-review-android-source-{version}.zip'}
+
+
+def audit_android_payload(archive_path: Path, expected: dict[str, bytes], prefix: str):
+    with zipfile.ZipFile(archive_path) as archive:
+        names = archive.namelist()
+        if len(names) != len(set(names)):
+            raise ValueError('Duplicate Android archive entries.')
+        actual = {name for name in names if name.startswith(prefix) and not name.endswith('/')}
+        if actual != {prefix + name for name in expected}:
+            raise ValueError('Android asset inventory differs from current source.')
+        for name, data in expected.items():
+            if archive.read(prefix + name) != data:
+                raise ValueError(f'Android package/source mismatch: {name}')
+
+
+def package_android(output: Path, root: Path = ROOT):
+    """Accept only locally built binaries whose embedded viewer matches this checkout."""
+    version = android_version(root)
+    builder = module('package_android')
+    expected = builder.payload(root)
+    apk = root / 'android-app/app/build/outputs/apk/debug/app-debug.apk'
+    bundle = root / 'android-app/app/build/outputs/bundle/release/app-release.aab'
+    lint = root / 'android-app/app/build/reports/lint-results-debug.xml'
+    for path in (apk, bundle, lint):
+        if not path.is_file() or path.is_symlink():
+            raise ValueError(f'Missing Android build output: {path}; run assembleDebug lintDebug bundleRelease.')
+    issues = ET.parse(lint).getroot().findall('issue')
+    if any(issue.get('severity') in {'Fatal', 'Error'} for issue in issues):
+        raise ValueError('Android lint contains errors.')
+    sdk = os.environ.get('ANDROID_HOME') or os.environ.get('ANDROID_SDK_ROOT')
+    if not sdk:
+        raise ValueError('ANDROID_HOME is required to audit APK version and signature.')
+    tools = Path(sdk) / 'build-tools/36.1.0'
+    suffix = '.bat' if os.name == 'nt' else ''
+    subprocess.run([str(tools / ('apksigner' + suffix)), 'verify', str(apk)], check=True, cwd=root)
+    aapt = tools / ('aapt2.exe' if os.name == 'nt' else 'aapt2')
+    badging = subprocess.check_output([str(aapt), 'dump', 'badging', str(apk)], text=True, cwd=root)
+    gradle = (root / 'android-app/app/build.gradle').read_text(encoding='utf-8')
+    code = re.search(r'versionCode\s+(\d+)', gradle).group(1)
+    if not re.search(r"package: name='dev\.kicadvizdiff\.android' versionCode='" + code + r"' versionName='" + re.escape(version) + "'", badging):
+        raise ValueError('Android APK package/version differs from source.')
+    audit_android_payload(apk, expected, 'assets/viewer/')
+    audit_android_payload(bundle, expected, 'base/assets/viewer/')
+    with zipfile.ZipFile(bundle) as archive:
+        if any(re.fullmatch(r'META-INF/[^/]+\.(?:RSA|DSA|EC|SF)', name, re.IGNORECASE) for name in archive.namelist()):
+            raise ValueError('Expected an unsigned Android bundle.')
+    source = builder.package(root)
+    with zipfile.ZipFile(source) as archive:
+        source_names = {path.relative_to(root).as_posix() for path in (root / 'android-app').rglob('*')
+                        if path.is_file() and not any(part in {'build', '.gradle'} for part in path.relative_to(root / 'android-app').parts)
+                        and path.name != 'local.properties'}
+        if set(archive.namelist()) != source_names or len(archive.namelist()) != len(source_names):
+            raise ValueError('Android source archive inventory differs from current source.')
+        for name in archive.namelist():
+            path = root / name
+            if not path.resolve().is_relative_to((root / 'android-app').resolve()) or not path.is_file() or path.is_symlink() or archive.read(name) != path.read_bytes():
+                raise ValueError(f'Android source archive mismatch: {name}')
+    for source_path, name in ((apk, f'kicad-visual-review-android-phone-tablet-{version}-development.apk'),
+                              (bundle, f'kicad-visual-review-android-{version}-unsigned.aab'),
+                              (source, f'kicad-visual-review-android-source-{version}.zip')):
+        shutil.copyfile(source_path, output / name)
+    return {'version': version, 'versionCode': int(code), 'viewerAssets': len(expected),
+            'apkSignature': 'Verified development/debug signature; not a production signing identity.',
+            'bundleSigning': 'Unsigned; not ready for Play Store upload.',
+            'lintWarnings': sum(issue.get('severity') == 'Warning' for issue in issues),
+            'deviceAcceptance': 'Not implied by the release build; requires separate device verification.',
+            'reproducibility': 'Build instructions and exact source commit recorded; signed binary bytes may differ between builds.'}
+
+
+def build(output: Path, tag: str | None = None, android: bool = False):
     version = versions(tag=tag)
     commit = source_commit(tag=tag)
     if output.is_symlink() or any(parent.is_symlink() for parent in output.parents):
@@ -146,6 +229,8 @@ def build(output: Path, tag: str | None = None):
              f'kicad-visual-review-guides-{version}.zip', 'FIREFOX.md', 'SAFARI.md',
              f'kicad-visual-review-app-web-{version}.zip', f'kicad-visual-review-github-app-{version}.zip',
              f'kicad-visual-review-step-source-{version}.zip', 'SHA256SUMS.txt', 'RELEASE-NOTES.md', 'INSTALL.md', 'COMMENTS.md', 'GIT-HOSTS.md', 'THIRD-PARTY-NOTICES.md', 'release-manifest.json'}
+    if android:
+        names.update(android_names())
     if output.is_symlink():
         raise ValueError('Release output must not be a symbolic link.')
     if output.exists() and any(p.name not in names or not p.is_file() or p.is_symlink() for p in output.iterdir()):
@@ -154,6 +239,8 @@ def build(output: Path, tag: str | None = None):
     chrome = module('package_extension').package(output=output / f'kicad-visual-review-chrome-edge-brave-opera-vivaldi-chromium-{version}.zip')
     native = module('package_vscode').package(output=output / f'kicad-visual-review-vscode-{version}.vsix')
     evidence = audit_packages(chrome, native)
+    if android:
+        evidence['android'] = package_android(output)
     module('package_step_source').package(output / f'kicad-visual-review-step-source-{version}.zip')
     for target in ('firefox', 'safari'):
         builder = module(f'package_{target}')
@@ -192,11 +279,12 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--tag', help='Existing checked-out version tag, e.g. v0.11.0')
     parser.add_argument('--output', type=Path, default=ROOT / 'dist/release')
+    parser.add_argument('--android', action='store_true', help='Include audited assembleDebug/lintDebug/bundleRelease outputs (requires Android SDK 36.1.0).')
     args = parser.parse_args()
     versions(tag=args.tag)
     source_commit(tag=args.tag)
     run_tests()
-    build(args.output, args.tag)
+    build(args.output, args.tag, android=args.android)
 
 
 if __name__ == '__main__':

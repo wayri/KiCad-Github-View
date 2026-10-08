@@ -177,6 +177,11 @@ body .object-row.selected{background:var(--selected);color:var(--text);border:1p
 .review-page-settings{border-top:1px solid var(--line);padding-top:10px}.review-page-settings>summary{cursor:pointer;font-size:13px;font-weight:600;padding:4px 0}.review-page-fields{display:grid;gap:10px;padding-top:10px}.review-page-fields>h3{display:none}
 .navigator-tabs button{min-height:34px;font-size:12px;gap:5px;border-radius:0}
 .navigator-pane{gap:10px}.navigator-pane input,.navigator-pane select{font-size:12px}
+/* Scroll content rather than shrinking filters, headings and result rows. */
+.navigator-pane>*{flex-shrink:0}
+.object-list>*{flex-shrink:0}
+#bomRows,#zoneStats{flex:none;overflow:visible;min-height:0}
+.bom-group{flex:none;min-height:84px;align-content:flex-start}
 .sidebar-heading h2{font-size:13px}.property-group dl{font-size:12px;line-height:1.5}
 .sidebar-heading button,#designNavigator>.panel-heading button{width:auto;min-width:26px;padding:4px 6px;flex-shrink:0;font-size:11px}
 .review-sidebar input,.review-sidebar select,.review-sidebar textarea{font-size:13px}
@@ -247,3 +252,29 @@ body[data-workspace="true"] #projectButton,body[data-workspace="true"] #viewOppo
 .floating-layer-selector button[aria-pressed=true]{background:var(--selected);border-color:var(--accent);color:var(--text)}
 .floating-layer-selector .layer-swatch{width:12px;height:12px;flex:0 0 12px;border-radius:3px}
 @media(max-width:600px){.floating-layer-selector{bottom:32px;max-width:calc(100% - 12px);gap:2px;padding:3px}.floating-layer-selector button{padding:4px 6px;font-size:11px}}
+
+#layerPanel{min-height:0;flex:1;overflow:auto}#layerPanel>*{flex-shrink:0}
+
+/* Translucent floating controls keep drawing detail visible without fading labels. */
+.floating-layer-selector,.sidebar-heading,.panel-heading{background:var(--panel);background:color-mix(in srgb,var(--panel) 92%,transparent);}
+@media(prefers-reduced-transparency:reduce){.floating-layer-selector,.sidebar-heading,.panel-heading{background:var(--panel);backdrop-filter:none}}
+
+/* Compact desktop controls keep the drawing dominant; touch retains larger targets. */
+@media(pointer:fine){
+ #frameControls{min-height:34px;padding:2px 6px;gap:4px}
+ #frameControls button,.top-sheet-navigation button,.top-sheet-navigation #sheetSelect{min-height:28px;font-size:11px}
+ #drawingTools{flex-basis:34px;width:34px;gap:3px;padding:4px 2px}
+ #drawingTools button{width:28px;min-height:28px;padding:4px}
+ #reviewWorkspace{--tool-strip-width:34px}
+ .panel-heading,.sidebar-heading{padding:6px 8px}
+ #designNavigator>.panel-heading{height:34px;min-height:34px}
+ .navigator-tabs button{min-height:30px;padding:5px 3px;font-size:11px}
+ .navigator-pane{padding:8px;gap:7px}
+ .property-group{padding:8px 0}.property-group dl{gap:4px 8px}
+ .review-footer{min-height:20px;padding:2px 6px}
+}
+.floating-layer-selector:has(.compact-layer-toggle){left:auto;right:10px;bottom:12px;transform:none;opacity:1;max-width:calc(100% - 20px);overflow:visible;background:var(--panel);background:color-mix(in srgb,var(--panel) 88%,transparent)}
+.compact-layer-toggle{min-width:66px}.compact-layer-options{display:none;gap:3px;min-width:0;overflow-x:auto}
+.layers-expanded .compact-layer-options{display:flex}.layers-expanded:has(.compact-layer-toggle){left:10px;right:10px}
+#drawingTools{background:var(--panel);background:color-mix(in srgb,var(--panel) 92%,transparent)}
+@media(prefers-reduced-transparency:reduce){.floating-layer-selector:has(.compact-layer-toggle),#drawingTools{background:var(--panel)}}

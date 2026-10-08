@@ -1,0 +1,141 @@
+# Android phone and tablet viewer
+
+This hybrid Android app packages the shared KiCad schematic, PCB and approximate 3D viewer inside a native Java host. One APK adapts to phones and tablets. It requires Android 8 (API 26) or later and targets API 36. Source designs are read-only.
+
+## Open a project
+
+- **Open a project folder** uses Android's storage picker and includes nested sheets and available local model files. Select the complete project folder rather than only its `.kicad_pro` file.
+- **Open a file** supports individual drawings, project files and complete project ZIPs. A single file grants no access to its siblings.
+- **Drive / cloud** opens Android's document picker. Choose Drive or an installed storage provider. For complete projects, select a ZIP containing the drawings, subsheets and models. This is not a direct Drive URL browser or separate Drive OAuth integration.
+- **GitHub** supports public and authorized private repositories, native device sign-in and manual tokens. Private OAuth requests GitHub's broad `repo` scope; organization approval or SSO may be required.
+- **GitLab** supports public/private GitLab.com and self-hosted HTTPS servers at the origin root, with server-scoped tokens or registered public OAuth clients using PKCE. Register callback `kicadvizdiff://gitlab-oauth` on the selected server. Publication needs the appropriate API permissions.
+
+Online imports pin the revision and load supported drawings and models. They do not modify the repository. Branch/history comparison uses bounded native imports. External model lookup and approximate stand-ins retain the shared viewer's limitations.
+
+## Project library and offline copies (v1.6)
+
+Open **Menu > Your projects** for **All**, **Starred**, and **Offline** collections. Search matches project names, repository names and server names.
+
+- **Bookmark current** saves a pinned GitHub/GitLab project link. Local projects are saved with their source copy because a bookmark cannot silently reopen a folder grant.
+- **Save offline** keeps the loaded drawings and models inside the app. It does not create a file in Downloads or require a new login to reopen the saved copy.
+- **Star / Unstar** changes membership in the Starred collection.
+- **Remove offline copy** retains the bookmark and star; reopening then needs the online source.
+- **Remove bookmark** removes its associated offline copy too. Original project files and local review notes remain unchanged.
+
+Offline copies and library metadata use a separate AndroidKeyStore AES-GCM key. Snapshots are compressed and stored atomically in the app's no-backup directory. No account tokens are included. Source-only reopening removes remote transport metadata, so it reads local saved files. Explicit copies remain after account sign-out; clearing app data or uninstalling removes the library. There is no cloud library sync or automatic offline refresh.
+
+An updated online bookmark retains the previous offline revision until **Save offline** is selected again. The library shows the actual saved revision rather than relabeling an older copy as a newer one. A project has a stable library identity across viewed revisions.
+
+Limits: 200 bookmarks, 20 offline projects, 512 MiB total stored ciphertext, and 160 MiB serialized snapshot. These are additional to the 96 MiB original source/model import limit. Storage errors preserve the previous successful copy. Encrypted files depend on the device's app key and cannot serve as portable backups.
+
+## ZIP export
+
+**Export project ZIP** is separate from in-app offline saving. It writes supported original source and model files to a location chosen through Android's save picker. Credentials, app metadata and review records are excluded. The export is an ordinary unencrypted ZIP; private exports require an explicit native confirmation. Account sign-out cannot remove an exported file. Importing its ZIP works offline.
+
+The export uses the imported project snapshot, not an alternate comparison revision. Native ZIP intake rejects unsafe paths, duplicates, symlinks, encrypted or unsupported entries, executable KiCad entries and malformed archives. Limits are 32 MiB per file, 96 MiB expanded supported content, 2,000 supported files, 4,000 ZIP entries and a 100 MiB archive container. Highly inflated entries are rejected.
+
+## Touch workflow
+
+The bottom tabs switch between Project, Schematic and Layout. Views/compare controls open from the header. The drawing toolbar provides Search, Fit, group Highlight, Comments and More. Drag pans; pinch zooms; double-tap enters a sheet; hold opens contextual actions. Phone panels slide up. Tablet panels support pinning and resizing. Back dismisses overlays before exiting and protects unsaved comment drafts.
+
+Controls retain accessible labels and at least 48-pixel touch targets. The native host handles system/keyboard insets, font scaling and modern Android Back callbacks. Light/dark themes and reduced-motion preferences are respected. Locally bundled SVG icons use short captions. Settings load on demand, file lists are bounded and searchable, and parsing uses workers with a safe fallback. No measured large-project speedup is claimed.
+
+## Accounts and review
+
+Tokens stay in native AndroidKeyStore-backed AES-GCM storage and never enter WebView JavaScript or web storage. Sign-out purges account credentials and active authenticated source, but preserves explicitly saved library copies. App backup is disabled. GitLab credentials are server-scoped. The WebView loads trusted packaged assets through WebViewAssetLoader; remote pages are opened outside the privileged viewer.
+
+Review drafts remain local until explicitly published. GitHub Issues/Discussions and GitLab issues/issue discussions support thread readback, member suggestions, policy checks, screenshot upload and duplicate retry protection. Remote permissions and account registration still apply. Offline review is local; remote publication and thread updates need a connection. Offline drafts are not automatically merged into another revision's remote comments.
+
+## Build and packages
+
+From the repository root, stage assets with `python scripts/package_android.py`. Then set `JAVA_HOME` to a JDK 17+ installation, configure `ANDROID_HOME` for an Android SDK with API 36, and run `android-app/gradlew.bat -p android-app assembleDebug lintDebug bundleRelease` (or the shell wrapper on Linux/macOS). The project currently uses AGP 9.3 and Gradle 9.5.
+
+Development output is `app/build/outputs/apk/debug/app-debug.apk`. The release bundle is `app/build/outputs/bundle/release/app-release.aab`; configure your own release signing for distribution. APKs in `dist` are development-signed, not Play Store releases. `dist/kicad-visual-review-android-source.zip` includes source and staged assets, excluding build caches and `local.properties`.
+
+## Verification
+
+Version 1.6 was built and installed on the connected Samsung SM_A366E running Android 16. JavaScript tests cover local transport, hierarchy, provider isolation, review handling, touch navigation, library metadata, filters and native reply correlation. Packaging checks verify asset staging.
+
+The isolated `LibraryInstrumentation` test uses its own temporary native directory. On-device checks verified encryption at rest, recreation/reopen, star persistence, stable revision identity, exact offline revision tracking, failed-save preservation, tamper rejection, and independent copy/bookmark removal (15 checks). Run it after `assembleDebugAndroidTest` by installing the app and test APK and invoking `adb shell am instrument -w dev.kicadvizdiff.android.test/dev.kicadvizdiff.android.LibraryInstrumentation`.
+
+Phone/tablet browser fixtures verify presentation and interaction, not live provider authentication. Physical SAF/Drive interactions, keyboard behavior, long-press gestures, live account sign-in and remote publication have not all been accepted on-device. Large-project phone performance is not benchmarked. Saved geometry and unsupported renderer constructs retain the shared viewer's disclosed limitations.
+
+## Version 1.7 visual actions
+Larger icons and small captions distinguish source cards and project navigation. GitHub and GitLab buttons use locally bundled official Invertocat and Tanuki geometry. See the staged BRAND-ASSETS.md for provenance. Drawing controls retain full accessible labels and compact touch targets.
+
+## Touch net selection
+
+Tap a wire, pad or track to highlight its net. If several networks are within 14 screen pixels, a compact chooser lists their names and visible layers; selection uses the existing cross-highlight workflow. Hidden or isolated-out layers are excluded. Pan, pinch and long-press do not trigger this chooser. Tap outside menus to dismiss them; destructive confirmations and unsaved-draft decisions still require an explicit choice.
+
+## Open links from Chrome and other apps
+
+In Chrome, open a GitHub/GitLab repository or KiCad file page and choose **Share → KiCad Visual Review**. The app opens the provider dialog with repository and revision filled in. Tap **Add and open project**; private repositories use the existing provider account. A matching linked KiCad file opens after import. Existing review drafts stay intact until you choose to change projects.
+
+Redirect buttons can use `kicadvizdiff://open?url=` followed by the URL-encoded HTTPS repository/file link. Chrome intent links can use `intent://open?url=ENCODED_URL#Intent;scheme=kicadvizdiff;package=dev.kicadvizdiff.android;end`. Browser restrictions may require a user tap rather than an automatic redirect.
+
+Normal GitHub.com and GitLab.com HTTPS links are registered as unverified supported links. On Android 12+, these usually open in the browser unless the user enables the domains under **Android Settings → Apps → KiCad Visual Review → Open by default / Open supported links**. We cannot verify domains owned by GitHub/GitLab. Self-hosted GitLab uses Share or the app redirect scheme; the app does not claim every HTTPS host.
+
+Home, tree, blob and raw file links are accepted. URLs with a slash-containing branch encoded as one segment retain it; otherwise verify/edit the revision field, since a web URL alone cannot separate an unescaped branch from the file path. Links cannot sign in, publish comments, change scopes or fetch arbitrary Drive URLs. Drive projects still open through the Android document picker as files/ZIPs.
+
+## GitHub access and quota errors
+
+Native API errors now distinguish exhausted primary quota (with approximate reset wait), secondary throttling/Retry-After, organization SSO, and access refusal. They state whether the failing request was authenticated. No remote error body, SSO URL or token is exposed. Repository import checks the remaining core quota after indexing, before spending one request per supported file; insufficient quota offers account sign-in or local ZIP opening. A GitHub login in Chrome is separate from the app's native account.
+
+## Simplified GitHub sign-in (1.11)
+
+Sign in opens a trusted browser Custom Tab automatically, reusing that browser's GitHub session. Only the short-lived user code is copied to the clipboard (marked sensitive), ready to paste if GitHub requests it. It is cleared after completion/cancel on return only if the clipboard still contains that same code. Tokens and the private device code are never placed on the clipboard. Open GitHub app tries GitHub Mobile when installed; unsupported handling falls back to the browser. GitHub Mobile does not provide a documented third-party seamless account handoff, so this remains GitHub's device authorization flow.
+
+Android now polls authorization independently of WebView timers and rechecks on return. Pending device credentials are encrypted separately in Android Keystore storage, recover across activity/process recreation until GitHub expiry, and are purged on cancel/sign-out. The OAuth token is encrypted as soon as GitHub grants authorization; retrieving a profile name cannot delay acceptance or undo it on a temporary API/network failure. The button and account indicator update from native completion events. I have authorized — check now also refreshes status without starting a new authorization. Live account verification requires a connected device and user approval on GitHub.
+
+## ZIP project import (1.12)
+
+ZIPs are copied in bounded chunks to a private temporary cache file and removed when import succeeds, fails or is cancelled. The compressed archive limit is 512 MiB; extraction is selective, so unrelated images, manuals and backups are never decompressed and do not consume the supported-project byte budget. Nested repository paths are preserved. Supported KiCad sources and local 3D models retain the 32 MiB per-member, 96 MiB total and 2000-file limits used by the viewer. Archives are limited to 10000 directory entries, with path, duplicate, encryption, Unix symlink, CRC and supported-member compression-ratio checks. ZIP64 and multipart archives remain unsupported. Errors distinguish archive bytes, supported member bytes and total supported project bytes.
+
+The production reader can be tested without a device by compiling `app/src/main/java/dev/kicadvizdiff/android/ZipProjectReader.java` and `tests/ZipProjectReaderTest.java` with Java 17+, then running `dev.kicadvizdiff.android.ZipProjectReaderTest`. Fixtures include an archive over 50 MiB with 110 MiB of excluded documentation, nested sheets, supported-file limits, corrupt CRC, traversal, case-duplicate paths, symlinks, cancellation and truncation. Device document-provider testing still requires a connected phone.
+
+## Panel interaction (1.13)
+
+Touch and pen gesture completion no longer trigger mouse hover auto-hide. Pointer, wheel and scroll interaction inside a pane cancels pending dismissal. Outside drawing taps still collapse unpinned panes, and mouse hover departure retains normal auto-hide. The Android adapter no longer closes panes merely because more than one pane is visible during a click.
+
+## Long-press actions (1.14)
+
+Opening a context menu no longer selects the pressed object or opens Properties. Choose Inspect properties explicitly to inspect that object. Comment on object retains its exact saved-object anchor and opens Comments directly. Normal taps keep their existing selection behavior.
+
+## Back navigation (1.15)
+
+Android Back first closes the active dialog/menu and then panels, with nested drawing frames consulted before the project shell. With no overlay active it uses the shared parent-sheet navigation, or non-root sheet history when a parent is unavailable. It never follows history back into a child after reaching the root. At the root drawing, Back shows the home screen while retaining the current project in memory; the app may exit on a subsequent Back at home. Draft protection runs before sheet/home navigation. Native Back only allows exit after an explicit false response from the ready trusted UI; missing adapters, exceptions and unexpected evaluation results do not exit the activity.
+
+## Explicit text selection (1.16)
+
+Drawing tools now offer Select text mode for readable UI text and Copy drawing text for selectable saved text from the active drawing. Text selection is off during normal navigation; context menus, buttons and navigation captions remain non-selectable even in selection mode. Input and comment fields always retain normal editing, copy and paste. Back closes the copy dialog first and exits selection mode before navigating sheets. Drawing text is read from saved visible text primitives, limited to 5000 entries and 256 KiB; it is not OCR or generated geometry.
+
+## Readable explorer and BOM (1.17)
+
+Explorer headings, filters and result rows no longer shrink under a small height budget. BOM content uses the outer pane scroll rather than multiple compressed lists. Phone BOM groups have spaced cards, 16px titles, wrapped footprint labels and 48px reference buttons; board analytics retain readable label/value spacing. The phone explorer can use 86% of the drawing-frame height and remains closable with Back.
+
+## Touch button help (1.18)
+
+Hold a button or explorer tab for 500 ms to show its title or accessible label as a tooltip. The hold does not activate the command; ordinary taps still do. Movement over 8 px, scrolling and pointer cancellation dismiss help. Tooltips use the active dialog when necessary, retain existing accessibility descriptions, disappear automatically after 3.5 seconds and can be dismissed with Back. Drawing long-press retains its context menu.
+
+## Single project menu (1.19)
+
+Embedded drawing toolbars hide their duplicate Menu button when an ancestor workspace provides the project/account menu. Standalone drawings keep their menu fallback. The main Menu and Views actions stay in the project header; drawing actions retain Search, Fit, Highlight, Comments and More.
+
+## Selection modes (1.20)
+Select offers All (smart), Part and Net in phone drawings. The web viewer provides the same selection dropdown. Smart ambiguity lists saved component references and networks, including a pad/pin’s owning component. Group highlighting preserves mixed part/net selections and paired highlighting. Long-press context actions remain separate.
+
+## Expandable phone sheets (1.21)
+Phone dialogs, tools, properties, comments, explorer and ambiguity/context menus have a drag handle. Pull up/down to resize, tap to expand/reduce, or use arrow keys on the focused handle. Heights stay within the available viewport, including the keyboard. Dialog contents scroll independently without shrinking rows; desktop/tablet pane sizing remains unchanged.
+
+## BoM and field copies (1.22)
+Open More → BoM manager for separate schematic/PCB part lists, grouped quantities, search, filters, ordering and procurement metadata. Management drafts are stored by project revision and saved identity; CSV/JSON export uses Android's destination picker. JSON import uses the native file chooser. Reused schematic sheet instances are not expanded into an assembly quantity.
+
+Edit KiCad fields opens existing Value/custom fields only. Save field draft keeps changes in memory; Export revised project writes a new ZIP through the document picker. Original imported files, coordinates, identities and connections are unchanged. Related schematic/PCB parts and other symbol units are not synchronized. Reopen and validate the exported copy in KiCad. Creating new source fields, changing references/footprints/connectivity and live ERC/DRC are not implemented. See [native rule engine plan](NATIVE_RULE_ENGINE_PLAN.md).
+
+### Compact viewer (1.23)
+
+Drawing views use a compact toolbar and bottom navigation, with Menu and Views floating over the drawing. The PCB layer selector folds into a small chip and expands on tap. Panel headings and spacing are reduced while touch controls retain usable targets. Floating controls use subtle theme-aware translucency, opaque text and an opaque fallback. In the phone-sized browser fixture, the drawing rectangle occupies about 89% of workspace height; floating controls cover small portions of it. Device verification is pending while the phone is disconnected.
+
+### GitHub-only field editing (1.24)
+
+Existing Value/custom-field editing is available only for projects opened online from GitHub. Local files, offline snapshots and GitLab imports remain view-only. The editor still exports a revised ZIP copy and does not overwrite repository files.

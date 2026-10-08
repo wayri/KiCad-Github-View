@@ -29,6 +29,7 @@
     while (i < source.length) {
       const ch = source[i];
       if (/\s/.test(ch)) { i++; continue; }
+      if((ch==="<"||ch===">")&&/^(?:<{7,}|>{7,})(?:\s|$)/.test(source.slice(i,i+120)))throw new Error("Unresolved Git merge conflict at line "+(source.slice(0,i).split("\n").length)+". Resolve the conflict in a separate copy before viewing.");
       if (ch === ";") { while (i < source.length && source[i] !== "\n") i++; continue; }
       if (ch === "(") {
         if (stack.length >= MAX_DEPTH) throw new Error("KiCad S-expression is too deep.");

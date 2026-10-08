@@ -1,0 +1,58 @@
+/* Account and project UI. Credentials never enter JavaScript or web storage. */
+((root)=>{
+'use strict';
+function repository(value){
+ const text=String(value||'').trim();if(text.startsWith('https://')){const u=new URL(text);if(u.origin!=='https://github.com'||u.search||u.hash)throw Error('Enter a github.com repository URL.');const parts=u.pathname.replace(/\/+$/,'').split('/').filter(Boolean);if(parts.length!==2)throw Error('Enter the repository home URL, not a file or issue URL.');return repository(parts.join('/'));}
+ if(!/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(text)||text.length>200||text.split('/').some(p=>p==='.'||p==='..'))throw Error('Enter owner/repository or its GitHub home URL.');return text;
+}
+function library(storage){
+ const key='android-github-projects-v1';
+ const list=()=>{try{const items=JSON.parse(storage.getItem(key)||'[]');if(!Array.isArray(items))return[];return items.filter(v=>{try{return repository(v.repository)===v.repository&&typeof v.ref==='string'&&v.ref.length<=200&&!/[\x00-\x1f]/.test(v.ref);}catch{return false;}}).slice(0,100);}catch{return[];}};
+ return{list,save:item=>{const value={repository:repository(item.repository),ref:String(item.ref||'').slice(0,200),sha:/^[a-f0-9]{40}$/.test(item.sha)?item.sha:'',private:Boolean(item.private)};if(/[\x00-\x1f]/.test(value.ref))throw Error('Invalid branch.');const items=list().filter(v=>v.repository!==value.repository||v.ref!==value.ref);items.unshift(value);storage.setItem(key,JSON.stringify(items.slice(0,100)));},remove:item=>storage.setItem(key,JSON.stringify(list().filter(v=>v.repository!==item.repository||v.ref!==item.ref)))};
+}
+function bridge(native,{setTimeout:later=root.setTimeout,clearTimeout:clear=root.clearTimeout}={}){
+ let next=0;const pending=new Map();
+ return{request:message=>new Promise((resolve,reject)=>{
+  if(typeof native()?.githubRequest!=='function'){reject(Error('GitHub requires the updated Android app.'));return;}if(pending.size>=8){reject(Error('Wait for the current GitHub request.'));return;}
+  const id=++next,timer=later(()=>{pending.delete(id);reject(Error('GitHub request timed out. Try again.'));},message.type.endsWith('import')?600000:message.type==='token-connect'?300000:60000);pending.set(id,{resolve,reject,timer,type:message.type});try{const {type,...fields}=message;native().githubRequest(id,{...fields,action:type});}catch(error){clear(timer);pending.delete(id);reject(Error('GitHub native connection unavailable.'));}
+ }),reply:(id,response)=>{if(!Number.isSafeInteger(id)||!pending.has(id)||!response||typeof response.ok!=='boolean')return;const item=pending.get(id);pending.delete(id);clear(item.timer);response.ok?item.resolve(response.result):item.reject(Object.assign(Error(response.error||'GitHub request failed.'),{authExpired:Boolean(response.authExpired)}));},cancel:type=>{for(const [id,item] of pending){if(item.type!==type)continue;clear(item.timer);item.reject(Error('GitHub request cancelled.'));pending.delete(id);}},close:()=>{for(const item of pending.values()){clear(item.timer);item.reject(Error('GitHub view closed.'));}pending.clear();}};
+}
+root.KiCadAndroidGitHubCore={repository,library,bridge};if(typeof module==='object'&&module.exports){module.exports=root.KiCadAndroidGitHubCore;return;}
+const api=bridge(()=>root.AndroidKiCad),saved=library(localStorage),$=id=>document.getElementById(id);root.KiCadAndroidGitHub={reply:api.reply,request:api.request,openProject:importProject};
+let connected=false,pendingSignIn=false,authEpoch=0,pollTimer=null,deviceEpoch=0,importEpoch=0,listEpoch=0,page=1;
+const status=(text,error=false)=>{$('githubStatus').textContent=text;$('githubStatus').dataset.error=String(error);};
+function pending(value){pendingSignIn=Boolean(value?.pending);$('githubDevice').hidden=!pendingSignIn;if(value?.userCode)$('githubCode').textContent=value.userCode;$('githubSignIn').disabled=pendingSignIn;$('githubScope').disabled=connected||pendingSignIn;}
+const clearSource=()=>{if(!root.KiCadAndroidProject?.github)return;delete root.KiCadAndroidProject;delete root.KiCadAndroidRevisionCache;const frame=$('viewer');frame.removeAttribute('src');frame.hidden=true;$('projectPicker').hidden=true;$('drawingPicker').replaceChildren();$('welcome').hidden=false;};
+function auth(value){connected=Boolean(value?.connected);pending(value);$('githubAccount').textContent=connected?(value.login?'Signed in as '+value.login:'Signed in to GitHub'):'Public projects work without signing in.';$('githubSignIn').textContent=connected?'Sign out':'Sign in with GitHub';$('githubSignIn').setAttribute('aria-label',connected?'Sign out':'Sign in with GitHub');$('githubSignIn').title=connected?'Sign out':'Sign in with GitHub';$('githubSignIn').dataset.connected=String(connected);$('githubButton').dataset.connected=String(connected);$('githubScope').disabled=connected||pendingSignIn;$('githubBrowse').disabled=!connected;if(!connected){$('githubRepositories').replaceChildren();$('githubMore').hidden=true;}}
+function renderSaved(){const holder=$('githubSaved');holder.replaceChildren();for(const item of saved.list()){const row=document.createElement('div');row.className='github-project-row';const open=document.createElement('button');open.textContent=item.repository+(item.private?' · private':'')+(item.ref?' · '+item.ref:'');open.onclick=()=>importProject(item);const remove=document.createElement('button');remove.textContent='Remove';remove.setAttribute('aria-label','Remove saved '+item.repository);remove.onclick=()=>{saved.remove(item);renderSaved();};row.append(open,remove);holder.append(row);}if(!holder.children.length)holder.textContent='No saved GitHub projects yet.';}
+function failure(error){if(error.authExpired){clearSource();auth({connected:false});}status(error.message,true);}
+async function refreshAuth(){if(!root.AndroidKiCad?.githubRequest)return;const ticket=++authEpoch;try{const value=await api.request({type:'auth-status'});if(ticket!==authEpoch)return;auth(value);if(value.connected)status('GitHub connected. You can open projects now.');else if(value.pending)status('Waiting for GitHub authorization. Return here after approving.');}catch(error){if(ticket===authEpoch)failure(error);}}
+async function importProject(item){
+ const ticket=++importEpoch;let repo;try{repo=repository(item.repository);}catch(error){status(error.message,true);return;}
+ $('githubAdd').disabled=true;$('githubSpinner').hidden=false;root.KiCadAndroidUI?.loading('Opening read-only project…');status('Downloading '+repo+' and its saved sheets/models…');
+ try{const result=await api.request({type:'import',repository:repo,...(item.ref?{ref:item.ref}:{})});if(ticket!==importEpoch)return;if(!/^[a-f0-9]{40}$/.test(result?.sha))throw Error('GitHub did not return a pinned revision.');
+  repo=repository(result.repository||repo);const project=KiCadAndroidLocal.validate({...result.project,github:{repository:repo,sha:result.sha}});root.KiCadAndroid.receiveProject(project);const linkedFile=root.KiCadAndroidLinks?.fileFor('github',repo,item.ref||'');if(linkedFile)root.KiCadAndroid.openDrawing(linkedFile);saved.save({repository:repo,ref:item.ref||'',sha:result.sha,private:result.private??item.private});renderSaved();status('Opened '+repo+' at '+result.sha.slice(0,12));$('githubDialog').close();
+ }catch(error){if(ticket===importEpoch)failure(error);}finally{if(ticket===importEpoch){$('githubAdd').disabled=false;$('githubSpinner').hidden=true;root.KiCadAndroidUI?.loading(null);}}
+}
+async function browse(reset=false){const epoch=++listEpoch;if(reset){page=1;$('githubRepositories').replaceChildren();}status('Loading your repositories…');try{const result=await api.request({type:'repositories',page});if(epoch!==listEpoch)return;if(!Array.isArray(result?.repositories))throw Error('Invalid GitHub repository response.');for(const item of result.repositories){const open=document.createElement('button');open.textContent=item.fullName+(item.private?' · private':'');open.onclick=()=>{$('githubRepository').value=item.fullName;$('githubRef').value=item.defaultBranch||'';importProject({repository:item.fullName,ref:item.defaultBranch,private:item.private});};$('githubRepositories').append(open);}$('githubMore').hidden=!result.hasMore;page++;status('Choose a repository to add and open.');}catch(error){if(epoch===listEpoch)failure(error);}}
+function stopPolling(){pendingSignIn=false;authEpoch++;$('githubSignIn').disabled=false;$('githubScope').disabled=connected;deviceEpoch++;if(pollTimer!==null)clearTimeout(pollTimer);pollTimer=null;$('githubDevice').hidden=true;}
+$('githubSignIn').onclick=async()=>{
+ if(connected){stopPolling();importEpoch++;listEpoch++;api.cancel('import');api.cancel('repositories');api.cancel('device-poll');clearSource();auth({connected:false});$('githubSpinner').hidden=true;root.KiCadAndroidUI?.loading(null);$('githubAdd').disabled=false;try{await api.request({type:'sign-out'});status('Signed out. Protected credentials and active GitHub source cleared.');}catch(error){status(error.message,true);}return;}
+ $('githubSignIn').disabled=true;authEpoch++;try{stopPolling();const value=await api.request({type:'device-start',scope:$('githubScope').value});pending({...value,pending:true});status('The code is copied when authorization opens. Paste it on GitHub if requested, then return here.');api.request({type:'open-verification'}).catch(error=>{if(!connected)status(error.message,true);});}catch(error){status(error.message,true);}finally{$('githubSignIn').disabled=pendingSignIn;}
+};
+$('githubToken').onclick=async()=>{try{stopPolling();const result=await api.request({type:'token-connect'});auth(result);status('GitHub connected using the selected token permissions.');}catch(error){failure(error);}};
+$('githubOpenVerification').onclick=()=>api.request({type:'open-verification'}).catch(error=>status(error.message,true));
+$('githubCancelSignIn').onclick=()=>{stopPolling();api.request({type:'device-cancel'}).catch(error=>status(error.message,true));status('Sign-in cancelled.');};
+$('githubAdd').onclick=()=>importProject({repository:$('githubRepository').value,ref:$('githubRef').value.trim()});$('githubBrowse').onclick=()=>browse(true);$('githubMore').onclick=()=>browse();
+$('githubButton').onclick=()=>{$('githubDialog').showModal();renderSaved();refreshAuth();};$('githubClose').onclick=()=>{$('githubDialog').close();};
+$('githubCopyCode').onclick=()=>api.request({type:'copy-device-code'}).then(()=>status('Code copied. Paste it on GitHub.')).catch(error=>{if(!connected)status(error.message,true);});
+$('githubOpenMobile').onclick=()=>api.request({type:'open-verification-mobile'}).catch(error=>{if(!connected)status(error.message,true);});
+$('githubCheckStatus').onclick=refreshAuth;
+addEventListener('kicad-android-ready',refreshAuth);
+addEventListener('kicad-android-resumed',refreshAuth);
+addEventListener('kicad-github-auth-changed',event=>{authEpoch++;const value=event.detail||{};if(value.connected){stopPolling();auth(value);status(value.warning||'GitHub connected. You can open projects now.');}else if(value.pending){pending(value);if(value.error)status('Still waiting; connection will retry. '+value.error,true);}else if(value.error){stopPolling();status(value.error,true);}});
+root.KiCadAndroidGitHub.authExpired=()=>{clearSource();auth({connected:false});};
+root.KiCadAndroidGitHub.localImport=()=>{importEpoch++;api.cancel('import');$('githubSpinner').hidden=true;root.KiCadAndroidUI?.loading(null);$('githubAdd').disabled=false;};
+addEventListener('pagehide',()=>{stopPolling();api.close();});
+refreshAuth();renderSaved();
+})(globalThis);

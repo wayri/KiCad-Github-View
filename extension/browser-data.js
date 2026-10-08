@@ -39,7 +39,8 @@
   const names=[],stack=[];let i=0,nodes=0,roots=0;
   while(i<source.length) {
     const c=source[i];if(/\s/.test(c)){i++;continue;}
-    if(c===";"){while(i<source.length&&source[i]!=="\n")i++;continue;}
+    if((c==="<"||c===">")&&/^(?:<{7,}|>{7,})(?:\s|$)/.test(source.slice(i,i+120)))throw new Error("Unresolved Git merge conflict at line "+(source.slice(0,i).split("\n").length)+". Resolve the conflict in a separate copy before viewing.");
+      if(c===";"){while(i<source.length&&source[i]!=="\n")i++;continue;}
     if(++nodes>1000000)throw new Error("KiCad source has too many S-expression nodes.");
     if(c==="(") {if(stack.length>=96)throw new Error("KiCad source is too deeply nested.");if(!stack.length)roots++;stack.push([]);i++;continue;}
     if(c===")") {

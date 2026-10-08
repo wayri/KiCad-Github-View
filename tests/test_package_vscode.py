@@ -1,6 +1,7 @@
 import hashlib
 import importlib.util
 import json
+import re
 from pathlib import Path
 import tempfile
 import unittest
@@ -57,6 +58,13 @@ class PackageVSCodeTests(unittest.TestCase):
                 entry = archive.read('extension/media/revision-viewer.js').decode()
                 self.assertIn('KiCadVSCodeContext?.search ?? location.search', entry)
                 self.assertNotIn('kicanvas', entry.lower())
+
+    def test_viewer_html_dependencies_are_packaged(self):
+        for name in ('revision-viewer.html', 'project-viewer.html'):
+            html = (ROOT / 'extension' / name).read_text(encoding='utf-8')
+            for reference in re.findall(r'(?:src|href)="([^"?#]+)"', html):
+                if reference.endswith(('.js', '.css')) and '://' not in reference:
+                    self.assertIn(reference, builder.ASSETS, f'{name} requires {reference}')
 
     def test_entry_adapter_rejects_shared_contract_drift(self):
         with self.assertRaisesRegex(ValueError, 'entry changed'):

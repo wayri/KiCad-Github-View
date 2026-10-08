@@ -58,13 +58,14 @@ function sheetFiles(source) {
   const names=[],stack=[];let i=0,nodes=0,roots=0;
   while(i<source.length) {
     const c=source[i];if(/\s/.test(c)){i++;continue;}
-    if(c===";"){while(i<source.length&&source[i]!=="\n")i++;continue;}
+    if((c==="<"||c===">")&&/^(?:<{7,}|>{7,})(?:\s|$)/.test(source.slice(i,i+120)))throw new Error("Unresolved Git merge conflict at line "+(source.slice(0,i).split("\n").length)+". Resolve the conflict in a separate copy before viewing.");
+      if(c===";"){while(i<source.length&&source[i]!=="\n")i++;continue;}
     if(++nodes>1000000)throw new Error("KiCad source has too many S-expression nodes.");
     if(c==="(") {if(stack.length>=96)throw new Error("KiCad source is too deeply nested.");if(!stack.length)roots++;stack.push([]);i++;continue;}
     if(c===")") {
       if(!stack.length)throw new Error("Unexpected closing KiCad parenthesis.");
       const entry=stack.pop();i++;
-      if(entry[0]==="property" && entry[1]==="Sheetfile" && typeof entry[2]==="string" &&
+      if(entry[0]==="property" && ["Sheetfile","Sheet file"].includes(entry[1]) && typeof entry[2]==="string" &&
         stack.length===2 && stack[0][0]==="kicad_sch" && stack[1][0]==="sheet")names.push(entry[2]);
       continue;
     }
@@ -114,7 +115,11 @@ async function loadProject(uri,scope=projectScope(uri),cancel={isCancellationReq
     }
     if(bytes.byteLength>MAX_FILE || (total+=bytes.byteLength)>MAX_PROJECT)throw new Error("Project exceeds the 8 MiB file / 24 MiB project limit.");
     const content=new TextDecoder("utf-8",{fatal:true}).decode(bytes);files.push({path,content});
-    if(/\.kicad_sch$/i.test(path))for(const name of sheetFiles(content)) {
+    let children=[];
+    if(/\.kicad_sch$/i.test(path))try{children=sheetFiles(content);}catch(error){
+      throw new Error(`${path}: ${error.message} The saved schematic could not be read. Open the source with the Text Editor to check whether it is empty or incomplete, and save or restore a complete KiCad file.`);
+    }
+    for(const name of children) {
       const child=childPath(path,name);
       if(!child)warnings.push(`Unsupported or out-of-workspace sheet reference: ${name.slice(0,200)}`);
       else if(!seen.has(child))queue.push(child);
@@ -516,7 +521,7 @@ function activate(context) {
         panel.onDidDispose(()=>{session.disposed=true;liveSessions.delete(session);receiver.dispose();if(![...liveSessions].some((other)=>other.uri.toString()===session.uri.toString()))unpair(session.uri);});
         panel.webview.html=await htmlFor(panel.webview,context,session);
         if(project.warnings.length)vscode.window.showWarningMessage(project.warnings.join(" ").slice(0,2000));
-      } catch(error) {panel.webview.html=`<!doctype html><html><head><meta http-equiv="Content-Security-Policy" content="default-src 'none'"></head><body><h2>KiCad drawing could not be opened</h2><p>${escaped(error.message || error)}</p><p>Run the packaging script to prepare shared media for extension development.</p></body></html>`;}
+      } catch(error) {panel.webview.html=`<!doctype html><html><head><meta http-equiv="Content-Security-Policy" content="default-src 'none'"></head><body><h2>KiCad drawing could not be opened</h2><p>${escaped(error.message || error)}</p><p>For a source-file error, use Reopen Editor With → Text Editor to inspect the saved file. If a packaged viewer resource is missing, reinstall the latest VSIX. Source files have not been changed.</p></body></html>`;}
     }
   };
   context.subscriptions.push(vscode.window.registerCustomEditorProvider(VIEW,provider,{supportsMultipleEditorsPerDocument:true,webviewOptions:{retainContextWhenHidden:true}}));

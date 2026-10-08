@@ -3,7 +3,7 @@
 VIEWER_PAGES = ('index.html', 'styles.css', 'app.js', 'public-data.js',
                 'revision.html', 'revision.js', 'setup.html', 'setup.css',
                 'setup.js', 'README.md')
-RENDERER_ASSETS = ('file-compatibility.js', 'design-diff.js', 'owned-canvas.js', 'worksheet.js',
+RENDERER_ASSETS = ('BRAND-ASSETS.md', 'ui-icons.js', 'file-compatibility.js', 'design-diff.js', 'owned-canvas.js', 'worksheet.js',
                    'schematic-renderer.js', 'pcb-renderer.js', 'step-decoder.js', 'step-worker.js')
 VENDOR_ASSETS = ('spike-board3d.bundle.js', 'SPIKE-ENGINE-NOTICE.md',
                  'THREE-LICENSE', 'occt/occt-import-js.js', 'occt/occt-import-js.wasm',

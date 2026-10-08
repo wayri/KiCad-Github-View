@@ -154,3 +154,11 @@ test('net-class draw colors leave source primitives unchanged and yield to selec
  const {canvas}=runtime(),p={type:'circle',x:10,y:10,r:1,layer:'F.Cu',kind:'pad',color:'#ff0000'},painted=[];canvas.setDocument({layers:['F.Cu'],primitives:[p]},'board.kicad_pcb');canvas.paint=(primitive,style)=>painted.push(style.color);canvas.netClassColors=new Map([[p,'rgba(0,150,220,1)']]);canvas.draw();assert.equal(painted.at(-1),'rgba(0,150,220,1)');assert.equal(p.color,'#ff0000');
  canvas.setNetHighlight({primitives:[p]});canvas.draw();assert.equal(painted.at(-1),'#ffe18b');canvas.setNetHighlight(null);canvas.netClassColors=new Map();canvas.draw();assert.equal(painted.at(-1),null);
 });
+
+
+test('touch picking radius expands in screen pixels and respects hidden and isolated layers',()=>{
+ const {canvas}=runtime();const front={type:'line',kind:'track',uuid:'front',layer:'F.Cu',points:[{x:0,y:0},{x:20,y:0}],width:.1},back={...front,uuid:'back',layer:'B.Cu',points:[{x:0,y:1},{x:20,y:1}]};
+ canvas.setDocument({layers:['F.Cu','B.Cu'],primitives:[front,back]},'board.kicad_pcb');canvas.viewport.camera.zoom=10;
+ assert.equal(canvas.query({x:10,y:1.3}).length,1);assert.equal(canvas.query({x:10,y:1.3},14).length,2);
+ canvas.visibleLayers.delete('B.Cu');assert.deepEqual(canvas.query({x:10,y:1.3},14).map(p=>p.uuid),['front']);canvas.visibleLayers.add('B.Cu');canvas.focusedLayer='B.Cu';canvas.layerFocusMode='isolate';assert.deepEqual(canvas.query({x:10,y:1.3},14).map(p=>p.uuid),['back']);canvas.dispose();
+});

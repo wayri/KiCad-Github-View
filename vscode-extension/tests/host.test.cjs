@@ -509,3 +509,18 @@ test("Windows Open and Split commands validate the local file after its drive pr
  const count=h.commands.filter(Array.isArray).length;
  await h.commands.find(c=>c.name==="kicadVisualReview.open").handler(root.with({path:"/D:/Project/../bad.kicad_sch"}));assert.equal(h.commands.filter(Array.isArray).length,count);
 });
+
+test('incomplete saved schematic reports its exact path and source recovery guidance',async()=>{
+ const h=harness(),uri=h.write('subdir/broken.kicad_sch','(kicad_sch (version 20250114)');
+ await assert.rejects(h.api._test.loadProject(uri),error=>/subdir\/broken.kicad_sch: Incomplete KiCad S-expression/.test(error.message)&&/Text Editor/.test(error.message));
+});
+test('KiCad Sheet file spelling discovers referenced children in VS Code',async()=>{
+ const h=harness(),uri=h.write('root.kicad_sch','(kicad_sch (sheet (property "Sheet file" "nested/child.kicad_sch")))');h.write('nested/child.kicad_sch');
+ const project=await h.api._test.loadProject(uri);assert.deepEqual(plain(project.files.map(f=>f.path)),['root.kicad_sch','nested/child.kicad_sch']);
+});
+
+test('unresolved Git conflict is identified without writing source',async()=>{
+ const h=harness(),content='(kicad_sch\n<<<<<<< HEAD\n(symbol)\n=======\n(sheet)\n>>>>>>> branch\n)',uri=h.write('conflict.kicad_sch',content);
+ await assert.rejects(h.api._test.loadProject(uri),/conflict.kicad_sch: Unresolved Git merge conflict at line 2/);
+ assert.equal(new TextDecoder().decode(h.entries.get(uri.toString()).bytes),content);
+});

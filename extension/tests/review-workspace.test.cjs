@@ -518,6 +518,36 @@ test('auto-hide preserves focused comment input, hides after leaving, and restor
  view.get('dockComments').dispatchEvent(new Event('pointerenter'));view.get('dockComments').click();assert.equal(view.get('commentsSidebar').hidden,false);assert.equal(view.get('commentText').value,'Unsaved draft');
  view.get('dockComments').dispatchEvent(new Event('pointerleave'));view.get('commentsSidebar').dispatchEvent(new Event('pointerenter'));await new Promise(resolve=>setTimeout(resolve,380));assert.equal(view.get('commentsSidebar').hidden,false);view.workspace.dispose();
 });
+test('touch scrolling and taps within properties do not schedule hover dismissal',async()=>{
+ const view=workspaceRuntime();view.get('propertiesButton').click();const panel=view.get('designInspector');
+ panel.dispatchEvent(uiEvent('pointerenter',{pointerType:'touch'}));
+ panel.dispatchEvent(uiEvent('pointerdown',{pointerType:'touch'}));
+ panel.dispatchEvent(uiEvent('pointerleave',{pointerType:'touch'}));
+ await new Promise(resolve=>setTimeout(resolve,380));assert.equal(panel.hidden,false);
+ panel.dispatchEvent(uiEvent('pointerleave',{pointerType:'pen'}));await new Promise(resolve=>setTimeout(resolve,380));assert.equal(panel.hidden,false);
+ view.get('drawingHost').dispatchEvent(new Event('pointerdown'));assert.equal(panel.hidden,true);view.workspace.dispose();
+});
+test('context menu on an object does not open Properties until Inspect is chosen',()=>{
+ const selections=[];const view=workspaceRuntime(undefined,{query:()=>[{bbox:{context:{uuid:'fp',reference:'R1'}}}],onSelection:value=>selections.push(value)});view.load();
+ view.canvas.canvas.dispatchEvent(uiEvent('contextmenu',{clientX:30,clientY:30,button:2}));
+ assert.equal(view.get('designInspector').hidden,true);assert.equal(view.get('objectMenu').hidden,false);assert.equal(selections.length,0);
+ view.get('objectMenu').children.find(b=>b.textContent==='Inspect properties').click();
+ assert.equal(view.get('designInspector').hidden,false);assert.equal(view.get('selectedName').textContent,'R1');assert.equal(view.get('objectMenu').hidden,true);assert.equal(selections.length,1);view.workspace.dispose();
+});
+test('context comment uses the pressed object without opening Properties',()=>{
+ const view=workspaceRuntime(undefined,{query:()=>[{bbox:{context:{uuid:'fp',reference:'R1'}}}]});view.load();
+ view.canvas.canvas.dispatchEvent(uiEvent('contextmenu',{clientX:30,clientY:30,button:2}));
+ view.get('objectMenu').children.find(b=>b.textContent==='Comment on object').click();
+ assert.equal(view.get('designInspector').hidden,true);assert.equal(view.get('commentsSidebar').hidden,false);assert.match(view.get('commentAnchor').textContent,/R1/);view.workspace.dispose();
+});
+test('interaction within a panel cancels pending mouse dismissal without blocking outside dismissal',async()=>{
+ for(const action of ['pointerdown','wheel','scroll']){
+  const view=workspaceRuntime();view.get('propertiesButton').click();const panel=view.get('designInspector');
+  panel.dispatchEvent(uiEvent('pointerleave',{pointerType:'mouse'}));panel.dispatchEvent(new Event(action));
+  await new Promise(resolve=>setTimeout(resolve,380));assert.equal(panel.hidden,false,action);
+  panel.dispatchEvent(uiEvent('pointerleave',{pointerType:'mouse'}));await new Promise(resolve=>setTimeout(resolve,380));assert.equal(panel.hidden,true);view.workspace.dispose();
+ }
+});
 test('pinning prevents pending auto-hide; unpinning resumes it and disposal cancels timers',async()=>{
  const view=workspaceRuntime();view.get('dockNavigator').click();view.get('designNavigator').dispatchEvent(new Event('pointerleave'));view.get('pinNavigator').click();await new Promise(resolve=>setTimeout(resolve,380));assert.equal(view.get('designNavigator').hidden,false);
  view.get('pinNavigator').click();view.get('designNavigator').dispatchEvent(new Event('pointerleave'));await new Promise(resolve=>setTimeout(resolve,380));assert.equal(view.get('designNavigator').hidden,true);
@@ -693,4 +723,66 @@ test('ambiguous settings need explicit selection and failed settings reads retai
 
 test('property search filters names and values, opens matching collapsed groups and restores on clear',()=>{
  const view=workspaceRuntime();view.load();view.get('objectList').children[0].click();const search=view.get('propertySearch');assert.equal(search.disabled,false);search.value='30.000';search.oninput();const groups=view.get('propertyList').children;assert.ok(groups.some(g=>!g.hidden&&g.textContent.includes('30.000')));assert.ok(groups.some(g=>g.hidden));search.value='no such property';search.oninput();assert.match(view.get('propertySearchStatus').textContent,/No matching/);search.value='';search.oninput();assert.ok(groups.every(g=>!g.hidden));assert.equal(view.get('propertySearchStatus').hidden,true);view.workspace.dispose();
+});
+
+
+test('touch net choices distinguish nearby nets, deduplicate geometry and scope the active sheet',()=>{
+ const {touchNetIndex,touchNetCandidates}=require('../review-workspace.js');
+ const wire={kind:'wire'},pad={kind:'pad',layer:'F.Cu'},via={kind:'via',layer:'B.Cu'},body={kind:'footprint'},arc={kind:'arc',layer:'F.Cu'};
+ const a={id:'a',name:'DATA',path:'a',primitives:[wire,pad,body,arc]},b={id:'b',name:'DATA',path:'a',primitives:[via]},other={id:'other',path:'b',primitives:[wire]};
+ const index=touchNetIndex([a,b,other],'a'),choices=touchNetCandidates([wire,pad,via,pad,body],index);
+ assert.deepEqual(choices.map(c=>c.net.id),['a','b']);assert.deepEqual([...choices[0].layers],['F.Cu']);assert.deepEqual([...choices[1].layers],['B.Cu']);
+ assert.equal(touchNetCandidates([body],index).length,0);assert.equal(touchNetCandidates([arc],index)[0].net,a);
+ assert.equal(touchNetCandidates([],index).length,0);
+});
+
+
+test('ambiguous touch shows a chooser and selecting its net uses existing cross-highlight callbacks',()=>{
+ const selections=[],view=workspaceRuntime(undefined,{onSelection:item=>selections.push(item),source:'(kicad_pcb (net 1 "DATA") (net 2 "CLOCK") (segment (start 0 0) (end 20 0) (width 0.2) (layer "F.Cu") (net 1) (uuid "data")) (segment (start 0 1) (end 20 1) (width 0.2) (layer "B.Cu") (net 2) (uuid "clock")))'});
+ view.load();view.canvas.query=(at,radius)=>{assert.equal(radius,14);return view.design.primitives.filter(p=>p.kind==='track');};
+ assert.equal(view.canvas.touchNetPick({clientX:50,clientY:50}),true);assert.equal(selections.length,0);
+ const popup=view.document.body.querySelector('.touch-net-picker');assert.ok(popup);view.workspace.draw();assert.equal(view.document.body.querySelector('.touch-net-picker'),popup);assert.match(popup.textContent,/DATA.*F.Cu.*CLOCK.*B.Cu/);
+ popup.children.find(n=>n.tagName==='BUTTON'&&n.textContent.includes('CLOCK')).click();assert.equal(view.document.body.querySelector('.touch-net-picker'),null);assert.equal(view.canvas.netHighlight.name,'CLOCK');assert.equal(view.get('designInspector').hidden,true);assert.equal(selections.at(-1).netName,'CLOCK');
+ view.canvas.query=()=>view.design.primitives.filter(p=>p.uuid==='data');assert.equal(view.canvas.touchNetPick({clientX:50,clientY:50}),true);assert.equal(view.canvas.netHighlight.name,'DATA');assert.equal(view.document.body.querySelector('.touch-net-picker'),null);
+ view.canvas.query=()=>[];assert.equal(view.canvas.touchNetPick({clientX:50,clientY:50}),false);view.workspace.dispose();assert.equal(view.canvas.touchNetPick,undefined);
+});
+
+
+test('schematic touch ambiguity offers separate labelled networks',()=>{
+ const view=workspaceRuntime(undefined,{pcb:false,files:[{path:'root.kicad_sch',content:'(kicad_sch (wire (pts (xy 0 0) (xy 20 0)) (uuid "a")) (label "DATA" (at 0 0) (uuid "la")) (wire (pts (xy 0 1) (xy 20 1)) (uuid "b")) (label "CLOCK" (at 0 1) (uuid "lb")))'}]});
+ view.load();view.canvas.query=()=>view.design.primitives.filter(p=>p.kind==='wire');
+ assert.equal(view.canvas.touchNetPick({clientX:50,clientY:50}),true);const popup=view.document.body.querySelector('.touch-net-picker');assert.ok(popup);assert.match(popup.textContent,/DATA/);assert.match(popup.textContent,/CLOCK/);popup.children.find(n=>n.tagName==='BUTTON'&&n.textContent.includes('DATA')).click();assert.equal(view.canvas.netHighlight.name,'DATA');view.workspace.dispose();
+});
+
+test('Smart selection offers pad net and owning part; filters and deduplicates saved identities',()=>{
+ const {selectionCandidates,touchNetIndex}=require('../review-workspace.js');
+ const part={id:'u1',uuid:'component',path:'board',kind:'footprint',reference:'U1'},pad={id:'p1',uuid:'pad1',path:'board',kind:'pad',parentId:'u1'};
+ const primitive={kind:'pad',uuid:'pad1',ownerUuid:'component',layer:'F.Cu'},body={kind:'footprint',uuid:'component'};
+ const net={id:'vcc',name:'VCC',path:'board',primitives:[primitive]},index=touchNetIndex([net],'board');
+ const all=selectionCandidates([primitive,body,primitive],index,[part,pad],'board');
+ assert.deepEqual(all.map(c=>c.kind),['net','part']);assert.equal(all[1].object,part);
+ assert.deepEqual(selectionCandidates([primitive],index,[part,pad],'board','part').map(c=>c.kind),['part']);
+ assert.deepEqual(selectionCandidates([primitive],index,[part,pad],'board','net').map(c=>c.kind),['net']);
+ assert.equal(selectionCandidates([primitive],index,[part,pad],'other','part').length,0);
+});
+test('Schematic smart selection resolves a pin owner and keeps nearby parts as separate choices',()=>{
+ const {selectionCandidates,touchNetIndex}=require('../review-workspace.js');
+ const a={id:'a',uuid:'a',kind:'symbol',path:'sheet',reference:'R1'},b={id:'b',uuid:'b',kind:'symbol',path:'sheet',reference:'R2'};
+ const pin={kind:'pin',uuid:'pin',ownerUuid:'a'},body={kind:'symbol',uuid:'b'},net={id:'n',path:'sheet',name:'DATA',primitives:[pin]};
+ const choices=selectionCandidates([pin,body],touchNetIndex([net],'sheet'),[a,b],'sheet');
+ assert.deepEqual(choices.map(c=>c.net?.name||c.object.reference),['DATA','R1','R2']);
+});
+
+test('part/net mode filters actual picks; mixed groups retain the part and net',()=>{
+ const selections=[],view=workspaceRuntime(undefined,{onSelection:item=>selections.push(item)});view.load();
+ view.canvas.query=()=>view.design.primitives.filter(p=>p.kind==='pad');
+ view.get('multiHighlight').checked=true;
+ assert.equal(view.canvas.touchNetPick({clientX:30,clientY:40}),true);
+ let popup=view.document.body.querySelector('.touch-net-picker');assert.match(popup.textContent,/Net: SIGNAL/);assert.match(popup.textContent,/Part: R1/);
+ popup.children.find(n=>n.tagName==='BUTTON'&&n.textContent.includes('Part: R1')).click();
+ view.get('selectionMode').value='net';assert.equal(view.canvas.touchNetPick({clientX:30,clientY:40}),true);
+ assert.equal(view.document.body.querySelector('.touch-net-picker'),null);
+ const group=selections.at(-1);assert.equal(group.kind,'group');assert.equal(group.items.length,2);assert.ok(group.items.some(i=>i.kind==='net'));assert.ok(group.items.some(i=>i.reference==='R1'));
+ view.get('selectionMode').value='part';view.get('multiHighlight').checked=false;assert.equal(view.canvas.touchNetPick({clientX:30,clientY:40}),true);assert.equal(view.get('selectedName').textContent,'R1');
+ view.workspace.dispose();
 });
