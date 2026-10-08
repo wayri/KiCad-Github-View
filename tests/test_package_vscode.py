@@ -60,7 +60,7 @@ class PackageVSCodeTests(unittest.TestCase):
                 self.assertNotIn('kicanvas', entry.lower())
 
     def test_viewer_html_dependencies_are_packaged(self):
-        for name in ('revision-viewer.html', 'project-viewer.html'):
+        for name in ('revision-viewer.html', 'project-viewer.html', 'conflict-viewer.html'):
             html = (ROOT / 'extension' / name).read_text(encoding='utf-8')
             for reference in re.findall(r'(?:src|href)="([^"?#]+)"', html):
                 if reference.endswith(('.js', '.css')) and '://' not in reference:

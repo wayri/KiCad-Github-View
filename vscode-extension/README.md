@@ -45,3 +45,9 @@ Version 0.11.0 adds the shared BOM / Stats and DNP controls, saved board/zone an
 Version 0.11.1 shares the refined read-only project setup forms and tables. GitHub release packaging is documented in [the release guide](https://github.com/wayri/KiCad-Github-View/blob/main/docs/RELEASING.md).
 
 Version 0.11.2 opens PCB drawings from the project tree, provides saved layer details when physical stackup is absent, and simplifies project/schematic hierarchy navigation.
+
+## Resolve Git conflicts visually
+
+On a saved `.kicad_sch` or `.kicad_pcb`, run **KiCad: Resolve Git Conflict Visually**. Opening a marker-conflicted file in the custom viewer opens the same comparison. Pan/zoom either version with linked cameras, inspect highlighted saved-object differences, then choose **Use current** or **Use incoming**. This accepts that side across all conflicts. **Save resolved copy** preserves the original; **Replace conflicted file** requires a confirmation. **Stage resolved file** is a separate confirmed action through the built-in Git extension. No commit or push is automatic.
+
+Syntax/root validation does not establish electrical correctness; validate the resulting design in KiCad. Dirty documents and detected changes block saving. Filesystem-provider writes are not atomic with the preceding version check, so concurrent external writers can still race. Conflict resolution is the explicit exception to this host's otherwise read-only design viewer.

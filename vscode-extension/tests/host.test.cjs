@@ -19,7 +19,7 @@ function harness(folder=Uri.parse("vscode-vfs://github/owner/repo?ref=main")) {
     ,workspaceFolders:folder?[{uri:folder,name:"repo"}]:[],findFiles:async()=>[...entries.keys()].filter((u)=>/\.kicad_(sch|pcb)(?:\?|$)/.test(u)).map(Uri.parse),asRelativePath:(uri)=>uri.path.split("/").at(-1)
   },EventEmitter:class{constructor(){this.event=()=>{};}fire(){}dispose(){}},window:{registerTreeDataProvider:(view,provider)=>{registrations.push({view,provider});return {dispose(){}};},registerCustomEditorProvider:(view,provider,options)=>{registrations.push({view,provider,options});return {dispose(){}};},showQuickPick:async(items)=>items[0],showWarningMessage(){},showErrorMessage(){},showInformationMessage(){}},
     commands:{registerCommand:(name,handler)=>{commands.push({name,handler});return {dispose(){}};},executeCommand:async(...args)=>{commands.push(args);}}};
-  const sandbox={module:{exports:{}},require(name){if(name==="./media/parsing.js")return require("../../extension/parsing.js");assert.equal(name,"vscode");return vscode;},crypto:require("node:crypto").webcrypto,URLSearchParams,TextDecoder,TextEncoder,Uint8Array,console};
+  const sandbox={module:{exports:{}},require(name){if(name==="./media/parsing.js")return require("../../extension/parsing.js");if(name==="./conflict-host.js")return require("../conflict-host.js");if(name==="./media/merge-conflicts.js")return require("../../extension/merge-conflicts.js");assert.equal(name,"vscode");return vscode;},crypto:require("node:crypto").webcrypto,URLSearchParams,TextDecoder,TextEncoder,Uint8Array,console};
   vm.runInNewContext(source,sandbox,{filename:"extension.js"});
   const context={extensionUri:Uri.parse("file:///extension"),subscriptions:[],_reviewQueue:Promise.resolve(),workspaceState:{get:(key,fallback)=>state.has(key)?state.get(key):fallback,update:async(key,value)=>{state.set(key,value);}}};
   const write=(relative,content="(kicad_sch)",options={})=>{const base=folder || Uri.parse("file:///outside"),uri=Uri.joinPath(base,relative),parts=relative.split("/");
@@ -172,7 +172,7 @@ test("webview HTML confines resources and points relative SPIKE loads at package
   assert.match(html,/src="https:\/\/resources.example\/extension\/media\/revision-viewer.js"/);
   assert.match(html,/nonce="[a-f0-9]{48}"/);
   assert.match(html,/GitHub publishing and remote annotations are unavailable/);
-  assert.ok(!html.includes("Publishing uses GitHub’s signed-in composer"));
+  assert.ok(!html.includes("Publishing uses GitHubâ€™s signed-in composer"));
   const relative=new URL("vendor/spike-board3d.bundle.js","https://resources.example/extension/media/");
   assert.equal(relative.href,"https://resources.example/extension/media/vendor/spike-board3d.bundle.js");
 });

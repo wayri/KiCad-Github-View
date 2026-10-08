@@ -493,7 +493,17 @@ async function htmlFor(webview,context,session) {
   html=html.replace("<head>","<head><style>.github-comment-controls>label:not(:last-of-type),#loadCategories,#reviewSettings,#refreshGitHub,#refreshCommentPolicy,#commentPolicyStatus,.github-draft-action,.github-publish-action{display:none!important}</style>");
   return html;
 }
+async function conflictHTML(webview,context,session) {
+  const media=vscode.Uri.joinPath(context.extensionUri,"media");
+  let html=new TextDecoder().decode(await vscode.workspace.fs.readFile(vscode.Uri.joinPath(media,"conflict-viewer.html")));
+  const nonce=secret(),resource=name=>webview.asWebviewUri(vscode.Uri.joinPath(media,...name.split("/"))).toString();
+  const csp=`default-src 'none'; script-src 'nonce-${nonce}' ${webview.cspSource}; style-src ${webview.cspSource} 'unsafe-inline'; img-src ${webview.cspSource} data:; font-src ${webview.cspSource}; base-uri ${webview.cspSource}; frame-src 'none';`;
+  html=html.replace(/(src|href)="([^"#:]+)"/g,(match,attr,name)=>`${attr}="${escaped(resource(name))}"`);
+  const bootstrap=JSON.stringify({token:session.token}).replace(/</g,"\\u003c");
+  return html.replace("<head>",`<head><meta http-equiv="Content-Security-Policy" content="${escaped(csp)}"><base href="${escaped(resource(""))}/"><script nonce="${nonce}">globalThis.KiCadVSCodeContext=${bootstrap};</script><script nonce="${nonce}" src="${escaped(webview.asWebviewUri(vscode.Uri.joinPath(context.extensionUri,"webview-bridge.js")).toString())}"></script>`);
+}
 function activate(context) {
+  const conflicts=require("./conflict-host.js").createHost(vscode,require("./media/merge-conflicts.js"),{projectScope,sameScope,secret,conflictHTML});
   const navigatorChanged=new vscode.EventEmitter();
   context.subscriptions.push(navigatorChanged,vscode.window.registerTreeDataProvider("kicadVisualReview.navigator",{
     onDidChangeTreeData:navigatorChanged.event,getTreeItem:(item)=>item,
@@ -510,6 +520,9 @@ function activate(context) {
   }));
   context.subscriptions.push(vscode.commands.registerCommand("kicadVisualReview.refreshNavigator",()=>navigatorChanged.fire()));
   const activeUri=(uri)=>uri || vscode.window.activeTextEditor?.document.uri || vscode.window.tabGroups?.activeTabGroup?.activeTab?.input?.uri;
+  context.subscriptions.push(vscode.commands.registerCommand("kicadVisualReview.resolveConflicts",async(uri)=>{
+    const target=activeUri(uri);try {if(!target)throw new Error("Select a saved schematic or PCB.");await conflicts.open(target,context);}catch(error){vscode.window.showErrorMessage(error.message);}
+  }));
   const provider={
     async openCustomDocument(uri){return {uri,dispose(){}};},
     async resolveCustomEditor(document,panel,cancel) {
@@ -521,7 +534,9 @@ function activate(context) {
         panel.onDidDispose(()=>{session.disposed=true;liveSessions.delete(session);receiver.dispose();if(![...liveSessions].some((other)=>other.uri.toString()===session.uri.toString()))unpair(session.uri);});
         panel.webview.html=await htmlFor(panel.webview,context,session);
         if(project.warnings.length)vscode.window.showWarningMessage(project.warnings.join(" ").slice(0,2000));
-      } catch(error) {panel.webview.html=`<!doctype html><html><head><meta http-equiv="Content-Security-Policy" content="default-src 'none'"></head><body><h2>KiCad drawing could not be opened</h2><p>${escaped(error.message || error)}</p><p>For a source-file error, use Reopen Editor With → Text Editor to inspect the saved file. If a packaged viewer resource is missing, reinstall the latest VSIX. Source files have not been changed.</p></body></html>`;}
+      } catch(error) {
+        if(/Unresolved Git merge conflict/.test(error.message||""))try {await conflicts.open(document.uri,context,panel);return;}catch(conflictError){error=conflictError;}
+        panel.webview.html=`<!doctype html><html><head><meta http-equiv="Content-Security-Policy" content="default-src 'none'"></head><body><h2>KiCad drawing could not be opened</h2><p>${escaped(error.message || error)}</p><p>For a source-file error, use Reopen Editor With → Text Editor to inspect the saved file. If a packaged viewer resource is missing, reinstall the latest VSIX. Source files have not been changed.</p></body></html>`;}
     }
   };
   context.subscriptions.push(vscode.window.registerCustomEditorProvider(VIEW,provider,{supportsMultipleEditorsPerDocument:true,webviewOptions:{retainContextWhenHidden:true}}));
@@ -577,4 +592,4 @@ function activate(context) {
   }));
 }
 function deactivate() {pairTargets.clear();}
-module.exports={activate,deactivate,_test:{projectScope,sameScope,childPath,loadProject,createSession,handleMessage,htmlFor,staticHTML,validateSidecar,readSidecar,writeSidecar,CHANNEL,MAX_FILE,MAX_PROJECT}};
+module.exports={activate,deactivate,_test:{projectScope,sameScope,childPath,loadProject,createSession,handleMessage,htmlFor,conflictHTML,staticHTML,validateSidecar,readSidecar,writeSidecar,CHANNEL,MAX_FILE,MAX_PROJECT}};
