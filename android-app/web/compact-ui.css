@@ -1,0 +1,76 @@
+/* Final Android sizing contract. Shared desktop drawing styles do not set touch layout. */
+body[data-size] button.icon-caption{display:inline-flex;align-items:center;justify-content:center;gap:6px;min-width:0;height:auto;white-space:normal;line-height:1.25}
+body[data-size] button.icon-caption>.ui-icon{width:22px;height:22px;flex:0 0 22px;position:static;margin:0}
+body[data-size] button.icon-caption>.button-label{position:static;clip-path:none;width:auto;height:auto;min-width:0;max-width:100%;overflow:visible;white-space:normal;overflow-wrap:anywhere;font-size:11px;line-height:1.25}
+body[data-size] :is(input,textarea,select){max-width:100%;min-width:0;box-sizing:border-box}
+body[data-size] input::placeholder{font-size:13px;text-overflow:ellipsis;opacity:.65}
+body[data-size] textarea::placeholder{font-size:13px;line-height:1.4;opacity:.65}
+body[data-size] :is(.android-sheet-content,.github-content)>label{min-width:0;gap:4px}
+body[data-size] dialog>header{min-height:48px;padding:2px 12px;gap:8px}
+body[data-size] dialog>header>strong{font-size:14px;line-height:1.3;overflow-wrap:anywhere}
+body[data-size] dialog.android-resizable-sheet>:is(.android-sheet-content,.github-content){padding:10px 12px!important}
+body[data-size] dialog.android-resizable-sheet>:is(.android-sheet-content,.github-content)>*{margin-bottom:8px}
+body[data-size] dialog.android-resizable-sheet>:is(.android-sheet-content,.github-content)>:last-child{margin-bottom:0}
+body[data-size] .android-sheet-content :is(p,h2,h3){margin-top:8px;margin-bottom:8px}
+body[data-size] .android-sheet-content p:empty{display:none}
+body[data-size] .github-help{font-size:12px;line-height:1.4}
+body[data-size] #androidViewToolbar{overflow-x:auto;overflow-y:hidden;justify-content:flex-start;scrollbar-width:none;gap:2px;padding:0 4px}
+body[data-size] #androidViewToolbar>button{flex:0 0 44px;min-width:44px;width:44px;min-height:44px;height:44px;padding:4px}
+body[data-size] #androidViewToolbar>button svg{width:22px;height:22px;flex:0 0 22px}
+body[data-size] #androidViewToolbar #allSheetPagesButton{flex-direction:column;gap:0;font-size:9px;line-height:1.1}
+body[data-size] #androidWorkspaceNav{min-height:48px;gap:2px;padding-left:4px;padding-right:4px}
+body[data-size] #androidWorkspaceNav #workspaceTabs{flex:1;min-width:0;width:auto;gap:0}
+body[data-size] #androidWorkspaceNav #workspaceTabs button{flex:1 1 0;min-width:0;min-height:48px;padding:3px 2px;gap:2px;flex-direction:column}
+body[data-size] #androidWorkspaceNav :is(#workspaceTabs,#androidWorkspaceActions) button>.ui-icon{width:20px;height:20px;flex:0 0 20px}
+body[data-size] #androidWorkspaceNav :is(#workspaceTabs,#androidWorkspaceActions) .button-label{font-size:9px;line-height:1.15;white-space:nowrap;overflow-wrap:normal}
+body[data-size] #androidWorkspaceActions{flex:none;gap:0}
+body[data-size] #androidWorkspaceActions button{min-width:44px;width:44px;padding:3px 2px;gap:2px}
+body[data-size] #androidToolsSheet :is(.tool-group,.frame-actions,#drawingTools){gap:4px}
+body[data-size] #androidToolsSheet :is(#variantBar,#highlightControls,.top-sheet-navigation,.ruler-controls){gap:4px;padding:6px 0;min-width:0}
+body[data-size] #androidToolsSheet .top-sheet-navigation button{width:44px;min-width:44px;min-height:44px;padding:4px}
+body[data-size] #androidToolsSheet .top-sheet-navigation #sheetLabel{flex:1 1 100%;min-width:0}
+body[data-size] #androidToolsSheet .top-sheet-navigation #sheetSelect{width:100%;min-height:44px;font-size:13px}
+body[data-size] #appMenuDialog .android-sheet-content>button{margin:0 0 4px;min-height:44px;gap:8px}
+body[data-size] #appMenuDialog .android-menu-group-title{margin:10px 0 4px}
+body[data-size] .property-group>summary{padding:6px 8px}
+body[data-size] .property-group :is(dt,dd){margin:0;min-width:0;overflow-wrap:anywhere;line-height:1.4}
+@media(max-width:599px){
+ .android-home #welcome{padding:12px 14px}
+ .android-home #welcome h1{font-size:22px;margin:8px 0 4px}
+ .android-home #welcome .home-intro{font-size:13px;margin:10px 0 12px}
+ .android-home .android-welcome-actions{gap:6px}
+ .android-home .android-welcome-actions button.icon-caption{min-height:72px;padding:8px;gap:4px;border-radius:12px}
+ .android-home .android-welcome-actions button.icon-caption>.ui-icon{width:28px;height:28px;flex:0 0 28px}
+ .android-home .android-welcome-actions button:last-child{min-height:44px;flex-direction:row}
+ .android-home #welcomeLibrary{margin:8px 0;gap:6px}
+ #recentProjects{margin-top:14px;padding-top:10px}
+ #recentProjects h2{margin-bottom:8px}
+ #androidProjectHome{padding:12px 14px}
+ .android-project-title h1{font-size:22px;margin-bottom:4px}
+ #androidProjectHome .android-project-actions{gap:6px}
+ #androidProjectHome .android-project-actions button.icon-caption{min-height:64px;padding:6px;gap:4px}
+ body[data-size] .comment-top-controls{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:4px}
+ body[data-size] .comment-top-controls label{min-width:0;margin:4px 0!important}
+ body[data-size] .comment-top-controls select{width:100%;font-size:11px;padding:4px 20px 4px 6px}
+ body[data-size] .note{padding:10px;margin:8px 0;border-radius:12px}
+ body[data-size] .notification-tools{gap:4px;margin:8px 0}
+}
+body[data-size] :is(dialog,#designNavigator,#designInspector,#commentsSidebar,#ruleWindow,.viewer-settings) button.android-close-button{font-size:26px!important;min-height:44px!important;height:44px!important;padding:0!important;line-height:1!important;flex:0 0 44px!important}
+body[data-size] #androidSearchSheet .universal-search{width:100%;max-width:none;min-width:0;flex:1;position:relative}
+body[data-size] #androidSearchSheet #universalSearch{width:100%;max-width:none;min-width:0;padding:8px 10px;min-height:44px;font-size:16px}
+body[data-size] #androidToolsSheet .top-sheet-navigation #sheetLabel{font-size:0;display:block}
+/* Tablet dialogs must not stretch auto grid rows into blank vertical space. */
+body[data-size] dialog>.github-content{display:block;padding:10px 12px;overflow:auto;min-height:0}
+body[data-size] dialog>.github-content>*{margin-top:0;margin-bottom:8px}
+body[data-size] dialog>.github-content>:last-child{margin-bottom:0}
+body[data-size] dialog>.android-sheet-content{align-content:start;gap:8px}
+body[data-size] :is(#githubDialog,#gitlabDialog) label{gap:4px;font-size:12px}
+body[data-size] :is(#githubDialog,#gitlabDialog) :is(button,input,select,summary){min-height:44px;padding-top:6px;padding-bottom:6px}
+body[data-size] :is(#githubDialog,#gitlabDialog) summary{font-size:12px}
+body[data-size] :is(#githubDialog,#gitlabDialog) h2{font-size:16px;margin:10px 0 6px}
+body .android-sheet-dismiss{position:absolute!important;top:32px;right:8px;z-index:25;display:flex;align-items:center;justify-content:center;width:44px!important;min-width:44px!important;height:44px!important;min-height:44px!important;font-size:26px!important;padding:0!important;margin:0!important;border-radius:50%!important;background:var(--panel,var(--android-container));color:inherit}
+body .android-sheet-has-dismiss>:not(.android-sheet-handle):not(.android-sheet-dismiss):first-of-type{padding-right:56px}
+@media(min-width:600px){body .android-sheet-dismiss{top:4px}}
+body .android-sheet-dismiss{top:2px!important}
+body .android-sheet-has-dismiss>.android-sheet-handle{min-height:48px!important;height:48px!important}
+@media(min-width:600px){body .android-sheet-has-dismiss{padding-top:48px!important}}

@@ -21,6 +21,25 @@ test('picking uses shape geometry, tolerances and excludes frame and drill holes
 test('fit bounds exclude worksheet and include physical track width',()=>{
  const b=core.bounds([{type:'line',points:[{x:10,y:20},{x:30,y:20}],width:2},{type:'line',points:[{x:0,y:0},{x:297,y:210}],frame:true}]);assert.deepEqual(b,{x:9,y:19,w:22,h:2});
 });
+test('text culling uses rendered metrics, keeps crossing and rotated labels, and caches measurements by zoom and flip',()=>{
+ const {canvas}=runtime();let measurements=0;
+ canvas.ctx.measureText=()=>{measurements++;return {actualBoundingBoxLeft:80,actualBoundingBoxRight:80,actualBoundingBoxAscent:10,actualBoundingBoxDescent:10};};
+ canvas.viewport.camera.zoom=10;
+ const view={x:0,y:0,w:10,h:10},outside={type:'text',x:100,y:100,text:'outside'},crossing={type:'text',x:15,y:5,text:'crossing'},rotated={type:'text',x:5,y:15,text:'rotated',angle:90};
+ assert.equal(canvas.inView(outside,view),false);assert.equal(canvas.inView(crossing,view),true);assert.equal(canvas.inView(rotated,view),true);
+ canvas.inView(outside,view);assert.equal(measurements,3);
+ canvas.viewport.camera.zoom=20;assert.equal(canvas.inView(crossing,view),false);assert.equal(measurements,4);
+ canvas.viewport.camera.flipped=true;canvas.inView(crossing,view);assert.equal(measurements,5);
+ assert.equal(crossing.text,'crossing');canvas.dispose();
+});
+test('multiline text and minimum pixel font remain visible, with safe fallback for missing metrics',()=>{
+ const {canvas}=runtime();canvas.viewport.camera.zoom=1;
+ canvas.ctx.measureText=()=>({actualBoundingBoxLeft:100,actualBoundingBoxRight:0,actualBoundingBoxAscent:8,actualBoundingBoxDescent:8});
+ const p={type:'text',x:80,y:20,text:'A\nB',size:20,minPixelSize:40,fontWidth:40};
+ assert.equal(canvas.inView(p,{x:0,y:0,w:10,h:10}),true);
+ canvas.primitives=[p];canvas.ctx.measureText=()=>({width:10});assert.equal(canvas.inView(p,{x:1000,y:1000,w:1,h:1}),true);
+ canvas.dispose();
+});
 function runtime(dpr=1,extra={}){
   const operations=[],listeners=new Map(),ctx=new Proxy({},{get:(obj,key)=>obj[key]||((...args)=>operations.push([key,...args])),set:(obj,key,value)=>{obj[key]=value;return true;}});
   const element={style:{},setAttribute(){},addEventListener:(key,fn)=>listeners.set(key,fn),removeEventListener(){},getContext:()=>ctx,getBoundingClientRect:()=>({left:0,top:0,width:800,height:600}),remove(){},setPointerCapture(){},hasPointerCapture:()=>false};

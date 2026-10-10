@@ -14,7 +14,7 @@ test('handle drag grows continuously, clamps, suppresses ghost click and support
  const f=fixture();f.fire('pointerdown');f.fire('pointermove',{clientY:200});assert.equal(f.panel.values.height,'536px');f.fire('pointerup',{clientY:200});f.fire('click');assert.equal(f.panel.values.height,'536px');
  f.fire('click');assert.equal(f.panel.values.height,'752px');assert.equal(f.handle.getAttribute('aria-expanded'),'true');f.fire('click');assert.equal(f.panel.values.height,'336px');
  f.fire('pointerdown');f.fire('pointermove',{clientY:-2000});assert.equal(f.panel.values.height,'752px');f.fire('pointercancel');
- f.api.scan();assert.equal(f.panel.children.length,1);
+ f.api.scan();assert.equal(f.panel.children.length,2);
 });
 test('keyboard arrows resize; viewport change reclamps and desktop removes phone sizing',()=>{
  const f=fixture();f.fire('keydown',{key:'ArrowUp'});assert.equal(f.panel.values.height,'416px');
@@ -64,10 +64,24 @@ test('nested keyboard clipping also follows an Android root resized without Visu
 test('panel rebuild preserves the existing drag handle and its expansion behavior',()=>{
  const f=fixture();const original=f.handle;
  // The shared workspace rebuilds Properties with replaceChildren after startup.
- f.panel.children=[];f.api.scan();assert.equal(f.panel.children.length,1);assert.equal(f.panel.children[0],original);
- f.fire('click');assert.equal(f.panel.values.height,'752px');f.api.scan();assert.equal(f.panel.children.length,1);
+ f.panel.children=[];f.api.scan();assert.equal(f.panel.children.length,2);assert.equal(f.panel.children[0],original);
+ f.fire('click');assert.equal(f.panel.values.height,'752px');f.api.scan();assert.equal(f.panel.children.length,2);
 });
 
 test('shared workspace class replacement restores phone sheet sizing',()=>{
- const f=fixture();f.panel.classes.clear();f.api.scan();assert.ok(f.panel.classList.contains('android-resizable-sheet'));assert.equal(f.panel.children.length,1);
+ const f=fixture();f.panel.classes.clear();f.api.scan();assert.ok(f.panel.classList.contains('android-resizable-sheet'));assert.equal(f.panel.children.length,2);
+});
+
+test('pulling below the preview dismisses; small drags and cancelled gestures stay open',()=>{
+ const f=fixture();f.fire('pointerdown');f.fire('pointermove',{clientY:430});f.fire('pointerup',{clientY:430});assert.notEqual(f.panel.hidden,true);
+ f.fire('pointerdown');f.fire('pointermove',{clientY:520});f.fire('pointercancel',{clientY:520});assert.notEqual(f.panel.hidden,true);
+ f.fire('pointerdown');f.fire('pointermove',{clientY:520});f.fire('pointerup',{clientY:520});assert.equal(f.panel.hidden,true);f.fire('click');assert.equal(f.panel.hidden,true);
+});
+test('dedicated close dismisses headerless panels and remains after a content rebuild',()=>{
+ const f=fixture(),close=f.panel.children.find(n=>n.getAttribute('aria-label')==='Close panel');assert.ok(close);close.onclick();assert.equal(f.panel.hidden,true);
+ f.panel.children=[];f.api.scan();assert.ok(f.panel.children.includes(close));
+});
+test('dismissal uses the existing sidebar close action, retaining workspace state handling',()=>{
+ const f=fixture();let closed=0;f.panel.id='commentsSidebar';f.doc.getElementById=id=>id==='closeComments'?{click(){closed++;}}:null;
+ f.fire('pointerdown');f.fire('pointermove',{clientY:520});f.fire('pointerup',{clientY:520});assert.equal(closed,1);assert.notEqual(f.panel.hidden,true);
 });

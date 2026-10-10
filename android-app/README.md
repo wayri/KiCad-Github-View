@@ -185,7 +185,7 @@ Temporary copies live in the app-private `temporary-projects` directory with a f
 Inexact Android alarms clean expired temporary source files and recent-entry snapshots. Android may delay background execution; expired copies are denied immediately by the native file server and project library, with cleanup also on app startup/resume. Expiry while the app is open closes the expired viewer. Saved permanent copies and original input files are preserved. Temporary and large permanent copies are unencrypted in private app storage; sign-out does not delete saved copies.
 
 Verification for this change: complete JavaScript suite, bounded-heap production ZIP reader checks, Android compilation/lint, and native lifecycle/transport instrumentation. All 84 native instrumentation checks passed on a disposable Android 16 emulator; the 32 ZIP-reader checks ran with a 64 MiB JVM heap, and all 867 JavaScript tests passed. Live provider/SAF acceptance on a physical phone remains separate.
-# Android 1.35 presentations
+# Android 1.41 presentations
 
 Open Project actions (or drawing tools) and choose **Present project** for a live
 walkthrough, or **Create slides** for a saved deck. Walkthroughs hide viewer chrome,
@@ -200,7 +200,7 @@ no account or network connection is needed to present the exported file. 3D can 
 presented live; 3D slide capture is not supported.
 
 Verified: 96 app-web tests, Android build/lint, browser fixture capture/edit/playback
-and exit restoration, plus Android 1.35 installation on the connected Galaxy A36.
+and exit restoration, plus Android 1.41 installation on the connected Galaxy A36.
 Native document-picker export and prolonged physical-device gesture acceptance
 have not been exercised.
 

@@ -1,0 +1,4 @@
+body[data-size] #androidCopperControls{display:flex;flex-wrap:wrap;gap:4px 12px;min-width:0;padding:4px 8px 8px;margin:0 0 8px;border:1px solid var(--line,var(--android-outline));border-radius:10px}
+body[data-size] #androidCopperControls legend{padding:0 4px;font-size:11px;color:var(--muted,var(--android-muted))}
+body[data-size] #androidCopperControls label{display:flex;align-items:center;gap:6px;min-height:44px;margin:0;flex:1 1 140px;font-size:12px}
+body[data-size] #androidCopperControls input{width:18px;height:18px;min-height:18px;margin:0;flex:none;accent-color:var(--accent,var(--android-primary))}

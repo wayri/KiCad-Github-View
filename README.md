@@ -15,6 +15,8 @@
 
 The workspace has **Project · Schematic · Layout** tabs, with **Split view** and **Compare commits** on the same row. Schematics automatically open their saved root; navigate with the hierarchy tree, double-click sheet symbols, or use the top Back / Forward / Up / Root icons. Parent discovery follows saved links across repository folders, with diagnostics for incomplete or ambiguous hierarchies.
 
+Android development version **1.37** adds a direct **All sheets** control: pages share one pan/zoom canvas with sheet names above them. Repeated placements of one source sheet form a stack; use **Repeated sheets** to choose its front placement. Highlighting a net keeps only connected sheets and placements, with intersheet airwires. Connectivity follows exact global labels and saved parent sheet-pin/child hierarchical-label links; implicit power connections and bus expansion are not inferred. Cyclic or incomplete hierarchies retain diagnostics. The same overview and connectivity implementation is shared with the browser viewer. Android 1.37 also provides a full-height privacy reader, consistent trailing close controls, and Menu → GitHub notifications for saved KiCad repositories. The foreground inbox supports unread, mentions/requests and all-activity filters; reconnect an existing account if GitHub notifications permission is missing. It checks at most the latest 500 account notifications, does not mark them read and does not provide background push notifications.
+
 ![Pinned explorer and auto-hide side tabs](docs/images/integration/pinned-auto-hide-panes.png)
 
 This screenshot uses a synthetic drawing and local mock transport.
@@ -183,10 +185,10 @@ Read [the complete comment guide](docs/COMMENTS.md) for authentication, permissi
 
 ## VS Code installation
 
-Download **`kicad-visual-review-vscode-0.12.35.vsix`** from Releases. In VS Code run **Extensions: Install from VSIX**, select the file and run **Developer: Reload Window**. Open a KiCad project folder and use **KiCad: Open Visual Viewer** or **Reopen Editor With → KiCad Visual Review**. The **KiCad Review** explorer lists saved drawings and review sidecars.
+Download **`kicad-visual-review-vscode-0.12.36.vsix`** from Releases. In VS Code run **Extensions: Install from VSIX**, select the file and run **Developer: Reload Window**. Open a KiCad project folder and use **KiCad: Open Visual Viewer** or **Reopen Editor With → KiCad Visual Review**. The **KiCad Review** explorer lists saved drawings and review sidecars.
 
 ```sh
-code --install-extension kicad-visual-review-vscode-0.12.35.vsix --force
+code --install-extension kicad-visual-review-vscode-0.12.36.vsix --force
 ```
 
 Local notes use `.kicad-review.json` in the workspace root (or drawing directory outside a workspace). Filesystem-provider permissions still apply. The VSIX is not currently published in Visual Studio Marketplace. See [the VS Code guide](vscode-extension/README.md).
