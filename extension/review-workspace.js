@@ -477,25 +477,37 @@
       setSelectionIcon(selectedNet?"net":iconFor(selected?.kind));
       const chip=(text,className="")=>{const span=make("span",text);span.className="summary-chip "+className;$("selectionSummary").append(span);};
       if(selectedNet){
+        const matchingSheets=selectedNet.kind!=="pcb"?netSheetMatches([selectedNet]):null;
         chip(selectedNet.kind==="pcb"?"Saved net ID "+selectedNet.code:"Active-sheet connectivity");
         chip(`${selectedNet.stats.pads||selectedNet.members.filter(m=>m.kind==="pin").length} ${selectedNet.kind==="pcb"?"pads":"pins"}`);
+        if(matchingSheets){const count=matchingSheets.size;chip(`${count} matching sheet${count===1?'':'s'}`);}
         propertySection("Electrical",{"Net name":selectedNet.name,"Saved code":selectedNet.kind==="pcb"?selectedNet.code:undefined,"Scope":selectedNet.kind==="pcb"?"This PCB":"This sheet only"});
         const stats=selectedNet.stats;propertySection(selectedNet.kind==="pcb"?"Copper":"Wiring",selectedNet.kind==="pcb"?{"Pads":stats.pads,"Track segments":stats.tracks,"Vias":stats.vias,"Zones":stats.zones,"Routed length":stats.lengthMm.toFixed(3)+" mm"}:{"Wire length":stats.lengthMm.toFixed(3)+" mm"});
         $("netMembers").hidden=false;const members=selectedNet.members.filter(m=>m.kind==="pad"||m.kind==="pin");
         for(const member of members.slice(0,300)){const node=button("",()=>{activeConnection=member;if(member.position)focus(member.position);$("selectionStatus").textContent=`${selectedNet.name} · ${member.reference||"Component"} · ${member.pin||member.pad||""}`;});node.append(make("span",`${member.reference||"Component"} · ${member.kind==="pin"?"pin "+member.pin:"pad "+member.pad}`));$("netMemberList").append(node);}
         if(!members.length)$("netMemberList").append(make("p","No saved pads or pins on this network."));
         if(members.length>300)$("netMemberList").append(make("p",`First 300 of ${members.length} connections shown.`));
-        if(selectedNet.kind!=="pcb"){const section=make('section');section.className='property-section';section.append(make('h3','Matching sheets'));for(const [path,matches]of netSheetMatches()){const row=button(model.sheets.find(s=>s.path===path)?.label||path,()=>followSheet(path));row.title=path+' · '+matches.map(n=>n.name).join(', ');row.className='net-sheet-link';section.append(row);}$("propertyList").append(section);}if(selectedNet.kind!=="pcb")propertySection("Connectivity limits",{"Analysis":"Saved global labels, explicit global power symbols and unambiguous sheet pins identify matching sheets. Reused sheet instances, cyclic hierarchy, hidden power pins and buses are not resolved; this is not a KiCad netlist."});
+        if(matchingSheets){const section=make('section');section.className='property-section';section.append(make('h3','Matching sheets'));for(const [path,matches]of matchingSheets){const row=button(model.sheets.find(s=>s.path===path)?.label||path,()=>followSheet(path,matches[0]?.id));row.title=path+' · '+matches.map(n=>n.name).join(', ');row.className='net-sheet-link';section.append(row);}$("propertyList").append(section);}if(selectedNet.kind!=="pcb")propertySection("Connectivity limits",{"Analysis":"Saved global labels, explicit global power symbols and unambiguous sheet pins identify matching sheets. Reused sheet instances, cyclic hierarchy, hidden power pins and buses are not resolved; this is not a KiCad netlist."});
         return;
       }
       if(!selected)return;
       if(selected.kind==='zone'){const stats=boardAnalytics();const zone=stats?.zones?.find(z=>z.uuid&&z.uuid===selected.uuid);if(zone)propertySection('Saved zone analytics',{'Outline polygon area sum':zone.outlineAreaMm2.toFixed(3)+' mm²','Saved fill polygon area sum':zone.fillAreaMm2.toFixed(3)+' mm²','Saved fill layers':zone.layers.join(', ')||'None','Method':stats.limits});}
       const entries={...selected.properties};delete entries["Source fingerprint"];
-      const linked=netsForObject(selected);if(linked.length){entries.Net=linked.map(n=>n.name).join(", ");$("selectObjectNet").hidden=false;root.KiCadUIIcons?.label($("selectObjectNet"),linked.length===1?"Highlight net":`${linked.length} nets`);}
+      const linked=netsForObject(selected);if(linked.length){entries.Net=linked.length===1?linked[0].name:`${linked.length} connected nets`;$("selectObjectNet").hidden=false;root.KiCadUIIcons?.label($("selectObjectNet"),linked.length===1?"Highlight net":`${linked.length} nets`);}
       if(entries.Value)chip(entries.Value);if(["symbol","footprint","pad"].includes(selected.kind))chip(selected.populated?"Fitted":"Do not populate",selected.populated?"population":"dnp");
       const used=new Set();const take=keys=>Object.fromEntries(keys.filter(k=>entries[k]!==undefined&&(used.add(k),true)).map(k=>[k,entries[k]]));
       propertySection("Identity",take(["Reference","Value","Description","Library ID","lib_id","Number","Type","Shape"]));
       propertySection("Electrical",take(["Net","Sim.Device","Sim.Pins"]));
+      if(linked.length){
+        const section=collapsible('Connected nets',[],true,'property:connected-nets');section.className='property-group sidebar-section';
+        for(const net of linked.slice(0,100)){
+          const count=net.members.filter(member=>member.kind==='pin'||member.kind==='pad').length;
+          const row=button('',()=>selectNet(net,true));row.className='net-sheet-link';row.title=`Highlight ${net.name}`;row.setAttribute('aria-label',`Highlight net ${net.name}`);
+          row.append(make('strong',net.name),make('small',` · ${count} ${net.kind==='pcb'?'pad':'pin'}${count===1?'':'s'}`));section.append(row);
+        }
+        if(linked.length>100)section.append(make('p',`First 100 of ${linked.length} connected nets shown. Search the Nets explorer for other connections.`));
+        $('propertyList').append(section);
+      }
       const geometry=take(["layer","Layers","Angle","width","size","drill","unit"]);if(selected.position){geometry["X position"]=selected.position.x.toFixed(3)+" mm";geometry["Y position"]=selected.position.y.toFixed(3)+" mm";}propertySection("Geometry",geometry);
       propertySection("Assembly",{...take(["DNP","Exclude from BOM","Exclude from board"]),"Variant":model.variants.find(item=>item.id===variant)?.name||"Saved design"});
       propertySection("Properties",Object.fromEntries(Object.keys(entries).filter(key=>!used.has(key)).sort().map(key=>[key,entries[key]])));
@@ -524,8 +536,8 @@
     }
     function focusNet(net){const canvas=getCanvas();canvas.resize();const visible=net.primitives.filter(p=>!p.hole&&(!p.layer||canvas.visibleLayers.has(p.layer))),box=root.KiCadOwnedCanvas?.bounds(visible);if(!box){$("selectionStatus").textContent=`${net.name} · no geometry on visible layers`;return;}const margin=Math.max(3,Math.max(box.w,box.h)*.1);canvas.viewport.camera.bbox={x:box.x-margin,y:box.y-margin,w:box.w+2*margin,h:box.h+2*margin};canvas.draw();}
     function highlightedNets(){const path=currentFile(),result=new Map([...pinnedNets.values()].filter(n=>n.path===path).map(n=>[n.id,n]));if(classConfig)for(const net of netModel.nets){if(net.path!==path)continue;if([...pinnedClasses.values()].some(c=>c.path===path&&root.KiCadProjectSearch.netClasses(net.name,classConfig).includes(c.name))&&result.size<200)result.set(net.id,net);}if(selectedNet&&!result.has(selectedNet.id)&&result.size<200)result.set(selectedNet.id,selectedNet);return [...result.values()];}
-    function netSheetMatches(){
-      const selected=[...pinnedNets.values(),...(selectedNet?[selectedNet]:[])].filter(n=>n.kind==='schematic'),key=selected.map(n=>n.id).sort().join('\n');
+    function netSheetMatches(networks){
+      const selected=(networks??[...pinnedNets.values(),...(selectedNet?[selectedNet]:[])]).filter(n=>n.kind==='schematic'),key=selected.map(n=>n.id).sort().join('\n');
       if(sheetMatchCache?.model===netModel&&sheetMatchCache.objects===objects&&sheetMatchCache.key===key)return sheetMatchCache.result;
       const result=new Map(),links=objects.filter(o=>o.kind==='sheet').map(o=>({path:o.path,target:sheetTarget(o),sheetId:o.uuid||o.id}));
       for(const net of selected)for(const match of root.KiCadNetModel?.relatedSchematicNets(netModel.nets,net.id,links)?.matches||[net]){
@@ -687,7 +699,7 @@
       try{openSheet(path);pointerWorld=null;}catch(error){sheetVisits.move(-delta);notice(error.message);}updateSheetNavigation();
     }
     function homeSheet(){const home=rootSheetPath(rootFile,objects,files);if(home){openSheet(home);pointerWorld=null;}else{navigate('sheets');notice('The loaded hierarchy has no unambiguous root sheet. Choose a sheet in the navigator.');}}
-    function followSheet(path){if(!files.some(f=>f.path===path&&/\.kicad_sch$/i.test(path)))return false;const matches=netSheetMatches().get(path);openSheet(path);const net=matches?.length?netModel.nets.find(n=>n.id===matches[0].id):null;if(net)selectNet(net,true,false);else highlightSheet(path);return true;}
+    function followSheet(path,netId){if(!files.some(f=>f.path===path&&/\.kicad_sch$/i.test(path)))return false;const matches=netSheetMatches().get(path),id=netId??matches?.[0]?.id;openSheet(path);const net=id?netModel.nets.find(n=>n.id===id&&n.path===path):null;if(net)selectNet(net,true,false);else highlightSheet(path);return true;}
     function renderSheets(){updateSheetNavigation();
       const list=$("sheetList");list.replaceChildren();
       const query=$("sheetSearch").value.trim(),sheets=model.sheets.filter(s=>s.kind==='schematic'),links=objects.filter(o=>o.kind==='sheet');

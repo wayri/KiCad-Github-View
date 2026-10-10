@@ -85,6 +85,17 @@ test('part inspector groups saved properties and offers only connected net selec
   view.get('selectObjectNet').click();assert.equal(view.canvas.netHighlight.name,'SIGNAL');assert.equal(view.get('selectedName').textContent,'SIGNAL');
 });
 
+test('part properties cross-probe each connected net directly without opening explorer',()=>{
+  const selections=[],source='(kicad_pcb (net 1 "SUPPLY") (net 2 "RETURN") (net 3 "UNCONNECTED") (footprint "Resistor" (layer "F.Cu") (at 30 40) (uuid "fp") (property "Reference" "R1") (property "Value" "10k") (pad "1" smd rect (at 1 0) (size 2 2) (layers "F.Cu") (net 1 "SUPPLY") (uuid "pad1")) (pad "2" smd rect (at 3 0) (size 2 2) (layers "F.Cu") (net 2 "RETURN") (uuid "pad2"))))';
+  const view=workspaceRuntime(undefined,{source,onSelection:value=>selections.push(value)});view.load();view.get('objectList').children[0].click();
+  const section=view.get('propertyList').children.find(node=>node.children[0]?.textContent==='Connected nets');
+  assert.ok(section);assert.equal(section.open,true);assert.equal(section.children.length,3);
+  assert.match(section.textContent,/SUPPLY.*1 pad/);assert.match(section.textContent,/RETURN.*1 pad/);assert.doesNotMatch(section.textContent,/UNCONNECTED/);
+  assert.match(view.get('propertyList').textContent,/2 connected nets/);
+  section.children.find(node=>node.attributes['aria-label']==='Highlight net RETURN').click();assert.equal(view.canvas.netHighlight.name,'RETURN');assert.equal(view.get('selectedName').textContent,'RETURN');assert.equal(view.get('designNavigator').hidden,true);
+  assert.equal(selections.at(-1).kind,'net');assert.equal(selections.at(-1).netName,'RETURN');assert.equal(selections.at(-1).path,'board.kicad_pcb');view.workspace.dispose();
+});
+
 function uiEvent(type,values){const event=new Event(type,{cancelable:true});Object.assign(event,values);return event;}
 test('pinned properties and comments share the side dock and collapse independently',()=>{
  const view=workspaceRuntime(undefined,{width:1600});view.load();
@@ -680,6 +691,26 @@ test('thread reader shows ordinary text safely, filters dates, and prepares a re
 
 test('net highlighting badges only related sheets and publishes the shared hierarchy',()=>{
  const content=(global)=>`(kicad_sch (version 20250114) (global_label "${global}" (at 0 0) (uuid "g")) (wire (pts (xy 0 0) (xy 10 0)) (uuid "w")))`,files=[{path:'root.kicad_sch',content:content('SUPPLY')},{path:'child.kicad_sch',content:content('SUPPLY')},{path:'unrelated.kicad_sch',content:content('OTHER')}];let snapshot;const view=workspaceRuntime(async()=>[],{pcb:false,files,onHierarchy:value=>snapshot=value});view.load();view.get('netList').children[0].click();const rows=view.get('sheetList').children[1].children,marked=rows.filter(r=>r.children.some(n=>n.className.includes('net-sheet-match')));assert.equal(marked.length,2);assert.equal(typeof view.workspace.followSheet,'function');assert.equal(view.workspace.followSheet('missing.kicad_sch'),false);assert.deepEqual([...snapshot.highlighted].sort(),['child.kicad_sch','root.kicad_sch']);assert.match(view.get('propertyList').textContent,/Matching sheets/);view.get('clearHighlights').click();assert.equal(snapshot.highlighted.length,0);
+});
+
+test('net properties show matching sheet count and links cross-probe the exact related sheet',()=>{
+  const content=name=>`(kicad_sch (version 20250114) (global_label "${name}" (at 0 0) (uuid "g")) (wire (pts (xy 0 0) (xy 10 0)) (uuid "w")))`;
+  const files=[{path:'root.kicad_sch',content:content('SUPPLY')},{path:'nested/child.kicad_sch',content:content('SUPPLY')},{path:'other.kicad_sch',content:content('OTHER')}],opened=[],selections=[];let active=files[0].path;
+  const view=workspaceRuntime(undefined,{pcb:false,files,currentFile:()=>active,openSheet:path=>{opened.push(path);active=path;},onSelection:value=>selections.push(value)});view.load();view.get('netList').children[0].click();
+  assert.match(view.get('selectionSummary').textContent,/2 matching sheets/);
+  const section=view.get('propertyList').children.find(node=>node.children[0]?.textContent==='Matching sheets');
+  assert.equal(section.children.length,3);const link=section.children.find(node=>node.title?.startsWith('nested/child.kicad_sch'));
+  assert.ok(link);link.click();assert.deepEqual(opened,['nested/child.kicad_sch']);assert.equal(view.canvas.netHighlight.name,'SUPPLY');assert.equal(view.canvas.netHighlight.path,'nested/child.kicad_sch');assert.equal(selections.at(-1).path,'nested/child.kicad_sch');view.workspace.dispose();
+});
+
+test('net properties follow the inspected network when other nets are also highlighted',()=>{
+  const content=names=>`(kicad_sch (version 20250114) ${names.map((name,i)=>`(global_label "${name}" (at 0 ${i*20}) (uuid "g${i}")) (wire (pts (xy 0 ${i*20}) (xy 10 ${i*20})) (uuid "w${i}"))`).join(' ')})`;
+  const files=[{path:'root.kicad_sch',content:content(['AAA','ZZZ'])},{path:'child.kicad_sch',content:content(['AAA','ZZZ'])},{path:'aaa-only.kicad_sch',content:content(['AAA'])}];let active=files[0].path;
+  const view=workspaceRuntime(undefined,{pcb:false,files,currentFile:()=>active,openSheet:path=>{active=path;}});view.load();view.get('multiHighlight').checked=true;
+  view.get('netList').children.find(row=>row.title==='AAA').click();view.get('netList').children.find(row=>row.title==='ZZZ').click();
+  assert.equal(view.get('selectedName').textContent,'ZZZ');assert.match(view.get('selectionSummary').textContent,/2 matching sheets/);
+  const section=view.get('propertyList').children.find(node=>node.children[0]?.textContent==='Matching sheets');assert.equal(section.children.length,3);
+  section.children.find(node=>node.title?.startsWith('child.kicad_sch')).click();assert.equal(active,'child.kicad_sch');assert.equal(view.get('selectedName').textContent,'ZZZ');view.workspace.dispose();
 });
 
 test('angle ruler previews, pins, resets and uses opaque label backgrounds',()=>{

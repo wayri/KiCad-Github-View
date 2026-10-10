@@ -48,6 +48,8 @@ Review drafts remain local until explicitly published. GitHub Issues/Discussions
 
 ## Build and packages
 
+For Google Play, follow [the submission and upload-key guide](../docs/play-store/SUBMISSION.md). `bundlePlayRelease` requires a production upload key supplied through environment variables and never falls back to debug signing. Ordinary `bundleRelease` remains unsigned when no key is configured. Keep signing keys outside this checkout and back them up securely. Play Console submission and approval are separate from GitHub releases.
+
 From the repository root, stage assets with `python scripts/package_android.py`. Then set `JAVA_HOME` to a JDK 17+ installation, configure `ANDROID_HOME` for an Android SDK with API 36, and run `android-app/gradlew.bat -p android-app assembleDebug lintDebug bundleRelease` (or the shell wrapper on Linux/macOS). The project currently uses AGP 9.3 and Gradle 9.5.
 
 Development output is `app/build/outputs/apk/debug/app-debug.apk`. The release bundle is `app/build/outputs/bundle/release/app-release.aab`; configure your own release signing for distribution. APKs in `dist` are development-signed, not Play Store releases. `dist/pocket-kivi-android-source.zip` includes source and staged assets, excluding build caches and `local.properties`.

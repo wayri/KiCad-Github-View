@@ -2,6 +2,16 @@ plugins {
     id 'com.android.application'
 }
 
+// Secrets are supplied by the operator, never committed or packaged with source.
+def uploadValues = ['POCKET_KIVI_KEYSTORE', 'POCKET_KIVI_STORE_PASSWORD',
+                    'POCKET_KIVI_KEY_ALIAS', 'POCKET_KIVI_KEY_PASSWORD'].collectEntries {
+    [(it): System.getenv(it)]
+}
+def uploadSigning = uploadValues.values().every { it != null && !it.isBlank() }
+if (uploadValues.values().any { it != null && !it.isBlank() } && !uploadSigning) {
+    throw new GradleException('Upload signing requires all four POCKET_KIVI signing environment variables.')
+}
+
 android {
     namespace 'dev.kicadvizdiff.android'
     compileSdk 36
@@ -10,8 +20,8 @@ android {
         applicationId 'dev.kicadvizdiff.android'
         minSdk 26
         targetSdk 36
-        versionCode 34
-        versionName '1.31'
+        versionCode 35
+        versionName '1.32'
         testInstrumentationRunner 'dev.kicadvizdiff.android.LibraryInstrumentation'
     }
 
@@ -19,6 +29,33 @@ android {
         sourceCompatibility JavaVersion.VERSION_17
         targetCompatibility JavaVersion.VERSION_17
     }
+
+    signingConfigs {
+        if (uploadSigning) {
+            upload {
+                storeFile file(uploadValues.POCKET_KIVI_KEYSTORE)
+                storePassword uploadValues.POCKET_KIVI_STORE_PASSWORD
+                keyAlias uploadValues.POCKET_KIVI_KEY_ALIAS
+                keyPassword uploadValues.POCKET_KIVI_KEY_PASSWORD
+            }
+        }
+    }
+    buildTypes {
+        release {
+            debuggable false
+            if (uploadSigning) signingConfig signingConfigs.upload
+        }
+    }
+}
+
+// Explicit Play task fails instead of producing an unsigned or debug-signed upload.
+tasks.register('bundlePlayRelease') {
+    doFirst {
+        if (!uploadSigning) throw new GradleException('Configure an upload key before building for Google Play; see docs/play-store/SUBMISSION.md.')
+    }
+}
+tasks.named('bundlePlayRelease').configure {
+    if (uploadSigning) dependsOn('bundleRelease')
 }
 
 dependencies {

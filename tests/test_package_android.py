@@ -1,10 +1,19 @@
 import importlib.util
 from pathlib import Path
 import unittest
+import tempfile
 ROOT=Path(__file__).resolve().parents[1]
 spec=importlib.util.spec_from_file_location('android_package',ROOT/'scripts/package_android.py')
 builder=importlib.util.module_from_spec(spec);spec.loader.exec_module(builder)
 class AndroidPackageTests(unittest.TestCase):
+    def test_source_archive_excludes_local_signing_material(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root=Path(directory)
+            app=root/'android-app';app.mkdir()
+            for name in ('build.gradle','local.properties','signing.properties','keystore.properties','upload.jks','upload.keystore','private.pem','private.key','.env.upload'):
+                (app/name).write_text('fixture',encoding='utf-8')
+            (app/'build').mkdir();(app/'build'/'cached.txt').write_text('fixture')
+            self.assertEqual([p.name for p in builder.source_files(root)],['build.gradle'])
     def test_shared_engine_and_native_runtime_are_packaged_without_online_credentials(self):
         assets=builder.payload()
         for name in ('owned-canvas.js','schematic-renderer.js','pcb-renderer.js'):

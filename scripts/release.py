@@ -123,7 +123,9 @@ def package_guides(output: Path, root: Path = ROOT):
              *sorted((root / 'extension/docs').rglob('*.md')),
              *([root / 'vscode-extension/README.md'] if (root / 'vscode-extension/README.md').is_file() else []),
              *sorted((root / 'docs/images').rglob('*.jpg')),
-             *sorted((root / 'docs/images').rglob('*.png'))]
+               *sorted((root / 'docs/images').rglob('*.png'))]
+    paths.extend(sorted((root / 'docs/play-store/assets').glob('*.png')))
+    paths.extend(sorted((root / 'docs/play-store').glob('*.html')))
     with zipfile.ZipFile(output, 'w', compression=zipfile.ZIP_DEFLATED, compresslevel=9) as archive:
         for path in paths:
             if path.is_symlink() or not path.resolve().is_relative_to(root.resolve()):
@@ -196,9 +198,7 @@ def package_android(output: Path, root: Path = ROOT):
             raise ValueError('Expected an unsigned Android bundle.')
     source = builder.package(root)
     with zipfile.ZipFile(source) as archive:
-        source_names = {path.relative_to(root).as_posix() for path in (root / 'android-app').rglob('*')
-                        if path.is_file() and not any(part in {'build', '.gradle'} for part in path.relative_to(root / 'android-app').parts)
-                        and path.name != 'local.properties'}
+        source_names = {path.relative_to(root).as_posix() for path in builder.source_files(root)}
         if set(archive.namelist()) != source_names or len(archive.namelist()) != len(source_names):
             raise ValueError('Android source archive inventory differs from current source.')
         for name in archive.namelist():

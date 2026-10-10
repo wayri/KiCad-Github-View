@@ -17,6 +17,10 @@ node_modules/
 !.env.example
 *.pem
 *.key
+*.jks
+*.keystore
+keystore.properties
+signing.properties
 .code*/
 .agents/
 .aws/

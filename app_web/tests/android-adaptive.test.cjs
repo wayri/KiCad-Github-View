@@ -1,4 +1,24 @@
 const test=require('node:test'),assert=require('node:assert/strict'),vm=require('node:vm'),fs=require('node:fs');
+
+test('workspace shortcuts preserve split handlers, comparison focus and companion chooser lifecycle',()=>{
+ const nodes=new Map(),observers=new Map();let splits=0,focused=0;
+ const make=tag=>({tagName:tag.toUpperCase(),children:[],dataset:{},attrs:{},append(...children){this.children.push(...children);for(const child of children)if(child.id)nodes.set(child.id,child);},setAttribute(k,v){this.attrs[k]=v;},getAttribute(k){return this.attrs[k];}});
+ const nav=make('nav'),tools=make('dialog');tools.showModal=()=>{tools.open=true;};tools.close=()=>{tools.open=false;};
+ nodes.set('androidWorkspaceNav',nav);nodes.set('androidWorkspaceSheet',tools);
+ const split=make('button');split.click=()=>splits++;split.disabled=false;split.setAttribute('aria-pressed','false');nodes.set('splitView',split);
+ const chooser=make('span');chooser.hidden=true;nodes.set('pairChooser',chooser);
+ const picker={open:false,querySelector:()=>({focus(){focused++;}})};
+ const document={readyState:'loading',getElementById:id=>nodes.get(id),createElement:make,addEventListener(){},querySelector:selector=>selector==='.revision-picker'?picker:null,querySelectorAll:selector=>selector==='dialog[open]'&&tools.open?[tools]:[]};
+ const context={document,module:{exports:{}},MutationObserver:class{constructor(callback){this.callback=callback;}observe(node){observers.set(node,this.callback);}}};
+ vm.createContext(context);vm.runInContext(fs.readFileSync('android-app/web/adaptive-ui.js','utf8'),context);
+ context.KiCadAndroidUI.workspaceActions();context.KiCadAndroidUI.workspaceActions();
+ assert.equal(nav.children.length,1);assert.equal(nav.children[0].children.length,2,'observer remounts do not duplicate actions');
+ nodes.get('androidQuickSplit').onclick();assert.equal(splits,1);
+ split.disabled=true;split.setAttribute('aria-pressed','true');observers.get(split)();assert.equal(nodes.get('androidQuickSplit').disabled,true);assert.equal(nodes.get('androidQuickSplit').getAttribute('aria-pressed'),'true');
+ chooser.hidden=false;observers.get(chooser)();assert.equal(tools.open,true);
+ chooser.hidden=true;observers.get(chooser)();assert.equal(tools.open,false,'auto-selected companions close the chooser');
+ nodes.get('androidQuickCompare').onclick();assert.equal(tools.open,true);assert.equal(picker.open,true);assert.equal(focused,1);
+});
 test('embedded and split drawings reuse the ancestor workspace menu; standalone keeps a menu',()=>{
  const {hasParentWorkspace}=require('../../android-app/web/adaptive-ui.js');
  const top={document:{getElementById:()=>null}};top.parent=top;

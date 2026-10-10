@@ -38,6 +38,7 @@
   if(!d.body.classList.contains('android-home'))return;
   const header=d.querySelector('body>header'),title=header.querySelector('strong');title.id='appTitle';
   const menu=sheet('appMenuDialog','Library and accounts');API.openMenu=()=>openSheet(menu.dialog);
+  const privacy=sheet('androidPrivacyDialog','Privacy');const policy=make('iframe');policy.title='Pocket KiVi privacy policy';policy.src='privacy.html';policy.setAttribute('sandbox','');policy.style.cssText='width:100%;height:65vh;border:0;background:white;';privacy.content.append(policy);menu.content.append(button('Privacy policy',()=>openSheet(privacy.dialog)));
   header.prepend(button('Menu',API.openMenu));header.firstChild.id='appMenuButton';
   const globalHeading=make('h3','Open a project');globalHeading.className='android-menu-group-title';menu.content.append(globalHeading);for(const id of ['openFiles','openFolder'])menu.content.append($(id));const accountHeading=make('h3','Online accounts');accountHeading.className='android-menu-group-title';menu.content.append(accountHeading);for(const id of ['githubButton','gitlabButton'])menu.content.append($(id));
   for(const id of ['githubButton','gitlabButton'])$(id).addEventListener('click',()=>menu.dialog.close());
@@ -59,13 +60,10 @@
   const comments=button('Comments',()=>showPane('commentsSidebar','commentsButton'));
   const more=button('More',()=>openSheet(tools.dialog),'More drawing tools');const paths=['M4 6h16M4 12h16M4 18h16','M10 3a7 7 0 1 0 0 14 7 7 0 0 0 0-14Zm5 12 6 6','M8 3H3v5M16 3h5v5M3 16v5h5M21 16v5h-5','M3 17 15 5l4 4L7 21H3v-4ZM13 7l4 4','M3 4h18v13H9l-6 4V4Z','M5 12h.01M12 12h.01M19 12h.01'];[menu,searchButton,fit,highlight,comments,more].forEach((b,i)=>{const icon=d.createElementNS('http://www.w3.org/2000/svg','svg');icon.setAttribute('viewBox','0 0 24 24');icon.setAttribute('width','24');icon.setAttribute('height','24');icon.setAttribute('aria-hidden','true');const path=d.createElementNS(icon.namespaceURI,'path');path.setAttribute('d',paths[i]);path.setAttribute('fill','none');path.setAttribute('stroke','currentColor');path.setAttribute('stroke-width','2');path.setAttribute('stroke-linecap','round');icon.append(path);b.title=b.getAttribute('aria-label');b.replaceChildren(icon);});toolbar.append(menu,searchButton,fit,highlight,comments,more);d.body.prepend(toolbar);
   const mode3d=$('mode3d');if(mode3d){toolbar.insertBefore(mode3d,more);mode3d.classList.add('android-3d-toggle');const sync3d=()=>{const active=mode3d.getAttribute('aria-pressed')==='true';mode3d.textContent=active?'2D':'3D';mode3d.setAttribute('aria-label',active?'Switch layout to 2D':'Switch layout to 3D');mode3d.title=active?'Return to PCB layout':'View board in 3D';};sync3d();new MutationObserver(sync3d).observe(mode3d,{attributes:true,attributeFilter:['aria-pressed']});}
-  const selectionSheet=sheet('androidSelectionSheet','Selection');
-  const selectButton=button('Select',()=>openSheet(selectionSheet.dialog),'Choose selection mode');
-  root.KiCadUIIcons?.decorate?.(selectButton);
-  selectButton.textContent='Select';toolbar.insertBefore(selectButton,highlight);
-  const modeLabel=make('label','Select');modeLabel.htmlFor='selectionMode';selectionSheet.content.append(modeLabel,$('selectionMode'));
-  const modeHelp=make('p','Smart offers parts and nets under your touch. Part selects components; Net highlights connections. Turn on Highlight to add or remove items from a group.');selectionSheet.content.append(modeHelp);
-  $('selectionMode').addEventListener('change',()=>{selectButton.textContent=$('selectionMode').value==='all'?'Smart':$('selectionMode').value==='part'?'Part':'Net';selectButton.setAttribute('aria-label','Choose selection mode: '+selectButton.textContent);selectionSheet.dialog.close();});
+  const selection=$('selectionMode');selection.classList.add('android-selection-mode');for(const option of selection.options)if(option.value==='all')option.textContent='Smart';selection.title='Smart: choose a part or net under your touch. Part: components only. Net: connections only.';selection.setAttribute('aria-label','Selection mode');
+  toolbar.insertBefore(selection,highlight);
+  // Preserve the shared select element, its current value and existing handlers.
+  highlight.title='Group selection: add or remove parts and nets';
   search.content.append($('universalSearch').closest('.universal-search'),$('universalSearchResults'));
   $('universalSearch').addEventListener('keydown',e=>{if(e.key==='Enter'&&$('universalSearchResults').hidden)search.dialog.close();});
   $('universalSearchResults').addEventListener('click',event=>{if(event.target.closest('[role=option]'))search.dialog.close();});
@@ -90,6 +88,15 @@
   const nav=make('nav');nav.id='androidWorkspaceNav';nav.setAttribute('aria-label','Project views');nav.append($('workspaceTabs'));d.body.append(nav);
   const tools=sheet('androidWorkspaceSheet','Views and revisions');const actions=make('div');actions.className='android-pane-actions';actions.append(button('This project',()=>{tools.dialog.close();root.top.KiCadAndroidUI?.openProjectActions?.();},'Bookmark, save offline or download this project'));tools.content.append(actions,$('projectTools'),$('toolbar'));const bar=make('div');bar.id='androidWorkspaceHeader';bar.append(button('Library',()=>root.top.KiCadAndroidUI?.openMenu?.(),'Library and accounts'),make('strong',root.top.KiCadAndroidProject?.name||root.top.KiCadAndroidProject?.github?.repository||'KiCad project'),button('Project',()=>openSheet(tools.dialog),'Project actions and view options'));$('reviewHeader').append(bar);
  }
+ function workspaceActions(){
+  const nav=$('androidWorkspaceNav'),tools=$('androidWorkspaceSheet');if(!nav||!tools)return;
+  let quick=$('androidWorkspaceActions');if(!quick){quick=make('div');quick.id='androidWorkspaceActions';quick.setAttribute('aria-label','Split and revision comparison');nav.append(quick);}
+  const split=$('splitView');if(split&&!$('androidQuickSplit')){const b=button('Split',()=>split.click(),'Split schematic and layout');b.id='androidQuickSplit';b.dataset.icon='flip';quick.append(b);root.KiCadUIIcons?.decorate?.(quick);const update=()=>{b.disabled=split.disabled;b.setAttribute('aria-pressed',split.getAttribute('aria-pressed')||'false');};update();new MutationObserver(update).observe(split,{attributes:true,attributeFilter:['disabled','aria-pressed']});}
+  const picker=d.querySelector('.revision-picker');if(picker&&!$('androidQuickCompare')){const b=button('Compare',()=>{openSheet(tools);picker.open=true;picker.querySelector('input')?.focus();},'Compare commits');b.id='androidQuickCompare';b.dataset.icon='compare';quick.append(b);root.KiCadUIIcons?.decorate?.(quick);}
+  // A split with several companions still uses the existing validated chooser.
+  const chooser=$('pairChooser');if(chooser&&!chooser.dataset.androidBound){chooser.dataset.androidBound='true';let showing=false;new MutationObserver(()=>{if(!chooser.hidden){showing=true;openSheet(tools);}else if(showing){showing=false;tools.close();}}).observe(chooser,{attributes:true,attributeFilter:['hidden']});}
+ }
+ API.workspaceActions=workspaceActions;
  function compactLayers(){
   const strip=$('floatingLayerSelector');if(!strip||$('androidLayerToggle'))return;
   const options=make('div');options.className='android-layer-options';options.append(...strip.children);
@@ -99,10 +106,10 @@
   d.addEventListener('pointerdown',event=>{if(!strip.contains(event.target)){strip.classList.remove('layers-expanded');strip.querySelector('#androidLayerToggle')?.setAttribute('aria-expanded','false');}},true);}update();
  }
  const resize=()=>d.body.dataset.size=sizeClass(root.innerWidth);
- const preparedGroups=new WeakSet();function propertyBasics(){if($('allSheetPagesButton'))$('allSheetPagesButton').hidden=true;if($('androidAllSheetsButton'))$('androidAllSheetsButton').hidden=!root.KiCadSheetOverview;if(sizeClass(root.innerWidth)!=='compact')return;for(const group of d.querySelectorAll('#propertyList details'))if(!preparedGroups.has(group)){preparedGroups.add(group);const title=group.querySelector('summary')?.textContent||'';group.open=/^(Identity|Electrical)$/.test(title);}}
+ const preparedGroups=new WeakSet();function propertyBasics(){if($('allSheetPagesButton'))$('allSheetPagesButton').hidden=true;if($('androidAllSheetsButton'))$('androidAllSheetsButton').hidden=!root.KiCadSheetOverview;if(sizeClass(root.innerWidth)!=='compact')return;for(const group of d.querySelectorAll('#propertyList details'))if(!preparedGroups.has(group)){preparedGroups.add(group);const title=group.querySelector('summary')?.textContent||'';group.open=/^(Identity|Electrical|Connected nets)$/.test(title);}}
  function init(){
   d.addEventListener('click',event=>{const modal=event.target;if(modal?.tagName!=='DIALOG'||!modal.open||modal.classList.contains('library-confirm')||modal.id==='androidDraftExit')return;const r=modal.getBoundingClientRect();if(event.clientX<r.left||event.clientX>r.right||event.clientY<r.top||event.clientY>r.bottom)modal.close();});
   d.addEventListener('pointerdown',event=>{if(sizeClass(root.innerWidth)==='expanded')return;for(const[id,close]of panes){const pane=$(id);if(visible(pane)&&!pane.contains(event.target)&&!event.target.closest?.('button,dialog,[role=dialog]'))$(close)?.click();}},true);
-  resize();shell();drawing();workspace();compactLayers();root.KiCadAndroidProjectUI?.mount();let queued=false;new MutationObserver(()=>{if(queued)return;queued=true;queueMicrotask(()=>{queued=false;drawing();workspace();compactLayers();propertyBasics();});}).observe(d.body,{childList:true,subtree:true});root.addEventListener('resize',resize);d.addEventListener('keydown',e=>{if(e.key==='Escape'&&API.handleBack()){e.preventDefault();e.stopPropagation();}},true);}
+  resize();shell();drawing();workspace();workspaceActions();compactLayers();root.KiCadAndroidProjectUI?.mount();let queued=false;new MutationObserver(()=>{if(queued)return;queued=true;queueMicrotask(()=>{queued=false;drawing();workspace();workspaceActions();compactLayers();propertyBasics();});}).observe(d.body,{childList:true,subtree:true});root.addEventListener('resize',resize);d.addEventListener('keydown',e=>{if(e.key==='Escape'&&API.handleBack()){e.preventDefault();e.stopPropagation();}},true);}
  if(d.readyState==='loading')d.addEventListener('DOMContentLoaded',init,{once:true});else init();
 })(globalThis);

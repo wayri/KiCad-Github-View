@@ -193,11 +193,11 @@ body.project-app{background:var(--android-surface);color:var(--android-text)}
 
 /* Large visual actions with short secondary captions. */
 body[data-size] .ui-icon{width:32px;height:32px;flex-basis:32px}
-body[data-size] .ui-brand-gitlab{width:84px;height:84px;flex-basis:84px;margin:-26px}
 body[data-size] .icon-caption .button-label{font-size:10px}
 .android-welcome-actions button.icon-caption{flex-direction:column;align-items:center;justify-content:center;min-height:104px;gap:10px}
 .android-welcome-actions button .ui-icon{width:42px;height:42px;flex-basis:42px}
-.android-welcome-actions button .ui-brand-gitlab{width:104px;height:104px;flex-basis:104px;margin:-31px}
+.android-home .android-welcome-actions button .ui-icon{width:36px;height:36px;flex:0 0 36px;margin:0}
+#appMenuDialog .ui-icon{width:28px;height:28px;flex:0 0 28px;margin:0}
 .android-welcome-actions .button-label{font-size:11px!important}
 #androidWorkspaceNav #workspaceTabs .ui-icon{width:30px;height:30px;flex-basis:30px}
 #androidWorkspaceNav #workspaceTabs .button-label{font-size:10px}
@@ -363,4 +363,13 @@ body .android-comment-pin[data-severity=critical]{--pin-accent:#ff6775}body .and
 @media(max-width:599px){#viewCommentsPane>.hint{display:none}}
 
 #androidViewToolbar .android-3d-toggle{font-size:12px;font-weight:700;min-width:36px;padding:4px 6px}#threePane{height:100%;width:100%;min-height:0}
+
+/* Keep frequent ECAD actions next to the project views, with the shared handlers. */
+#androidWorkspaceNav #workspaceTabs{flex:1;min-width:0;width:auto}
+#androidWorkspaceActions{display:flex;align-items:center;flex:none;border-left:1px solid var(--android-outline);gap:2px;padding-left:3px}
+#androidWorkspaceActions button{display:flex;flex-direction:column;justify-content:center;align-items:center;gap:2px;min-width:48px;min-height:44px;height:44px;padding:3px 6px;border-radius:8px}
+#androidWorkspaceActions .ui-icon{width:22px;height:22px;flex-basis:22px}
+#androidWorkspaceActions .button-label{font-size:9px;line-height:1.1}
+#androidViewToolbar select.android-selection-mode{flex:none;width:76px;min-width:0;min-height:40px;height:40px;border:1px solid var(--line,var(--android-outline));border-radius:9px;padding:4px;font-size:11px;background:var(--panel,var(--android-container));color:var(--ink,var(--android-text))}
+@media(max-width:599px){#androidWorkspaceNav #workspaceTabs button{min-width:0;padding:4px;gap:3px;flex-direction:column}#androidWorkspaceNav #workspaceTabs .ui-icon{width:22px;height:22px}#androidWorkspaceNav #workspaceTabs .button-label{font-size:9px;line-height:1.1}#androidViewToolbar button{min-width:32px}#androidViewToolbar select.android-selection-mode{width:66px}}
 #recentProjects{margin-top:24px;border-top:1px solid var(--android-outline);padding-top:16px}#recentProjects h2{font-size:16px;line-height:1.4;margin:0 0 12px}#recentProjectRows{display:grid;gap:8px}.recent-project-card{border:1px solid var(--android-outline);border-radius:14px;background:var(--android-container);padding:10px 12px;min-width:0}.recent-project-open{display:flex;align-items:center;gap:10px;width:100%;justify-content:flex-start;text-align:left;white-space:normal;background:transparent;border:0;padding:4px 0;font-size:13px;min-height:40px}.recent-project-open span{overflow-wrap:anywhere}.recent-project-open .ui-icon{width:28px;height:28px;flex:0 0 28px}.recent-project-state{display:inline-block;font-size:10px;padding:3px 7px;border-radius:8px;background:var(--android-surface);color:var(--android-muted);margin:4px 0}.recent-project-state[data-online=true]{color:var(--android-primary)}.recent-project-source{display:block;color:var(--android-muted);font-size:10px;overflow-wrap:anywhere}#recentProjectStatus{font-size:12px!important;line-height:1.4!important}#recentProjectStatus:empty{display:none}@media(min-width:840px){#recentProjectRows{grid-template-columns:repeat(2,minmax(0,1fr))}}

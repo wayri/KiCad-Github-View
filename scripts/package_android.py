@@ -7,6 +7,15 @@ import re
 import zipfile
 ROOT = Path(__file__).resolve().parents[1]
 
+def source_files(root=ROOT):
+    """Exclude local configuration and signing material even when ignored by Git."""
+    return sorted(p for p in (root / 'android-app').rglob('*')
+                  if p.is_file() and not p.is_symlink()
+                  and not any(x in {'build', '.gradle', '.git'} for x in p.relative_to(root / 'android-app').parts)
+                  and p.name not in {'local.properties', 'keystore.properties', 'signing.properties'}
+                  and p.suffix.lower() not in {'.jks', '.keystore', '.pem', '.key'}
+                  and not p.name.startswith('.env'))
+
 def payload(root=ROOT):
     spec = importlib.util.spec_from_file_location('extension_builder', root / 'scripts/package_extension.py')
     module = importlib.util.module_from_spec(spec); spec.loader.exec_module(module)
@@ -53,7 +62,7 @@ def package(root=ROOT):
     for name, data in payload(root).items():
         path = assets / name; path.parent.mkdir(parents=True, exist_ok=True); path.write_bytes(data)
     output = root / 'dist/pocket-kivi-android-source.zip'; output.parent.mkdir(parents=True, exist_ok=True)
-    sources = sorted(p for p in (root / 'android-app').rglob('*') if p.is_file() and not any(x in {'build','.gradle'} for x in p.relative_to(root / 'android-app').parts) and p.name != 'local.properties')
+    sources = source_files(root)
     with zipfile.ZipFile(output, 'w', zipfile.ZIP_DEFLATED) as archive:
         for path in sources:
             info = zipfile.ZipInfo(str(path.relative_to(root)).replace('\\','/'), (2020,1,1,0,0,0)); info.compress_type=zipfile.ZIP_DEFLATED; info.external_attr=0o100644 << 16; archive.writestr(info,path.read_bytes())
