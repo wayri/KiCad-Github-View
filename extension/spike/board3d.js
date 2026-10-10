@@ -11,6 +11,8 @@ import { trackCapsuleDimensions } from "@spike/trackGeometry";
 import { viewportSceneIdentity } from "@spike/viewportScenePolicy";
 import { populationMask, uniqueComponentIndexes } from "./componentState.mjs";
 import { footprintProxies } from "./footprintProxies.mjs";
+import { selectionMatcher, tapGesture } from "./selectionState.mjs";
+import { sphereFitDistance } from "./fitPolicy.mjs";
 
 const STYLE = `
   :host{display:block;width:100%;height:100%;font:12px/1.4 system-ui,-apple-system,"Segoe UI",sans-serif;
@@ -326,13 +328,22 @@ export function mountBoard3D(container, source, options = {}) {
     await Promise.all(Array.from({ length: Math.min(3, inventory.models.length) }, async () => {
       while (cursor < inventory.models.length && active) await one(inventory.models[cursor++]);
     }));
-    if(active)showModelDiagnostics();
+    if(active) { showModelDiagnostics(); setSelection(externalSelection); }
   }
 
   function fit(topView = false) {
-    const distance = extent * (topView ? .85 : .95) + 5;
-    camera.position.set(topView ? 0 : extent * .45, topView ? 0 : -extent * .38, distance);
-    camera.up.set(0, 1, 0); controls.target.set(0, 0, 0); controls.update();
+    const viewportWidth = Math.max(1, canvasHost.clientWidth), viewportHeight = Math.max(1, canvasHost.clientHeight);
+    renderer.setSize(viewportWidth, viewportHeight, false); camera.aspect = viewportWidth / viewportHeight;
+    boardGroup.updateWorldMatrix(true, true);
+    const sphere = new THREE.Box3().setFromObject(boardGroup).getBoundingSphere(new THREE.Sphere());
+    const radius = Number.isFinite(sphere.radius) && sphere.radius > 0 ? sphere.radius : Math.hypot(width, height, thickness + 5) / 2;
+    const center = sphere.radius > 0 ? sphere.center : new THREE.Vector3();
+    const distance = sphereFitDistance(radius, camera.fov, camera.aspect) || extent * 3;
+    controls.maxDistance = Math.max(extent * 8, distance * 4);
+    camera.far = Math.max(3000, distance * 6 + radius); camera.updateProjectionMatrix();
+    const direction = new THREE.Vector3(topView ? 0 : .45, topView ? 0 : -.38, 1).normalize();
+    camera.position.copy(center).addScaledVector(direction, distance);
+    camera.up.set(0, 1, 0); controls.target.copy(center); controls.update();
   }
   action("Fit", () => fit()); action("Top", () => fit(true));
   toggle("Front copper", true, (visible) => { groupFor("F.Cu").visible = visible; });
@@ -341,7 +352,53 @@ export function mountBoard3D(container, source, options = {}) {
   fit();
 
   const raycaster = new THREE.Raycaster(), pointer = new THREE.Vector2();
-  let selected = null, down = null;
+  let selected = null;
+  const gesture = tapGesture();
+  const selectionLimit = 2000;
+  const groupHighlight = new THREE.InstancedMesh(new THREE.BoxGeometry(1, 1, 1),
+    new THREE.MeshBasicMaterial({ color: initialDark ? 0xffdf7d : 0x9b5500, wireframe: true, depthTest: false, depthWrite: false }), selectionLimit);
+  groupHighlight.count = 0; groupHighlight.frustumCulled = false; groupHighlight.renderOrder = 101;
+  scene.add(groupHighlight);
+  let externalSelection = {};
+  const selectionNotice = document.createElement('div'); selectionNotice.className = 'hint'; selectionNotice.style.bottom = '42px'; selectionNotice.hidden = true; stage.append(selectionNotice);
+  function setSelection(selection = {}) {
+    externalSelection = selection || {};
+    const matches = selectionMatcher(externalSelection, board);
+    const matrix = new THREE.Matrix4(), local = new THREE.Matrix4(), box = new THREE.Box3();
+    const center = new THREE.Vector3(), size = new THREE.Vector3();
+    let count = 0, total = 0;
+    const append = (object, instanceId) => {
+      if (Number.isInteger(instanceId)) {
+        object.getMatrixAt(instanceId, local);
+        if (local.determinant() === 0) return;
+      }
+      total++;
+      if (count >= selectionLimit) return;
+      object.updateWorldMatrix(true, false);
+      if (Number.isInteger(instanceId)) {
+        if (!object.geometry.boundingBox) object.geometry.computeBoundingBox(); box.copy(object.geometry.boundingBox);
+        matrix.multiplyMatrices(object.matrixWorld, local); box.applyMatrix4(matrix);
+      } else box.setFromObject(object);
+      if (box.isEmpty()) { total--; return; }
+      box.getCenter(center); box.getSize(size);
+      size.set(Math.max(size.x, .08), Math.max(size.y, .08), Math.max(size.z, .08));
+      matrix.compose(center, new THREE.Quaternion(), size);
+      groupHighlight.setMatrixAt(count++, matrix);
+    };
+    for (const object of pickables) {
+      let visible = true; for (let node = object; node; node = node.parent) if (!node.visible) visible = false;
+      if (!visible) continue;
+      const records = object.userData.records;
+      if (records) records.forEach((record, index) => { if (matches(record)) append(object, index); });
+      else if (matches(object.userData.record)) append(object);
+    }
+    groupHighlight.count = count; groupHighlight.instanceMatrix.needsUpdate = true;
+    selectionNotice.hidden = total <= selectionLimit;
+    selectionNotice.textContent = `Showing ${count} of ${total} selected 3D objects`;
+    selectionNotice.style.display = total > selectionLimit ? 'block' : 'none';
+    highlight.visible = false;
+    return { highlighted: count, matched: total, limited: total > selectionLimit };
+  }
   const highlight = new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1),
     new THREE.MeshBasicMaterial({ color: initialDark ? 0xffdf7d : 0x9b5500,
       wireframe: true, depthTest: false, depthWrite: false }));
@@ -367,6 +424,7 @@ export function mountBoard3D(container, source, options = {}) {
   }
   function clearSelection() {
     selected = null; inspector.hidden = true; menu.hidden = true; highlight.visible = false;
+    setSelection({});
     options.onSelect?.(null);
   }
   function select(record, point, object, instanceId) {
@@ -383,7 +441,7 @@ export function mountBoard3D(container, source, options = {}) {
       const term = document.createElement("dt"), desc = document.createElement("dd");
       term.textContent = label; desc.textContent = String(value); list.append(term, desc);
     }
-    inspector.append(heading, list); inspector.hidden = false;
+    inspector.append(heading, list); inspector.hidden = Boolean(options.externalInspector);
   }
   function pick(event) {
     const rect = renderer.domElement.getBoundingClientRect();
@@ -396,10 +454,11 @@ export function mountBoard3D(container, source, options = {}) {
     if (!record) return;
     select(record, hit.point, hit.object, hit.instanceId);
   }
-  renderer.domElement.addEventListener("pointerdown", (event) => { down = [event.clientX, event.clientY]; menu.hidden = true; });
+  renderer.domElement.addEventListener("pointerdown", (event) => { gesture.down(event); menu.hidden = true; });
+  renderer.domElement.addEventListener("pointermove", event => gesture.move(event));
+  renderer.domElement.addEventListener("pointercancel", event => gesture.cancel(event));
   renderer.domElement.addEventListener("pointerup", (event) => {
-    if (down && Math.hypot(event.clientX - down[0], event.clientY - down[1]) < 4) pick(event);
-    down = null;
+    if (gesture.up(event) && (event.button === 0 || event.pointerType === 'touch')) pick(event);
   });
   renderer.domElement.addEventListener("contextmenu", (event) => {
     event.preventDefault(); pick(event); if (!selected) return;
@@ -420,11 +479,12 @@ export function mountBoard3D(container, source, options = {}) {
     renderer.setSize(width, height, false); camera.aspect = width / height; camera.updateProjectionMatrix(); };
   const observer = new ResizeObserver(resize); observer.observe(canvasHost); resize();
   let active = true, frame = 0;
-  const layoutFrame = requestAnimationFrame(() => { if (active) resize(); });
+  const layoutFrame = requestAnimationFrame(() => { if (active) { resize(); fit(); } });
   const animate = () => { if (!active) return; frame = requestAnimationFrame(animate); controls.update(); renderer.render(scene, camera); };
   animate();
   void loadRepositoryModels();
   return { host, board,
+    setSelection,
     fit(topView=false){if(active)fit(topView);},
     zoom(factor){if(!active||!Number.isFinite(factor)||factor<=0)return;const offset=camera.position.clone().sub(controls.target);const distance=Math.max(controls.minDistance,Math.min(controls.maxDistance,offset.length()/factor));if(offset.length()>0)camera.position.copy(controls.target).add(offset.setLength(distance));controls.update();},
     setTheme(dark) {
@@ -432,6 +492,7 @@ export function mountBoard3D(container, source, options = {}) {
       host.dataset.theme = dark ? "dark" : "light";
       scene.background.setHex(dark ? 0x0d1b26 : 0xf3f7f5);
       highlight.material.color.setHex(dark ? 0xffdf7d : 0x9b5500);
+      groupHighlight.material.color.setHex(dark ? 0xffdf7d : 0x9b5500);
       resize();
       renderer.render(scene, camera);
     },
@@ -458,6 +519,7 @@ export function mountBoard3D(container, source, options = {}) {
       if (!componentMesh || !active) return;
       population = populationMask(board.components, entries);
       updateComponentVisibility();
+      setSelection(externalSelection);
       if (selected?.record?.ref) {
         const index = componentIndexes.get(selected.record.ref);
         if (index != null && !population[index]) clearSelection();

@@ -62,6 +62,7 @@ function workspaceRuntime(respond=async()=>[], hooks={}){
     KiCadCommentCompose:{...require('../comment-compose.js'),...(hooks.compose||{})},KiCadReviewTools:require('../review-tools.js'),KiCadDesignModel:require('../design-model.js'),KiCadNetModel:require('../net-model.js'),KiCadReviewComments:require('../review-comments.js'),KiCadBrowserData:require('../browser-data.js'),KiCadOwnedCanvas:require('../owned-canvas.js'),
     KiCadPairedReview:require('../paired-review.js'),KiCadBomAnalytics:require('../bom-analytics.js'),
     chrome:{runtime:{sendMessage:async message=>({ok:true,result:await respond(message)})}},setTimeout,clearTimeout,URL,Blob};
+  if(hooks.android)context.KiCadAndroidRuntime=true;
   if(hooks.vscode)context.KiCadVSCodeContext={};
   if(hooks.navigation){Object.assign(context,{KiCadProjectSearch:require('../project-search.js'),KiCadRuleReports:require('../rule-reports.js'),KiCadDesignDiff:diff,KiCadPCBRenderer:require('../pcb-renderer.js'),KiCadSchematicRenderer:require('../schematic-renderer.js')});vm.runInNewContext(fs.readFileSync(path.join(__dirname,'../review-navigation.js'),'utf8'),context);get('ruleSeverity').value='all';get('showRuleMarkers').checked=true;}
   canvas.setNetHighlights=(nets,options)=>{canvas.highlightNets=nets;canvas.netHighlight=nets[0]||null;canvas.netPrimitives=new Set(nets.flatMap(n=>n.primitives||[]));canvas.highlightMode=options.mode;};
@@ -785,4 +786,62 @@ test('part/net mode filters actual picks; mixed groups retain the part and net',
  const group=selections.at(-1);assert.equal(group.kind,'group');assert.equal(group.items.length,2);assert.ok(group.items.some(i=>i.kind==='net'));assert.ok(group.items.some(i=>i.reference==='R1'));
  view.get('selectionMode').value='part';view.get('multiHighlight').checked=false;assert.equal(view.canvas.touchNetPick({clientX:30,clientY:40}),true);assert.equal(view.get('selectedName').textContent,'R1');
  view.workspace.dispose();
+});
+
+
+test('sheet overview highlights use sheet-scoped nets and rendered primitive identity', () => {
+  const {sheetPageHighlights}=require('../review-workspace.js');
+  const own={uuid:'shared'},child={uuid:'wire'},other={uuid:'other'};
+  const nets=[{id:'root:GND',path:'root.kicad_sch',primitives:[other]}, {id:'child:GND',path:'child.kicad_sch',primitives:[child]}];
+  const groups=sheetPageHighlights(nets,{netIds:['root:GND','child:GND'],uuids:['shared']},{primitives:[own,child,other]},'child.kicad_sch');
+  assert.deepEqual(groups,[nets[1],{primitives:[own]}]);
+  assert.deepEqual(sheetPageHighlights(nets,{netIds:[],uuids:[]},{primitives:[own]},'child.kicad_sch'),[]);
+});
+
+test('Android review cards place comment content ahead of compact location metadata',async()=>{
+ const note={id:'android-note',text:'Check VCC\nConfirm the supply connection.',state:'open',severity:'major',createdAt:'2026-10-10T00:00:00Z',anchor:{repository:'wayri/fixture',ref:'main',file:'board.kicad_pcb'}};
+ const view=workspaceRuntime(async m=>m.type==='comment-list'?[note]:[],{android:true});view.load();await view.workspace.refreshComments();
+ const card=view.get('commentList').children[0];assert.equal(card.attributes['data-note-id'],note.id);
+ assert.equal(card.children[0].className,'note-heading');assert.equal(card.children[0].textContent,'Check VCC');assert.equal(card.children[1].className,'note-body');assert.match(card.children[1].textContent,/Confirm the supply/);
+ assert.equal(card.children[2].className,'note-meta');assert.match(card.children[2].textContent,/major/);assert.equal(card.children[3].className,'note-meta note-location');view.workspace.dispose();
+});
+
+test('overview airwires join resolved global nets, not same-named local nets',()=>{
+ const {overviewNetLinks}=require('../review-workspace.js');globalThis.KiCadNetModel=require('../net-model.js');
+ const net=(id,path,globalNames,kind='global_label')=>({id,path,kind:'schematic',name:'VCC',globalNames,members:[{kind,position:{x:40,y:50}}]});
+ const nets=[net('a','root.kicad_sch',['VCC']),net('b','power.kicad_sch',['VCC']),net('c','other.kicad_sch',[],'label')];
+ const edges=overviewNetLinks(nets,['a','b'],[]);
+ assert.equal(edges.length,1);assert.equal(edges[0].from.path,'root.kicad_sch');assert.equal(edges[0].to.path,'power.kicad_sch');
+ assert.deepEqual(edges[0].from.position,{x:40,y:50});assert.deepEqual(overviewNetLinks(nets,['c']),[]);
+});
+
+test('shared overview translates geometry and airwires without changing saved primitives',()=>{
+ const {composeSheetOverview}=require('../review-workspace.js');
+ const source={type:'arc',start:{x:1,y:2},mid:{x:3,y:4},end:{x:5,y:6},hidden:true,uuid:'shared'};
+ const design={page:{width:100,height:100},primitives:[source],layers:[]};
+ const result=composeSheetOverview([{path:'a',label:'A',design,groups:[]},{path:'b',label:'B',design,groups:[{primitives:[source]}]}],[{from:{path:'a',position:{x:1,y:2}},to:{path:'b',position:{x:1,y:2}},name:'VCC'}]);
+ assert.equal(result.pages.length,2);assert.equal(result.airwires.length,1);
+ const shifted=result.highlighted[0];assert.equal(shifted.sourcePath,'b');assert.equal(shifted.hidden,true);
+ assert.equal(shifted.start.x,result.pages[1].x+1);assert.equal(source.start.x,1);assert.notEqual(shifted.start,source.start);
+ assert.deepEqual(result.airwires[0].points[1],{x:result.pages[1].x+1,y:result.pages[1].y+2});
+});
+test('2D and 3D share saved component selection across mode switches without callback loops',()=>{
+ const view=workspaceRuntime();view.load();view.get('objectList').children[0].click();
+ let state,calls=0;const scene={setPopulation(){},setSelection(value){state=value;calls++;},selectReference(){throw Error('callback-based selection must not be used');}};
+ view.workspace.setScene(scene);assert.deepEqual(Array.from(state.references),['R1']);assert.ok(state.uuids.includes('fp'));
+ view.workspace.select3D({uuid:'fp',ref:'R1'});assert.equal(view.get('selectedName').textContent,'R1');assert.ok(calls<10);
+ view.workspace.setScene(null);assert.equal(view.get('selectedName').textContent,'R1');assert.equal(view.get('designInspector').hidden,false);
+});
+test('3D copper selection and paired net/group messages update both saved net and part highlights',()=>{
+ const view=workspaceRuntime();view.load();let state;view.workspace.setScene({setPopulation(){},setSelection:value=>state=value});
+ view.workspace.select3D({net:1});assert.equal(view.get('selectedName').textContent,'SIGNAL');assert.deepEqual(Array.from(state.netCodes),['1']);
+ view.workspace.highlightRelated({kind:'group',items:[{kind:'part',reference:'R1',path:'sheet.kicad_sch'},{kind:'net',netName:'SIGNAL',path:'sheet.kicad_sch'}]});
+ assert.ok(state.references.includes('R1'));assert.ok(state.netCodes.includes('1'));
+ view.workspace.setScene(null);assert.equal(view.canvas.netHighlight.name,'SIGNAL');
+});
+test('3D selection obeys Part and Net filters instead of selecting hidden alternatives',()=>{
+ const view=workspaceRuntime();view.load();view.workspace.setScene({setPopulation(){},setSelection(){}});view.get('objectList').children[0].click();
+ view.get('selectionMode').value='part';view.workspace.select3D({net:1,uuid:'track'});assert.equal(view.get('selectedName').textContent,'R1');
+ view.get('selectionMode').value='net';view.workspace.select3D({uuid:'fp',ref:'R1'});assert.equal(view.get('selectedName').textContent,'R1');
+ view.workspace.select3D({uuid:'pad',ref:'R1',net:1});assert.equal(view.get('selectedName').textContent,'SIGNAL');
 });

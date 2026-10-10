@@ -49,3 +49,12 @@ test('GitLab saved rule reports are pinned to the resolved drawing revision',asy
  const result=await message({type:'rule-report',provider:'gitlab',repository:'group/sub/board',ref:'main',file:'board.kicad_pcb',reportPath:'reports/drc.json'});
  assert.equal(result.ok,true,result.error);assert.equal(result.result.path,'reports/drc.json');assert.equal(calls.length,2);
 });
+
+
+test('GitLab analysis page can read pinned report source but cannot use write tools',async t=>{
+ const sender={id:'test',url:'chrome-extension://test/analysis-viewer.html?file=analysis.csv'},sha='c'.repeat(40),previous=global.fetch;
+ global.fetch=async url=>{assert.equal(new URL(url).searchParams.get('ref'),sha);return new Response('time,V\n0,1');};t.after(()=>global.fetch=previous);
+ const scope={provider:'gitlab',host:'https://gitlab.com',repository:'group/board',ref:sha,file:'analysis.csv'};
+ const result=await message({type:'project-file',...scope},sender);assert.equal(result.ok,true,result.error);assert.equal(result.result.content,'time,V\n0,1');
+ for(const type of ['comment-save','comment-delete','comment-publish','project']){const reply=await message({type,...scope},sender);assert.equal(reply.ok,false);assert.match(reply.error,/only read/);}
+});

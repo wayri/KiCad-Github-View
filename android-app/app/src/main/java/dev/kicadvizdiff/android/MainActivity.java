@@ -73,6 +73,7 @@ public final class MainActivity extends Activity {
     private GitHubClient github;
     private GitLabClient gitlab;
     private ProjectLibrary projectLibrary;
+    private DiskProjectStore diskProjectStore;
     private final ExecutorService gitlabExecutor = Executors.newSingleThreadExecutor();
 
     @Override
@@ -81,6 +82,7 @@ public final class MainActivity extends Activity {
         github = new GitHubClient(this);
         gitlab = new GitLabClient(this);
         projectLibrary = new ProjectLibrary(this);
+        diskProjectStore = new DiskProjectStore(this);
         configureWindow();
         createViewer();
         registerBackCallback();
@@ -142,6 +144,7 @@ public final class MainActivity extends Activity {
                         || !uri.getPath().startsWith(VIEWER_PREFIX)) {
                     return forbidden();
                 }
+                if(uri.getPath().startsWith("/assets/viewer/downloaded/")) { WebResourceResponse disk=diskProjectStore.response(uri); return disk!=null?disk:forbidden(); }
                 WebResourceResponse response = assetLoader.shouldInterceptRequest(uri);
                 return response != null ? response : forbidden();
             }
@@ -152,6 +155,8 @@ public final class MainActivity extends Activity {
                     return !VIEWER_URL.equals(request.getUrl().toString());
                 }
                 Uri uri = request.getUrl();
+                // Imported HTML is inert source data, never a native-bridge document.
+                if (uri.getPath() != null && uri.getPath().startsWith("/assets/viewer/downloaded/")) return true;
                 return !"https".equals(uri.getScheme())
                         || !"appassets.androidplatform.net".equals(uri.getHost())
                         || (uri.getPort() != -1 && uri.getPort() != 443)
@@ -614,6 +619,7 @@ public final class MainActivity extends Activity {
     private void launchDownload(JSONObject candidate, String filename) {
         if (pendingDownload != null || pendingTextExport != null) return;
         if (activeProject == null) { sendError("Open a project before downloading"); return; }
+        if(candidate != null && candidate.optBoolean("diskBacked")) { sendError("This project is already downloaded in private app storage. Reopen or star it in Your projects. External ZIP export is unavailable for large downloaded copies."); return; }
         final JSONObject project = activeProject;
         final int epoch = downloadGeneration.get();
         Runnable create = () -> {

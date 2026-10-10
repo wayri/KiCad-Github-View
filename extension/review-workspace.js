@@ -63,6 +63,64 @@
     const parts=item.path.split('/');parts.pop();for(const part of name.split('/')){if(part==='..'){if(!parts.length)return null;parts.pop();}else if(part!=='.'&&part)parts.push(part);}return parts.join('/');
   }
   // File hierarchy, with query ancestors retained and bounded cycle traversal.
+  // Gallery canvases use their own rendered primitives, never primitive identities
+  // from a different file or a prior cached drawing.
+  function sheetPageHighlights(nets, selection, design, path) {
+    const wanted=new Set(selection?.netIds||[]), uuids=new Set(selection?.uuids||[]);
+    const groups=(nets||[]).filter(net=>net.path===path&&wanted.has(net.id));
+    const primitives=(design?.primitives||[]).filter(p=>uuids.has(p.uuid)||uuids.has(p.ownerUuid));
+    return [...groups,...(primitives.length?[{primitives}]:[])];
+  }
+  // Logical intersheet airwires join only connectivity resolved by the net model.
+  // One representative saved connection point per sheet avoids a dense mesh.
+  function composeSheetOverview(entries,links=[],dark=false) {
+    const primitives=[],pages=[],highlighted=[],columns=Math.max(1,Math.ceil(Math.sqrt(entries.length)));
+    const cellWidth=Math.max(297,...entries.map(e=>e.design.page?.width||297))+35;
+    const cellHeight=Math.max(210,...entries.map(e=>e.design.page?.height||210))+40;
+    entries.forEach((entry,index)=>{
+      const x=index%columns*cellWidth,y=Math.floor(index/columns)*cellHeight+14,w=entry.design.page?.width||297,h=entry.design.page?.height||210;
+      const shift=p=>({...p,x:p.x+x,y:p.y+y});
+      const background={type:'polygon',points:[{x,y},{x:x+w,y},{x:x+w,y:y+h},{x,y:y+h}],color:dark?'#192a34':'#fff',fill:true,stroke:false,pick:false};
+      primitives.push(background,{type:'text',x,y:y-7,text:entry.label,size:4,minPixelSize:12,bold:true,align:'left',color:dark?'#dbe7ed':'#172d3b',pick:false});
+      const selected=new Set(entry.groups.flatMap(g=>g.primitives||[]));
+      for(const source of entry.design.primitives){
+        const p={...source,frame:false,sourcePath:entry.path};
+        if(Number.isFinite(source.x)&&Number.isFinite(source.y)){p.x=source.x+x;p.y=source.y+y;}
+        for(const key of ['start','mid','end','connectPoint'])if(source[key]&&Number.isFinite(source[key].x))p[key]=shift(source[key]);
+        if(source.points)p.points=source.points.map(shift);
+        primitives.push(p);if(selected.has(source))highlighted.push(p);
+      }
+      pages.push({path:entry.path,x,y,w,h,label:entry.label});
+    });
+    const airwires=[];
+    for(const link of links){
+      const endpoint=end=>{const page=pages.find(p=>p.path===end.path);if(!page)return null;return {x:page.x+(end.position?.x??page.w/2),y:page.y+(end.position?.y??page.h/2)};};
+      const from=endpoint(link.from),to=endpoint(link.to);if(from&&to)airwires.push({type:'line',points:[from,to],color:'#ddb333',width:.35,pick:false,name:link.name});
+    }
+    return {design:{primitives,layers:[...new Set(entries.flatMap(e=>e.design.layers||[]))],page:{width:columns*cellWidth,height:Math.ceil(entries.length/columns)*cellHeight}},pages,highlighted,airwires};
+  }
+  function overviewNetLinks(nets, selectedIds, hierarchy=[]) {
+    const edges=[],seen=new Set();
+    for(const id of [...new Set(selectedIds)].slice(0,200)){
+      const related=root.KiCadNetModel?.relatedSchematicNets(nets,id,hierarchy)?.matches||[];
+      const byPath=new Map();
+      for(const net of related)if(!byPath.has(net.path))byPath.set(net.path,net);
+      const selected=nets.find(net=>net.id===id),source=selected&&byPath.get(selected.path);
+      if(!source)continue;
+      const endpoint=net=>{
+        const members=(net.members||[]).filter(m=>Number.isFinite(m.position?.x)&&Number.isFinite(m.position?.y));
+        const member=members.find(m=>['global_label','hierarchical_label','sheet_pin'].includes(m.kind))||members[0];
+        return {path:net.path,netId:net.id,position:member?{...member.position}:null};
+      };
+      for(const target of byPath.values()){
+        if(target.path===source.path)continue;
+        const key=[source.id,target.id].sort().join('\n');if(seen.has(key))continue;seen.add(key);
+        edges.push({name:source.name,from:endpoint(source),to:endpoint(target)});
+        if(edges.length>=512)return edges;
+      }
+    }
+    return edges;
+  }
   function sheetEntries(sheets, links, query = "", collapsed = new Set()) {
     const byPath = new Map(sheets.map(sheet => [sheet.path, sheet]));
     const outgoing = new Map(), incoming = new Map();
@@ -482,9 +540,10 @@
       const dnp=dnpHighlight?objects.filter(o=>o.path===path&&['symbol','footprint'].includes(o.kind)&&o.populated===false):[];
       const parts=[...highlightObjects.filter(o=>o.path===path),...dnp],ids=new Set(parts.map(o=>o.uuid).filter(Boolean)),primitives=(canvas?.primitives||[]).filter(p=>ids.has(p.uuid)||ids.has(p.ownerUuid));
       const groups=[...nets,...(primitives.length?[{primitives}]:[])],mode=$('highlightStyle').value||'dim';
+      if(scene?.setSelection){const picked=[...parts,...(selected?.path===path?[selected]:[])];scene.setSelection({references:[...new Set(picked.map(o=>o.reference).filter(Boolean))],uuids:[...new Set(picked.map(o=>o.uuid).filter(Boolean))],netCodes:nets.map(n=>n.code).filter(n=>n!==undefined)});}
       if(canvas?.setNetHighlights)canvas.setNetHighlights(groups,{mode});else canvas?.setNetHighlight(groups[0]||null,{isolate:mode==='isolate'});
       $('highlightSummary').textContent=`${nets.length} nets · ${parts.length} components/objects highlighted${pinnedNets.size>nets.length||highlightObjects.some(o=>o.path!==path)?' · other sheets retained':''}`;
-      $('fitHighlights').disabled=!groups.length;renderSheets();canvas?.draw();
+      $('fitHighlights').disabled=!groups.length;renderSheets();canvas?.draw();options.onOverviewHighlights?.();
     }
     function partSelection(object){
       if(!object||!['symbol','footprint','pad'].includes(object.kind)||!object.reference)return null;
@@ -565,7 +624,7 @@
       if (object.path !== currentFile()) {
         openSheet(object.path, object.position);if(object.kind==='sheet'&&!silent)highlightSheet(sheetTarget(object),object); return;
       }
-      if (scene && object.reference) { if (!fromScene) scene.selectReference(object.reference); }
+      if (scene && object.reference) { if (!fromScene&&!scene.setSelection) scene.selectReference?.(object.reference); }
       else {
         const canvas = getCanvas();
         if (native && object.position && canvas?.layers?.query_point) {
@@ -793,8 +852,18 @@
       for (const note of shown) {
         const card=make("article");card.className="note severity-"+(note.severity||"info");
         const unread=KiCadReviewComments.isUnread(note,receipt(note));
+        card.setAttribute('data-note-id',note.id);
+        if(root.KiCadAndroidRuntime){
+          const heading=make('h3',root.KiCadCommentCompose?.titleFromText(note.text)||'Review comment');heading.className='note-heading';
+          const body=make('p',note.text.split(/\r\n|\r|\n/).slice(1).join('\n'));body.className='note-body';
+          const meta=make('small',`${KiCadReviewComments.commentType(note)==='discussion'?'Discussion':'Issue'} · ${note.severity||'info'} · ${note.state||'open'}${unread?' · Unread':''}`);meta.className='note-meta';
+          const location=make('small',anchorLabel(note.anchor));location.className='note-meta note-location';
+          const date=make('small',new Date(note.updatedAt||note.createdAt).toLocaleString());date.className='note-meta';
+          card.append(heading,body,meta,location,date);
+        }else{
         card.append(make("h3",root.KiCadCommentCompose?.titleFromText(note.text)||"Review comment"),make("strong",`${(note.severity||"info").toUpperCase()} · ${KiCadReviewComments.commentType(note)==='discussion'?'Discussion':KiCadReviewComments.commentType(note)==='issue'?'Issue':'Uncategorized'} · ${unread?"Unread":"Read"}`),make("small",anchorLabel(note.anchor)),make("p",note.text.split(/\r\n|\r|\n/).slice(1).join("\n")),
           make("small",`Created ${new Date(note.createdAt).toLocaleString()} · Updated ${new Date(note.updatedAt||note.createdAt).toLocaleString()} · ${note.github?`${providerName} ${note.github.source} #${note.github.number} · ${note.github.state} · ${note.github.author||""}`:"local"}`));
+        }
         if(note.mentions?.length)card.append(make("small",`Mentions: ${note.mentions.map(login=>"@"+login).join(", ")}`));
         if(note.github?.createdAt)card.append(make('small',`GitHub posted ${new Date(note.github.createdAt).toLocaleString()}${note.github.updatedAt?` · edited ${new Date(note.github.updatedAt).toLocaleString()}`:''}`));
         const actions=make("div");actions.className="inspector-actions";
@@ -908,7 +977,7 @@
       for(const object of highlightObjects.filter(o=>o.path===active).slice(0,200)){const geometry=(getCanvas()?.primitives||[]).filter(p=>object.uuid&&(p.uuid===object.uuid||p.ownerUuid===object.uuid)),box=root.KiCadOwnedCanvas?.bounds(geometry);if(box){const a=screen(box),b=screen({x:box.x+box.w,y:box.y+box.h});if(a&&b)overlay.append(svg('rect',{x:Math.min(a.x,b.x)-3,y:Math.min(a.y,b.y)-3,width:Math.abs(b.x-a.x)+6,height:Math.abs(b.y-a.y)+6,fill:'none',stroke:'#e6a834','stroke-width':2}));}}
       if(activeConnection?.position){const p=screen(activeConnection.position);if(p)overlay.append(svg('circle',{cx:p.x,cy:p.y,r:12,fill:'none',stroke:'#39bce5','stroke-width':3}),svg('path',{d:`M ${p.x-18} ${p.y} h 36 M ${p.x} ${p.y-18} v 36`,stroke:'#39bce5','stroke-width':1}));}
       navigation?.draw(overlay,pins,screen,svg);
-      visibleNotes().forEach((note,index) => {const p = screen(note.anchor.position);if(!p)return;const pin=button(String(index+1),()=>{inspector("comments","view");commentStatus(note.text);});pin.className="pin";pin.style.background=severityColors[note.severity||"info"];pin.setAttribute("aria-label",`Comment ${index+1}: ${note.text.slice(0,60)}`);pin.style.left=p.x+"px";pin.style.top=p.y+"px";pins.append(pin);});
+      visibleNotes().forEach((note,index) => {const p = screen(note.anchor.position);if(!p)return;const pin=button(String(index+1),()=>{inspector("comments","view");if(root.KiCadAndroidRuntime){const card=[...$('commentList').querySelectorAll('[data-note-id]')].find(n=>n.getAttribute('data-note-id')===note.id);card?.scrollIntoView({block:'start',behavior:'smooth'});if(provider==='github'&&remoteAvailable&&note.github)readThread(note.github.source.startsWith('discussion')?'discussion':'issue',note.github.number);}else commentStatus(note.text);});pin.className="pin"+(root.KiCadAndroidRuntime?' android-comment-pin '+(KiCadReviewComments.commentType(note)==='discussion'?'discussion':'issue'):'');pin.setAttribute('data-severity',note.severity||'info');pin.title=note.text.split(/\r\n|\r|\n/)[0];pin.style.background=severityColors[note.severity||"info"];pin.setAttribute("aria-label",`Comment ${index+1}: ${note.text.slice(0,60)}`);pin.style.left=p.x+"px";pin.style.top=p.y+"px";pins.append(pin);});
     }
     function menu(event) {
       event.preventDefault(); if (scene || rightDown?.moved) return;
@@ -1193,11 +1262,16 @@
     root.KiCadUIIcons?.decorate();$("schematicLayersHint").hidden=pcb;showNavigator(false);variants();
     if(chrome.storage?.local)chrome.storage.local.get(variantKey).then((saved)=>{if(saved[variantKey])installConfig(saved[variantKey]);}).catch((error)=>notice(error.message));
     refreshCommentPolicy();if(netColorsEnabled)loadNetColors();
-    return {attachCanvas,draw,refreshNets,refreshComments,highlightRelated,followSheet,select3D(record){nativePick=record;const object=resolveObject(objects,rootFile,record);selectObject(object,false,false,true);},
+    return {attachCanvas,draw,refreshNets,refreshComments,highlightRelated,followSheet,
+      overviewSheets(){return sheetEntries(model.sheets.filter(s=>s.kind==='schematic'),objects.filter(o=>o.kind==='sheet'));},
+      overviewSelection(path){return {netIds:(netSheetMatches().get(path)||[]).map(n=>n.id),uuids:highlightObjects.filter(o=>o.path===path).map(o=>o.uuid).filter(Boolean),mode:$('highlightStyle').value||'dim',netActive:netSheetMatches().size>0};},
+      selectOverviewNet(path,uuid){const matches=netModel.nets.filter(n=>n.path===path&&n.uuids.includes(uuid));if(matches.length===1){selectNet(matches[0],false,false,false,false);return true;}return false;},
+      overviewNetLinks(){return overviewNetLinks(netModel.nets,[...pinnedNets.values(),...(selectedNet?[selectedNet]:[])].filter(n=>n.kind==='schematic').map(n=>n.id),objects.filter(o=>o.kind==='sheet').map(o=>({path:o.path,target:sheetTarget(o),sheetId:o.uuid||o.id})));},
+      select3D(record){nativePick=record;const object=resolveObject(objects,rootFile,record),mode=$('selectionMode').value||'all';if(mode==='part'&&record&&!object?.reference)return;const net=record&&netModel.nets.find(n=>n.path===currentFile()&&(String(n.code)===String(record.net)||n.name===record.net));if(net&&(mode==='net'||!object?.reference)){selectNet(net,true,false);return;}if(mode==='net'&&record)return;if(object&&$('multiHighlight').checked){const index=highlightObjects.findIndex(o=>o.id===object.id);if(index<0)highlightObjects.push(object);else highlightObjects.splice(index,1);}selectObject(object,false,false,true);},
       comment3D(record){const object=resolveObject(objects,rootFile,record);if(object)editComment(null,anchor(object.position,object));else notice("This 3D object has no unambiguous saved part anchor; switch to 2D to place a comment.");},
-      setScene(next){scene=next;$("highlightControls").hidden=Boolean(scene);$("highlightDnp").disabled=Boolean(scene);for(const id of ["measureButton","navNets","navLayers","pointComment","areaComment"])$(id).disabled=Boolean(scene);if(scene&&navigatorTab!=="parts")navigate("parts");if(scene){setCommentMode(null);measureMode=false;measurePoints=[];getCanvas()?.canvas.classList?.toggle("ruler-mode",false);measurePreview=rulerSnap=boardMeasure=null;$("rulerControls").hidden=true;$("measureButton").setAttribute("aria-pressed","false");$("measurementStatus").textContent="";scene.setPopulation(objects.filter((item)=>item.kind==="footprint").map((item)=>({reference:item.reference,populated:item.populated})));}draw();},
+      setScene(next){scene=next;$("highlightControls").hidden=Boolean(scene&&!scene.setSelection);$("highlightDnp").disabled=Boolean(scene);for(const id of ["measureButton","navLayers","pointComment","areaComment"])$(id).disabled=Boolean(scene);$("navNets").disabled=Boolean(scene&&!scene.setSelection);if(scene&&navigatorTab!=="parts")navigate("parts");if(scene){setCommentMode(null);measureMode=false;measurePoints=[];getCanvas()?.canvas.classList?.toggle("ruler-mode",false);measurePreview=rulerSnap=boardMeasure=null;$("rulerControls").hidden=true;$("measureButton").setAttribute("aria-pressed","false");$("measurementStatus").textContent="";scene.setPopulation(objects.filter((item)=>item.kind==="footprint").map((item)=>({reference:item.reference,populated:item.populated})));}updateHighlights();draw();},
       dispose(){root.removeEventListener?.('pointerdown',outsideTouchPicker,true);dismissTouchPicker();netColorDisposed=true;netColorTicket++;threadTicket++;pasteGeneration++;mentionDisposed=true;mentionGeneration++;clearTimeout(mentionTimer);loadId++;remoteLoad++;netBuilder?.clear();reviewToolsObserver?.disconnect();sidebarObserver?.disconnect();root.removeEventListener?.('resize',layoutSidebars);root.removeEventListener?.('resize',ruleResize);ruleWindowObserver?.disconnect();for(const cleanup of resizeCleanups)cleanup();root.removeEventListener?.('keydown',reviewKeydown);narrowPanels.removeEventListener?.("change",keepDrawingVisible);navigation?.dispose();attach?.dispose();}}
   }
-  root.KiCadReviewWorkspace={mount,resolveObject,touchNetIndex,touchNetCandidates,selectionCandidates,measurement,matchesSearch,sheetTarget,sheetEntries,sheetHistory,rootSheetPath};
+  root.KiCadReviewWorkspace={mount,resolveObject,touchNetIndex,touchNetCandidates,selectionCandidates,measurement,matchesSearch,sheetTarget,sheetEntries,sheetHistory,rootSheetPath,sheetPageHighlights,overviewNetLinks,composeSheetOverview};
   if(typeof module==="object"&&module.exports)module.exports=root.KiCadReviewWorkspace;
 })(globalThis);

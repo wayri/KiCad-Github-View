@@ -9,10 +9,10 @@ test('Android imported source transport discovers scattered schematic hierarchy 
  const asset=await api.send({type:'repo-asset',file:'models/header.step'});assert.equal(asset.result.base64,'QUJD');
  assert.equal((await api.send({type:'project-file',file:'../private.kicad_sch'})).ok,false);assert.equal((await api.send({type:'project-file',file:'design/main.kicad_pro',repository:'other/repo'})).ok,false);
 });
-test('Android imports reject traversal, active content, duplicates, invalid binaries and missing drawings',()=>{
- for(const path of ['../x.kicad_sch','/x.kicad_sch','x\\evil.kicad_sch','x:kicad_sch','index.html'])assert.throws(()=>local.validate({files:[{path,content:''}]}));
+test('Android imports reject traversal, executable sources, duplicates, invalid binaries and missing drawings',()=>{
+ for(const path of ['../x.kicad_sch','/x.kicad_sch','x\\evil.kicad_sch','x:kicad_sch','executable.js'])assert.throws(()=>local.validate({files:[{path,content:''}]}));
  assert.throws(()=>local.validate({files:[{path:'a.kicad_sch',content:''},{path:'a.kicad_sch',content:''}]}));
- assert.throws(()=>local.validate({files:[{path:'a.json',content:'{}'}]}));
+ assert.throws(()=>local.validate({files:[{path:'a.exe',content:'binary'}]}));
  assert.throws(()=>local.validate({...project(),assets:[{path:'models/x.step',base64:'<script>'}]}));
 });
 test('Android notes persist, enforce update conflicts and remain separate between imports',async()=>{
@@ -24,7 +24,7 @@ test('Android notes persist, enforce update conflicts and remain separate betwee
  assert.equal((await api.send({type:'github-publish-comment',comment:note})).ok,false);
 });
 test('Android touch camera pans and pinches without selecting after a drag, and cancels safely',()=>{
- globalThis.MouseEvent=class{constructor(type,init){Object.assign(this,{type},init);}};const touch=require('../../android-app/web/touch.js'),listeners=new Map(),clicks=[],camera=new (require('../../extension/owned-canvas.js').Camera)(800,600);camera.zoom=4;
+ globalThis.MouseEvent=class{constructor(type,init){Object.assign(this,{type},init);}};const touch=require('../../extension/touch-canvas.js'),listeners=new Map(),clicks=[],camera=new (require('../../extension/owned-canvas.js').Camera)(800,600);camera.zoom=4;
  const node={classList:{contains:()=>false},addEventListener:(n,f)=>listeners.set(n,f),removeEventListener:n=>listeners.delete(n),getBoundingClientRect:()=>({left:0,top:0}),setPointerCapture(){},releasePointerCapture(){},dispatchEvent:e=>clicks.push(e)};
  const view={canvas:node,viewport:{camera},requestDraw(){},prepareMotion(){},finishMotion(){}},detach=touch.attach(view);
  const emit=(type,id,x,y)=>listeners.get(type)({type,pointerType:'touch',pointerId:id,clientX:x,clientY:y,preventDefault(){},stopImmediatePropagation(){}});
@@ -34,7 +34,7 @@ test('Android touch camera pans and pinches without selecting after a drag, and 
 
  test('Android hold opens contextual comment actions without a selection, and movement cancels it',()=>{
  const timers=new Map();let serial=0;const originalSet=globalThis.setTimeout,originalClear=globalThis.clearTimeout;globalThis.setTimeout=fn=>{const id=++serial;timers.set(id,()=>{timers.delete(id);fn();});return id;};globalThis.clearTimeout=id=>timers.delete(id);globalThis.MouseEvent=class{constructor(type,init){Object.assign(this,{type},init);}};
- try{const touch=require('../../android-app/web/touch.js'),listeners=new Map(),events=[];const camera=new (require('../../extension/owned-canvas.js').Camera)(400,600),node={classList:{contains:()=>false},addEventListener:(n,f)=>listeners.set(n,f),removeEventListener:n=>listeners.delete(n),getBoundingClientRect:()=>({left:0,top:0}),dispatchEvent:e=>events.push(e)};const detach=touch.attach({canvas:node,viewport:{camera},requestDraw(){}});const emit=(type,x,y)=>listeners.get(type)({type,pointerType:'touch',pointerId:1,clientX:x,clientY:y,preventDefault(){},stopImmediatePropagation(){}});
+ try{const touch=require('../../extension/touch-canvas.js'),listeners=new Map(),events=[];const camera=new (require('../../extension/owned-canvas.js').Camera)(400,600),node={classList:{contains:()=>false},addEventListener:(n,f)=>listeners.set(n,f),removeEventListener:n=>listeners.delete(n),getBoundingClientRect:()=>({left:0,top:0}),dispatchEvent:e=>events.push(e)};const detach=touch.attach({canvas:node,viewport:{camera},requestDraw(){}});const emit=(type,x,y)=>listeners.get(type)({type,pointerType:'touch',pointerId:1,clientX:x,clientY:y,preventDefault(){},stopImmediatePropagation(){}});
  emit('pointerdown',20,30);[...timers.values()][0]();emit('pointerup',20,30);assert.deepEqual(events.map(e=>[e.type,e.clientX,e.clientY]),[['contextmenu',20,30]]);
  emit('pointerdown',20,30);emit('pointermove',50,30);assert.equal(timers.size,0);emit('pointerup',50,30);assert.equal(events.length,1);emit('pointerdown',20,30);detach();assert.equal(timers.size,0);
  }finally{globalThis.setTimeout=originalSet;globalThis.clearTimeout=originalClear;delete globalThis.MouseEvent;}
@@ -43,7 +43,7 @@ test('Android touch camera pans and pinches without selecting after a drag, and 
 
 test('touch net chooser intercepts taps without double selection, dragging or holding',()=>{
  globalThis.MouseEvent=class{constructor(type,init){Object.assign(this,{type},init);}};
- const touch=require('../../android-app/web/touch.js'),listeners=new Map(),events=[],picks=[];
+ const touch=require('../../extension/touch-canvas.js'),listeners=new Map(),events=[],picks=[];
  const camera=new (require('../../extension/owned-canvas.js').Camera)(400,600);
  const node={classList:{contains:()=>false},addEventListener:(n,f)=>listeners.set(n,f),removeEventListener:n=>listeners.delete(n),getBoundingClientRect:()=>({left:0,top:0}),dispatchEvent:e=>events.push(e)};
  const detach=touch.attach({canvas:node,viewport:{camera},requestDraw(){},touchNetPick:e=>{picks.push([e.clientX,e.clientY]);return true;}});
@@ -51,4 +51,18 @@ test('touch net chooser intercepts taps without double selection, dragging or ho
  emit('pointerdown',20,30);emit('pointerup',20,30);assert.deepEqual(picks,[[20,30]]);assert.equal(events.length,0);
  emit('pointerdown',20,30);emit('pointermove',60,30);emit('pointerup',60,30);assert.equal(picks.length,1);
  emit('pointerdown',20,30);emit('pointercancel',20,30);assert.equal(picks.length,1);detach();delete globalThis.MouseEvent;
+});
+
+test('large disk project manifests fetch only requested source and model files',async()=>{
+ const project=local.validate({id:'disk',diskBacked:true,offline:true,files:[{path:'main.kicad_pcb',size:50*1024*1024,diskPath:'/assets/viewer/downloaded/'+ 'a'.repeat(32)+'/0'},{path:'child.kicad_sch',size:200,diskPath:'/assets/viewer/downloaded/'+ 'a'.repeat(32)+'/1'}],assets:[{path:'models/header.step',size:100*1024*1024,diskPath:'/assets/viewer/downloaded/'+ 'a'.repeat(32)+'/2'}]});
+ const requests=[],oldFetch=globalThis.fetch;globalThis.fetch=async path=>{requests.push(path);return{ok:true,text:async()=>'(kicad_pcb)',arrayBuffer:async()=>new Uint8Array([65,66,67]).buffer};};
+ try{const api=local.transport(project,store());assert.equal((await api.send({type:'project-inventory'})).result.files[0].size,50*1024*1024);assert.equal(requests.length,0);assert.equal((await api.send({type:'project-file',file:'main.kicad_pcb'})).result.content,'(kicad_pcb)');assert.equal(requests.length,1);assert.equal((await api.send({type:'repo-asset',file:'models/header.step'})).result.base64,'QUJD');assert.equal(requests.length,2);assert.equal((await api.send({type:'project-file',file:'../outside.kicad_pcb'})).ok,false);assert.equal(requests.length,2);}finally{globalThis.fetch=oldFetch;}
+});
+test('disk manifests refuse external URLs, oversized files and oversized combined projects',()=>{
+ const entry={path:'main.kicad_pcb',size:40*1024*1024,diskPath:'/assets/viewer/downloaded/'+ 'b'.repeat(32)+'/0'};
+ for(const patch of [{diskPath:'https://github.com/source'},{diskPath:'/assets/viewer/downloaded/../0'},{size:257*1024*1024}])assert.throws(()=>local.validate({diskBacked:true,files:[{...entry,...patch}]}));
+ assert.throws(()=>local.validate({diskBacked:true,files:Array.from({length:5},(_,i)=>({...entry,path:i+'.kicad_pcb',size:256*1024*1024}))}));
+});
+test('local project retains its bounded display name for the compact header',()=>{
+ const project=local.validate({id:'named',name:'Marble board',files:[{path:'root.kicad_sch',content:'(kicad_sch)'}]});assert.equal(project.name,'Marble board');
 });

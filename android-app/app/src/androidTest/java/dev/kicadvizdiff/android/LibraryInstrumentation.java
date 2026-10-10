@@ -53,9 +53,13 @@ public final class LibraryInstrumentation extends Instrumentation {
             check(opened.getJSONArray("files").getJSONObject(0).getString("content").equals("offline-secret-source"),"source roundtrip");
             check(!opened.has("github")&&!opened.has("remote")&&!opened.has("token")&&opened.getBoolean("offline"),"offline source isolation");
             check(opened.getString("libraryId").equals(id),"stable reopen identity");
+            long lastOpened=reopened.handle(new JSONObject().put("action","list"),null).getJSONArray("items").getJSONObject(0).getLong("lastOpened");
+            check(lastOpened>0,"native open recency missing");
             reopened.handle(new JSONObject().put("action","star").put("id",id).put("value",true),null);
+            check(reopened.handle(new JSONObject().put("action","list"),null).getJSONArray("items").getJSONObject(0).getLong("lastOpened")==lastOpened,"star changed open recency");
             check(new ProjectLibrary(context).handle(new JSONObject().put("action","list"),null).getJSONArray("items").getJSONObject(0).getBoolean("starred"),"star persistence");
             save.put("ref","b");check(reopened.handle(save,source).getJSONArray("items").length()==1,"revision duplicated bookmark");
+            check(reopened.handle(new JSONObject().put("action","list"),null).getJSONArray("items").getJSONObject(0).getLong("lastOpened")==lastOpened,"save changed open recency");
             save.put("offline",false).put("ref","c");JSONObject newer=reopened.handle(save,source).getJSONArray("items").getJSONObject(0);check(newer.getString("ref").equals("c")&&newer.getString("offlineRef").equals("b"),"bookmark revision relabeled old snapshot");
             try{reopened.handle(new JSONObject(save.toString()).put("name","bad\nname"),source);throw new AssertionError("invalid metadata accepted");}catch(IllegalArgumentException expected){checks++;}
             check(reopened.handle(new JSONObject().put("action","open").put("id",id),null).getJSONObject("project").getJSONArray("files").length()==1,"failed save destroyed old snapshot");
@@ -65,6 +69,31 @@ public final class LibraryInstrumentation extends Instrumentation {
             reopened.handle(new JSONObject().put("action","remove-offline").put("id",id),null);JSONObject remaining=reopened.handle(new JSONObject().put("action","list"),null).getJSONArray("items").getJSONObject(0);check(!remaining.getBoolean("offline")&&remaining.getBoolean("starred"),"copy removal erased bookmark/star");
             try{reopened.handle(new JSONObject().put("action","open").put("id",id),null);throw new AssertionError("bookmark only reopened");}catch(IllegalArgumentException expected){checks++;}
             reopened.handle(new JSONObject().put("action","remove").put("id",id),null);check(reopened.handle(new JSONObject().put("action","list"),null).getJSONArray("items").length()==0,"bookmark removal");
+            JSONObject recentLocal=reopened.handle(new JSONObject().put("action","save").put("remember",true).put("provider","local").put("name","Recent local"),source).getJSONArray("items").getJSONObject(0);
+            check(recentLocal.getLong("lastOpened")>0&&!recentLocal.getBoolean("offline"),"remember copied local source without consent");
+            check(recentLocal.getString("storage").equals("Original file not saved in app"),"local recent claims online storage");
+            reopened.handle(new JSONObject().put("action","remove").put("id",recentLocal.getString("id")),null);
+            String pinned="a".repeat(40);
+            java.net.URL publicUrl=GitHubClient.downloadUrl("owner/test",pinned,"sub folder/large board.kicad_pcb",101L*1024*1024,false);
+            check(publicUrl.getHost().equals("raw.githubusercontent.com")&&publicUrl.getPath().contains("/"+pinned+"/")&&publicUrl.toString().contains("sub%20folder/large%20board"),"public raw download not pinned/encoded");
+            check(GitHubClient.downloadUrl("owner/test",pinned,"main.kicad_pcb",33L*1024*1024,true).getHost().equals("api.github.com"),"private contents transport");
+            try{GitHubClient.downloadUrl("owner/test",pinned,"main.kicad_pcb",101L*1024*1024,true);throw new AssertionError("unsupported private raw transport accepted");}catch(IOException expected){check(expected.getMessage().contains("not supported by this download path"),"private API limit guidance");}
+            for(String bad:new String[]{"../secret","https://evil.test/a","a\\b"})try{GitHubClient.downloadUrl("owner/test",pinned,bad,1,false);throw new AssertionError("unsafe download path accepted");}catch(IOException expected){checks++;}
+            DiskProjectStore disk=new DiskProjectStore(context);
+            JSONArray nodes=new JSONArray().put(new JSONObject().put("type","blob").put("mode","100644").put("path","main.kicad_pcb").put("size",33L*1024*1024));
+            JSONObject downloaded=disk.download("owner/test", "a".repeat(40),false,nodes,(path,target,size)->{try(OutputStream output=new FileOutputStream(target)){byte[] buffer=new byte[65536];for(long written=0;written<size;written+=buffer.length)output.write(buffer,0,(int)Math.min(buffer.length,size-written));}});
+            JSONObject manifest=downloaded.getJSONObject("project");check(manifest.getBoolean("diskBacked"),"disk manifest missing");
+            check(!manifest.getJSONArray("files").getJSONObject(0).has("content"),"large source crossed bridge");
+            android.webkit.WebResourceResponse diskResponse=disk.response(android.net.Uri.parse("https://appassets.androidplatform.net"+manifest.getJSONArray("files").getJSONObject(0).getString("diskPath")));
+            check(diskResponse!=null,"downloaded source inaccessible");diskResponse.getData().close();
+            JSONObject diskSaved=reopened.handle(new JSONObject().put("action","save").put("offline",true).put("provider","github").put("repository","owner/test").put("name","Large board"),manifest).getJSONArray("items").getJSONObject(0);
+            check(reopened.handle(new JSONObject().put("action","open").put("id",diskSaved.getString("id")),null).getJSONObject("project").getBoolean("diskBacked"),"disk library reopen failed");
+            reopened.handle(new JSONObject().put("action","remove-offline").put("id",diskSaved.getString("id")),null);
+            check(disk.response(android.net.Uri.parse("https://appassets.androidplatform.net"+manifest.getJSONArray("files").getJSONObject(0).getString("diskPath")))==null,"removed disk copy retained");
+            JSONObject noCopy=reopened.handle(new JSONObject().put("action","list"),null).getJSONArray("items").getJSONObject(0);
+            check(noCopy.getString("storage").equals("Online repository")&&!noCopy.getBoolean("offline"),"removed download still claims local location");
+            try{disk.download("owner/test","a".repeat(40),false,nodes,(path,target,size)->{throw new IOException("cancelled");});throw new AssertionError("partial download accepted");}catch(IOException expected){checks++;}
+            check(new File(sandbox,"downloaded-projects").listFiles().length==0,"partial download files retained");
             result.putString("stream","Native library checks passed: "+checks);finish(0,result);
         }catch(Throwable error){result.putString("stream","Library failure: "+error.toString());finish(1,result);}finally{delete(sandbox);}
     }

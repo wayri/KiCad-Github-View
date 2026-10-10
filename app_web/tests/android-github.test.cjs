@@ -22,3 +22,9 @@ test('GitHub source transport stays pinned to repository and commit',async()=>{
  assert.equal((await api.send({type:'project-file',file:'nested/root.kicad_sch',ref:'main'})).ok,false);
  assert.throws(()=>local.validate({...project,github:{repository:'owner/private',sha:'main'}}));
 });
+
+test('Explicit large download gets enough bridge time without extending ordinary requests',async()=>{
+ const durations=[],sent=[];const api=bridge(()=>({githubRequest:(id,msg)=>sent.push(id)}),{setTimeout:(f,ms)=>{durations.push(ms);return durations.length;},clearTimeout:()=>{}});
+ const ordinary=api.request({type:'import'}),large=api.request({type:'import',downloadLarge:true}),auth=api.request({type:'auth-status'});
+ assert.deepEqual(durations,[600000,2100000,60000]);for(const id of sent)api.reply(id,{ok:true,result:{}});await Promise.all([ordinary,large,auth]);
+});

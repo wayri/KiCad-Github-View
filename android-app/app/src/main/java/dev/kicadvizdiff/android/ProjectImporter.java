@@ -175,10 +175,17 @@ final class ProjectImporter {
         counts[1] += content.length;
         JSONObject item = new JSONObject().put("path", path);
         if (text) {
-            String decoded = StandardCharsets.UTF_8.newDecoder()
-                    .onMalformedInput(CodingErrorAction.REPORT)
-                    .onUnmappableCharacter(CodingErrorAction.REPORT)
-                    .decode(ByteBuffer.wrap(content)).toString();
+            String decoded;
+            try {
+                decoded = StandardCharsets.UTF_8.newDecoder()
+                        .onMalformedInput(CodingErrorAction.REPORT)
+                        .onUnmappableCharacter(CodingErrorAction.REPORT)
+                        .decode(ByteBuffer.wrap(content)).toString();
+            } catch (java.nio.charset.CharacterCodingException error) {
+                throw new IOException(lower.endsWith(".raw")
+                        ? "Binary RAW data is unsupported. Import an ASCII RAW export."
+                        : "Project text files must use UTF-8: " + path, error);
+            }
             files.put(item.put("content", decoded));
         } else {
             assets.put(item.put("base64", Base64.encodeToString(content, Base64.NO_WRAP)));
@@ -193,7 +200,9 @@ final class ProjectImporter {
                 || lower.endsWith(".json") || lower.endsWith("/sym-lib-table")
                 || lower.endsWith("/fp-lib-table") || lower.equals("sym-lib-table")
                 || lower.equals("fp-lib-table") || lower.endsWith(".gbr")
-                || lower.endsWith(".ger") || lower.endsWith(".drl") || lower.endsWith(".csv");
+                || lower.endsWith(".ger") || lower.endsWith(".drl") || lower.endsWith(".csv")
+                || lower.endsWith(".tsv") || lower.endsWith(".txt") || lower.endsWith(".wbk")
+                || lower.endsWith(".raw") || lower.endsWith(".html") || lower.endsWith(".htm");
     }
 
     static boolean isAsset(String path) {

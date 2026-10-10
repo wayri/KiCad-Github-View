@@ -145,9 +145,9 @@ def android_version(root: Path = ROOT) -> str:
 
 def android_names(root: Path = ROOT) -> set[str]:
     version = android_version(root)
-    return {f'kicad-visual-review-android-phone-tablet-{version}-development.apk',
-            f'kicad-visual-review-android-{version}-unsigned.aab',
-            f'kicad-visual-review-android-source-{version}.zip'}
+    return {f'pocket-kivi-android-phone-tablet-{version}-development.apk',
+            f'pocket-kivi-android-{version}-unsigned.aab',
+            f'pocket-kivi-android-source-{version}.zip'}
 
 
 def audit_android_payload(archive_path: Path, expected: dict[str, bytes], prefix: str):
@@ -205,9 +205,9 @@ def package_android(output: Path, root: Path = ROOT):
             path = root / name
             if not path.resolve().is_relative_to((root / 'android-app').resolve()) or not path.is_file() or path.is_symlink() or archive.read(name) != path.read_bytes():
                 raise ValueError(f'Android source archive mismatch: {name}')
-    for source_path, name in ((apk, f'kicad-visual-review-android-phone-tablet-{version}-development.apk'),
-                              (bundle, f'kicad-visual-review-android-{version}-unsigned.aab'),
-                              (source, f'kicad-visual-review-android-source-{version}.zip')):
+    for source_path, name in ((apk, f'pocket-kivi-android-phone-tablet-{version}-development.apk'),
+                              (bundle, f'pocket-kivi-android-{version}-unsigned.aab'),
+                              (source, f'pocket-kivi-android-source-{version}.zip')):
         shutil.copyfile(source_path, output / name)
     return {'version': version, 'versionCode': int(code), 'viewerAssets': len(expected),
             'apkSignature': 'Verified development/debug signature; not a production signing identity.',

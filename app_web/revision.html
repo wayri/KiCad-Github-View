@@ -27,11 +27,13 @@
   #properties dt{color:#a8bec6}#properties dd{margin:0}#warning{color:#e7c891;overflow-wrap:anywhere}
   #threePane{flex:1;min-height:0;width:100%;overflow:hidden}
   @media(max-width:700px){.hint{display:none}#frameControls{gap:5px;padding:5px}button{padding:6px 8px}#sidePanel{width:150px;flex-basis:150px}}
+@media(max-width:700px){#viewportRow{position:relative}#sidePanel{display:none;position:absolute;inset:8px 8px 8px auto;width:min(320px,calc(100% - 16px));max-width:100%;z-index:5;box-shadow:0 8px 24px #0008;border:1px solid #34444b;border-radius:12px}body:has(#detailsButton[aria-expanded=true]) #sidePanel{display:block}#frameControls{overflow-x:auto;min-height:48px}#frameControls button{min-height:44px;flex-shrink:0}#sidePanel select{min-height:44px}#properties{grid-template-columns:minmax(70px,.8fr) minmax(0,1.2fr)}}
+@media(min-width:701px){#detailsButton{display:none}}
 </style>
 </head>
 <body>
   <div id="frameControls" hidden>
-    <button id="fitDrawing" type="button">Fit drawing</button><button id="fitPage" type="button">Full sheet</button>
+    <button id="detailsButton" type="button" aria-expanded="false" aria-controls="sidePanel">Details</button><button id="fitDrawing" type="button">Fit drawing</button><button id="fitPage" type="button">Full sheet</button>
     <button id="mode3d" type="button" aria-pressed="false" hidden>SPIKE 3D</button>
     <span class="spacer"></span><span class="hint">Right-drag to pan · wheel to zoom · click an object to inspect</span>
     <button id="themeButton" type="button" aria-pressed="false">Dark paper</button>
@@ -49,7 +51,7 @@
   <div id="threePane" hidden></div>
   <script src="public-data.js"></script>
   <script src="design-diff.js"></script>
-  <script src="owned-canvas.js"></script>
+  <script src="owned-canvas.js"></script><script src="touch-canvas.js"></script>
   <script src="worksheet.js"></script><script src="file-compatibility.js"></script><script src="schematic-renderer.js"></script>
   <script src="pcb-renderer.js"></script>
   <script src="revision.js"></script>

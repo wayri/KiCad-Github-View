@@ -1059,3 +1059,14 @@ test('ordinary GitHub thread readback is restricted to extension viewers',async(
 test('trusted project viewer resolves project settings branches while rejecting unsafe paths',async(t)=>{
  let reads=0;withFetch(t,async url=>{reads++;assert.match(url,/repos\/owner\/board\/commits\/main$/);return new Response(sha('a'));});const args={type:'revision-resolve',repository:'owner/board',ref:'main',file:'design/board.kicad_pro'};const result=await message(args);assert.equal(result.ok,true);assert.equal(result.result.sha,sha('a'));assert.equal((await message({...args,file:'../board.kicad_pro'})).ok,false);assert.equal(reads,1);
 });
+
+
+test('trusted analysis page is read-only and only accepts exact extension sender identity',async t=>{
+ const sender={id:'test-id',url:extensionOrigin+'analysis-viewer.html?repository=owner/board&ref='+sha('a')+'&file=analysis.csv'};
+ assert.equal(background.analysisSender(sender),true);assert.equal(background.viewerSender(sender),false);
+ assert.equal(background.analysisSender({...sender,url:extensionOrigin+'analysis-viewer.html.evil'}),false);assert.equal(background.analysisSender({...sender,id:'other'}),false);
+ const reads=[];withFetch(t,async url=>{reads.push(url);return new Response('time,V\n0,1');});
+ const read=await message({type:'project-file',repository:'owner/board',ref:sha('a'),file:'analysis.csv'},sender);assert.equal(read.ok,true,read.error);assert.equal(read.result.content,'time,V\n0,1');assert.ok(reads.every(url=>new URL(url).searchParams.get('ref')===sha('a')));
+ for(const type of ['comment-save','comment-delete','github-publish-comment','github-auth-set','open-viewer-window','project']){const response=await message({type,repository:'owner/board',ref:sha('a'),file:'analysis.csv'},sender);assert.equal(response.ok,false);assert.match(response.error,/only read/);}
+ assert.equal((await message({type:'project-file',repository:'owner/board',ref:sha('a'),file:'../analysis.csv'},sender)).ok,false);
+});

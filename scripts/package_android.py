@@ -15,6 +15,13 @@ def payload(root=ROOT):
     result = {}
     for name in sorted(names):
         content = (root / 'extension' / name).read_bytes()
+        if name=='browser-data.js':
+            # Disk-backed imports are bounded separately; only the active drawing
+            # hierarchy enters WebView memory. Desktop limits remain unchanged.
+            text=content.decode('utf-8').replace('const PROJECT_MAX_BYTES = 96 * 1024 * 1024;', 'const PROJECT_MAX_BYTES = 512 * 1024 * 1024;')
+            text=text.replace('const PROJECT_MAX_FILES = 128, PARENT_MAX_CANDIDATES = 128', 'const PROJECT_MAX_FILES = 512, PARENT_MAX_CANDIDATES = 512')
+            text=text.replace('(/\\.kicad_pcb$/i.test(path) ? 64 : 8) * 1024 * 1024', '256 * 1024 * 1024')
+            content=text.encode('utf-8')
         if name=='review-workspace.js':
             text=content.decode('utf-8').replace("&&!root.KiCadVSCodeContext","&&(!root.KiCadVSCodeContext||root.KiCadAndroidOnline)")
             text=text.replace("provider!=='github'||!remoteAvailable","!remoteAvailable").replace("!remoteAvailable||provider!=='github'","!remoteAvailable").replace("provider==='github'&&remoteAvailable","remoteAvailable")
@@ -32,7 +39,6 @@ def payload(root=ROOT):
             text = content.decode('utf-8')
             text = text.replace('</head>', '<link rel="stylesheet" href="android.css"></head>')
             text = re.sub(r'<script src=', '<script src="local-project.js"></script><script src="remote-review.js"></script><script src="revision-snapshots.js"></script><script src="runtime.js"></script><script src=', text, count=1)
-            text = text.replace('<script src="revision-viewer.js">', '<script src="touch.js"></script><script src="revision-viewer.js">')
             text = text.replace('</body>', '<script src="android-project.js"></script><script src="touch-tooltips.js"></script><script src="resizable-sheets.js"></script><script src="adaptive-ui.js"></script></body>')
             # Folder HTML is deliberately excluded: it must never execute with a native bridge.
             content = text.encode('utf-8')
@@ -46,7 +52,7 @@ def package(root=ROOT):
     assets = root / 'android-app/app/src/main/assets/viewer'
     for name, data in payload(root).items():
         path = assets / name; path.parent.mkdir(parents=True, exist_ok=True); path.write_bytes(data)
-    output = root / 'dist/kicad-visual-review-android-source.zip'; output.parent.mkdir(parents=True, exist_ok=True)
+    output = root / 'dist/pocket-kivi-android-source.zip'; output.parent.mkdir(parents=True, exist_ok=True)
     sources = sorted(p for p in (root / 'android-app').rglob('*') if p.is_file() and not any(x in {'build','.gradle'} for x in p.relative_to(root / 'android-app').parts) and p.name != 'local.properties')
     with zipfile.ZipFile(output, 'w', zipfile.ZIP_DEFLATED) as archive:
         for path in sources:

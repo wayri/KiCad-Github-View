@@ -25,7 +25,7 @@ test('uses embedded GitHub ref data for slash-containing branch names', () => {
 });
 
 test('rejects unsafe and unrelated file paths', () => {
-  for (const path of ['../root.kicad_sch', '/root.kicad_sch', 'a\\b.kicad_pcb', 'root.kicad_sch.txt']) {
+  for (const path of ['../root.kicad_sch', '/root.kicad_sch', 'a\\b.kicad_pcb', 'root.kicad_sch.exe']) {
     assert.equal(filePath(path), null);
   }
   assert.equal(route('https://github.com/a/b/blob/main/%2e%2e/root.kicad_pcb'), null);
@@ -50,7 +50,7 @@ test('viewer query carries revision and absence status for PR additions and remo
 
 test('inline project and fabrication routes accept supported files without widening drawing paths',()=>{
  for(const file of ['board.kicad_pro','board.kicad_prl','rules.kicad_dru','page.kicad_wks','fp-lib-table','sym-lib-table','gerbers/top.gbr','gerbers/top.gtl','holes.drl']){assert.ok(filePath(file));assert.ok(route('https://github.com/owner/repo/blob/main/'+file));}
- for(const file of ['../top.gbr','C:/top.gbr','x\u0000.gbr','a/../top.gbr','notes.json','top.gbr.exe'])assert.equal(filePath(file),null);
+ for(const file of ['../top.gbr','C:/top.gbr','x\u0000.gbr','a/../top.gbr','notes.js','top.gbr.exe'])assert.equal(filePath(file),null);
  assert.equal(require('../browser-data.js').validPath('board.kicad_pro'),false);
 });
 
@@ -86,4 +86,10 @@ test('current nested file and branch determine the embedded SHA, not stale or sa
   const stale = embeddedBlobData([JSON.stringify({path:'SubSheets/HPBM-SMALL.kicad_pcb',refInfo:{name:'old-branch',currentOid:'b'.repeat(40)}})],current);
   assert.equal(stale,null);
   assert.notEqual(blobRequest(current,stale)?.head,'b'.repeat(40));
+});
+
+
+test('report source paths and host routes accept only bounded safe text formats',()=>{
+ for(const file of ['analysis.json','results.csv','results.tsv','simulation.wbk','output.raw','report.html','report.htm','simulation.txt','root.kicad_sch.txt']){assert.equal(filePath(file),file);assert.equal(require('../browser-data.js').validPath(file),false);assert.ok(route('https://github.com/owner/repo/blob/main/'+file));}
+ for(const file of ['../results.csv','/analysis.wbk','x\\analysis.raw','x:report.html','results.csv.exe','report.js'])assert.equal(filePath(file),null);
 });

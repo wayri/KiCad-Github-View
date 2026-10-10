@@ -6,7 +6,7 @@ const root=path.join(__dirname,'..');
 const manifest=JSON.parse(fs.readFileSync(path.join(root,'manifest.json'),'utf8'));
 test('inline shell and each nested drawing page are accessible from GitHub and GitLab.com',()=>{
  const rules=manifest.web_accessible_resources;
- const pages=['project-viewer.html','browser-viewer.html','pcb-viewer.html','schematic-viewer.html','revision-viewer.html'];
+ const pages=['analysis-viewer.html','project-viewer.html','browser-viewer.html','pcb-viewer.html','schematic-viewer.html','revision-viewer.html'];
  for(const page of pages){
   for(const host of ['https://github.com/*','https://gitlab.com/*'])assert.ok(rules.some(rule=>rule.matches.includes('https://*/*')&&rule.resources.includes(page)),`${page} must be navigable inside the ${host} frame tree`);
   assert.ok(fs.existsSync(path.join(root,page)));

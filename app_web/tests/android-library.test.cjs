@@ -1,5 +1,15 @@
 const {test}=require('node:test');const assert=require('node:assert/strict');
-const {metadata,filter,bridge}=require('../../android-app/web/project-library.js');
+const {metadata,filter,recent,availability,bridge}=require('../../android-app/web/project-library.js');
+test('recent projects use persisted open time, not stars or modification time',()=>{
+ const items=[{id:'a',lastOpened:2,updated:100,starred:true},{id:'b',lastOpened:3,updated:1},{id:'c',updated:200},{id:'d',lastOpened:1}];
+ assert.deepEqual(recent(items,2).map(x=>x.id),['b','a']);assert.equal(items[0].id,'a');
+});
+test('source indicators distinguish online copies and local projects without saved files',()=>{
+ assert.equal(availability({provider:'github',offline:false}),'Online');
+ assert.equal(availability({provider:'gitlab',offline:true}),'Online · available offline');
+ assert.equal(availability({provider:'local',offline:true}),'Offline only');
+ assert.match(availability({provider:'local',offline:false}),/reopen file/);
+});
 test('library metadata contains only bookmark identity, never source or credentials',()=>{
  const meta=metadata({id:'abc',github:{repository:'wayri/Marble',sha:'a'.repeat(40)},files:[{path:'design/main.kicad_pro',content:'secret source'}],token:'secret'});
  assert.equal(meta.provider,'github');assert.equal(meta.host,'https://github.com');assert.equal(meta.name,'wayri/Marble');assert(!JSON.stringify(meta).includes('secret'));

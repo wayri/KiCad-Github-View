@@ -27,9 +27,11 @@ final class ProjectLibrary {
     private static final long STORE_LIMIT = 512L * 1024 * 1024;
     private static final int INDEX_LIMIT = 1024 * 1024;
     private final File directory;
+    private final DiskProjectStore diskStore;
     private final AtomicFile index;
 
     ProjectLibrary(Context context) {
+        diskStore = new DiskProjectStore(context);
         directory = new File(context.getNoBackupFilesDir(), "project-library");
         index = new AtomicFile(new File(directory, "library.enc"));
     }
@@ -51,22 +53,26 @@ final class ProjectLibrary {
         int position = find(items, id);
         if (position < 0) throw new IOException("Saved project not found. Refresh the library.");
         JSONObject item = items.getJSONObject(position);
-        String oldFile = item.optString("snapshot");
+        String oldFile = item.optString("snapshot"), oldDownload = item.optString("downloadedId");
         if (action.equals("open")) {
             if (oldFile.isEmpty()) throw new IOException("This project is bookmarked only. Open its online source and choose Save offline first.");
             JSONObject project = new JSONObject(readEncrypted(snapshotFile(oldFile), SNAPSHOT_LIMIT));
             // Only the source payload is exposed: offline views cannot inherit provider transport.
             JSONObject clean = sourceOnly(project);
             clean.put("offline", true).put("name", item.getString("name")).put("libraryId", id).put("offlineRef", item.optString("snapshotRef", item.optString("ref")));
+            item.put("updated",System.currentTimeMillis()).put("lastOpened",System.currentTimeMillis());writeIndex(items);
             return new JSONObject().put("project", clean).put("item", publicItem(item));
         }
         if (action.equals("star")) item.put("starred", request.optBoolean("value", false));
-        else if (action.equals("remove-offline")) item.remove("snapshot");
+        else if (action.equals("remove-offline")) { item.remove("snapshot"); item.remove("downloadedId"); item.remove("snapshotRef"); }
         else if (action.equals("remove")) items.remove(position);
         else throw new IOException("Unknown project library action");
         item.put("updated", System.currentTimeMillis());
         writeIndex(items);
-        if ((action.equals("remove") || action.equals("remove-offline")) && !oldFile.isEmpty()) deleteSnapshot(oldFile);
+        if ((action.equals("remove") || action.equals("remove-offline")) && !oldFile.isEmpty()) {
+            if(!oldDownload.isEmpty()) diskStore.remove(new JSONObject().put("diskBacked",true).put("id",oldDownload));
+            deleteSnapshot(oldFile);
+        }
         return listing(items);
     }
 
@@ -96,6 +102,9 @@ final class ProjectLibrary {
                 .put("repository", repository).put("host", host).put("ref", ref)
                 .put("starred", request.has("starred") ? request.optBoolean("starred") : request.has("star") ? request.optBoolean("star") : previous != null && previous.optBoolean("starred"))
                 .put("updated", System.currentTimeMillis());
+        if(request.optBoolean("remember", false)) item.put("lastOpened", System.currentTimeMillis());
+        else if(previous!=null && previous.has("lastOpened")) item.put("lastOpened",previous.getLong("lastOpened"));
+        if(previous!=null && previous.has("downloadedId"))item.put("downloadedId",previous.getString("downloadedId"));
         String oldFile = previous == null ? "" : previous.optString("snapshot");
         if (!oldFile.isEmpty()) item.put("snapshot", oldFile).put("snapshotRef", previous.optString("snapshotRef", previous.optString("ref")));
         String created = "";
@@ -105,6 +114,8 @@ final class ProjectLibrary {
                 for (int i = 0; i < items.length(); i++) if (!items.getJSONObject(i).optString("snapshot").isEmpty()) offlineCount++;
                 if (oldFile.isEmpty() && offlineCount >= 20) throw new IOException("Offline limit reached (20 projects). Remove an offline copy first.");
                 JSONObject clean = sourceOnly(project);
+                if(project.optBoolean("diskBacked")) item.put("downloadedId",project.getString("id"));
+                else item.remove("downloadedId");
                 created = id + "-" + UUID.randomUUID().toString().replace("-", "") + ".enc";
                 writeEncrypted(new AtomicFile(snapshotFile(created)), clean.toString(), SNAPSHOT_LIMIT);
                 if (storedBytes() > STORE_LIMIT) throw new IOException("Offline storage limit reached (512 MiB). Remove an offline copy first.");
@@ -116,7 +127,7 @@ final class ProjectLibrary {
             if (!created.isEmpty()) deleteSnapshot(created);
             throw error;
         }
-        if (!created.isEmpty() && !oldFile.isEmpty()) deleteSnapshot(oldFile);
+        if (!created.isEmpty() && !oldFile.isEmpty()) {deleteSnapshot(oldFile);if(previous!=null && !previous.optString("downloadedId").isEmpty() && !previous.optString("downloadedId").equals(item.optString("downloadedId")))diskStore.remove(new JSONObject().put("diskBacked",true).put("id",previous.getString("downloadedId")));}
         return listing(items);
     }
 
@@ -124,6 +135,16 @@ final class ProjectLibrary {
         JSONArray files = source.optJSONArray("files"), assets = source.optJSONArray("assets");
         if (files == null || files.length() == 0 || files.length() > 2000 || assets != null && assets.length() > 2000)
             throw new IOException("Invalid offline project payload");
+        if(source.optBoolean("diskBacked")) {
+            JSONArray cleanFiles=new JSONArray(),cleanAssets=new JSONArray();
+            for(int category=0;category<2;category++) {JSONArray entries=category==0?files:assets;if(entries==null)continue;
+                for(int i=0;i<entries.length();i++){JSONObject entry=entries.getJSONObject(i);String path=entry.getString("path"),diskPath=entry.getString("diskPath");long size=entry.getLong("size");
+                    if(!DiskProjectStore.pathOK(path)||!diskPath.matches("/assets/viewer/downloaded/[a-f0-9]{32}/[0-9]{1,4}")||size<0||size>DiskProjectStore.FILE_LIMIT)throw new IOException("Invalid downloaded file");
+                    (category==0?cleanFiles:cleanAssets).put(new JSONObject().put("path",path).put("diskPath",diskPath).put("size",size));
+                }
+            }
+            return new JSONObject().put("id",field(source,"id","project",200)).put("diskBacked",true).put("files",cleanFiles).put("assets",cleanAssets).put("offline",true);
+        }
         // Native importers validate paths and original payload limits. Copy only source fields;
         // preflight escaped UTF-8 size before JSONObject.toString allocates its serialized buffer.
         long encoded = 2048;
@@ -171,7 +192,8 @@ final class ProjectLibrary {
     }
     private static JSONObject publicItem(JSONObject item) throws Exception {
         JSONObject result = new JSONObject();
-        for (String key : new String[]{"id", "name", "repository", "host", "provider", "ref", "starred", "updated"}) result.put(key, item.opt(key));
+        for (String key : new String[]{"id", "name", "repository", "host", "provider", "ref", "starred", "updated", "lastOpened"}) result.put(key, item.opt(key));
+        result.put("storage", !item.optString("downloadedId").isEmpty() ? "Private app storage / downloaded projects" : !item.optString("snapshot").isEmpty() ? "Private app storage / encrypted snapshots" : item.optString("provider").equals("local") ? "Original file not saved in app" : item.optString("provider").equals("local") ? "Original file not saved in app" : "Online repository");
         return result.put("offline", !item.optString("snapshot").isEmpty()).put("offlineRef", item.optString("snapshotRef", item.optString("ref")));
     }
     private static JSONObject listing(JSONArray items) throws Exception {

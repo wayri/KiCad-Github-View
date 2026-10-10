@@ -1,4 +1,4 @@
-# Android phone and tablet viewer
+# Pocket KiVi — Portable KiCAD Viewer
 
 This hybrid Android app packages the shared KiCad schematic, PCB and approximate 3D viewer inside a native Java host. One APK adapts to phones and tablets. It requires Android 8 (API 26) or later and targets API 36. Source designs are read-only.
 
@@ -38,7 +38,7 @@ The export uses the imported project snapshot, not an alternate comparison revis
 
 The bottom tabs switch between Project, Schematic and Layout. Views/compare controls open from the header. The drawing toolbar provides Search, Fit, group Highlight, Comments and More. Drag pans; pinch zooms; double-tap enters a sheet; hold opens contextual actions. Phone panels slide up. Tablet panels support pinning and resizing. Back dismisses overlays before exiting and protects unsaved comment drafts.
 
-Controls retain accessible labels and at least 48-pixel touch targets. The native host handles system/keyboard insets, font scaling and modern Android Back callbacks. Light/dark themes and reduced-motion preferences are respected. Locally bundled SVG icons use short captions. Settings load on demand, file lists are bounded and searchable, and parsing uses workers with a safe fallback. No measured large-project speedup is claimed.
+Controls retain accessible labels with compact phone controls and larger tablet spacing. The native host handles system/keyboard insets, font scaling and modern Android Back callbacks. Light/dark themes and reduced-motion preferences are respected. Locally bundled SVG icons use short captions. Settings load on demand, file lists are bounded and searchable, and parsing uses workers with a safe fallback. No measured large-project speedup is claimed.
 
 ## Accounts and review
 
@@ -50,7 +50,7 @@ Review drafts remain local until explicitly published. GitHub Issues/Discussions
 
 From the repository root, stage assets with `python scripts/package_android.py`. Then set `JAVA_HOME` to a JDK 17+ installation, configure `ANDROID_HOME` for an Android SDK with API 36, and run `android-app/gradlew.bat -p android-app assembleDebug lintDebug bundleRelease` (or the shell wrapper on Linux/macOS). The project currently uses AGP 9.3 and Gradle 9.5.
 
-Development output is `app/build/outputs/apk/debug/app-debug.apk`. The release bundle is `app/build/outputs/bundle/release/app-release.aab`; configure your own release signing for distribution. APKs in `dist` are development-signed, not Play Store releases. `dist/kicad-visual-review-android-source.zip` includes source and staged assets, excluding build caches and `local.properties`.
+Development output is `app/build/outputs/apk/debug/app-debug.apk`. The release bundle is `app/build/outputs/bundle/release/app-release.aab`; configure your own release signing for distribution. APKs in `dist` are development-signed, not Play Store releases. `dist/pocket-kivi-android-source.zip` includes source and staged assets, excluding build caches and `local.properties`.
 
 ## Verification
 
@@ -69,11 +69,11 @@ Tap a wire, pad or track to highlight its net. If several networks are within 14
 
 ## Open links from Chrome and other apps
 
-In Chrome, open a GitHub/GitLab repository or KiCad file page and choose **Share → KiCad Visual Review**. The app opens the provider dialog with repository and revision filled in. Tap **Add and open project**; private repositories use the existing provider account. A matching linked KiCad file opens after import. Existing review drafts stay intact until you choose to change projects.
+In Chrome, open a GitHub/GitLab repository or KiCad file page and choose **Share → Pocket KiVi**. The app opens the provider dialog with repository and revision filled in. Tap **Add and open project**; private repositories use the existing provider account. A matching linked KiCad file opens after import. Existing review drafts stay intact until you choose to change projects.
 
 Redirect buttons can use `kicadvizdiff://open?url=` followed by the URL-encoded HTTPS repository/file link. Chrome intent links can use `intent://open?url=ENCODED_URL#Intent;scheme=kicadvizdiff;package=dev.kicadvizdiff.android;end`. Browser restrictions may require a user tap rather than an automatic redirect.
 
-Normal GitHub.com and GitLab.com HTTPS links are registered as unverified supported links. On Android 12+, these usually open in the browser unless the user enables the domains under **Android Settings → Apps → KiCad Visual Review → Open by default / Open supported links**. We cannot verify domains owned by GitHub/GitLab. Self-hosted GitLab uses Share or the app redirect scheme; the app does not claim every HTTPS host.
+Normal GitHub.com and GitLab.com HTTPS links are registered as unverified supported links. On Android 12+, these usually open in the browser unless the user enables the domains under **Android Settings → Apps → Pocket KiVi → Open by default / Open supported links**. We cannot verify domains owned by GitHub/GitLab. Self-hosted GitLab uses Share or the app redirect scheme; the app does not claim every HTTPS host.
 
 Home, tree, blob and raw file links are accepted. URLs with a slash-containing branch encoded as one segment retain it; otherwise verify/edit the revision field, since a web URL alone cannot separate an unescaped branch from the file path. Links cannot sign in, publish comments, change scopes or fetch arbitrary Drive URLs. Drive projects still open through the Android document picker as files/ZIPs.
 
@@ -139,3 +139,37 @@ Drawing views use a compact toolbar and bottom navigation, with Menu and Views f
 ### GitHub-only field editing (1.24)
 
 Existing Value/custom-field editing is available only for projects opened online from GitHub. Local files, offline snapshots and GitLab imports remain view-only. The editor still exports a revised ZIP copy and does not overwrite repository files.
+
+## Android 1.27: sheets, phone panels and large GitHub projects
+
+More → All sheets opens a scrollable gallery of loaded schematic pages with saved sheet names and file paths above each page. Tap a page to enter it. Cross-sheet nets and selected groups use the existing highlight style and highlight matching headings. Reused sheet instances share one saved-file view. Pages render as they enter the viewport, and offscreen canvases are disposed. Back returns to the single-sheet view.
+
+Phone tools and properties start as a smaller draggable preview. Library/accounts and current-project actions are separate. While writing a comment, secondary controls collapse so the text box and Save/Comment actions stay visible; settings return when editing loses focus. Comment text leads each card, with muted location/date metadata and distinct issue/discussion markers.
+
+GitHub imports beyond the in-memory 32 MiB/file or 96 MiB/project threshold offer Download and Cancel. Download streams a commit-pinned copy into private app storage and automatically adds Your projects for one-tap reopening and starring. Public downloads support 256 MiB/file; private GitHub Contents API downloads support 100 MiB/file. Both support 1 GiB/project and 2 GiB total downloaded storage. Private files above the GitHub API limit and Git LFS sources are unsupported by this automatic download path. The active schematic hierarchy has a separate 512 MiB/512-file bound; an individual drawing still needs available device memory. Copies are view-only, unencrypted, remain after sign-out, and are removed with their offline library entry or app data. External ZIP export of these large copies is unavailable. GitLab and local ZIP limits are unchanged.
+
+Verification: native debug APK build and lint succeeded; packaging tests and shared JS regressions passed. Synthetic phone-size checks confirmed named pages and a readable focused comment at 400×440. Native disk-storage acceptance tests compile but were not run: no Android device was connected. Physical keyboard behavior and the full Marble download remain device acceptance checks.
+
+### All sheets and net links
+
+In Schematic, choose **All sheets** to see named pages together on one canvas with shared pan and zoom. Select a net in a drawing, then open All sheets: only matching pages remain, with dashed yellow intersheet airwires. **Show all sheets** clears the highlights and restores every sheet in the shared workspace. Links represent saved global-label and resolved hierarchical-pin connectivity; they are review overlays, not PCB routing or a full KiCad netlist. Reused sheet instances and unresolved buses retain the existing connectivity limitations.
+
+### Analysis and simulation results
+
+**Project → Analysis & simulation** opens saved WayriCAD reports, thermal/PI maps, SI plots, mechanical mesh previews, KiCad workbooks and exported CSV/ASCII SPICE waveforms. Supported report files can also open on their own. Results are read-only and available in downloaded/offline projects; no solver is run on the phone. See [saved-result formats and limits](../docs/ANALYSIS_VIEWER.md).
+
+## Android 1.30 verification
+
+All schematic sheets share one pan/zoom canvas, with headings above each page. Selecting a connected net retains matching sheets and shows logical intersheet airwires. Phone drawing actions and Library/accounts are separate from active-project bookmark, offline and download actions.
+
+Properties, comments and tools start as compact previews and expand from their drag handles. Handles survive asynchronous shared-viewer rebuilds. Focusing a comment expands the editor within the visible keyboard space, and preserves that state across pane reopening; comment bodies and threads use larger text than their grey location/date/state metadata. Issue and discussion pins use different shapes and severity borders.
+
+Large public GitHub downloads use pinned raw source URLs without credentials, avoiding per-file API quota. The Download/Cancel prompt precedes disk-backed import. Downloaded projects appear in Your projects with their app-storage location, offline status, star and one-tap reopen. Removing or replacing an offline entry clears its old disk copy and location label.
+
+Verification includes JavaScript regressions, Android build/lint and native test compilation, plus a local phone-width viewer with two sheets, connected-net airwire and keyboard-sized comment layout. These checks do not establish physical keyboard/device behavior or a successful live authenticated private-project transfer. Native device tests remain pending.
+
+## Android 1.31: 3D Layout selection
+
+Layout has a direct 3D / 2D toggle in its compact toolbar. Part, net and group selections transfer into the 3D view and remain selected on returning to 2D. 3D picks update the shared properties panel and schematic/layout cross-selection. Search and connected-net controls remain available; Fit and zoom act on the active camera. Pinch, pan and cancelled gestures do not pick a part.
+
+The preview uses saved front/back copper, vias, footprint stand-ins and local repository models. Inner-layer copper is not rendered by this 3D engine. Cross-highlights use up to 2,000 visible bounds and disclose larger selections; stand-ins remain identified approximations. This feature does not edit the design or run KiCad.

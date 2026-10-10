@@ -27,6 +27,7 @@ final class GitHubClient {
     private static final String CLIENT = "Ov23li8RsSVZk2dHptN1";
     private static final int FILE_LIMIT = 32 * 1024 * 1024;
     private static final int TOTAL_LIMIT = 96 * 1024 * 1024;
+    private final DiskProjectStore diskStore;
     private final GitHubVault vault;
     private final GitHubVault deviceVault;
     private String userCode = "";
@@ -44,7 +45,7 @@ final class GitHubClient {
     private int interval;
 
     GitHubClient(Context context) { this(context,"github"); }
-    GitHubClient(Context context, String namespace) { vault = new GitHubVault(context,namespace); deviceVault = new GitHubVault(context, namespace+"_device"); token = vault.read();
+    GitHubClient(Context context, String namespace) { diskStore = new DiskProjectStore(context); vault = new GitHubVault(context,namespace); deviceVault = new GitHubVault(context, namespace+"_device"); token = vault.read();
         try { String saved = deviceVault.read(); if (saved != null && token == null) {
             JSONObject pending = new JSONObject(saved); long remaining = pending.getLong("expiresAt") - System.currentTimeMillis();
             if (remaining > 0 && remaining <= 1800000) { deviceCode = pending.getString("deviceCode"); userCode = pending.getString("userCode"); interval = Math.max(5, Math.min(60,pending.optInt("interval",5))); deviceWallExpiry = pending.getLong("expiresAt"); deviceExpiry = SystemClock.elapsedRealtime()+remaining; nextPoll = SystemClock.elapsedRealtime()+interval*1000L; }
@@ -170,7 +171,7 @@ final class GitHubClient {
         return new JSONObject().put("repositories", repositories).put("hasMore", source.length() == 100);
     }
     private JSONObject importProject(JSONObject request, int epoch) throws Exception {
-        long deadline = SystemClock.elapsedRealtime() + 8 * 60 * 1000;
+        long deadline = SystemClock.elapsedRealtime() + (request.optBoolean("downloadLarge") ? 30L : 8L) * 60 * 1000;
         String repository = request.getString("repository");
         if (repository.length() > 240 || !repository.matches("[A-Za-z0-9][A-Za-z0-9-]{0,38}/[A-Za-z0-9_.-]{1,100}")
                 || repository.endsWith("/.") || repository.endsWith("/..")) throw new Failure("Enter a valid owner/repository");
@@ -189,13 +190,25 @@ final class GitHubClient {
         for (int i = 0; i < nodes.length(); i++) { JSONObject node = nodes.getJSONObject(i);
             if (node.optString("type").equals("blob") && importable(node.optString("path"))) requiredFiles++;
         }
-        synchronized (this) {
-            check(epoch); boolean authenticated = token != null;
-            String budget = GitHubFailure.importBudget(requiredFiles, quotaAuthenticated == authenticated ? coreRemaining : -1, authenticated);
-            if (budget != null) throw new Failure(budget);
-        }
 
         if (nodes.length() > 100000) throw new Failure("Repository has too many entries");
+        long sourceBytes = 0; boolean large = false;
+        for (int i = 0; i < nodes.length(); i++) { JSONObject node = nodes.getJSONObject(i);
+            if (!node.optString("type").equals("blob") || !importable(node.optString("path"))) continue;
+            long size = node.optLong("size", -1); if (size < 0) throw new Failure("Unknown repository file size");
+            sourceBytes += size; large |= size > FILE_LIMIT;
+        }
+        large |= sourceBytes > TOTAL_LIMIT;
+        synchronized (this) {
+            check(epoch); boolean authenticated = token != null;
+            String budget = GitHubFailure.importBudget((large || request.optBoolean("downloadLarge")) && !metadata.optBoolean("private") ? 0 : requiredFiles, quotaAuthenticated == authenticated ? coreRemaining : -1, authenticated);
+            if (budget != null) throw new Failure(budget);
+        }
+        if (large || request.optBoolean("downloadLarge")) {
+            if (!request.optBoolean("downloadLarge")) return new JSONObject().put("downloadRequired", true).put("bytes", sourceBytes).put("repository", repository).put("sha", sha);
+            return diskStore.download(repository, sha, metadata.optBoolean("private"), nodes, (path, target, size) -> downloadFile(repository, sha, path, target, size, metadata.optBoolean("private"), epoch, deadline));
+        }
+
         JSONArray files = new JSONArray(), assets = new JSONArray();
         Set<String> paths = new HashSet<>();
         int total = 0, count = 0;
@@ -206,7 +219,7 @@ final class GitHubClient {
             if (!node.optString("type").equals("blob")) continue;
             String path = node.getString("path"), lower = path.toLowerCase(Locale.ROOT);
             boolean binary = lower.matches(".*\\.(step|stp|wrl)$");
-            boolean text = lower.matches(".*\\.(kicad_sch|kicad_pcb|kicad_pro|kicad_prl|kicad_dru|kicad_wks|json|gbr|ger|drl|csv)$")
+            boolean text = lower.matches(".*\\.(kicad_sch|kicad_pcb|kicad_pro|kicad_prl|kicad_dru|kicad_wks|json|gbr|ger|drl|csv|tsv|txt|wbk|raw|html|htm)$")
                     || lower.equals("sym-lib-table") || lower.equals("fp-lib-table") || lower.endsWith("/sym-lib-table") || lower.endsWith("/fp-lib-table");
             if (!binary && !text) continue;
             safePath(path);
@@ -239,15 +252,44 @@ final class GitHubClient {
         return new JSONObject().put("repository", metadata.getString("full_name")).put("sha", sha).put("private", metadata.getBoolean("private"))
                 .put("project", new JSONObject().put("id", id.toString()).put("files", files).put("assets", assets));
     }
-    private static boolean importable(String path) {
+    private void downloadFile(String repository, String sha, String path, java.io.File target, long size, boolean isPrivate, int epoch, long projectDeadline) throws Exception {
+        HttpsURLConnection connection = (HttpsURLConnection)downloadUrl(repository,sha,path,size,isPrivate).openConnection();
+        connection.setInstanceFollowRedirects(false); connection.setUseCaches(false); connection.setConnectTimeout(15000); connection.setReadTimeout(30000);
+        connection.setRequestProperty("Accept", "application/vnd.github.raw+json"); connection.setRequestProperty("User-Agent", "KiCadVizDiff-Android");
+        String bearer = credential(epoch); if(isPrivate && bearer!=null) connection.setRequestProperty("Authorization", "Bearer "+bearer);
+        try {
+            int status = connection.getResponseCode(); check(epoch);
+            if(status!=200) throw new Failure("Large-file download failed (HTTP "+status+"); check sign-in and repository access");
+            long expected=connection.getContentLengthLong(); if(expected>=0 && expected!=size) throw new Failure("Large-file download size mismatch");
+            long total=0, deadline=Math.min(projectDeadline,SystemClock.elapsedRealtime()+15*60*1000L);
+            try(InputStream input=connection.getInputStream(); java.io.OutputStream output=new java.io.FileOutputStream(target)) {
+                byte[] buffer=new byte[65536]; int n; while((n=input.read(buffer))!=-1) { check(epoch); if(SystemClock.elapsedRealtime()>deadline || n>size-total) throw new Failure("Large-file download size or time limit exceeded"); output.write(buffer,0,n); total+=n; }
+            }
+            if(total!=size) throw new Failure("Large-file download was incomplete");
+        } finally { connection.disconnect(); }
+    }
+    static URL downloadUrl(String repository, String sha, String path, long size, boolean isPrivate) throws Exception {
+        if (!repository.matches("[A-Za-z0-9][A-Za-z0-9-]{0,38}/[A-Za-z0-9_.-]{1,100}") || repository.endsWith("/.") || repository.endsWith("/..")) throw new IOException("Invalid repository");
+        validSha(sha); safePath(path);
+        if (size < 0 || size > DiskProjectStore.FILE_LIMIT) throw new IOException("Invalid download size");
+        StringBuilder encoded = new StringBuilder(); for (String part : path.split("/")) { if(encoded.length()>0) encoded.append('/'); encoded.append(encode(part)); }
+        // Public raw sources avoid per-file API quota. Private sources use the
+        // authenticated contents API; raw-host bearer authentication is not reliable.
+        if (isPrivate && size > 100L*1024*1024) throw new IOException("Private GitHub files over 100 MiB are not supported by this download path; GitHub Contents API cannot serve them");
+        String endpoint = !isPrivate
+                ? "https://raw.githubusercontent.com/"+repository+"/"+sha+"/"+encoded
+                : "https://api.github.com/repos/"+repository+"/contents/"+encoded+"?ref="+sha;
+        return new URL(endpoint);
+    }
+    static boolean importable(String path) {
         String lower = path.toLowerCase(Locale.ROOT);
-        return lower.matches(".*\\.(step|stp|wrl|kicad_sch|kicad_pcb|kicad_pro|kicad_prl|kicad_dru|kicad_wks|json|gbr|ger|drl|csv)$")
+        return lower.matches(".*\\.(step|stp|wrl|kicad_sch|kicad_pcb|kicad_pro|kicad_prl|kicad_dru|kicad_wks|json|gbr|ger|drl|csv|tsv|txt|wbk|raw|html|htm)$")
                 || lower.equals("sym-lib-table") || lower.equals("fp-lib-table") || lower.endsWith("/sym-lib-table") || lower.endsWith("/fp-lib-table");
     }
     private static String revisionFile(JSONObject request) throws Exception {
         String file = request.getString("file"); safePath(file);
-        if (!file.toLowerCase(Locale.ROOT).matches(".*\\.(kicad_sch|kicad_pcb|kicad_pro|kicad_prl|kicad_dru|kicad_wks|sch|brd)$"))
-            throw new Failure("Select a supported KiCad drawing or project file");
+        if (!file.toLowerCase(Locale.ROOT).matches(".*\\.(kicad_sch|kicad_pcb|kicad_pro|kicad_prl|kicad_dru|kicad_wks|sch|brd|json|csv|tsv|txt|wbk|raw|html|htm)$"))
+            throw new Failure("Select a supported KiCad drawing, project or analysis report");
         return file;
     }
     private String revisionRef(JSONObject request, String repo, int epoch) throws Exception {

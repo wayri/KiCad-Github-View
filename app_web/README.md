@@ -33,3 +33,11 @@ parity are not supported.
 The GitHub App links into this page from a check or other App surface. GitHub
 Apps cannot replace GitHub's own blob-file viewer. GitHub's public API rate
 limit, CORS, file-size limits, and the 32-sheet/24-MiB project cap apply.
+
+## Android browsers
+
+The hosted viewer includes touch pan, pinch zoom, tap selection and long-press context events using the same touch adapter as the Android app. On screens up to 700 CSS pixels, Details opens a scrollable overlay; tapping the drawing or pressing Escape closes it. Drawing controls remain reachable in a horizontally scrollable toolbar. No browser extension is required for the hosted viewer. Hosted retrieval remains public GitHub only; private GitHub/GitLab account access and downloaded offline projects remain features of the native Android app.
+
+Chrome for Android cannot install the desktop extension; use the hosted viewer or Android app. Firefox for Android supports extensions, but this project's unsigned Firefox package has not passed Android-device acceptance or Mozilla signing. Do not describe it as an installable mobile add-on yet. See [Mozilla's Android extension guide](https://extensionworkshop.com/documentation/develop/developing-extensions-for-firefox-for-android/) and [Chrome extension installation](https://support.google.com/chrome/answer/2664769).
+
+Mobile browser acceptance on 2026-10-08: a synthetic schematic rendered at 400×800 CSS pixels, Details opened and closed, and the page had no horizontal overflow. Shared touch tests cover drag/pinch, cancellation, long press, and chooser dispatch. These checks used a Chromium browser viewport and synthetic transport, not installed Android Chrome or Firefox.

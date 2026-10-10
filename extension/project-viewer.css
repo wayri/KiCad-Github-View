@@ -23,3 +23,5 @@ body[data-ui-theme=light] .project-warnings{color:#8c551b}
 @media(max-width:900px){.project-header strong,.project-header .mode-badge{display:none}.project-header #projectSearch{max-width:none}.project-header #projectRevision{display:none}.project-header{flex-wrap:wrap}.settings-card{padding:10px}.setting-field{gap:8px}}
 
 #fileSearchStatus{font-size:11px;color:var(--muted);margin:6px 0}@media(max-width:760px){.project-tree{width:100%;max-width:none;min-width:0;resize:none}}
+
+#analysisPreviewHost iframe{border:1px solid var(--line);width:100%;height:70vh;min-height:400px}#analysisReportList{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px}

@@ -12,6 +12,7 @@
 
   const loading=globalThis.KiCadLoading?.indicator(document.body);
   const loadController=typeof AbortController==='function'?new AbortController():null;
+  let sheetOverview=null;
   let dark=pcb,workspace=null,canvas=null,scene=null,modelAssetCache=null,disposed=false,applying=false,crossApplying=false,lastView='',lastFile='';
 
   const own=new URL(chrome.runtime.getURL('browser-viewer.html')),ownOrigin=`${own.protocol}//${own.host}`;
@@ -176,13 +177,23 @@
 
     $('fitLayer').onclick=()=>{if(!canvas.fitLayer())$('layerFocusStatus').textContent='No drawable geometry on the focused layer.';canvas.draw();};
 
+    function buildSheet(path){
+      if(!designs.has(path)){
+        const file=files.find(source=>source.path===path);
+        if(!file)throw new Error('The referenced sheet is absent.');
+        const sheets=files.filter(source=>/\.kicad_sch$/i.test(source.path));
+        designs.set(path,(pcb?KiCadPCBRenderer:KiCadSchematicRenderer).build(KiCadDesignDiff.parse(file.content),path,{sheetNumber:sheets.findIndex(source=>source.path===path)+1,sheetCount:sheets.length,sheetName:path===rootFile?'/':'/'+path.split('/').at(-1).replace(/\.kicad_sch$/i,'')+'/'}));
+      }
+      return designs.get(path);
+    }
     function openSheet(path,position){
+      sheetOverview?.close();
 
       if(scene)return;const file=files.find(source=>source.path===path);if(!file)throw new Error('The referenced sheet is absent.');
 
       if(/\.kicad_pcb$/i.test(path)!==pcb)throw new Error('Cannot mix board and schematic drawings.');
 
-      if(!designs.has(path)){const ast=KiCadDesignDiff.parse(file.content),engine=pcb?KiCadPCBRenderer:KiCadSchematicRenderer;const sheets=files.filter(source=>/\.kicad_sch$/i.test(source.path));designs.set(path,engine.build(ast,path,{sheetNumber:sheets.findIndex(source=>source.path===path)+1,sheetCount:sheets.length,sheetName:path===rootFile?"/":"/"+path.split("/").at(-1).replace(/\.kicad_sch$/i,"")+"/"}));}
+      buildSheet(path);
 
       canvas.setDocument(designs.get(path),path);layers();workspace?.attachCanvas(canvas);workspace?.draw();
 
@@ -197,18 +208,59 @@
     if(disposed)return;
     workspace=KiCadReviewWorkspace.mount({initialModel:prepared.model,initialDesign:prepared.design,initialNetModel:prepared.nets,files,repository,provider,host:providerContext.host,ref,rootFile,pcb,pairedFile:params.get('pairedFile')||undefined,getCanvas:()=>canvas,currentFile,focus,openSheet,getRulerUnits:()=>preferences.rulerUnits,
 
-      getDesigns:()=>designs,updateDiagnostics,
+      getDesigns:()=>designs,updateDiagnostics,onOverviewHighlights:()=>sheetOverview?.refresh(),
       onHierarchy(hierarchy){if(!disposed)parent.postMessage({type:'kicad-review:hierarchy',repository,ref,hierarchy},ownOrigin);},
       onSelection(selection){if(crossApplying||!globalThis.KiCadPairedReview?.validSelection(selection))return;if(globalThis.KiCadVSCodeBridge?.selection)globalThis.KiCadVSCodeBridge.selection(selection);else parent.postMessage({type:'kicad-review:selection',selection},ownOrigin);},
       onCommentsChanged(){if(globalThis.KiCadVSCodeBridge?.onCommentsChanged)globalThis.KiCadVSCodeBridge.onCommentsChanged();else parent.postMessage({type:'kicad-review:comments-changed'},ownOrigin);},pullNumber:Number(params.get('pullNumber'))||null,pullRepository:params.get('pullRepository')||repository});
 
     workspace.attachCanvas(canvas);openSheet(initialFile);loading?.hide();
+    if(!pcb&&globalThis.KiCadAndroidUI){
+      const gallery=document.createElement('section');gallery.id='sheetOverview';gallery.hidden=true;gallery.setAttribute('aria-label','All schematic sheets');host.append(gallery);
+      const heading=document.createElement('header'),title=document.createElement('strong'),back=document.createElement('button'),clear=document.createElement('button'),fitAll=document.createElement('button'),help=document.createElement('small');
+      title.textContent='All sheets';back.type=clear.type=fitAll.type='button';back.textContent='Single sheet';clear.textContent='Show all sheets';fitAll.textContent='Fit';clear.hidden=true;clear.onclick=()=>$('clearHighlights').click();heading.append(title,back,clear,fitAll,help);gallery.append(heading);
+      const surface=document.createElement('div');surface.className='sheet-shared-canvas';gallery.append(surface);
+      let overviewView=null,opened=false,ticket=0,composition=null;
+      const fitOverview=()=>{if(!overviewView||!composition)return;overviewView.resize();overviewView.viewport.camera.bbox={x:-12,y:-4,w:composition.design.page.width+12,h:composition.design.page.height+4};overviewView.draw();};
+      const rebuild=async()=>{
+        const generation=++ticket,entries=workspace.overviewSheets().filter(entry=>entry.sheet);
+        const active=entries.some(entry=>workspace.overviewSelection(entry.sheet.path).netActive);clear.hidden=!active;
+        help.textContent='Drag to pan · pinch to zoom · tap a net · double-tap a sheet to enter';
+        const shown=active?entries.filter(entry=>workspace.overviewSelection(entry.sheet.path).netIds.length):entries,rendered=[];
+        for(const entry of shown){
+          await new Promise(resolve=>setTimeout(resolve,0));if(!opened||generation!==ticket)return;
+          const path=entry.sheet.path,design=buildSheet(path),nets=KiCadNetModel.build([files.find(file=>file.path===path)],new Map([[path,design]])).nets;
+          rendered.push({path,label:[...new Set((entry.parents||[]).map(link=>link.label).filter(Boolean))].join(' / ')||entry.sheet.label||path,design,groups:KiCadReviewWorkspace.sheetPageHighlights(nets,workspace.overviewSelection(path),design,path)});
+        }
+        if(!opened||generation!==ticket)return;
+        composition=KiCadReviewWorkspace.composeSheetOverview(rendered,workspace.overviewNetLinks?.()||[],dark);
+        if(!overviewView){
+          overviewView=KiCadOwnedCanvas.mount(surface,{dark,pcb:false,acceleration:'off'});
+          const baseDraw=overviewView.draw.bind(overviewView);overviewView.draw=()=>{
+            baseDraw();if(!composition)return;const ctx=overviewView.ctx;if(!ctx)return;
+            ctx.save();ctx.setLineDash([6,4]);for(const wire of composition.airwires)overviewView.paint(wire);ctx.restore();
+          };
+          overviewView.addEventListener('kicad:select',()=>{const hit=overviewView.selected;if(hit?.sourcePath&&hit.uuid)workspace.selectOverviewNet?.(hit.sourcePath,hit.uuid);});
+          overviewView.canvas.addEventListener('dblclick',event=>{
+            const rect=overviewView.canvas.getBoundingClientRect(),at=overviewView.viewport.camera.screen_to_world({x:event.clientX-rect.left,y:event.clientY-rect.top});
+            const page=composition.pages.find(p=>at.x>=p.x&&at.x<=p.x+p.w&&at.y>=p.y&&at.y<=p.y+p.h);if(page){close();workspace.followSheet(page.path);}
+          });
+        }
+        overviewView.dark=dark;overviewView.setDocument(composition.design,'all-sheets');overviewView.paperVisible=false;
+        overviewView.setNetHighlights(composition.highlighted.length?[{primitives:composition.highlighted}]:[],{mode:'bright'});fitOverview();
+      };
+      const close=()=>{if(!opened)return;opened=false;ticket++;gallery.hidden=true;canvas.canvas.hidden=false;overviewView?.dispose();overviewView=null;composition=null;toggle.setAttribute('aria-pressed','false');canvas.resize();canvas.draw();};
+      const open=()=>{if(opened)return;opened=true;gallery.hidden=false;canvas.canvas.hidden=true;toggle.setAttribute('aria-pressed','true');return rebuild();};
+      const toggle=document.createElement('button');toggle.id='allSheetPagesButton';toggle.type='button';toggle.textContent='All sheets';toggle.title='See every loaded schematic page on one canvas';toggle.setAttribute('aria-pressed','false');toggle.onclick=()=>opened?close():open();
+      ($('sheetHome')?.parentElement||$('frameControls')).append(toggle);back.onclick=close;fitAll.onclick=fitOverview;
+      sheetOverview={open,close,isOpen:()=>opened,toggle:()=>opened?close():open(),refresh(){if(opened)return rebuild();},dispose(){close();gallery.remove();toggle.remove();}};globalThis.KiCadSheetOverview=sheetOverview;
+      addEventListener('keydown',event=>{if(event.key==='Escape'&&opened){event.preventDefault();close();}});
+    }
 
     $('frameControls').hidden=false;label('fitDrawing',pcb?'Fit board':'Fit drawing');
 
-    const fit=kind=>{if(scene)return;kind==='page'?canvas.zoom_to_page():canvas.zoom_to_board();canvas.draw();};
+    const fit=kind=>{if(scene){scene.fit?.(kind==='page');return;}kind==='page'?canvas.zoom_to_page():canvas.zoom_to_board();canvas.draw();};
 
-    const zoom=factor=>{if(scene)return;const c=canvas.viewport.camera;c.zoom=Math.max(.001,Math.min(10000,c.zoom*factor));canvas.draw();};
+    const zoom=factor=>{if(scene){scene.zoom?.(factor);return;}const c=canvas.viewport.camera;c.zoom=Math.max(.001,Math.min(10000,c.zoom*factor));canvas.draw();};
 
     $('fitDrawing').onclick=()=>fit('drawing');$('fitPage').onclick=()=>fit('page');$('zoomIn').onclick=()=>zoom(1.25);$('zoomOut').onclick=()=>zoom(1/1.25);
 
@@ -251,7 +303,7 @@
 
       const load=()=>loading||=new Promise((resolve,reject)=>{if(globalThis.SpikeBoard3D?.mountBoard3D){resolve(SpikeBoard3D);return;}const script=document.createElement('script');script.src='vendor/spike-board3d.bundle.js';script.onload=()=>globalThis.SpikeBoard3D?.mountBoard3D?resolve(SpikeBoard3D):reject(new Error('SPIKE 3D did not initialize.'));script.onerror=()=>{loading=null;reject(new Error('SPIKE 3D could not be loaded.'));};document.head.append(script);});
 
-      const lock=value=>{for(const id of ['fitDrawing','fitPage','zoomIn','zoomOut','gridButton','flipButton','applyPage','resetPage'])$(id).disabled=value;};
+      const lock=value=>{for(const id of ['gridButton','flipButton','applyPage','resetPage'])$(id).disabled=value;};
 
       mode.onclick=async()=>{
 
@@ -261,7 +313,7 @@
 
         try{const engine=await load();if(disposed)return;pane.hidden=false;canvas.canvas.hidden=true;
 
-          scene=engine.mountBoard3D(pane,files.find(file=>file.path===rootFile).content,{dark,boardPath:rootFile,loadAsset:modelAssetCache.load,onSelect:record=>workspace?.select3D(record),onComment:record=>workspace?.comment3D(record)});
+          scene=engine.mountBoard3D(pane,files.find(file=>file.path===rootFile).content,{dark,boardPath:rootFile,loadAsset:modelAssetCache.load,externalInspector:true,onSelect:record=>workspace?.select3D(record),onComment:record=>workspace?.comment3D(record)});
 
           workspace.setScene(scene);syncFloatingLayers();$('drawingLegend').hidden=true;lock(true);mode.setAttribute('aria-pressed','true');if($('renderMode'))$('renderMode').textContent='3D';
 
@@ -283,7 +335,7 @@
       const msg=event.data;
       if(msg.command==='open-sheet'){workspace.followSheet?.(msg.file);return;}
       if(msg.command==='refresh-comments'){workspace.refreshComments?.();return;}
-      if(msg.command==='highlight-related'){if(!scene||msg.selection?.kind==='part')related(msg.selection);return;}
+      if(msg.command==='highlight-related'){related(msg.selection);return;}
       if(scene)return;
 
       if(msg.command==='fit-drawing')fit('drawing');else if(msg.command==='fit-page')fit('page');else if(msg.command==='focus')focus(msg.position);else if(msg.command==='report-view')report(true);
@@ -306,7 +358,7 @@
 
   }
 
-  addEventListener('pagehide',()=>{disposed=true;loadController?.abort();loading?.dispose();modelAssetCache?.clear();workspace?.dispose();scene?.dispose();canvas?.dispose();});
+  addEventListener('pagehide',()=>{disposed=true;loadController?.abort();loading?.dispose();modelAssetCache?.clear();sheetOverview?.dispose();workspace?.dispose();scene?.dispose();canvas?.dispose();});
 
   start().catch(error=>{loading?.hide();if(disposed)return;status.textContent=error.message;status.classList.add('error');if(!status.isConnected)$('drawingHost').append(status);});
 

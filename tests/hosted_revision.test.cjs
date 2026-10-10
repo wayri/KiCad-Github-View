@@ -14,12 +14,14 @@ class Element {
   append(...children) { this.children.push(...children); }
   replaceChildren(...children) { this.children = [...children]; }
   setAttribute(name, value) { this.attributes[name] = value; }
+  getAttribute(name) { return this.attributes[name]; }
+  addEventListener(type, handler) { (this.events ||= {})[type] = handler; }
 }
 
 function fixture(file) {
   const ids = ['status', 'frameControls', 'viewportRow', 'drawingHost', 'properties',
     'sheetPanel', 'sheetSelect', 'warning', 'layerPanel', 'layerList', 'fitDrawing',
-    'fitPage', 'themeButton', 'mode3d', 'threePane'];
+    'fitPage', 'themeButton', 'mode3d', 'threePane', 'detailsButton'];
   const nodes = Object.fromEntries(ids.map((id) => [id, new Element()]));
   nodes.frameControls.hidden = nodes.viewportRow.hidden = true;
   const events = {};
@@ -85,6 +87,10 @@ test('hosted schematic mounts Canvas2D and navigates loaded subsheets', async ()
   assert.equal(ui.canvas.document.filename, 'design/root.kicad_sch');
   assert.equal(ui.nodes.sheetSelect.children.length, 2);
   assert.equal(ui.nodes.viewportRow.hidden, false);
+  ui.nodes.detailsButton.events.click();
+  assert.equal(ui.nodes.detailsButton.getAttribute('aria-expanded'), 'true');
+  ui.nodes.drawingHost.events.pointerdown();
+  assert.equal(ui.nodes.detailsButton.getAttribute('aria-expanded'), 'false');
   ui.nodes.sheetSelect.value = 'design/child.kicad_sch';
   ui.nodes.sheetSelect.onchange();
   assert.equal(ui.canvas.document.filename, 'design/child.kicad_sch');

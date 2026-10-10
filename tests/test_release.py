@@ -42,9 +42,9 @@ class ReleaseTests(unittest.TestCase):
             (root / 'android-app/app').mkdir(parents=True)
             (root / 'android-app/app/build.gradle').write_text("versionName '1.24'")
             self.assertEqual(release.android_names(root), {
-                'kicad-visual-review-android-phone-tablet-1.24-development.apk',
-                'kicad-visual-review-android-1.24-unsigned.aab',
-                'kicad-visual-review-android-source-1.24.zip'})
+                'pocket-kivi-android-phone-tablet-1.24-development.apk',
+                'pocket-kivi-android-1.24-unsigned.aab',
+                'pocket-kivi-android-source-1.24.zip'})
 
     def test_guides_archive_retains_relative_image_paths_and_is_deterministic(self):
         with tempfile.TemporaryDirectory() as folder:

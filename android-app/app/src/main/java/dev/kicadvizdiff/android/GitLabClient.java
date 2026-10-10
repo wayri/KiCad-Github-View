@@ -274,7 +274,7 @@ final class GitLabClient {
             check(epoch);if(SystemClock.elapsedRealtime()>deadline)throw new Failure("Repository download timed out");
             JSONObject node=nodes.getJSONObject(i);if(!node.optString("type").equals("blob"))continue;
             String path=node.getString("path"),lower=path.toLowerCase(Locale.ROOT);boolean binary=lower.matches(".*\\.(step|stp|wrl)$");
-            boolean text=lower.matches(".*\\.(kicad_sch|kicad_pcb|kicad_pro|kicad_prl|kicad_dru|kicad_wks|json|gbr|ger|drl|csv)$")||lower.equals("sym-lib-table")||lower.equals("fp-lib-table")||lower.endsWith("/sym-lib-table")||lower.endsWith("/fp-lib-table");
+            boolean text=lower.matches(".*\\.(kicad_sch|kicad_pcb|kicad_pro|kicad_prl|kicad_dru|kicad_wks|json|gbr|ger|drl|csv|tsv|txt|wbk|raw|html|htm)$")||lower.equals("sym-lib-table")||lower.equals("fp-lib-table")||lower.endsWith("/sym-lib-table")||lower.endsWith("/fp-lib-table");
             if(!binary&&!text)continue;safePath(path);
             if(!node.optString("mode").equals("100644")&&!node.optString("mode").equals("100755"))throw new Failure("Symbolic links cannot be imported");
             if(!paths.add(lower)||++count>2000)throw new Failure("Duplicate paths or too many KiCad files (limit 2000)");

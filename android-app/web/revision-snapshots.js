@@ -8,7 +8,7 @@ function create(project,getActive,request,validate,limit=96*1024*1024){
  return{async get(sha){
   if(getActive()!==project)throw Error('The active project changed.');
   if(!/^[a-f0-9]{40}$/.test(sha))throw Error('Comparison requires an immutable commit.');
-  if(snapshots.has(sha))return snapshots.get(sha);if(pending.has(sha))return pending.get(sha);
+  if(snapshots.has(sha))return snapshots.get(sha);if(project.diskBacked)throw Error('Commit comparison is unavailable for large downloaded projects. Open a smaller online project to compare revisions.');if(pending.has(sha))return pending.get(sha);
   const task=(async()=>{const value=await request({type:'revision-import',repository:info.repository,ref:sha,...(info.provider==='gitlab'?{host:info.host}:{})});
    if(getActive()!==project)throw Error('The active project changed while downloading.');
    if(value.sha!==sha||value.repository.toLowerCase()!==info.repository.toLowerCase())throw Error('Revision import identity mismatch.');

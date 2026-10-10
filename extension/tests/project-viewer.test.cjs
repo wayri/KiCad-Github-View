@@ -8,6 +8,7 @@ function runtime(fetchFile,inventoryFiles=null,inventoryError=null,options={}){
  KiCadReviewWorkspace:require('../review-workspace.js'),KiCadGitHub:require('../parsing.js'),KiCadProjectSettings:require('../project-settings.js'),KiCadProjectSettingsUI:require('../project-settings-ui.js'),KiCadGerberRenderer:require('../gerber-renderer.js'),KiCadUIIcons:{decorate(){}},
  KiCadOwnedCanvas:{mount(host){mounted=new EventTarget();Object.assign(mounted,{canvas:new Element(),viewport:{camera:new(require('../owned-canvas.js').Camera)(800,600)},resize(){},zoom_to_board(){},draw(){this.renderPrimitives?.(this.canvas.getContext(),this.viewport.camera,this);},dispose(){}});mounted.canvas.width=800;mounted.canvas.height=600;return mounted;}},
  chrome:{runtime:{getURL:name=>name,sendMessage:async request=>{requests.push(request);if(request.type==='project-inventory'&&inventoryError)return{ok:false,error:inventoryError};if(request.type==='project-inventory')return{ok:true,result:{snapshotRef:'a'.repeat(40),warnings:[],files:inventoryFiles||[{path:'board.kicad_pro'},{path:'top.gbr'},{path:'bottom.gbr'}]}};try{return{ok:true,result:{path:request.file,content:await fetchFile(request.file)}};}catch(e){return{ok:false,error:e.message};}}}}};
+ if(options.vscode)context.KiCadVSCodeContext={search:context.location.search};
  vm.runInNewContext(fs.readFileSync(path.join(__dirname,'../project-viewer.js'),'utf8'),context);return{get,requests,canvas:()=>mounted,handlers,bodyClasses,parentMessages};
 }
 const gerber='%FSLAX24Y24*%%MOMM*%%ADD10C,1*%D10*X010000Y020000D03*M02*';
@@ -93,4 +94,21 @@ test('primary project tab shows settings without embedding a second drawing shel
 
 test('header project search filters saved settings and constraints as well as project paths',async()=>{
  const view=runtime(async()=>JSON.stringify({board:{design_settings:{rules:{min_clearance:0.2,min_track_width:0.25}}}}));await tick();view.get('projectSearch').value='clearance';view.get('projectSearch').oninput();assert.match(view.get('settingSections').textContent,/clearance/i);assert.doesNotMatch(view.get('settingSections').textContent,/Min track width/);assert.match(view.get('constraintSections').textContent,/clearance/i);view.get('projectSearch').value='never-matches';view.get('projectSearch').oninput();assert.match(view.get('constraintSections').textContent,/No matching/);view.get('projectSearch').value='';view.get('projectSearch').oninput();assert.match(view.get('constraintSections').textContent,/Track width/i);
+});
+
+
+test('saved reports default to inert Analysis with immutable iframe scope and separate HTML opt-in',async()=>{
+ const files=[{path:'board.kicad_pro'},...['json','csv','tsv','wbk','raw','html'].map(ext=>({path:'analysis.'+ext}))];
+ const view=runtime(async()=>'<script>throw Error("do not execute")</script><table><tr><td>1</td></tr></table>',files);await tick();
+ for(const file of files.slice(1)){
+  await view.get('fileTree').children.find(n=>n.textContent===file.path).onclick();assert.equal(view.get('analysisPanel').hidden,false);
+  const frame=view.get('analysisPreviewHost').children[0];assert.equal(frame.src.split('?')[0],'analysis-viewer.html');const query=new URLSearchParams(frame.src.split('?')[1]);assert.equal(query.get('repository'),'wayri/review');assert.equal(query.get('ref'),'a'.repeat(40));assert.equal(query.get('file'),file.path);assert.equal(view.get('htmlPreviewHost').children.length,0);
+ }
+ view.get('htmlTab').onclick();assert.equal(view.get('htmlPanel').hidden,false);assert.equal(view.get('htmlPreviewHost').children.length,0,'HTML scripts remain opt-in');
+ view.get('analysisTab').onclick();assert.equal(view.get('analysisReportList').children.length,6);
+});
+
+test('VS Code analysis shows an actionable limitation without embedding a frame',async()=>{
+ const view=runtime(async()=> 'time,V\n0,1',[{path:'board.kicad_pro'},{path:'analysis.csv'}],null,{vscode:true});await tick();
+ await view.get('fileTree').children.find(n=>n.textContent==='analysis.csv').onclick();assert.equal(view.get('analysisPanel').hidden,false);assert.match(view.get('analysisPreviewHost').textContent,/browser extension and Android/);assert.equal(view.get('analysisPreviewHost').children.some(n=>n.src),false);
 });

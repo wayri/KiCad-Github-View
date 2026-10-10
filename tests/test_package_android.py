@@ -11,7 +11,7 @@ class AndroidPackageTests(unittest.TestCase):
             self.assertEqual(assets[name],(ROOT/'extension'/name).read_bytes())
         self.assertIn(b'root.KiCadAndroidOnline', assets['review-workspace.js'])
         self.assertIn(b"if(!remoteAvailable)return",assets['review-workspace.js'])
-        for name in ('remote-review.js','gitlab.js','github.js','index.html','index.js','runtime.js','local-project.js','touch.js','vendor/spike-board3d.bundle.js','vendor/occt/occt-import-js.wasm'):
+        for name in ('remote-review.js','gitlab.js','github.js','index.html','index.js','runtime.js','local-project.js','touch-canvas.js','vendor/spike-board3d.bundle.js','vendor/occt/occt-import-js.wasm'):
             self.assertIn(name,assets)
         for name in ('options.html','credential-vault.js','html-sandbox.html'):
             self.assertNotIn(name,assets)
@@ -21,8 +21,8 @@ class AndroidPackageTests(unittest.TestCase):
         self.assertLess(root_page.index('revision-snapshots.js'),root_page.index('index.js'))
         self.assertIn(b'window.top.KiCadAndroid.ensureSnapshots()',assets['runtime.js'])
         self.assertNotIn(b'KiCadAndroidSnapshots.create(',assets['runtime.js'])
-        self.assertLess(page.index('owned-canvas.js'),page.index('touch.js'))
-        self.assertLess(page.index('touch.js'),page.index('revision-viewer.js'))
+        self.assertLess(page.index('owned-canvas.js'),page.index('touch-canvas.js'))
+        self.assertLess(page.index('touch-canvas.js'),page.index('revision-viewer.js'))
     def test_html_local_script_references_resolve_in_bundle(self):
         import re
         assets=builder.payload()

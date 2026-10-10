@@ -300,3 +300,67 @@ body button,body button *,body nav,body nav *,body summary,body #objectMenu,body
  body .android-resizable-sheet>.android-sheet-handle{height:32px!important;min-height:32px!important}
 }
 @media(prefers-reduced-transparency:reduce){#androidViewToolbar,#androidWorkspaceNav,.floating-layer-selector,#androidWorkspaceHeader button{background:var(--panel,var(--android-container))!important;backdrop-filter:none!important}}
+
+/* Phone overlays begin as a preview; the handle expands without covering the drawing on selection. */
+.android-menu-group-title{font-size:11px;color:var(--android-muted);font-weight:650;text-transform:uppercase;letter-spacing:.06em;margin:8px 0 0}
+#androidProjectActionsSheet{background:var(--android-container);color:var(--android-text);border:1px solid var(--android-outline);border-radius:20px;max-width:calc(100vw - 24px)}
+#androidProjectActionsSheet header{display:flex;align-items:center;justify-content:space-between;padding:8px 12px}
+#androidProjectActionsSheet .android-sheet-content{display:grid;gap:8px;padding:12px}
+.note-heading{display:flex;align-items:center;gap:6px;font-size:15px;font-weight:650;line-height:1.4;margin:0 0 8px;color:var(--text,var(--android-text));overflow-wrap:anywhere}
+.note .note-body{overflow-wrap:anywhere;font-size:15px;line-height:1.5;margin:8px 0 12px;white-space:pre-wrap;color:var(--text,var(--android-text))}
+.note .note-meta,.note .note-location,.note small,.thread-message>small{font-size:11px;line-height:1.4;color:var(--muted,var(--android-muted));overflow-wrap:anywhere}
+.note .note-meta{display:block;margin:2px 0}.note .note-meta{display:block;margin:2px 0}.note .note-location{margin:4px 0}.note .inspector-actions{gap:4px;margin-top:8px}.note .inspector-actions button{font-size:11px;min-height:40px;padding:6px 8px}
+.thread-message{padding:12px;border:1px solid var(--line,var(--android-outline));border-radius:12px;margin:8px 0;background:var(--raised,var(--android-high))}
+.thread-message>strong{font-size:12px}.thread-message>small{display:block}.thread-message .thread-message-body{overflow-wrap:anywhere;font-size:15px;line-height:1.5;white-space:pre-wrap;margin:8px 0}
+.thread-read-controls{gap:4px}.thread-read-controls :is(input,select,button){font-size:12px;min-height:40px;padding:6px 8px}
+body .android-comment-pin{--pin-accent:#77bcff;min-width:30px!important;width:30px!important;min-height:30px!important;height:30px!important;padding:2px!important;font-size:12px!important;font-weight:700;background:var(--panel,var(--android-container))!important;color:var(--text,var(--android-text))!important;border:2px solid var(--pin-accent);box-shadow:0 2px 6px #0007}
+body .android-comment-pin.issue{border-radius:8px 8px 8px 2px!important}
+body .android-comment-pin.discussion{border-radius:50%!important;border-style:dashed}
+body .android-comment-pin[data-severity=critical]{--pin-accent:#ff6775}body .android-comment-pin[data-severity=major]{--pin-accent:#ffac56}body .android-comment-pin[data-severity=minor]{--pin-accent:#ffd75a}body .android-comment-pin[data-severity=info]{--pin-accent:#77bcff}
+@media(max-width:599px){
+ body button,body select,body summary{min-height:40px;font-size:12px;border-radius:10px}body button{padding:6px 10px}body button[aria-label]{min-width:40px}
+ body input:not([type=checkbox]):not([type=radio]),body textarea{padding:8px;font-size:16px}
+ body label.check{min-height:40px;gap:8px}body summary{padding:8px}body[data-size] .ui-icon{width:22px;height:22px;flex-basis:22px}
+ #androidToolsSheet :is(button,input,select){min-height:40px!important;font-size:12px!important}#androidToolsSheet #drawingTools button{min-height:40px;padding:8px}#androidToolsSheet .android-pane-actions{gap:6px}
+ body:has(#comparison:not([hidden])) #reviewHeader{height:40px;min-height:40px;padding:0 8px;overflow:hidden}
+ body:has(#comparison:not([hidden])) #androidWorkspaceHeader{position:static;width:100%;pointer-events:auto;gap:6px}
+ body:has(#comparison:not([hidden])) #androidWorkspaceHeader strong{display:block;font-size:12px}
+ body:has(#comparison:not([hidden])) #androidWorkspaceHeader button{min-height:36px;height:36px;min-width:36px;padding:4px 8px;box-shadow:none;background:transparent}
+ body:has(#comparison:not([hidden])) #androidWorkspaceHeader button .button-label{display:inline;font-size:10px}
+ body .android-resizable-sheet{bottom:var(--android-keyboard-bottom,0px)!important;height:var(--android-sheet-height,42dvh)!important}
+ #commentText{min-height:100px;max-height:34dvh;scroll-margin:12px}#commentEditor label{margin:6px 0;font-size:11px;gap:4px}
+ .comment-top-controls{gap:4px}.comment-top-controls label{min-width:74px}.comment-top-controls select{font-size:12px;min-height:36px;padding:6px}
+ .android-comment-actions{padding:6px 0 max(6px,env(safe-area-inset-bottom));gap:4px}.android-comment-actions button,.android-comment-actions select{min-height:40px;font-size:12px}
+ #propertiesPane,#commentsPane{padding:8px 12px}.selection-heading h2{font-size:16px;margin:4px 0}.selection-heading p{font-size:11px;margin:4px 0}
+ #designInspector[data-sheet-stage=peek] .property-searchbar{padding-bottom:4px}#propertySearch{min-height:36px}
+ #commentsSidebar:has(#commentText:focus) .sidebar-heading{min-height:36px!important}#commentsSidebar:has(#commentText:focus) .comment-tabs{display:none}
+ body :is(.object-row,.search-result,.net-member-list button,.rule-item,.rule-title){min-height:40px;font-size:12px;padding:8px}
+ #designNavigator .navigator-tabs button{min-height:40px;padding:8px;font-size:12px}.navigator-pane{padding:10px;gap:8px}
+}
+
+/* Focused composition leaves the entire visible sheet to the message and a single action row. */
+@media(max-width:599px){
+ body:has(#commentText:focus) #commentsSidebar{display:flex!important;flex-direction:column;overflow:hidden!important}
+ body:has(#commentText:focus) #commentsSidebar>.sidebar-heading{min-height:36px!important;height:36px!important}
+ body:has(#commentText:focus) #commentsSidebar>.sidebar-heading button{min-height:32px!important;height:32px!important}
+ body:has(#commentText:focus) #commentsPane{display:flex;flex:1;min-height:0;flex-direction:column;overflow:auto;padding:4px 10px}
+ body:has(#commentText:focus) :is(#commentCategoryTabs,#commentSettings,.comment-subtabs,#addCommentPane>.hint,#addCommentPane>.comment-tools,#commentAnchor,#commentComposeTop,#commentEditor>.composer-image,#commentPublishSettings,#commentComposerOptions,#commentEditor>.comment-markdown,#commentStatus){display:none!important}
+ body:has(#commentText:focus) :is(#commentCategoryContent,#addCommentPane){display:flex;flex:1;min-height:0;flex-direction:column}
+ body:has(#commentText:focus) #commentEditor{display:flex;flex:1;min-height:0;flex-direction:column;gap:4px;margin:0!important}
+ body:has(#commentText:focus) #commentEditor>label:has(#commentText){display:flex;flex:1;min-height:0;flex-direction:column;margin:0;gap:2px}
+ body:has(#commentText:focus) #commentText{flex:1;min-height:24px;height:auto;max-height:none;resize:none;line-height:1.4}
+ body:has(#commentText:focus) .android-comment-actions{position:static!important;flex:none;flex-wrap:nowrap;padding:4px 0;min-height:40px}
+ body:has(#commentText:focus) .android-comment-actions #commentPostRow{display:flex;flex:1;gap:4px;min-width:0;align-items:center}
+ body:has(#commentText:focus) #commentPostRow label{display:none!important}
+ body:has(#commentText:focus) .android-comment-actions :is(button,select){min-height:36px;padding:4px 8px;font-size:11px}
+ body:has(#commentText:focus) #inlineMentionSuggestions{max-height:80px;overflow:auto;flex:none}
+ body:has(#commentText:focus) #inlineMentionSuggestions button{min-height:32px;font-size:12px;padding:4px 8px}
+ .comment-compose-top{gap:4px}.comment-compose-top label{font-size:11px}.comment-compose-top select{min-height:36px;font-size:12px;padding:6px}
+}
+
+@media(max-width:599px){#propertiesPane .inspector-actions button{min-height:40px;height:40px;padding:6px 10px;font-size:12px}}
+
+@media(max-width:599px){#viewCommentsPane>.hint{display:none}}
+
+#androidViewToolbar .android-3d-toggle{font-size:12px;font-weight:700;min-width:36px;padding:4px 6px}#threePane{height:100%;width:100%;min-height:0}
+#recentProjects{margin-top:24px;border-top:1px solid var(--android-outline);padding-top:16px}#recentProjects h2{font-size:16px;line-height:1.4;margin:0 0 12px}#recentProjectRows{display:grid;gap:8px}.recent-project-card{border:1px solid var(--android-outline);border-radius:14px;background:var(--android-container);padding:10px 12px;min-width:0}.recent-project-open{display:flex;align-items:center;gap:10px;width:100%;justify-content:flex-start;text-align:left;white-space:normal;background:transparent;border:0;padding:4px 0;font-size:13px;min-height:40px}.recent-project-open span{overflow-wrap:anywhere}.recent-project-open .ui-icon{width:28px;height:28px;flex:0 0 28px}.recent-project-state{display:inline-block;font-size:10px;padding:3px 7px;border-radius:8px;background:var(--android-surface);color:var(--android-muted);margin:4px 0}.recent-project-state[data-online=true]{color:var(--android-primary)}.recent-project-source{display:block;color:var(--android-muted);font-size:10px;overflow-wrap:anywhere}#recentProjectStatus{font-size:12px!important;line-height:1.4!important}#recentProjectStatus:empty{display:none}@media(min-width:840px){#recentProjectRows{grid-template-columns:repeat(2,minmax(0,1fr))}}

@@ -4,23 +4,24 @@ const viewState=require('../view-state.js'),core=require('../owned-canvas.js');
 const tick=()=>new Promise(resolve=>setImmediate(resolve)),plain=value=>JSON.parse(JSON.stringify(value));
 async function revision(query='',extraFiles=[],options={}){
  const listeners=new Map(),canvasListeners=new Map(),controls=new Map(),reports=[],calls={board:0,page:0,draw:0,disposed:0,attach:0};
- class Element{constructor(){this.attributes={};this.children=[];this.hidden=false;this.dataset={viewer:'auto'};this.isConnected=true;this.classList={add(){},remove(){},toggle(){}};this.style={};}setAttribute(k,v){this.attributes[k]=String(v);}getAttribute(k){return this.attributes[k]??null;}append(...children){this.children.push(...children);}remove(){}replaceChildren(){this.children=[];}click(){return this.onclick?.();}}
+ class Element{constructor(){this.attributes={};this.children=[];this.hidden=false;this.dataset={viewer:'auto'};this.isConnected=true;this.classList={add(){},remove(){},toggle(){}};this.style={};}setAttribute(k,v){this.attributes[k]=String(v);}getAttribute(k){return this.attributes[k]??null;}append(...children){this.children.push(...children);}addEventListener(){}remove(){}replaceChildren(){this.children=[];}click(){return this.onclick?.();}}
  const get=id=>{if(!controls.has(id)){const element=new Element();if(id==='viewerSettings')element.hidden=true;controls.set(id,element);}return controls.get(id);};
  const camera=new core.Camera(800,600),parent={postMessage:(data,origin)=>reports.push({data,origin})};
- const canvas={canvas:new Element(),viewport:{camera},document:null,visibleLayers:new Set(),addEventListener:(type,callback)=>canvasListeners.set(type,callback),resize(){},draw(){calls.draw++;},dispose(){calls.disposed++;},
+ const canvas={setNetHighlights(){},canvas:new Element(),viewport:{camera},document:null,visibleLayers:new Set(),addEventListener:(type,callback)=>canvasListeners.set(type,callback),resize(){},draw(){calls.draw++;},dispose(){calls.disposed++;},
   setDocument(design,file){this.design=design;this.document={filename:file};this.zoom_to_board();this.draw();},
   zoom_to_board(){calls.board++;camera.bbox={x:92,y:192,w:16,h:16};},zoom_to_page(){calls.page++;camera.bbox={x:0,y:0,w:297,h:210};}};
  for(const name of ['focusLayer','restoreLayers','layerPreset'])canvas[name]=function(...args){if(name==='focusLayer'){if(!this.layerSnapshot)this.layerSnapshot=new Set(this.visibleLayers);this.focusedLayer=args[0];this.layerFocusMode=args[1];this.visibleLayers.add(args[0]);}else if(name==='layerPreset'){if(!this.layerSnapshot)this.layerSnapshot=new Set(this.visibleLayers);this.focusedLayer=null;this.visibleLayers=new Set(this.design.layers);}else{if(this.layerSnapshot)this.visibleLayers=new Set(this.layerSnapshot);this.layerSnapshot=null;this.focusedLayer=null;}};
  const initialFile=options.file||(options.pcb?'board.kicad_pcb':'root.kicad_sch');
  const context={URL,URLSearchParams,console,location:{search:'?repository=wayri/board&ref=main&file='+initialFile+query},parent,
-  document:{getElementById:get,body:new Element(),createElement:()=>new Element(),head:new Element()},
+  document:{getElementById:get,body:new Element(),createElement:()=>new Element(),createElementNS:()=>new Element(),head:new Element()},
   chrome:{runtime:{getURL:name=>'chrome-extension://ours/'+name,sendMessage:async message=>{(calls.requests||=[]).push(message);if(message.type==='revision-resolve')return{ok:true,result:{sha:'a'.repeat(40)}};if(message.type==='repo-asset'){(calls.assetRequests||=[]).push(message);return{ok:true,result:{base64:'AAAA'}};}return{ok:true,result:[{path:initialFile,content:options.pcb?'(kicad_pcb)':'(kicad_sch)'},...extraFiles]};}}},
   KiCadPairedReview:require('../paired-review.js'),KiCadReviewTools:require('../review-tools.js'),KiCadWorksheet:require('../worksheet.js'),KiCadBrowserData:require('../browser-data.js'),KiCadDesignModel:require('../design-model.js'),KiCadDesignDiff:require('../design-diff.js'),KiCadViewState:viewState,
   KiCadSchematicRenderer:{build:()=>({primitives:[],layers:[],page:{width:297,height:210},warnings:[]})},
   KiCadPCBRenderer:{build:()=>({primitives:[],layers:options.layers||[],page:{width:297,height:210},warnings:[]})},
   SpikeBoard3D:{mountBoard3D(_pane,_source,config){calls.modelOptions=config;return{dispose(){},setTheme(){}};}},
-  KiCadOwnedCanvas:{mount:()=>canvas},KiCadReviewWorkspace:{mount:options=>{calls.workspaceOptions=options;return {draw(){},setScene(){},attachCanvas(){calls.attach++;},dispose(){calls.disposed++;},highlightRelated(selection){calls.related=selection;options.onSelection?.(selection);},refreshComments(){calls.refreshed=(calls.refreshed||0)+1;},options};}},
+  KiCadOwnedCanvas:{mount:()=>canvas},KiCadReviewWorkspace:{composeSheetOverview:require('../review-workspace.js').composeSheetOverview,sheetPageHighlights:require('../review-workspace.js').sheetPageHighlights,mount:options=>{calls.workspaceOptions=options;return {draw(){},setScene(){},attachCanvas(){calls.attach++;},dispose(){calls.disposed++;},highlightRelated(selection){calls.related=selection;options.onSelection?.(selection);},refreshComments(){calls.refreshed=(calls.refreshed||0)+1;},options};}},
   addEventListener:(type,callback)=>listeners.set(type,callback)};
+ if(options.android){context.KiCadNetModel=require('../net-model.js');context.KiCadAndroidUI={};context.setTimeout=setTimeout;context.requestAnimationFrame=fn=>setTimeout(fn,0);context.cancelAnimationFrame=clearTimeout;context.IntersectionObserver=class{constructor(callback){this.callback=callback;calls.overviewObserver=this;this.observed=[];}observe(node){this.observed.push(node);}disconnect(){this.observed=[];}};const mount=context.KiCadReviewWorkspace.mount;context.KiCadReviewWorkspace.mount=opts=>({...mount(opts),overviewSheets:()=>[{sheet:{path:initialFile,label:'Root'},depth:0},...extraFiles.map(file=>({sheet:{path:file.path,label:'Power supply'},depth:1}))],overviewSelection:path=>options.overviewSelection?.(path)||({netIds:[],uuids:[],mode:'dim'})});}
  if(options.worker)context.KiCadLoading={indicator:()=>({show(){},hide(){},dispose(){}}),paint:async()=>{},run:async(_job,payload,prepare)=>{calls.workerPayload=payload;return {...prepare(),design:context.KiCadSchematicRenderer.build()};}};
  vm.runInNewContext(fs.readFileSync(path.join(__dirname,'../revision-viewer.js'),'utf8'),context);await tick();
  return{canvas,camera,calls,get,reports,parent,context,viewframe(){canvasListeners.get('kicad:viewframe')();},message(data,source=parent,origin='chrome-extension://ours'){listeners.get('message')({source,origin,data});},key(key,nodes=[],modifiers={}){let prevented=false;listeners.get('keydown')({key,composedPath:()=>nodes,preventDefault(){prevented=true;},...modifiers});return prevented;},hide(){listeners.get('pagehide')();}};
@@ -115,4 +116,25 @@ test('floating saved copper layer selector isolates, shows all and restores the 
  buttons[5].click();assert.deepEqual([...v.canvas.visibleLayers],['F.Cu','Edge.Cuts']);assert.equal(v.canvas.layerSnapshot,null);
  await v.get('mode3d').click();assert.equal(bar.hidden,true);await v.get('mode3d').click();assert.equal(bar.hidden,false);
  const schematic=await revision();assert.equal(schematic.get('drawingHost').children.some(child=>child.id==='floatingLayerSelector'),false);
+});
+
+
+test('Android all-sheet overview composes every loaded page on a single canvas',async()=>{
+ const v=await revision('',[{path:'sub/power.kicad_sch',content:'(kicad_sch)'}],{android:true});
+ await v.context.KiCadSheetOverview.open();
+ assert.equal(v.context.KiCadSheetOverview.isOpen(),true);
+ assert.deepEqual(v.canvas.design.primitives.filter(p=>p.type==='text').map(p=>p.text),['Root','Power supply']);
+ assert.equal(v.canvas.document.filename,'all-sheets');
+ v.context.KiCadSheetOverview.close();assert.equal(v.context.KiCadSheetOverview.isOpen(),false);
+ const desktop=await revision();assert.equal(desktop.context.KiCadSheetOverview,undefined);
+});
+
+test('Android shared overview filters matching sheets then restores all pages',async()=>{
+ let active=true;
+ const v=await revision('',[{path:'sub/power.kicad_sch',content:'(kicad_sch)'},{path:'other.kicad_sch',content:'(kicad_sch)'}],{android:true,overviewSelection:path=>({netActive:active,netIds:active&&path!=='other.kicad_sch'?['VCC']:[],uuids:[],mode:'dim'})});
+ await v.context.KiCadSheetOverview.open();
+ assert.equal(v.canvas.design.primitives.filter(p=>p.type==='text').length,2);
+ active=false;await v.context.KiCadSheetOverview.refresh();
+ assert.equal(v.canvas.design.primitives.filter(p=>p.type==='text').length,3);
+ v.context.KiCadSheetOverview.close();
 });

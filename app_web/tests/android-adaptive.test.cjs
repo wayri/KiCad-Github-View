@@ -56,3 +56,14 @@ test('text selection is explicit and Back exits that mode before sheet navigatio
  assert.equal(api.handleBack(),true);assert.equal(classes.has('text-select-mode'),false);assert.equal(cleared,1);assert.equal(up,0);assert.equal(button['aria-pressed'],'false');
  assert.equal(api.handleBack(),true);assert.equal(up,1);
 });
+
+test('Back closes the all-sheets overview before navigating a parent sheet',()=>{
+ let opened=true,parentVisits=0;const nodes=new Map();
+ nodes.set('sheetUp',{disabled:false,click(){parentVisits++;this.disabled=true;}});
+ const document={readyState:'loading',getElementById:id=>nodes.get(id),addEventListener(){},querySelectorAll:()=>[]};
+ const context={document,module:{exports:{}},console,KiCadSheetOverview:{isOpen:()=>opened,close(){opened=false;}}};
+ vm.createContext(context);vm.runInContext(fs.readFileSync('android-app/web/adaptive-ui.js','utf8'),context);
+ assert.equal(context.KiCadAndroidUI.handleBack(),true);assert.equal(opened,false);assert.equal(parentVisits,0);
+ assert.equal(context.KiCadAndroidUI.handleBack(),true);assert.equal(parentVisits,1);
+ assert.equal(context.KiCadAndroidUI.handleBack(),false);
+});

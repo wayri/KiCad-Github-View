@@ -147,6 +147,9 @@
   }
 
   addEventListener("pagehide", () => { scene?.dispose(); canvas?.dispose(); });
+  $('detailsButton').addEventListener('click',()=>{const b=$('detailsButton');b.setAttribute('aria-expanded',String(b.getAttribute('aria-expanded')!=='true'));});
+  $('drawingHost').addEventListener('pointerdown',()=>$('detailsButton').setAttribute('aria-expanded','false'));
+  addEventListener('keydown',e=>{if(e.key==='Escape')$('detailsButton').setAttribute('aria-expanded','false');});
   start().catch((error) => {
     scene?.dispose(); canvas?.dispose(); canvas = null;
     $("viewportRow").hidden = true; $("frameControls").hidden = true;

@@ -496,6 +496,11 @@ function viewerSender(sender) {
     page === chrome.runtime.getURL("pcb-viewer.html") || page === chrome.runtime.getURL("project-viewer.html");
 }
 
+// The analysis page only reads imported/repository source; it never receives review write privileges.
+function analysisSender(sender) {
+  return sender?.id === chrome.runtime.id && sender.url?.split(/[?#]/, 1)[0] === chrome.runtime.getURL("analysis-viewer.html");
+}
+
 function optionsSender(sender) {
   return sender?.id === chrome.runtime.id &&
     sender.url?.split(/[?#]/, 1)[0] === chrome.runtime.getURL("options.html");
@@ -777,7 +782,7 @@ async function gitlabDispatch(message, sender) {
     if(message.type==='gitlab-client-set')return auth.setClientId(host,message.clientId);
     return auth.startOAuth(host);
   }
-  if (!viewerSender(sender) && !['project','gitlab-merge-request'].includes(message.type)) throw new Error('Only extension viewers can use GitLab repository tools.');
+  if (!viewerSender(sender) && !(analysisSender(sender)&&['project-inventory','project-file'].includes(message.type)) && !['project','gitlab-merge-request'].includes(message.type)) throw new Error('Only extension viewers can use GitLab repository tools.');
   if (optionsSender(sender)) throw new Error('Options cannot load GitLab projects.');
   switch(message.type) {
     case 'gitlab-merge-request': {
@@ -853,9 +858,10 @@ async function gitlabDispatch(message, sender) {
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   const customHostSender=sender?.id===chrome.runtime.id&&typeof sender.url==='string'&&sender.url.startsWith('https://')&&message?.provider==='gitlab';
-  if (!(senderAllowed(sender) || optionsSender(sender)||customHostSender) || !message || typeof message !== "object") return false;
+  if (!(senderAllowed(sender) || analysisSender(sender) || optionsSender(sender)||customHostSender) || !message || typeof message !== "object") return false;
   (async () => {
     if (message.provider !== undefined && !['github','gitlab'].includes(message.provider)) throw new Error('Unsupported repository provider.');
+    if(analysisSender(sender)&&!['project-inventory','project-file'].includes(message.type))throw new Error('Analysis viewers can only read project inventory and source files.');
     let senderOrigin;try{senderOrigin=new URL(sender.url).origin;}catch{}
     if(senderOrigin?.startsWith('https://')&&senderOrigin!=='https://github.com'&&message.provider!=='gitlab')throw new Error('GitLab pages must specify the GitLab provider.');
     if(senderOrigin==='https://github.com'&&message.provider==='gitlab')throw new Error('Repository provider does not match the host page.');
@@ -931,7 +937,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         const content=await githubFile(message.repository,message.ref,path);if(content===null)throw new Error("Report was not found at this revision.");if(new TextEncoder().encode(content).byteLength>4*1024*1024)throw new Error("Rule report exceeds 4 MiB.");return {content,path};
       }
       case "project-inventory":
-        if(!viewerSender(sender))throw new Error('Only extension viewers can inspect project files.');return projectInventory(message.repository,message.ref,message.file);
+        if(!viewerSender(sender)&&!analysisSender(sender))throw new Error('Only extension viewers can inspect project files.');return projectInventory(message.repository,message.ref,message.file);
       case 'revision-branches':
         if(!viewerSender(sender))throw new Error('Only extension viewers can list branches.');return revisionBranches(message.repository,message.ref,message.file);
       case 'revision-commits':
@@ -939,7 +945,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       case 'revision-resolve':
         if(!viewerSender(sender))throw new Error('Only extension viewers can resolve revisions.');return revisionResolve(message.repository,message.ref,message.file);
       case "project-file":
-        if(!viewerSender(sender))throw new Error('Only extension viewers can read project settings.');return projectFile(message.repository,message.ref,message.file);
+        if(!viewerSender(sender)&&!analysisSender(sender))throw new Error('Only extension viewers can read project settings.');return projectFile(message.repository,message.ref,message.file);
       case "open-project-overview":
         if(!viewerSender(sender))throw new Error('Only extension viewers can open projects.');return openProjectWindow(message.repository,message.ref,message.file);
       case "project-search-files":
@@ -1008,7 +1014,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
 if (typeof module === "object" && module.exports) {
   module.exports = { githubFile, githubPull, githubFiles, githubDirectory, githubSchematicInventory, drawingFiles, openViewerWindow,
-    githubAsset, designChanges, senderAllowed, viewerSender, optionsSender, openFromAction,
+    githubAsset, designChanges, senderAllowed, viewerSender, analysisSender, optionsSender, openFromAction,
     commentList, commentSave, commentDelete, openCommentDraft, claimCommentDraft,
     acknowledgeCommentDraft, githubAnnotations, revisionBranches,revisionCommits,revisionResolve };
 }

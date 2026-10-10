@@ -278,3 +278,11 @@ body[data-workspace="true"] #projectButton,body[data-workspace="true"] #viewOppo
 .layers-expanded .compact-layer-options{display:flex}.layers-expanded:has(.compact-layer-toggle){left:10px;right:10px}
 #drawingTools{background:var(--panel);background:color-mix(in srgb,var(--panel) 92%,transparent)}
 @media(prefers-reduced-transparency:reduce){.floating-layer-selector:has(.compact-layer-toggle),#drawingTools{background:var(--panel)}}
+
+/* Android-only shared schematic workspace. */
+#sheetOverview{position:absolute;inset:0;z-index:8;display:flex;flex-direction:column;overflow:hidden;padding:8px;background:var(--surface,#14212a);color:var(--text,#dde7ed);overscroll-behavior:contain}
+#sheetOverview[hidden]{display:none}
+#sheetOverview>header{display:flex;align-items:center;flex-wrap:wrap;gap:8px;padding:4px 2px 10px}
+#sheetOverview>header small{font-size:11px;opacity:.65;flex-basis:100%}
+.sheet-shared-canvas{position:relative;flex:1;min-height:0;touch-action:none}
+.sheet-shared-canvas canvas{display:block}
