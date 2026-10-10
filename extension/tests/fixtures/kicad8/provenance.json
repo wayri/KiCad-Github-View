@@ -1,0 +1,16 @@
+{
+  "sourceRelease": "8.0.0",
+  "note": "Official QA fixtures bundled with KiCad 8.0.0; some were originally saved by earlier versions. No headers modified.",
+  "fixtures": [
+    {
+      "file": "custom_fields.kicad_sch",
+      "source": "https://raw.githubusercontent.com/KiCad/kicad-source-mirror/8.0.0/qa/data/pcbnew/custom_fields.kicad_sch",
+      "sha256": "d5db28793628bc9dd0e24d115fa41d118da56c7d3d44d5496256e8644b801f4e"
+    },
+    {
+      "file": "custom_fields.kicad_pcb",
+      "source": "https://raw.githubusercontent.com/KiCad/kicad-source-mirror/8.0.0/qa/data/pcbnew/custom_fields.kicad_pcb",
+      "sha256": "7ce0914f9e9c8efd6cd55c40a4740e2a7fec0cdab374171612a31c6c521f0f40"
+    }
+  ]
+}

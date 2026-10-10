@@ -12,7 +12,7 @@
 
   const loading=globalThis.KiCadLoading?.indicator(document.body);
   const loadController=typeof AbortController==='function'?new AbortController():null;
-  let sheetOverview=null;
+  let sheetOverview=null,compatibilityUI=null;
   let dark=pcb,workspace=null,canvas=null,scene=null,modelAssetCache=null,disposed=false,applying=false,crossApplying=false,lastView='',lastFile='';
 
   const own=new URL(chrome.runtime.getURL('browser-viewer.html')),ownOrigin=`${own.protocol}//${own.host}`;
@@ -64,6 +64,7 @@
     const designs=new Map(prepared.design?[[initialFile,prepared.design]]:[]),host=$('drawingHost');globalThis.KiCadUIIcons?.decorate();$('frameControls').hidden=false;
 
     canvas=KiCadOwnedCanvas.mount(host,{dark,pcb,acceleration:preferences.acceleration});status.remove();
+    compatibilityUI=globalThis.KiCadFileCompatibility?.mountStatus($('frameControls'),()=>canvas.design?.compatibility);
 
     const currentFile=()=>canvas.document?.filename||initialFile;
 
@@ -197,7 +198,7 @@
 
       buildSheet(path);
 
-      canvas.setDocument(designs.get(path),path);layers();workspace?.attachCanvas(canvas);workspace?.draw();
+      canvas.setDocument(designs.get(path),path);compatibilityUI?.refresh();layers();workspace?.attachCanvas(canvas);workspace?.draw();
 
       $('engineNotice').textContent=canvas.design.warnings?.join(' ')||'';$('engineNotice').hidden=!$('engineNotice').textContent;updateDiagnostics();
 
@@ -366,7 +367,7 @@
 
   }
 
-  addEventListener('pagehide',()=>{disposed=true;loadController?.abort();loading?.dispose();modelAssetCache?.clear();sheetOverview?.dispose();workspace?.dispose();scene?.dispose();canvas?.dispose();});
+  addEventListener('pagehide',()=>{disposed=true;loadController?.abort();loading?.dispose();modelAssetCache?.clear();sheetOverview?.dispose();compatibilityUI?.dispose();workspace?.dispose();scene?.dispose();canvas?.dispose();});
 
   start().catch(error=>{loading?.hide();if(disposed)return;status.textContent=error.message;status.classList.add('error');if(!status.isConnected)$('drawingHost').append(status);});
 

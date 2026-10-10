@@ -323,3 +323,12 @@ body[data-workspace="true"] #projectButton,body[data-workspace="true"] #viewOppo
 @media(pointer:coarse){#commentsPane .note .inspector-actions button{min-height:40px}}
 .sheet-instance-stacks section>button{display:block;width:100%;text-align:left;margin-top:4px;white-space:normal;font-size:11px;min-height:32px;padding:6px 8px}
 .sheet-instance-stacks section>button[aria-pressed=true]{border-color:var(--accent,#56cbbb);background:var(--raised);font-weight:600}
+
+.compatibility-button{font-size:11px;white-space:nowrap}
+.compatibility-dialog{box-sizing:border-box;max-width:460px;width:calc(100vw - 24px);max-height:80dvh;overflow:auto;padding:18px;background:var(--panel,#182630);color:var(--text,#e7edf2);border:1px solid var(--line,#536572);border-radius:12px}
+.compatibility-dialog::backdrop{background:#0008}
+.compatibility-dialog h2{font-size:16px;margin:0 0 12px}
+.compatibility-dialog p{font-size:12px;line-height:1.6;overflow-wrap:anywhere}
+.compatibility-dialog a{color:var(--accent,#69cddd);display:block;margin:12px 0}
+.compatibility-feature{display:block;width:100%;text-align:left;margin:6px 0;font-size:12px;min-height:36px;white-space:normal}
+.compatibility-feature[data-blocked=true]{color:var(--muted,#aeb9c2);border-style:dashed}
