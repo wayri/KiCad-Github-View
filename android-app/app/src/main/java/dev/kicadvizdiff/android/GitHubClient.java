@@ -206,7 +206,7 @@ final class GitHubClient {
         }
         if (large || request.optBoolean("downloadLarge")) {
             if (!request.optBoolean("downloadLarge")) return new JSONObject().put("downloadRequired", true).put("bytes", sourceBytes).put("repository", repository).put("sha", sha);
-            return diskStore.download(repository, sha, metadata.optBoolean("private"), nodes, (path, target, size) -> downloadFile(repository, sha, path, target, size, metadata.optBoolean("private"), epoch, deadline));
+            return diskStore.download(repository, sha, metadata.optBoolean("private"), nodes, (path, target, size) -> downloadFile(repository, sha, path, target, size, metadata.optBoolean("private"), epoch, deadline),request.optBoolean("temporaryDownload"));
         }
 
         JSONArray files = new JSONArray(), assets = new JSONArray();

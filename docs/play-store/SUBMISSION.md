@@ -4,7 +4,7 @@ Prepared 2026-10-10 for a **new** Play listing. This directory prepares the subm
 
 ## Upload identity and signing
 
-Use package `dev.kicadvizdiff.android`. Confirm this immutable identity before creating the listing. Android release 1.32 uses version code 35; later uploads must increase the code. Enroll in Play App Signing and retain an independent upload key. Do not reuse the development/debug key.
+Use package `dev.kicadvizdiff.android`. Confirm this immutable identity before creating the listing. Android build 1.33 uses version code 36; later uploads must increase the code. Enroll in Play App Signing and retain an independent upload key. Do not reuse the development/debug key.
 
 Create an upload key outside the repository using the JDK's interactive `keytool`; it prompts for passwords rather than putting them into shell history:
 

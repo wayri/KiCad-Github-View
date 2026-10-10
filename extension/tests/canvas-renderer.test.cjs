@@ -30,6 +30,22 @@ function runtime(dpr=1,extra={}){
   const canvas=env.KiCadOwnedCanvas.mount(host,{pcb:true,dark:true});return{canvas,element,operations,listeners};
 }
 
+test('zone fill and outline toggles independently control drawing and picking without changing source',()=>{
+ const {canvas}=runtime();
+ const polygon={type:'polygon',points:[{x:0,y:0},{x:10,y:0},{x:10,y:10},{x:0,y:10}],layer:'F.Cu',uuid:'z'};
+ const fill={...polygon,kind:'zone',fill:true},outline={...polygon,kind:'zone-outline',fill:false,width:.15};
+ const edge={type:'line',points:[{x:20,y:20},{x:30,y:20}],layer:'Edge.Cuts',uuid:'edge'};
+ canvas.setDocument({primitives:[fill,outline,edge],layers:['F.Cu','Edge.Cuts']},'board');
+ canvas.viewport.camera.bbox={x:-2,y:-2,w:40,h:40};
+ const painted=[];canvas.paint=p=>painted.push(p);canvas.setZoneVisibility({filled:false});
+ assert.ok(!painted.includes(fill));assert.ok(painted.includes(outline));assert.ok(painted.includes(edge));
+ assert.ok(!canvas.query({x:5,y:5}).includes(fill));assert.ok(canvas.query({x:0,y:5}).includes(outline));
+ painted.length=0;canvas.setZoneVisibility({filled:true,outlines:false});
+ assert.ok(painted.includes(fill));assert.ok(!painted.includes(outline));assert.ok(canvas.query({x:5,y:5}).includes(fill));
+ assert.ok(!canvas.query({x:0,y:5}).includes(outline));assert.equal(fill.fill,true);assert.equal(outline.fill,false);
+ painted.length=0;canvas.setZoneVisibility({filled:false,outlines:false});assert.ok(painted.includes(edge));assert.ok(!painted.includes(fill)&&!painted.includes(outline));
+ canvas.dispose();
+});
 test('large-board gesture previews skip repeated painting and settle back to the source camera',()=>{
  let frame,timer,painted=0,disposed=false;const {transform}=require('../motion-webgl.js');
  class Motion{constructor(){this.gl={MAX_TEXTURE_SIZE:1,getParameter:()=>4096};}upload(snapshot,saved){this.saved=saved;}show(current){return Boolean(transform(this.saved,current));}hide(){}dispose(){disposed=true;}}

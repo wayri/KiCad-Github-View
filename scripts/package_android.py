@@ -48,7 +48,7 @@ def payload(root=ROOT):
             text = content.decode('utf-8')
             text = text.replace('</head>', '<link rel="stylesheet" href="android.css"></head>')
             text = re.sub(r'<script src=', '<script src="local-project.js"></script><script src="remote-review.js"></script><script src="revision-snapshots.js"></script><script src="runtime.js"></script><script src=', text, count=1)
-            text = text.replace('</body>', '<script src="android-project.js"></script><script src="touch-tooltips.js"></script><script src="resizable-sheets.js"></script><script src="adaptive-ui.js"></script></body>')
+            text = text.replace('</body>', '<script src="android-project.js"></script><script src="touch-tooltips.js"></script><script src="resizable-sheets.js"></script><script src="adaptive-ui.js"></script><script src="presentation.js"></script></body>')
             # Folder HTML is deliberately excluded: it must never execute with a native bridge.
             content = text.encode('utf-8')
         result[name] = content

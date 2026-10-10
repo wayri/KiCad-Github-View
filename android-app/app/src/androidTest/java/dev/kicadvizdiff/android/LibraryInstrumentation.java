@@ -11,6 +11,7 @@ public final class LibraryInstrumentation extends Instrumentation {
     public void onCreate(Bundle args){super.onCreate(args);start();}
     public void onStart(){Bundle result=new Bundle();File sandbox=new File(getTargetContext().getNoBackupFilesDir(),"library-selftest");
         try {
+            delete(sandbox); // Recover only this isolated test directory after an interrupted runner.
             GitHubVault pendingVault = new GitHubVault(getTargetContext(),"auth_selftest_device");
             GitHubVault accountVault = new GitHubVault(getTargetContext(),"auth_selftest");accountVault.clear();pendingVault.clear();
             pendingVault.write(new JSONObject().put("deviceCode","private-device-test").put("userCode","TEST-CODE").put("expiresAt",System.currentTimeMillis()+600000).put("interval",5).toString());
@@ -94,8 +95,45 @@ public final class LibraryInstrumentation extends Instrumentation {
             check(noCopy.getString("storage").equals("Online repository")&&!noCopy.getBoolean("offline"),"removed download still claims local location");
             try{disk.download("owner/test","a".repeat(40),false,nodes,(path,target,size)->{throw new IOException("cancelled");});throw new AssertionError("partial download accepted");}catch(IOException expected){checks++;}
             check(new File(sandbox,"downloaded-projects").listFiles().length==0,"partial download files retained");
-            result.putString("stream","Native library checks passed: "+checks);finish(0,result);
-        }catch(Throwable error){result.putString("stream","Library failure: "+error.toString());finish(1,result);}finally{delete(sandbox);}
+            checks+=GitLabDownloadChecks.run(context);
+            JSONArray tempNodes=new JSONArray().put(new JSONObject().put("type","blob").put("mode","100644").put("path","temp.kicad_pcb").put("size",5));
+            JSONObject temporary=disk.download("test/temp",pinned,false,tempNodes,(path,target,size)->{try(OutputStream output=new FileOutputStream(target)){output.write("hello".getBytes());}},true).getJSONObject("project");
+            check(temporary.optBoolean("temporary")&&temporary.getLong("expiresAt")>System.currentTimeMillis(),"temporary expiry metadata");
+            check(disk.available(temporary),"temporary copy not available");
+            JSONObject tempSaved=store.handle(new JSONObject().put("action","save").put("offline",true).put("remember",true),temporary);
+            JSONObject tempItem=null;for(int i=0;i<tempSaved.getJSONArray("items").length();i++){JSONObject candidate=tempSaved.getJSONArray("items").getJSONObject(i);if(candidate.optBoolean("temporary"))tempItem=candidate;}
+            check(tempItem!=null,"temporary recent entry missing");
+            JSONObject reopenedTemp=store.handle(new JSONObject().put("action","open").put("id",tempItem.getString("id")),null).getJSONObject("project");
+            check(reopenedTemp.optBoolean("temporary"),"reopening lost expiry");
+            JSONObject kept=disk.promote(temporary);check(!kept.optBoolean("temporary")&&disk.available(kept),"temporary promotion failed");
+            JSONObject keptLibrary=store.handle(new JSONObject().put("action","save").put("offline",true),reopenedTemp);
+            check(keptLibrary.getJSONArray("items").length()>0,"Save offline promotion failed");
+            File tempManifest=new File(new File(new File(sandbox,"temporary-projects"),temporary.getString("id")),"manifest.json");
+            temporary.put("expiresAt",System.currentTimeMillis()-1);try(OutputStream output=new FileOutputStream(tempManifest)){output.write(temporary.toString().getBytes(java.nio.charset.StandardCharsets.UTF_8));}
+            check(disk.response(android.net.Uri.parse("https://appassets.androidplatform.net"+temporary.getJSONArray("files").getJSONObject(0).getString("diskPath")))==null,"expired file served");
+            disk.cleanupExpired();check(!tempManifest.getParentFile().exists(),"expired temporary files retained");
+            check(disk.available(kept),"cleanup removed permanent copy");
+            // Update the encrypted snapshot metadata to exercise index expiry pruning.
+            JSONObject expiredCopy=disk.download("test/expiry",pinned,false,tempNodes,(path,target,size)->{try(OutputStream output=new FileOutputStream(target)){output.write("hello".getBytes());}},true).getJSONObject("project");
+            expiredCopy.put("expiresAt",System.currentTimeMillis()-1);
+            try{store.handle(new JSONObject().put("action","save").put("offline",true).put("remember",true),expiredCopy);throw new AssertionError("expired snapshot saved");}catch(Exception expected){checks++;}
+            File quotaSandbox=new File(sandbox,"quota");
+            ContextWrapper quotaContext=new ContextWrapper(getTargetContext()){@Override public File getNoBackupFilesDir(){return quotaSandbox;}};
+            ProjectLibrary quotaLibrary=new ProjectLibrary(quotaContext);DiskProjectStore quotaDisk=new DiskProjectStore(quotaContext);
+            for(int i=0;i<20;i++){JSONObject quotaSource=new JSONObject(source.toString()).put("id","quota"+i);quotaLibrary.handle(new JSONObject().put("action","save").put("provider","local").put("offline",true),quotaSource);}
+            JSONObject quotaTemp=quotaDisk.download("test/quota",pinned,false,tempNodes,(path,target,size)->{try(OutputStream output=new FileOutputStream(target)){output.write("hello".getBytes());}},true).getJSONObject("project");
+            try{quotaLibrary.handle(new JSONObject().put("action","save").put("offline",true),quotaTemp);throw new AssertionError("offline quota bypassed");}catch(IllegalArgumentException expected){check(expected.getMessage().contains("Offline limit"),"unexpected failed-save result");}
+            check(new File(quotaSandbox,"downloaded-projects").listFiles().length==0,"failed promotion left permanent orphan");
+            check(quotaDisk.available(quotaTemp),"failed save erased temporary source");
+            JSONObject shortTemp=disk.download("test/short",pinned,false,tempNodes,(path,target,size)->{try(OutputStream output=new FileOutputStream(target)){output.write("hello".getBytes());}},true).getJSONObject("project");
+            shortTemp.put("expiresAt",System.currentTimeMillis()+1000);File shortManifest=new File(new File(new File(sandbox,"temporary-projects"),shortTemp.getString("id")),"manifest.json");
+            try(OutputStream output=new FileOutputStream(shortManifest)){output.write(shortTemp.toString().getBytes(java.nio.charset.StandardCharsets.UTF_8));}
+            store.handle(new JSONObject().put("action","save").put("offline",true).put("remember",true),shortTemp);
+            Thread.sleep(1250);JSONObject afterExpiry=store.handle(new JSONObject().put("action","list"),null);
+            for(int i=0;i<afterExpiry.getJSONArray("items").length();i++)check(!afterExpiry.getJSONArray("items").getJSONObject(i).optString("repository").equals("test/short"),"expired recent entry retained");
+            check(!shortManifest.getParentFile().exists(),"expired source directory retained after library cleanup");
+            delete(sandbox);result.putString("stream","Native library checks passed: "+checks);finish(0,result);
+        }catch(Throwable error){delete(sandbox);result.putString("stream","Library failure: "+error.toString());finish(1,result);}finally{delete(sandbox);}
     }
     void delete(File file){if(file.isDirectory()){File[] children=file.listFiles();if(children!=null)for(File child:children)delete(child);}file.delete();}
 }

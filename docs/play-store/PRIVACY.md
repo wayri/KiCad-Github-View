@@ -18,7 +18,7 @@ The Android app's built-in repository and authentication requests use HTTPS. Ext
 
 ## Storage and security
 
-Account credentials are encrypted using a device-backed AndroidKeyStore key and are not passed into the viewer's JavaScript. Ordinary saved library snapshots use separate encrypted storage. Large downloaded project copies use private app storage **without file encryption**. Exported project ZIPs and exported BoM files are ordinary unencrypted files. Protect your device and exported private projects accordingly.
+Account credentials are encrypted using a device-backed AndroidKeyStore key and are not passed into the viewer's JavaScript. Ordinary saved library snapshots use separate encrypted storage. Large downloaded project copies use private app storage **without file encryption**. Temporary downloaded copies are also unencrypted and have a fixed six-hour expiry. Android background cleanup may be delayed, but expired copies cannot be reopened. Choose Save offline to keep a permanent copy before expiry. Exported project ZIPs and exported BoM files are ordinary unencrypted files. Protect your device and exported private projects accordingly.
 
 Android backup is disabled for this app. Encryption keys depend on the installation and are not a portable backup. Project content remains sensitive even when it is in private app storage.
 

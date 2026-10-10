@@ -286,3 +286,40 @@ body[data-workspace="true"] #projectButton,body[data-workspace="true"] #viewOppo
 #sheetOverview>header small{font-size:11px;opacity:.65;flex-basis:100%}
 .sheet-shared-canvas{position:relative;flex:1;min-height:0;touch-action:none}
 .sheet-shared-canvas canvas{display:block}
+.sheet-instance-stacks{position:relative;font-size:11px}
+.sheet-instance-stacks>summary{cursor:pointer;padding:6px 8px;border:1px solid var(--line);border-radius:5px;background:var(--panel)}
+.sheet-instance-stacks>div{position:absolute;top:100%;left:0;z-index:10;width:min(320px,70vw);max-height:220px;overflow:auto;padding:10px;border:1px solid var(--line);border-radius:6px;background:var(--panel);color:var(--text);box-shadow:0 4px 16px #0004}
+.sheet-instance-stacks section+section{margin-top:10px;padding-top:9px;border-top:1px solid var(--line)}
+.sheet-instance-stacks p{margin-top:4px;white-space:pre-wrap;overflow-wrap:anywhere;line-height:1.6;color:var(--muted)}
+
+/* Readable inspection: give long part values the full panel width. */
+#propertiesPane .property-group{padding:0;margin:8px 0 12px;border-radius:8px}
+#propertiesPane .property-group>summary{padding:8px 10px;font-weight:600;letter-spacing:0;cursor:pointer}
+#propertiesPane .property-group dl{display:grid;grid-template-columns:minmax(0,1fr);gap:0;padding:0 10px;margin:0}
+#propertiesPane .property-group dt{padding:8px 0 1px;border:0;font-size:11px;line-height:1.4;color:var(--muted)}
+#propertiesPane .property-group dd{padding:1px 0 9px;margin:0;font-size:12px;line-height:1.6;border-bottom:1px solid var(--line);white-space:pre-wrap;overflow-wrap:anywhere;user-select:text}
+#propertiesPane .property-group dd:last-child{border-bottom:0}
+#propertiesPane .property-searchbar{padding:6px 0 9px}
+#propertiesPane .selection-heading{padding:3px 0 7px}
+#propertiesPane .selection-heading h2{font-size:16px;line-height:1.4}
+#propertiesPane .net-sheet-link{display:flex;width:100%;margin-top:4px;justify-content:flex-start;text-align:left;white-space:normal;overflow-wrap:anywhere}
+
+/* Comments emphasise the message; metadata and actions stay quieter. */
+#commentsPane .comment-list{gap:10px}
+#commentsPane .note{padding:12px;border-radius:8px;box-shadow:none}
+#commentsPane .note>h3{font-size:14px;font-weight:650;line-height:1.4;margin:0 0 5px;letter-spacing:0;color:var(--text)}
+#commentsPane .note>strong{font-size:10px;font-weight:550;letter-spacing:.025em;color:var(--muted)}
+#commentsPane .note>p,.thread-message-body{font-size:13px;line-height:1.65;margin:9px 0 11px;white-space:pre-wrap;overflow-wrap:anywhere}
+#commentsPane .note>small{font-size:10px;line-height:1.6;color:var(--muted)}
+#commentsPane .note img{margin:10px 0;border-radius:6px}
+#commentsPane .note .inspector-actions{gap:5px;margin:10px 0 0;padding-top:9px;border-top:1px solid var(--line)}
+#commentsPane .note .inspector-actions button{font-size:11px;padding:4px 7px;min-height:29px;background:transparent;white-space:normal}
+#commentsPane .note .inspector-actions button:hover{background:var(--raised)}
+.thread-message{padding:12px 0}
+.thread-message>strong{font-size:12px;line-height:1.5}
+.thread-message>small{font-size:10px;color:var(--muted);line-height:1.6}
+.thread-reply{margin-left:9px;padding-left:10px}
+#commentText{min-height:112px;line-height:1.6}
+@media(pointer:coarse){#commentsPane .note .inspector-actions button{min-height:40px}}
+.sheet-instance-stacks section>button{display:block;width:100%;text-align:left;margin-top:4px;white-space:normal;font-size:11px;min-height:32px;padding:6px 8px}
+.sheet-instance-stacks section>button[aria-pressed=true]{border-color:var(--accent,#56cbbb);background:var(--raised);font-weight:600}

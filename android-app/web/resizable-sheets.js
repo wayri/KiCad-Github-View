@@ -14,7 +14,7 @@
   const registered=new Map();
   const viewport=()=>viewportGeometry(host).height;
   const mobile=()=>host.innerWidth<600;
-  const targets='dialog,.touch-net-picker,#objectMenu,#designNavigator,#designInspector,#commentsSidebar,.viewer-settings,#ruleWindow';
+  const targets='dialog:not(#androidQuickStart),.touch-net-picker,#objectMenu,#designNavigator,#designInspector,#commentsSidebar,.viewer-settings,#ruleWindow';
   function attach(panel){
    if(registered.has(panel)){if(!panel.classList.contains?.('android-resizable-sheet'))panel.classList.add('android-resizable-sheet');const state=registered.get(panel);if(![...panel.children].includes(state.handle))panel.prepend(state.handle);return;}
    panel.classList.add('android-resizable-sheet');

@@ -3,7 +3,8 @@
  'use strict';
  const sizeClass=width=>width<600?'compact':width<840?'medium':'expanded';
  const hasParentWorkspace=host=>{try{for(let frame=host.parent,depth=0;frame&&frame!==host&&depth<8;frame=frame.parent,depth++){if(frame.document?.getElementById('androidWorkspaceHeader'))return true;if(frame.parent===frame)break;}}catch{}return false;};
- const API={sizeClass,hasParentWorkspace};root.KiCadAndroidUI=API;
+ const isField=node=>Boolean(node?.closest?.('input,textarea,select,output,[contenteditable=true]'));
+ const API={sizeClass,hasParentWorkspace,isField};root.KiCadAndroidUI=API;
  if(typeof module==='object'&&module.exports)module.exports=API;
  if(!root.document)return;
  const d=root.document,$=id=>d.getElementById(id),make=(tag,text)=>{const n=d.createElement(tag);if(text)n.textContent=text;return n;};
@@ -18,6 +19,7 @@
  function showPane(id,trigger){for(const modal of d.querySelectorAll('dialog[open]'))modal.close();if(sizeClass(root.innerWidth)!=='expanded')closePanes(id);if($(id)?.hidden)$(trigger)?.click();if(sizeClass(root.innerWidth)!=='expanded'){const pin=panes.find(p=>p[0]===id)?.[2];if($(pin)?.getAttribute('aria-pressed')==='false')$(pin).click();}}
  API.handleBack=()=>{
   if(root.KiCadAndroidTooltips?.dismiss?.())return true;
+  if(root.top?.KiCadAndroidPresentation?.stop?.())return true;
   const modal=[...d.querySelectorAll('dialog[open]')].at(-1);if(modal){modal.close();return true;}
   for(const frame of [...d.querySelectorAll('iframe')].reverse())if(visible(frame)){try{if(frame.contentWindow.KiCadAndroidUI?.handleBack())return true;}catch{}}
   if(visible($('ruleWindow'))){$('closeRuleWindow')?.click();return true;}
@@ -38,16 +40,28 @@
   if(!d.body.classList.contains('android-home'))return;
   const header=d.querySelector('body>header'),title=header.querySelector('strong');title.id='appTitle';
   const menu=sheet('appMenuDialog','Library and accounts');API.openMenu=()=>openSheet(menu.dialog);
-  const privacy=sheet('androidPrivacyDialog','Privacy');const policy=make('iframe');policy.title='Pocket KiVi privacy policy';policy.src='privacy.html';policy.setAttribute('sandbox','');policy.style.cssText='width:100%;height:65vh;border:0;background:white;';privacy.content.append(policy);menu.content.append(button('Privacy policy',()=>openSheet(privacy.dialog)));
+  const privacy=sheet('androidPrivacyDialog','Privacy');const policy=make('iframe');policy.title='Pocket KiVi privacy policy';policy.src='privacy.html';policy.setAttribute('sandbox','');policy.style.cssText='width:100%;height:65vh;border:0;background:white;';privacy.content.append(policy);const privacyButton=button('Privacy policy',()=>openSheet(privacy.dialog));privacyButton.id='androidPrivacyButton';menu.content.append(privacyButton);
   header.prepend(button('Menu',API.openMenu));header.firstChild.id='appMenuButton';
   const globalHeading=make('h3','Open a project');globalHeading.className='android-menu-group-title';menu.content.append(globalHeading);for(const id of ['openFiles','openFolder'])menu.content.append($(id));const accountHeading=make('h3','Online accounts');accountHeading.className='android-menu-group-title';menu.content.append(accountHeading);for(const id of ['githubButton','gitlabButton'])menu.content.append($(id));
   for(const id of ['githubButton','gitlabButton'])$(id).addEventListener('click',()=>menu.dialog.close());
   for(const id of ['openFiles','openFolder'])$(id).addEventListener('click',()=>menu.dialog.close());
-  const cloud=button('Open from Drive or cloud storage',()=>{$('openFiles').click();});cloud.id='cloudOpen';menu.content.append(cloud,make('p','Choose Drive or another storage provider in Android’s file picker. For a complete cloud project, open its ZIP archive.'));const copy=button('Download project to device',()=>API.downloadProject());copy.id='downloadProject';const projectMenu=sheet('androidProjectActionsSheet','This project');const contextHeading=make('p','Actions apply only to the project you are viewing.');contextHeading.className='hint';projectMenu.content.append(contextHeading,$('projectPicker'),button('Bookmark project',()=>root.KiCadAndroidLibrary?.saveCurrent(false)),button('Save offline in app',()=>root.KiCadAndroidLibrary?.saveCurrent(true)),copy);API.openProjectActions=()=>{if(!root.KiCadAndroidProject)return;menu.dialog.close();openSheet(projectMenu.dialog);};
+  const cloud=button('Open from Drive or cloud storage',()=>{$('openFiles').click();});cloud.id='cloudOpen';menu.content.append(cloud,make('p','Choose Drive or another storage provider in the Android file picker. For a complete cloud project, open its ZIP archive.'));menu.content.insertBefore(cloud,accountHeading);menu.content.append(privacyButton);const copy=button('Download project to device',()=>API.downloadProject());copy.id='downloadProject';const projectMenu=sheet('androidProjectActionsSheet','This project');const contextHeading=make('p','Actions apply only to the project you are viewing.');contextHeading.className='hint';projectMenu.content.append(contextHeading,$('projectPicker'),button('Bookmark project',()=>root.KiCadAndroidLibrary?.saveCurrent(false)),button('Save offline in app',()=>root.KiCadAndroidLibrary?.saveCurrent(true)),copy);API.openProjectActions=()=>{if(!root.KiCadAndroidProject)return;menu.dialog.close();openSheet(projectMenu.dialog);};
+  const tempCopy=button('Temporary download (6 hours)',()=>{const project=root.KiCadAndroidProject,remote=project?.remote||project?.github;if(!remote)return;projectMenu.dialog.close();const source={...remote,ref:remote.sha,temporaryDownload:true};(project.remote?root.KiCadAndroidGitLab:root.KiCadAndroidGitHub)?.openProject(source);});tempCopy.id='temporaryProjectDownload';projectMenu.content.append(tempCopy);
   API.downloadProject=()=>{if(!root.KiCadAndroidProject)return;menu.dialog.close();projectMenu.dialog.close();if(root.AndroidKiCad?.downloadProject)root.AndroidKiCad.downloadProject();else $('importStatus').textContent='Saving ZIP files is available in the installed Android app.';};
   const loading=make('section');loading.id='androidLoadingScreen';loading.hidden=true;loading.setAttribute('role','status');loading.setAttribute('aria-live','polite');const spinner=make('span');spinner.className='android-spinner';spinner.setAttribute('aria-hidden','true');const message=make('p');message.id='androidLoadingMessage';loading.append(spinner,make('strong','Preparing your project'),message);d.body.append(loading);API.loading=text=>{message.textContent=text||'';loading.hidden=!text;$('viewer').setAttribute('aria-busy',String(Boolean(text)));};
   const welcome=$('welcome'),actions=make('div');actions.className='android-welcome-actions';actions.append(button('Open a project folder',()=> $('openFolder').click()),button('Open a file',()=> $('openFiles').click()),button('GitHub projects',()=> $('githubButton').click()),button('GitLab projects',()=> $('gitlabButton').click()),button('Drive / cloud file',()=>cloud.click()));welcome.append(actions);
-  const update=()=>{const opened=!$('viewer').hidden;d.body.classList.toggle('android-viewing',opened);copy.disabled=!root.KiCadAndroidProject;const p=root.KiCadAndroidProject;title.textContent=p?.name||'Pocket KiVi';};new MutationObserver(update).observe($('viewer'),{attributes:true,attributeFilter:['hidden','src']});update();
+  for(const provider of ['github','gitlab']){
+   const content=$(provider+'Dialog').querySelector('.github-content'),repository=$(provider+'Repository').closest('label'),ref=$(provider+'Ref').closest('label');
+   const advanced=make('details');advanced.className='android-repository-options';advanced.append(make('summary','Branch or revision'),ref);
+   const intro=make('p','Paste a project link to view it. Connect an account below for private projects and publishing.');intro.className='github-help';
+   const heading=make('h3','Account access');heading.className='android-menu-group-title';
+   const account=$(provider+'Account');content.insertBefore(heading,account);
+   // Keep all original handlers and IDs, including progress and account state.
+   const first=content.firstChild;for(const node of [intro,repository,advanced,$(provider+'Add'),$(provider+'Status'),$(provider+'Spinner')])content.insertBefore(node,first);
+   const scopeHelp=[...content.children].find(node=>node.classList?.contains('github-help')&&node!==intro);
+   if(scopeHelp){const info=make('details');info.append(make('summary','Permissions and privacy'),scopeHelp);content.insertBefore(info,account.nextElementSibling?.nextElementSibling||null);}
+  }
+  const update=()=>{const opened=!$('viewer').hidden;d.body.classList.toggle('android-viewing',opened);copy.disabled=!root.KiCadAndroidProject;tempCopy.disabled=!(root.KiCadAndroidProject?.github||root.KiCadAndroidProject?.remote);const p=root.KiCadAndroidProject;title.textContent=p?.name||'Pocket KiVi';};new MutationObserver(update).observe($('viewer'),{attributes:true,attributeFilter:['hidden','src']});update();
  }
  function drawing(){
   if(!$('frameControls')||$('androidViewToolbar')||!$('universalSearch'))return;
@@ -76,7 +90,9 @@
   tools.content.append(button('Copy drawing text',()=>root.dispatchEvent(new Event('kicad:request-drawing-text'))));
   // Include remaining commands, without the redundant desktop identity / controls.
   for(const b of [...$('frameControls').querySelectorAll('button')])if(!['partsButton','propertiesButton','commentsButton','fitDrawing','reviewToolsButton','focusView','allSheetPagesButton'].includes(b.id))tools.content.append(b);
-  const help=make('details');help.className='android-tool-help';help.append(make('summary','Touch controls'),make('p','Select chooses Smart, Part or Net. Highlight adds items to a group. Hold the drawing for comments and net actions; double-tap a sheet to enter it.'));tools.content.append(help);tools.content.addEventListener('click',e=>{if(e.target.closest('button'))tools.dialog.close();});
+  const help=make('details');help.className='android-tool-help';help.append(make('summary','Touch controls'),make('p','Select chooses Smart, Part or Net. Highlight adds items to a group. Hold the drawing for comments and net actions; double-tap a sheet to enter it.'));tools.content.append(help);
+  // Close only launch actions. Toggles, navigation and field controls stay available.
+  shortcuts.addEventListener('click',e=>{if(e.target.closest('button'))tools.dialog.close();});
   const actions=make('div');actions.className='android-comment-actions';actions.addEventListener('pointerdown',event=>{if(sizeClass(root.innerWidth)==='compact'&&d.activeElement===$('commentText')&&event.target.closest?.('button'))event.preventDefault();});for(const id of ['commentPostRow','saveComment','cancelComment'])if($(id))actions.append($(id));$('commentEditor').append(actions);
   exitDraft=sheet('androidDraftExit','Unsaved comment');exitDraft.content.append(make('p','Save this comment as a local draft before leaving, or discard it.'),button('Keep editing',()=>{exitDraft.dialog.close();showPane('commentsSidebar','commentsButton');$('commentText').focus();}),button('Save draft',()=>{exitDraft.dialog.close();showPane('commentsSidebar','commentsButton');$('saveComment').click();}),button('Discard draft',()=>{$('cancelComment').click();exitDraft.dialog.close();}));
   $('addCommentTab')?.addEventListener('click',()=>{if($('commentEditor').hidden)$('newComment').click();});
@@ -106,10 +122,12 @@
   d.addEventListener('pointerdown',event=>{if(!strip.contains(event.target)){strip.classList.remove('layers-expanded');strip.querySelector('#androidLayerToggle')?.setAttribute('aria-expanded','false');}},true);}update();
  }
  const resize=()=>d.body.dataset.size=sizeClass(root.innerWidth);
- const preparedGroups=new WeakSet();function propertyBasics(){if($('allSheetPagesButton'))$('allSheetPagesButton').hidden=true;if($('androidAllSheetsButton'))$('androidAllSheetsButton').hidden=!root.KiCadSheetOverview;if(sizeClass(root.innerWidth)!=='compact')return;for(const group of d.querySelectorAll('#propertyList details'))if(!preparedGroups.has(group)){preparedGroups.add(group);const title=group.querySelector('summary')?.textContent||'';group.open=/^(Identity|Electrical|Connected nets)$/.test(title);}}
+ const preparedGroups=new WeakSet();function propertyBasics(){const all=$('allSheetPagesButton'),toolbar=$('androidViewToolbar');if(all&&toolbar){all.hidden=false;if(all.parentElement!==toolbar){all.classList.add('android-all-sheets');all.title='Toggle all schematic sheets on one canvas';all.setAttribute('aria-label','Toggle all sheets');toolbar.insertBefore(all,toolbar.lastElementChild);}}if($('androidAllSheetsButton'))$('androidAllSheetsButton').hidden=!root.KiCadSheetOverview;if(sizeClass(root.innerWidth)!=='compact')return;for(const group of d.querySelectorAll('#propertyList details'))if(!preparedGroups.has(group)){preparedGroups.add(group);const title=group.querySelector('summary')?.textContent||'';group.open=/^(Identity|Electrical|Connected nets)$/.test(title);}}
  function init(){
   d.addEventListener('click',event=>{const modal=event.target;if(modal?.tagName!=='DIALOG'||!modal.open||modal.classList.contains('library-confirm')||modal.id==='androidDraftExit')return;const r=modal.getBoundingClientRect();if(event.clientX<r.left||event.clientX>r.right||event.clientY<r.top||event.clientY>r.bottom)modal.close();});
-  d.addEventListener('pointerdown',event=>{if(sizeClass(root.innerWidth)==='expanded')return;for(const[id,close]of panes){const pane=$(id);if(visible(pane)&&!pane.contains(event.target)&&!event.target.closest?.('button,dialog,[role=dialog]'))$(close)?.click();}},true);
+  d.addEventListener('pointerdown',event=>{if(sizeClass(root.innerWidth)==='expanded'||isField(event.target))return;for(const[id,close]of panes){const pane=$(id);if(visible(pane)&&!pane.contains(event.target)&&!event.target.closest?.('button,dialog,[role=dialog]'))$(close)?.click();}},true);
+  // A field tap must never bubble into drawing selection or outside-dismiss handlers.
+  for(const type of ['click','dblclick','contextmenu'])d.addEventListener(type,event=>{if(isField(event.target))event.stopPropagation();});
   resize();shell();drawing();workspace();workspaceActions();compactLayers();root.KiCadAndroidProjectUI?.mount();let queued=false;new MutationObserver(()=>{if(queued)return;queued=true;queueMicrotask(()=>{queued=false;drawing();workspace();workspaceActions();compactLayers();propertyBasics();});}).observe(d.body,{childList:true,subtree:true});root.addEventListener('resize',resize);d.addEventListener('keydown',e=>{if(e.key==='Escape'&&API.handleBack()){e.preventDefault();e.stopPropagation();}},true);}
  if(d.readyState==='loading')d.addEventListener('DOMContentLoaded',init,{once:true});else init();
 })(globalThis);

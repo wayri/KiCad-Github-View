@@ -13,6 +13,8 @@ import org.json.JSONObject;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.File;
+import java.io.FileOutputStream;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.nio.charset.CodingErrorAction;
@@ -21,6 +23,8 @@ import java.util.ArrayDeque;
 import java.util.HashSet;
 import java.util.Locale;
 import java.util.Set;
+import java.util.Map;
+import java.util.LinkedHashMap;
 
 final class ProjectImporter {
     static final int MAX_FILE_BYTES = 32 * 1024 * 1024;
@@ -57,6 +61,57 @@ final class ProjectImporter {
 
     private ProjectImporter() { }
 
+    static JSONObject readDisk(ContentResolver resolver, File cacheDirectory, DiskProjectStore store,
+                               Uri uri, boolean folder, Cancelled cancelled, boolean temporary) throws Exception {
+        JSONObject metadata=new JSONObject().put("sourceId",sourceId(uri)).put("local",true);
+        if(!folder) {
+            Entry selected=querySingle(resolver,uri);
+            if(selected.path.toLowerCase(Locale.ROOT).endsWith(".zip")) {
+                File archive=File.createTempFile("project-import-",".zip",cacheDirectory);
+                try {
+                    try(InputStream input=resolver.openInputStream(uri)) {
+                        if(input==null)throw new IOException("Cannot open selected ZIP");
+                        ZipProjectReader.stage(input,archive,cancelled::get);
+                    }
+                    JSONObject[] result=new JSONObject[1];
+                    ZipProjectReader.readDisk(archive,cancelled::get,path->isText(path)||isAsset(path),(members,extractor)-> {
+                        JSONArray nodes=new JSONArray();
+                        for(ZipProjectReader.Member member:members)nodes.put(diskNode(member.path,member.size));
+                        result[0]=store.importProject(selected.path,nodes,(path,target,size)->extractor.extract(path,target),metadata,temporary);
+                    });
+                    return result[0];
+                } finally { if(!archive.delete())archive.deleteOnExit(); }
+            }
+        }
+        Map<String,Entry> entries=new LinkedHashMap<>();
+        if(folder)walkTree(resolver,uri,cancelled,entry->collectDiskEntry(entries,entry));
+        else collectDiskEntry(entries,querySingle(resolver,uri));
+        JSONArray nodes=new JSONArray();for(Entry entry:entries.values())nodes.put(diskNode(entry.path,entry.size));
+        return store.importProject(folder?"Local project":querySingle(resolver,uri).path,nodes,(path,target,size)-> {
+            Entry entry=entries.get(path);if(entry==null)throw new IOException("Unknown selected file");
+            try(InputStream input=resolver.openInputStream(entry.uri); FileOutputStream output=new FileOutputStream(target)) {
+                if(input==null)throw new IOException("Cannot open selected file");
+                byte[] buffer=new byte[65536];long bytes=0;int n;
+                while((n=input.read(buffer))!=-1) {
+                    checkCancelled(cancelled);bytes+=n;
+                    if(bytes>DiskProjectStore.FILE_LIMIT)throw new IOException("File exceeds 256 MiB: "+path);
+                    output.write(buffer,0,n);
+                }
+            }
+        },metadata,temporary);
+    }
+
+    private static JSONObject diskNode(String path,long size) throws Exception {
+        return new JSONObject().put("path",path).put("type","blob").put("mode","100644").put("size",size);
+    }
+    private static void collectDiskEntry(Map<String,Entry> entries,Entry entry) throws IOException {
+        if(!isText(entry.path)&&!isAsset(entry.path))return;
+        if(entries.size()>=MAX_FILES)throw new IOException("Too many KiCad files (limit 2000)");
+        for(String path:entries.keySet())if(path.equalsIgnoreCase(entry.path))throw new IOException("Duplicate file path: "+entry.path);
+        entries.put(entry.path,entry);
+    }
+    private interface TreeSink { void accept(Entry entry) throws Exception; }
+
     static JSONObject read(ContentResolver resolver, java.io.File cacheDirectory, Uri uri, boolean folder,
                            Cancelled cancelled) throws Exception {
         JSONArray files = new JSONArray();
@@ -84,6 +139,11 @@ final class ProjectImporter {
     private static void readTree(ContentResolver resolver, Uri treeUri, Cancelled cancelled,
                                  JSONArray files, JSONArray assets, Set<String> paths,
                                  int[] counts) throws Exception {
+        walkTree(resolver,treeUri,cancelled,entry->addFile(resolver,entry,cancelled,files,assets,paths,counts));
+    }
+
+    private static void walkTree(ContentResolver resolver, Uri treeUri, Cancelled cancelled,
+                                 TreeSink sink) throws Exception {
         if (!DocumentsContract.isTreeUri(treeUri)) throw new IOException("Invalid folder selection");
         String rootId = DocumentsContract.getTreeDocumentId(treeUri);
         Uri rootUri = DocumentsContract.buildDocumentUriUsingTree(treeUri, rootId);
@@ -119,7 +179,7 @@ final class ProjectImporter {
                     if (isDirectory) {
                         queue.addLast(child);
                     } else {
-                        addFile(resolver, child, cancelled, files, assets, paths, counts);
+                        sink.accept(child);
                     }
                 }
             }

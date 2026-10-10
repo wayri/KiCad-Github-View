@@ -27,3 +27,7 @@ test('library bridge correlates replies, rejects errors, and fails without nativ
  const bad=api.request({action:'open',id:'abc'});api.reply(request.id,{ok:false,error:'Copy unavailable'});await assert.rejects(bad,/Copy unavailable/);
  await assert.rejects(bridge(()=>null).request({action:'list'}),/updated Android/);
 });
+test('temporary library metadata and source indicators never imply permanent offline storage',()=>{
+ const expiresAt=Date.now()+3600000,meta=metadata({temporary:true,diskBacked:true,offline:true,libraryId:'a'.repeat(64),expiresAt,github:{repository:'wayri/Marble',sha:'a'.repeat(40)},files:[{path:'board.kicad_pcb'}]});
+ assert.equal(meta.temporary,true);assert.equal(meta.expiresAt,expiresAt);assert.equal(meta.provider,'github');assert.match(availability(meta),/^Temporary · expires/);assert.equal(availability({...meta,expiresAt:Date.now()-1}),'Temporary · expired');
+});

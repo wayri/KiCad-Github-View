@@ -28,3 +28,10 @@ test('Explicit large download gets enough bridge time without extending ordinary
  const ordinary=api.request({type:'import'}),large=api.request({type:'import',downloadLarge:true}),auth=api.request({type:'auth-status'});
  assert.deepEqual(durations,[600000,2100000,60000]);for(const id of sent)api.reply(id,{ok:true,result:{}});await Promise.all([ordinary,large,auth]);
 });
+const {chooseDownload}=require('../../android-app/web/github.js');
+test('large project chooser distinguishes permanent, temporary and cancellation',async()=>{
+ for(const [label,expected]of [['Download and keep','keep'],['Temporary (6 hours)','temporary'],['Cancel',null]]){
+  const nodes=[];const document={createElement:tag=>{const n={tag,children:[],append(...children){this.children.push(...children);},addEventListener(type,fn){this[type]=fn;},showModal(){this.open=true;},close(){this.open=false;},remove(){this.removed=true;}};nodes.push(n);return n;},body:{append(){}}};
+  const pending=chooseDownload({bytes:50*1048576},document);const dialog=nodes.find(n=>n.tag==='dialog');nodes.find(n=>n.textContent===label).onclick();assert.equal(await pending,expected);assert.equal(dialog.removed,true);assert.equal(dialog.open,false);assert.match(nodes.find(n=>n.tag==='p').textContent,/Android may delay physical cleanup/);
+ }
+});

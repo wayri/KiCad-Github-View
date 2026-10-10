@@ -66,3 +66,10 @@ test('disk manifests refuse external URLs, oversized files and oversized combine
 test('local project retains its bounded display name for the compact header',()=>{
  const project=local.validate({id:'named',name:'Marble board',files:[{path:'root.kicad_sch',content:'(kicad_sch)'}]});assert.equal(project.name,'Marble board');
 });
+test('temporary disk projects preserve expiry and prevent stale or substituted paths',async()=>{
+ const entry={path:'main.kicad_pcb',size:50*1024*1024,diskPath:'/assets/viewer/temporary-downloads/'+ 'b'.repeat(32)+'/0'};
+ const input={id:'temp',temporary:true,diskBacked:true,expiresAt:Date.now()+3600000,files:[entry],assets:[]};
+ const project=local.validate(input);assert.equal(project.temporary,true);assert.equal(project.expiresAt,input.expiresAt);
+ for(const patch of [{expiresAt:Date.now()-1},{diskBacked:false},{files:[{...entry,diskPath:entry.diskPath.replace('temporary-downloads','downloaded')}]},{files:[{...entry,diskPath:'/assets/viewer/temporary-downloads/../0'}]}])assert.throws(()=>local.validate({...input,...patch}));
+ project.expiresAt=Date.now()-1;const transport=local.transport(project,{getItem:()=>null,setItem(){}});assert.match((await transport.send({type:'project-file',file:entry.path})).error,/expired/);
+});

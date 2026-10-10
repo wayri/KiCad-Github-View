@@ -127,9 +127,11 @@
         for(const layer of copper)add(layer,'Show only '+layer,()=>{canvas.focusLayer(layer,'isolate');$('layerFocusMode').value='isolate';},KiCadPCBRenderer.colorFor?.(layer)||'#8c9cab');
         add('All','Show all saved board layers',()=>canvas.layerPreset('all'));
         add('Overview','Restore layer view before focusing',()=>canvas.restoreLayers());
+        add('Filled copper','Toggle saved filled copper zones',()=>canvas.setZoneVisibility({filled:canvas.showFilledCopper===false}));
+        add('Zone outlines','Toggle saved zone boundary outlines',()=>canvas.setZoneVisibility({outlines:canvas.showZoneOutlines===false}));
       }
       for(const [name,button] of floatingButtons){
-        const selected=name==='All'?!canvas.focusedLayer&&(canvas.design.layers||[]).every(layer=>canvas.visibleLayers.has(layer)):name==='Overview'?!canvas.focusedLayer&&!canvas.layerSnapshot:canvas.focusedLayer===name;
+        const selected=name==='Filled copper'?canvas.showFilledCopper!==false:name==='Zone outlines'?canvas.showZoneOutlines!==false:name==='All'?!canvas.focusedLayer&&(canvas.design.layers||[]).every(layer=>canvas.visibleLayers.has(layer)):name==='Overview'?!canvas.focusedLayer&&!canvas.layerSnapshot:canvas.focusedLayer===name;
         button.setAttribute('aria-pressed',String(selected));
       }
       if(floatingToggle)floatingToggle.textContent=canvas.focusedLayer||'Layers';
@@ -214,22 +216,28 @@
       onCommentsChanged(){if(globalThis.KiCadVSCodeBridge?.onCommentsChanged)globalThis.KiCadVSCodeBridge.onCommentsChanged();else parent.postMessage({type:'kicad-review:comments-changed'},ownOrigin);},pullNumber:Number(params.get('pullNumber'))||null,pullRepository:params.get('pullRepository')||repository});
 
     workspace.attachCanvas(canvas);openSheet(initialFile);loading?.hide();
-    if(!pcb&&globalThis.KiCadAndroidUI){
+    if(!pcb){
       const gallery=document.createElement('section');gallery.id='sheetOverview';gallery.hidden=true;gallery.setAttribute('aria-label','All schematic sheets');host.append(gallery);
       const heading=document.createElement('header'),title=document.createElement('strong'),back=document.createElement('button'),clear=document.createElement('button'),fitAll=document.createElement('button'),help=document.createElement('small');
       title.textContent='All sheets';back.type=clear.type=fitAll.type='button';back.textContent='Single sheet';clear.textContent='Show all sheets';fitAll.textContent='Fit';clear.hidden=true;clear.onclick=()=>$('clearHighlights').click();heading.append(title,back,clear,fitAll,help);gallery.append(heading);
+      const stacks=document.createElement('details'),stackTitle=document.createElement('summary'),stackList=document.createElement('div');stacks.className='sheet-instance-stacks';stackTitle.textContent='Repeated sheets';stacks.append(stackTitle,stackList);heading.insertBefore(stacks,help);
       const surface=document.createElement('div');surface.className='sheet-shared-canvas';gallery.append(surface);
-      let overviewView=null,opened=false,ticket=0,composition=null;
+      let overviewView=null,opened=false,ticket=0,composition=null;const frontInstances=new Map();
       const fitOverview=()=>{if(!overviewView||!composition)return;overviewView.resize();overviewView.viewport.camera.bbox={x:-12,y:-4,w:composition.design.page.width+12,h:composition.design.page.height+4};overviewView.draw();};
       const rebuild=async()=>{
         const generation=++ticket,entries=workspace.overviewSheets().filter(entry=>entry.sheet);
         const active=entries.some(entry=>workspace.overviewSelection(entry.sheet.path).netActive);clear.hidden=!active;
-        help.textContent='Drag to pan · pinch to zoom · tap a net · double-tap a sheet to enter';
+        const limits=entries.flatMap(e=>workspace.overviewSelection(e.sheet.path).limits||[]);
+        help.textContent=(active?'Connected sheets only · ':'')+'Pan and zoom · select a net · double-click/tap a sheet to enter'+(entries.some(e=>e.instanceCount>1)?' · Choose a placement in Repeated sheets.':'')+(entries.some(e=>e.instanceTruncated)?' · Instance counts capped at 4,096 placements.':'')+(limits.length?' · '+[...new Set(limits)].join(' '):'');
         const shown=active?entries.filter(entry=>workspace.overviewSelection(entry.sheet.path).netIds.length):entries,rendered=[];
+        const repeated=shown.filter(entry=>entry.instanceCount>1);stacks.hidden=!repeated.length;stackList.replaceChildren();
+        for(const entry of repeated){const group=document.createElement('section'),name=document.createElement('strong');name.textContent=`${entry.sheet.path} · ${entry.instanceCount} instances`;group.append(name);const selection=workspace.overviewSelection(entry.sheet.path),placements=(entry.placements||[]).filter(p=>!active||!selection.instanceIds?.length||selection.instanceIds.includes(p.id));for(const placement of placements.slice(0,256)){const choice=document.createElement('button');choice.type='button';choice.textContent=placement.label;choice.setAttribute('aria-pressed',String((frontInstances.get(entry.sheet.path)||placements[0]?.id)===placement.id));choice.onclick=()=>{frontInstances.set(entry.sheet.path,placement.id);rebuild();};group.append(choice);}if(placements.length>256){const note=document.createElement('p');note.textContent='First 256 placements shown.';group.append(note);}stackList.append(group);}
         for(const entry of shown){
           await new Promise(resolve=>setTimeout(resolve,0));if(!opened||generation!==ticket)return;
-          const path=entry.sheet.path,design=buildSheet(path),nets=KiCadNetModel.build([files.find(file=>file.path===path)],new Map([[path,design]])).nets;
-          rendered.push({path,label:[...new Set((entry.parents||[]).map(link=>link.label).filter(Boolean))].join(' / ')||entry.sheet.label||path,design,groups:KiCadReviewWorkspace.sheetPageHighlights(nets,workspace.overviewSelection(path),design,path)});
+          const path=entry.sheet.path,design=buildSheet(path),nets=KiCadNetModel.build([files.find(file=>file.path===path)],new Map([[path,design]])).nets,selection=workspace.overviewSelection(path);
+          const placements=(entry.placements||[]).filter(p=>!active||!selection.instanceIds?.length||selection.instanceIds.includes(p.id));
+          const front=placements.find(p=>p.id===frontInstances.get(path))||placements[0];if(front)frontInstances.set(path,front.id);
+          rendered.push({path,label:entry.instanceCount>1?path:(entry.sheet.label||path),instanceCount:placements.length||entry.instanceCount,totalInstanceCount:entry.instanceCount,instances:placements.map(p=>p.label),placements:front?[front,...placements.filter(p=>p!==front)]:placements,instanceId:front?.id,instanceLabel:entry.instanceCount>1?front?.label:null,design,groups:KiCadReviewWorkspace.sheetPageHighlights(nets,workspace.overviewSelection(path,front?.id),design,path)});
         }
         if(!opened||generation!==ticket)return;
         composition=KiCadReviewWorkspace.composeSheetOverview(rendered,workspace.overviewNetLinks?.()||[],dark);
@@ -239,7 +247,7 @@
             baseDraw();if(!composition)return;const ctx=overviewView.ctx;if(!ctx)return;
             ctx.save();ctx.setLineDash([6,4]);for(const wire of composition.airwires)overviewView.paint(wire);ctx.restore();
           };
-          overviewView.addEventListener('kicad:select',()=>{const hit=overviewView.selected;if(hit?.sourcePath&&hit.uuid)workspace.selectOverviewNet?.(hit.sourcePath,hit.uuid);});
+          overviewView.addEventListener('kicad:select',()=>{const hit=overviewView.selected;if(hit?.sourcePath&&hit.uuid)workspace.selectOverviewNet?.(hit.sourcePath,hit.uuid,hit.sourceInstanceId);});
           overviewView.canvas.addEventListener('dblclick',event=>{
             const rect=overviewView.canvas.getBoundingClientRect(),at=overviewView.viewport.camera.screen_to_world({x:event.clientX-rect.left,y:event.clientY-rect.top});
             const page=composition.pages.find(p=>at.x>=p.x&&at.x<=p.x+p.w&&at.y>=p.y&&at.y<=p.y+p.h);if(page){close();workspace.followSheet(page.path);}

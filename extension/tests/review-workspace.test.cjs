@@ -856,6 +856,34 @@ test('shared overview translates geometry and airwires without changing saved pr
  assert.equal(shifted.start.x,result.pages[1].x+1);assert.equal(source.start.x,1);assert.notEqual(shifted.start,source.start);
  assert.deepEqual(result.airwires[0].points[1],{x:result.pages[1].x+1,y:result.pages[1].y+2});
 });
+test('all-sheet stacks count repeated placements through nested reused parents',()=>{
+ const {sheetOverviewEntries,composeSheetOverview}=require('../review-workspace.js');
+ const sheets=['root.kicad_sch','channel.kicad_sch','child.kicad_sch'].map(path=>({path,kind:'schematic',label:path}));
+ const link=(path,file,label)=>({path,label,properties:{Sheetfile:file}});
+ const entries=sheetOverviewEntries(sheets,[link('root.kicad_sch','channel.kicad_sch','Left'),link('root.kicad_sch','channel.kicad_sch','Right'),link('channel.kicad_sch','child.kicad_sch','Control')]);
+ assert.equal(entries.find(e=>e.sheet.path==='channel.kicad_sch').instanceCount,2);
+ const child=entries.find(e=>e.sheet.path==='child.kicad_sch');assert.equal(child.instanceCount,2);assert.ok(child.instances.some(name=>name.includes('Right / Control')));
+ const source={type:'line',points:[{x:1,y:2},{x:3,y:4}],uuid:'part'};
+ const result=composeSheetOverview([{path:child.sheet.path,label:'Control',instanceCount:child.instanceCount,instances:child.instances,design:{page:{width:100,height:100},primitives:[source]},groups:[]}]);
+ assert.equal(result.pages[0].instanceCount,2);assert.equal(result.pages[0].instances.length,2);
+ assert.equal(result.design.primitives.filter(p=>p.type==='polygon').length,2);
+ assert.ok(result.design.primitives.some(p=>p.type==='text'&&p.text==='Control · 2 instances'));
+ assert.equal(result.design.primitives.filter(p=>p.uuid==='part').length,1);assert.deepEqual(source.points,[{x:1,y:2},{x:3,y:4}]);
+});
+test('all-sheet stack counting retains cyclic sources without claiming resolved placements',()=>{
+ const {sheetOverviewEntries}=require('../review-workspace.js');
+ const sheets=[{path:'loop.kicad_sch',kind:'schematic',label:'Loop'}];
+ const result=sheetOverviewEntries(sheets,[{path:'loop.kicad_sch',properties:{Sheetfile:'loop.kicad_sch'}}]);
+ assert.equal(result[0].instanceCount,1);assert.equal(result[0].instanceUnresolved,true);
+});
+test('all-sheet instance expansion is bounded for exponentially reused hierarchies',()=>{
+ const {sheetOverviewEntries}=require('../review-workspace.js');
+ const sheets=Array.from({length:15},(_,i)=>({path:`s${i}.kicad_sch`,kind:'schematic',label:`Sheet ${i}`}));
+ const links=sheets.slice(0,-1).flatMap((sheet,i)=>['A','B'].map(label=>({path:sheet.path,label,properties:{Sheetfile:`s${i+1}.kicad_sch`}})));
+ const result=sheetOverviewEntries(sheets,links);
+ assert.ok(result.every(e=>e.instanceTruncated));assert.ok(result.every(e=>e.instances.length<=256));
+ assert.ok(result.reduce((total,e)=>total+e.instanceCount,0)<=4096+sheets.length);
+});
 test('2D and 3D share saved component selection across mode switches without callback loops',()=>{
  const view=workspaceRuntime();view.load();view.get('objectList').children[0].click();
  let state,calls=0;const scene={setPopulation(){},setSelection(value){state=value;calls++;},selectReference(){throw Error('callback-based selection must not be used');}};
