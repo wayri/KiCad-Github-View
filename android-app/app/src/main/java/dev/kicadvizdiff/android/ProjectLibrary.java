@@ -45,10 +45,24 @@ final class ProjectLibrary {
     private JSONObject dispatch(JSONObject request, JSONObject activeProject) throws Exception {
         if (!directory.isDirectory() && !directory.mkdirs()) throw new IOException("Cannot create project library. Check available device storage.");
         JSONArray items = readIndex();
+        if(field(request,"action","list",40).equals("clear-temporary")) {
+            java.util.List<String> snapshots=new java.util.ArrayList<>();
+            for(int i=0;i<items.length();i++){JSONObject item=items.getJSONObject(i);if(!item.optBoolean("temporary"))continue;
+                String snapshot=item.optString("snapshot");if(!snapshot.isEmpty())snapshots.add(snapshot);
+                item.put("expiresAt",0);item.remove("snapshot");item.remove("snapshotRef");item.remove("downloadedId");
+            }
+            // Persist unavailable history before removing bytes; a failed cleanup must not reopen partial files.
+            writeIndex(items);
+            int removed=diskStore.clearTemporary();
+            for(String snapshot:snapshots)deleteSnapshot(snapshot);
+            pruneUnreferenced(items);
+            return listing(items).put("clearedTemporary",removed);
+        }
         diskStore.cleanupExpired();
         boolean pruned=false;
         for(int i=items.length()-1;i>=0;i--) { JSONObject item=items.getJSONObject(i);if(item.optBoolean("temporary")&&item.optLong("expiresAt",0)<=System.currentTimeMillis()) {
-            String snapshot=item.optString("snapshot");if(!snapshot.isEmpty())deleteSnapshot(snapshot);items.remove(i);pruned=true;
+            String snapshot=item.optString("snapshot");if(!snapshot.isEmpty())deleteSnapshot(snapshot);
+            if(item.has("snapshot")||item.has("downloadedId")){item.remove("snapshot");item.remove("snapshotRef");item.remove("downloadedId");pruned=true;}
         }}
         if(pruned)writeIndex(items);
         pruneUnreferenced(items);
@@ -62,6 +76,7 @@ final class ProjectLibrary {
         JSONObject item = items.getJSONObject(position);
         String oldFile = item.optString("snapshot"), oldDownload = item.optString("downloadedId");
         if (action.equals("open")) {
+            if(DiskProjectStore.expired(item,System.currentTimeMillis()))throw new IOException("Temporary project has expired. Reopen its source to download it again.");
             if (oldFile.isEmpty()) throw new IOException("This project is bookmarked only. Open its online source and choose Save offline first.");
             JSONObject project = new JSONObject(readEncrypted(snapshotFile(oldFile), SNAPSHOT_LIMIT));
             // Only the source payload is exposed: offline views cannot inherit provider transport.
@@ -216,7 +231,7 @@ final class ProjectLibrary {
         JSONObject result = new JSONObject();
         for (String key : new String[]{"id", "name", "repository", "host", "provider", "ref", "starred", "updated", "lastOpened", "temporary", "expiresAt"}) result.put(key, item.opt(key));
         result.put("storage", !item.optString("downloadedId").isEmpty() ? "Private app storage / downloaded projects" : !item.optString("snapshot").isEmpty() ? "Private app storage / encrypted snapshots" : item.optString("provider").equals("local") ? "Original file not saved in app" : item.optString("provider").equals("local") ? "Original file not saved in app" : "Online repository");
-        return result.put("offline", !item.optString("snapshot").isEmpty()).put("offlineRef", item.optString("snapshotRef", item.optString("ref")));
+        return result.put("expired",DiskProjectStore.expired(item,System.currentTimeMillis())).put("offline", !item.optString("snapshot").isEmpty()&&!DiskProjectStore.expired(item,System.currentTimeMillis())).put("offlineRef", item.optString("snapshotRef", item.optString("ref")));
     }
     private static JSONObject listing(JSONArray items) throws Exception {
         JSONArray result = new JSONArray();

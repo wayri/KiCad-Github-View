@@ -40,6 +40,15 @@ test('multiline text and minimum pixel font remain visible, with safe fallback f
  canvas.primitives=[p];canvas.ctx.measureText=()=>({width:10});assert.equal(canvas.inView(p,{x:1000,y:1000,w:1,h:1}),true);
  canvas.dispose();
 });
+test('measured label culling reduces paint work without changing layer, net, source or picking state',()=>{
+ const {canvas}=runtime();canvas.ctx.measureText=()=>({actualBoundingBoxLeft:20,actualBoundingBoxRight:20,actualBoundingBoxAscent:10,actualBoundingBoxDescent:10});
+ const visible={type:'text',x:5,y:5,text:'R1',size:1.27,layer:'F.Cu',uuid:'r1'},outside={...visible,x:1000,uuid:'outside'},hiddenLayer={...visible,layer:'B.Cu',uuid:'back'};
+ const before=JSON.stringify([visible,outside,hiddenLayer]);canvas.primitives=[visible,outside,hiddenLayer];canvas.visibleLayers=new Set(['F.Cu']);canvas.viewport.camera.bbox={x:0,y:0,w:10,h:10};
+ const painted=[];canvas.paint=(p,style)=>painted.push({p,style});canvas.setNetHighlight({primitives:[visible]});canvas.drawGeometry();
+ assert.deepEqual(painted.map(x=>x.p),[visible]);assert.equal(painted[0].style.opacity,1);assert.ok(painted[0].style.color);
+ assert.equal(canvas.query({x:5,y:5})[0],visible);assert.equal(JSON.stringify([visible,outside,hiddenLayer]),before);
+ canvas.viewport.camera.flipped=true;painted.length=0;canvas.drawGeometry();assert.deepEqual(painted.map(x=>x.p),[visible]);canvas.dispose();
+});
 function runtime(dpr=1,extra={}){
   const operations=[],listeners=new Map(),ctx=new Proxy({},{get:(obj,key)=>obj[key]||((...args)=>operations.push([key,...args])),set:(obj,key,value)=>{obj[key]=value;return true;}});
   const element={style:{},setAttribute(){},addEventListener:(key,fn)=>listeners.set(key,fn),removeEventListener(){},getContext:()=>ctx,getBoundingClientRect:()=>({left:0,top:0,width:800,height:600}),remove(){},setPointerCapture(){},hasPointerCapture:()=>false};

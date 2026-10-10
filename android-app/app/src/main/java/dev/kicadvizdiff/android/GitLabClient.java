@@ -265,6 +265,11 @@ final class GitLabClient {
     }
     private JSONObject importProject(String host,JSONObject request,int epoch) throws Exception {
         long deadline=SystemClock.elapsedRealtime()+(request.optBoolean("downloadLarge")?30L:8L)*60*1000;String repository=repository(request),root=project(request);
+        String sourceRef=request.optString("sourceRef",request.optString("ref",""));if(sourceRef.length()>255||controls(sourceRef))throw new Failure("Invalid branch or commit");
+        synchronized(this) {
+            check(epoch);JSONObject cached=diskStore==null?null:diskStore.findRemote("gitlab",host,repository,request.optString("ref",""));
+            if(cached!=null)return new JSONObject().put("provider","gitlab").put("host",host).put("repository",repository).put("sha",cached.getJSONObject("gitlab").getString("sha")).put("cached",true).put("project",cached);
+        }
         JSONObject metadata=json(host,root,epoch);String ref=request.optString("ref","");if(ref.isEmpty())ref=metadata.optString("default_branch","");
         if(ref.isEmpty()||ref.length()>255||controls(ref))throw new Failure("Invalid branch or commit");
         String sha=sha(json(host,root+"/repository/commits/"+encode(ref),epoch).getString("id"));
@@ -285,7 +290,7 @@ final class GitLabClient {
                 sources.put(new JSONObject().put("path",path).put("type","blob").put("mode",node.optString("mode")).put("size",-1));
             }
             final String projectRoot=root;
-            JSONObject origin=new JSONObject().put("host",host).put("repository",metadata.getString("path_with_namespace")).put("sha",sha);
+            JSONObject origin=new JSONObject().put("host",host).put("repository",metadata.getString("path_with_namespace")).put("sha",sha).put("sourceRef",sourceRef);
             JSONObject downloaded=store.importProject(metadata.getString("path_with_namespace"),sources,
                 (path,target,size)->downloadBlob(host,projectRoot,identities.get(path),target,epoch,deadline),
                 new JSONObject().put("gitlab",origin),request.optBoolean("temporaryDownload"));

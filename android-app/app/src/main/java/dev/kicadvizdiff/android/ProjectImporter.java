@@ -87,7 +87,7 @@ final class ProjectImporter {
         if(folder)walkTree(resolver,uri,cancelled,entry->collectDiskEntry(entries,entry));
         else collectDiskEntry(entries,querySingle(resolver,uri));
         JSONArray nodes=new JSONArray();for(Entry entry:entries.values())nodes.put(diskNode(entry.path,entry.size));
-        return store.importProject(folder?"Local project":querySingle(resolver,uri).path,nodes,(path,target,size)-> {
+        return store.importProject(folder?folderName(resolver,uri):querySingle(resolver,uri).path,nodes,(path,target,size)-> {
             Entry entry=entries.get(path);if(entry==null)throw new IOException("Unknown selected file");
             try(InputStream input=resolver.openInputStream(entry.uri); FileOutputStream output=new FileOutputStream(target)) {
                 if(input==null)throw new IOException("Cannot open selected file");
@@ -130,6 +130,7 @@ final class ProjectImporter {
             throw new IOException("No supported KiCad files found");
         }
         JSONObject result = new JSONObject();
+        result.put("name",folder?folderName(resolver,uri):querySingle(resolver,uri).path);
         result.put("id", sourceId(uri));
         result.put("files", files);
         result.put("assets", assets);
@@ -184,6 +185,14 @@ final class ProjectImporter {
                 }
             }
         }
+    }
+
+    private static String folderName(ContentResolver resolver, Uri treeUri) {
+        Uri document=DocumentsContract.buildDocumentUriUsingTree(treeUri,DocumentsContract.getTreeDocumentId(treeUri));
+        try(Cursor cursor=resolver.query(document,new String[]{DocumentsContract.Document.COLUMN_DISPLAY_NAME},null,null,null)) {
+            if(cursor!=null&&cursor.moveToFirst())return safeSegment(cursor.getString(0));
+        }catch(Exception ignored){ /* File names provide a fallback when the provider omits the folder name. */ }
+        return "Local project";
     }
 
     private static Entry querySingle(ContentResolver resolver, Uri uri)

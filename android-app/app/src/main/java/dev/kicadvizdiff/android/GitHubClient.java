@@ -220,6 +220,13 @@ final class GitHubClient {
         if (repository.length() > 240 || !repository.matches("[A-Za-z0-9][A-Za-z0-9-]{0,38}/[A-Za-z0-9_.-]{1,100}")
                 || repository.endsWith("/.") || repository.endsWith("/..")) throw new Failure("Enter a valid owner/repository");
         String root = "/repos/" + repository;
+        String sourceRef=request.optString("sourceRef",request.optString("ref",""));
+        if(sourceRef.length()>255||hasControl(sourceRef))throw new Failure("Invalid branch or commit");
+        synchronized(this) {
+            check(epoch);
+            JSONObject cached=diskStore.findRemote("github","",repository,request.optString("ref",""));
+            if(cached!=null)return new JSONObject().put("repository",repository).put("sha",cached.getJSONObject("github").getString("sha")).put("cached",true).put("project",cached);
+        }
         JSONObject metadata = api(root, epoch, 1024 * 1024);
         String ref = request.optString("ref", "");
         if (ref.isEmpty()) ref = metadata.getString("default_branch");
@@ -250,7 +257,7 @@ final class GitHubClient {
         }
         if (large || request.optBoolean("downloadLarge")) {
             if (!request.optBoolean("downloadLarge")) return new JSONObject().put("downloadRequired", true).put("bytes", sourceBytes).put("repository", repository).put("sha", sha);
-            return diskStore.download(repository, sha, metadata.optBoolean("private"), nodes, (path, target, size) -> downloadFile(repository, sha, path, target, size, metadata.optBoolean("private"), epoch, deadline),request.optBoolean("temporaryDownload"));
+            return diskStore.download(repository, sha, metadata.optBoolean("private"), nodes, (path, target, size) -> downloadFile(repository, sha, path, target, size, metadata.optBoolean("private"), epoch, deadline),request.optBoolean("temporaryDownload"),sourceRef);
         }
 
         JSONArray files = new JSONArray(), assets = new JSONArray();

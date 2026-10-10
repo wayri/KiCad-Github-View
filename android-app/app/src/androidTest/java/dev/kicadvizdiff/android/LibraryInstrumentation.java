@@ -100,6 +100,24 @@ public final class LibraryInstrumentation extends Instrumentation {
             JSONObject temporary=disk.download("test/temp",pinned,false,tempNodes,(path,target,size)->{try(OutputStream output=new FileOutputStream(target)){output.write("hello".getBytes());}},true).getJSONObject("project");
             check(temporary.optBoolean("temporary")&&temporary.getLong("expiresAt")>System.currentTimeMillis(),"temporary expiry metadata");
             check(disk.available(temporary),"temporary copy not available");
+            check(disk.findRemote("github","","test/temp","").getString("id").equals(temporary.getString("id")),"temporary copy not reused for repository link");
+            check(disk.findRemote("github","","TEST/temp",pinned)!=null,"pinned temporary copy not reused");
+            check(disk.findRemote("github","","test/temp","different-branch")==null,"different revision reused");
+            check(disk.findRemote("gitlab","https://gitlab.com","test/temp","")==null,"provider cache collision");
+            GitHubClient cachedGitHub=new GitHubClient(context,"cache_selftest");
+            JSONObject cachedReply=cachedGitHub.handle(new JSONObject().put("action","import").put("repository","test/temp"),cachedGitHub.generation());
+            check(cachedReply.optBoolean("cached")&&cachedReply.getJSONObject("project").getString("id").equals(temporary.getString("id")),"GitHub import did not return existing download");
+            JSONObject gitlabOrigin=new JSONObject().put("host","https://gitlab.com").put("repository","test/temp").put("sha",pinned).put("sourceRef","feature");
+            JSONObject gitlabCached=disk.importProject("test/temp",tempNodes,(path,target,size)->{try(OutputStream output=new FileOutputStream(target)){output.write("hello".getBytes());}},new JSONObject().put("gitlab",gitlabOrigin),true);
+            GitLabClient cachedGitLab=new GitLabClient(context,url->{throw new AssertionError("Cached import attempted network access");});cachedGitLab.setDiskProjectStore(disk);
+            JSONObject gitlabReply=cachedGitLab.handle(new JSONObject().put("action","import").put("host","https://gitlab.com").put("repository","test/temp").put("ref","feature"),cachedGitLab.generation());
+            check(gitlabReply.optBoolean("cached")&&gitlabReply.getJSONObject("project").getString("id").equals(gitlabCached.getString("id")),"GitLab import did not reuse named branch download");
+            check(disk.findRemote("gitlab","https://other.test","test/temp","feature")==null,"GitLab host cache collision");
+            disk.remove(gitlabCached);
+            File cacheFile=new File(new File(new File(sandbox,"temporary-projects"),temporary.getString("id")),"0");
+            try(OutputStream output=new FileOutputStream(cacheFile)){output.write("bad".getBytes());}
+            check(disk.findRemote("github","","test/temp","")==null,"incomplete download reused");
+            try(OutputStream output=new FileOutputStream(cacheFile)){output.write("hello".getBytes());}
             JSONObject tempSaved=store.handle(new JSONObject().put("action","save").put("offline",true).put("remember",true),temporary);
             JSONObject tempItem=null;for(int i=0;i<tempSaved.getJSONArray("items").length();i++){JSONObject candidate=tempSaved.getJSONArray("items").getJSONObject(i);if(candidate.optBoolean("temporary"))tempItem=candidate;}
             check(tempItem!=null,"temporary recent entry missing");
@@ -110,12 +128,17 @@ public final class LibraryInstrumentation extends Instrumentation {
             check(keptLibrary.getJSONArray("items").length()>0,"Save offline promotion failed");
             File tempManifest=new File(new File(new File(sandbox,"temporary-projects"),temporary.getString("id")),"manifest.json");
             temporary.put("expiresAt",System.currentTimeMillis()-1);try(OutputStream output=new FileOutputStream(tempManifest)){output.write(temporary.toString().getBytes(java.nio.charset.StandardCharsets.UTF_8));}
+            JSONObject cachedAfterExpiry=disk.findRemote("github","","test/temp","");
+            check(cachedAfterExpiry!=null&&!cachedAfterExpiry.optBoolean("temporary"),"expired download reused instead of permanent copy");
             check(disk.response(android.net.Uri.parse("https://appassets.androidplatform.net"+temporary.getJSONArray("files").getJSONObject(0).getString("diskPath")))==null,"expired file served");
             disk.cleanupExpired();check(!tempManifest.getParentFile().exists(),"expired temporary files retained");
             check(disk.available(kept),"cleanup removed permanent copy");
             // Update the encrypted snapshot metadata to exercise index expiry pruning.
             JSONObject expiredCopy=disk.download("test/expiry",pinned,false,tempNodes,(path,target,size)->{try(OutputStream output=new FileOutputStream(target)){output.write("hello".getBytes());}},true).getJSONObject("project");
             expiredCopy.put("expiresAt",System.currentTimeMillis()-1);
+            File expiredManifest=new File(new File(new File(sandbox,"temporary-projects"),expiredCopy.getString("id")),"manifest.json");
+            try(OutputStream output=new FileOutputStream(expiredManifest)){output.write(expiredCopy.toString().getBytes(java.nio.charset.StandardCharsets.UTF_8));}
+            check(disk.findRemote("github","","test/expiry","")==null,"expired-only download reused");
             try{store.handle(new JSONObject().put("action","save").put("offline",true).put("remember",true),expiredCopy);throw new AssertionError("expired snapshot saved");}catch(Exception expected){checks++;}
             File quotaSandbox=new File(sandbox,"quota");
             ContextWrapper quotaContext=new ContextWrapper(getTargetContext()){@Override public File getNoBackupFilesDir(){return quotaSandbox;}};
@@ -130,8 +153,19 @@ public final class LibraryInstrumentation extends Instrumentation {
             try(OutputStream output=new FileOutputStream(shortManifest)){output.write(shortTemp.toString().getBytes(java.nio.charset.StandardCharsets.UTF_8));}
             store.handle(new JSONObject().put("action","save").put("offline",true).put("remember",true),shortTemp);
             Thread.sleep(1250);JSONObject afterExpiry=store.handle(new JSONObject().put("action","list"),null);
-            for(int i=0;i<afterExpiry.getJSONArray("items").length();i++)check(!afterExpiry.getJSONArray("items").getJSONObject(i).optString("repository").equals("test/short"),"expired recent entry retained");
+            JSONObject retained=null;
+            for(int i=0;i<afterExpiry.getJSONArray("items").length();i++){JSONObject entry=afterExpiry.getJSONArray("items").getJSONObject(i);if(entry.optString("repository").equals("test/short"))retained=entry;}
+            check(retained!=null,"expired recent entry lost");check(retained.optBoolean("expired")&&!retained.optBoolean("offline"),"expired recent claimed offline availability");check(retained.optLong("lastOpened")>0,"expired recent lost access time");
+            try{store.handle(new JSONObject().put("action","open").put("id",retained.getString("id")),null);throw new AssertionError("expired recent opened");}catch(IllegalArgumentException expected){check(expected.getMessage().contains("expired"),"expired recent error unclear");}
             check(!shortManifest.getParentFile().exists(),"expired source directory retained after library cleanup");
+            JSONObject manualTemp=disk.download("test/manual",pinned,false,tempNodes,(path,target,size)->{try(OutputStream output=new FileOutputStream(target)){output.write("hello".getBytes());}},true).getJSONObject("project");
+            store.handle(new JSONObject().put("action","save").put("offline",true).put("remember",true),manualTemp);
+            JSONObject cleared=store.handle(new JSONObject().put("action","clear-temporary"),null);check(cleared.optInt("clearedTemporary")>0,"manual cleanup removed no copies");
+            check(!disk.available(manualTemp),"manual cleanup retained live temporary files");check(disk.available(kept),"manual cleanup deleted permanent copy");
+            check(disk.findRemote("github","","test/manual","")==null,"manually cleared download reused");
+            JSONObject manualEntry=null;for(int i=0;i<cleared.getJSONArray("items").length();i++){JSONObject entry=cleared.getJSONArray("items").getJSONObject(i);if(entry.optString("repository").equals("test/manual"))manualEntry=entry;}
+            check(manualEntry!=null&&manualEntry.optBoolean("expired")&&!manualEntry.optBoolean("offline")&&manualEntry.optLong("lastOpened")>0,"manual cleanup lost recent history or left availability");
+            check(store.handle(new JSONObject().put("action","clear-temporary"),null).optInt("clearedTemporary")==0,"repeat cleanup not idempotent");
             delete(sandbox);result.putString("stream","Native library checks passed: "+checks);finish(0,result);
         }catch(Throwable error){delete(sandbox);result.putString("stream","Library failure: "+error.toString());finish(1,result);}finally{delete(sandbox);}
     }

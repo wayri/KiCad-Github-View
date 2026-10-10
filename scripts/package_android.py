@@ -53,7 +53,13 @@ def payload(root=ROOT):
             content = text.encode('utf-8')
         result[name] = content
     for source in (root / 'android-app/web').iterdir():
-        if source.is_file(): result[source.name] = source.read_bytes()
+        if source.is_file():
+            content=source.read_bytes()
+            if source.name=='about.html':
+                version=re.search(r"versionName '([^']+)'",(root/'android-app/app/build.gradle').read_text()).group(1)
+                content=content.replace(b'__APP_VERSION__',version.encode('utf-8'))
+            result[source.name]=content
+    result['app-logo.png']=(root/'android-app/app/src/main/res/drawable/app_icon.png').read_bytes()
     result['shared-assets.json'] = (json.dumps({'assets': {name: hashlib.sha256(data).hexdigest() for name, data in sorted(result.items())}}, indent=2)+'\n').encode()
     return result
 

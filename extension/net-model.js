@@ -248,9 +248,9 @@
     }
     return nets;
   }
-  function build(files, designs=new Map()) {
+  function build(files, designs=new Map(), snapshot=null) {
     if (!diff?.projectObjects || !diff?.parse) throw new Error("KiCadDesignDiff is required for net extraction.");
-    const parsedFiles=new Map(),rawRecords=diff.projectObjects(files,(file,ast)=>parsedFiles.set(file.path,ast)), counts=new Map(), recordsByPath=new Map();
+    const parsedFiles=new Map(),rawRecords=diff.projectObjects(files,(file,ast)=>parsedFiles.set(file.path,ast),snapshot), counts=new Map(), recordsByPath=new Map();
     // Keep duplicate saved object IDs aligned with the design-model convention.
     for (const record of rawRecords) {
       if(!recordsByPath.has(record.path))recordsByPath.set(record.path,[]);

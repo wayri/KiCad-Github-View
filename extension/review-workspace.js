@@ -595,7 +595,14 @@
       const unique=new Map(highlightObjects.map(o=>[o.id,o]));for(const object of members)if(unique.size<200)unique.set(object.id,object);highlightObjects=[...unique.values()];
       updateHighlights();renderObjects();navigation?.renderSearch();emitHighlightGroup();notice(`Sheet group: ${paths.size} loaded sheets, ${highlightObjects.length} objects${members.length>200?' (200-object limit)':''}. Reused sheets share a saved file view.`);
     }
-    function clearHighlights(){options.onSelection?.({kind:'group',items:[]});dnpHighlight=false;$("highlightDnp").checked=false;pinnedNets.clear();pinnedClasses.clear();highlightObjects=[];selectedNet=null;connectionCursor=-1;activeConnection=null;getCanvas()?.setNetHighlight(null);renderNets();properties();updateHighlights();navigation?.renderSearch();}
+    function clearSelection(){
+      if(selectedNet)pinnedNets.set(selectedNet.id,selectedNet);
+      selected=null;nativePick=null;selectedNet=null;dismissTouchPicker();
+      const canvas=getCanvas();if(canvas){canvas.selected=null;canvas.hover=null;}
+      $("selectionStatus").textContent="Select a part to inspect its properties.";
+      properties();renderObjects();renderNets();updateHighlights();navigation?.renderSearch();emitHighlightGroup();draw();
+    }
+    function clearHighlights(){selected=null;nativePick=null;overviewSource=null;dismissTouchPicker();const canvas=getCanvas();if(canvas){canvas.selected=null;canvas.hover=null;}options.onSelection?.({kind:'group',items:[]});dnpHighlight=false;$("highlightDnp").checked=false;pinnedNets.clear();pinnedClasses.clear();highlightObjects=[];selectedNet=null;connectionCursor=-1;activeConnection=null;canvas?.setNetHighlight(null);$("selectionStatus").textContent="Select a part to inspect its properties.";renderNets();renderNetClasses();renderObjects();properties();updateHighlights();navigation?.renderSearch();draw();}
     function highlightSearchObjects(items,multi){
       const local=items.filter(o=>o.path===currentFile()).slice(0,200),derived=local.filter(o=>['net','netclass'].includes(o.kind)),parts=local.filter(o=>!['net','netclass'].includes(o.kind));if(!multi){highlightObjects=local[0]&&!['net','netclass'].includes(local[0].kind)?[local[0]]:[];pinnedNets.clear();pinnedClasses.clear();selectedNet=null;}else{const map=new Map(highlightObjects.map(o=>[o.id,o]));for(const o of parts)map.set(o.id,o);highlightObjects=[...map.values()].slice(0,200);}
       for(const item of multi?derived:derived.filter(o=>o===local[0])){if(item.kind==='net'){const net=netModel.nets.find(n=>n.path===currentFile()&&n.name===item.netName);if(net&&pinnedNets.size<200)pinnedNets.set(net.id,net);}else if(pinnedClasses.size<64)pinnedClasses.set(JSON.stringify([item.path,item.className]),{path:item.path,name:item.className});}
@@ -907,7 +914,7 @@
           button("Delete",async()=>{try{await request("comment-delete",{...scope(note.anchor.file),id:note.id});await refreshComments();options.onCommentsChanged?.();commentStatus("Local comment deleted.");}catch(error){commentStatus(error.message,true);}}));
         }
         if(!note.github){for(const [state,label] of [["open","Open"],["skipped","Skip"],["resolved","Resolve"]])if((note.state||"open")!==state)actions.append(button(label,()=>setNoteState(note,state)));}
-        if(!note.github&&remoteAvailable){actions.append(button(`Choose ${providerName} destination`,()=>inspector("github")));const publish=button(`Publish to ${providerName}`,()=>publishNote(note,publish));publish.className="github-publish-action";publish.disabled=policyStatus?.allowed===false;if(publish.disabled)publish.title=policyStatus.reason||"Repository comment policy restricts publishing.";actions.append(publish);}
+        if(!note.github&&remoteAvailable){actions.append(button(`Choose ${providerName} destination`,()=>inspector("github")));const publish=button(`Publish to ${providerName}`,()=>{try{assertNoteDestination(note);const destination=$('commentDestination').value,number=$('threadNumber').value,category=$('discussionCategory').value;editComment(note);$('editorDestination').value=destination;$('editorThreadNumber').value=number;$('editorCategory').value=category;editorDestinationChanged();reviewPost();}catch(error){commentStatus(error.message,true);}});publish.className="github-publish-action";publish.disabled=policyStatus?.allowed===false;if(publish.disabled)publish.title=policyStatus.reason||"Repository comment policy restricts publishing.";actions.append(publish);}
         if(!note.github){card.append(make("small",`State: ${note.state||"open"}${note.tags?.length?" · "+note.tags.join(", "):""}`));for(const ref of note.remoteRefs||[]){const link=make("a",`${ref.kind} #${ref.number}`);link.href=ref.url;link.target="_blank";link.rel="noopener noreferrer";card.append(link);if(provider==='github'&&remoteAvailable)card.append(button('View thread',()=>readThread(ref.kind==='discussion'?'discussion':'issue',ref.number)));}}
         if(note.capture){const image=make('img');image.src=note.capture.dataUrl;image.alt='Captured drawing area for this annotation';card.append(image);const download=make('a','Download screenshot');download.href=note.capture.dataUrl;download.download=`kicad-review-${note.id}.png`;actions.append(download);}
         else for(const attachment of note.attachments||[]){const image=make('img');image.src=attachment.url;image.alt='Published drawing screenshot';image.loading='lazy';image.referrerPolicy='no-referrer';card.append(image);}
@@ -1020,6 +1027,7 @@
       if (picked) {holder.append(button("Inspect properties",()=>{selectObject(picked);holder.hidden=true;}),button("Focus object",()=>{focus(picked.position || at);holder.hidden=true;}));}
       if(pickedNet)holder.append(button("Highlight "+pickedNet.name,()=>{selectNet(pickedNet);holder.hidden=true;}));
       holder.append(button(picked ? "Comment on object" : "Comment here",()=>{editComment(null,anchor(at,picked || null));holder.hidden=true;}));
+      holder.append(button('Unselect',()=>{clearSelection();holder.hidden=true;}),button('Clear highlights',()=>{clearHighlights();holder.hidden=true;}));
       if (picked?.kind === "sheet") holder.append(button("Open subsheet",()=>{openSubsheet(picked);holder.hidden=true;}));
       holder.style.left=Math.max(5,Math.min(event.clientX,innerWidth-190))+"px";holder.style.top=Math.max(5,Math.min(event.clientY,innerHeight-150))+"px";holder.hidden=false;
     }
@@ -1203,6 +1211,28 @@
       $("editorThreadNumber").value=$("threadNumber").value;editorDestinationChanged();
     }
     function editorDestinationChanged(){const value=$("editorDestination").value;$("editorNumberLabel").hidden=!value.startsWith("existing-");$("editorTitleLabel").hidden=true;$("editorCategoryLabel").hidden=$("editorLoadCategories").hidden=value!=="discussion";$("editorThreadNumber").placeholder=value.includes("discussion")?"Discussion number":"Issue number";}
+    let postReview=null;
+    function reviewPost(){
+      try{
+        if(pasteBusy)throw Error('Wait for the pasted screenshot to finish preparing.');
+        const note=editorNote();if(!remoteAvailable)throw Error(`${providerName} publication is unavailable in this viewer.`);
+        if(!postReview){
+          const dialog=make('dialog');dialog.id='commentPostReview';dialog.className='comment-post-review';dialog.setAttribute('aria-label','Review comment destination');
+          const header=make('header'),body=make('section'),summary=make('p'),preview=make('p'),error=make('p'),actions=make('div');body.className='android-sheet-content';summary.className='hint';preview.className='comment-post-preview';error.setAttribute('role','status');error.className='error';actions.className='inspector-actions';
+          const close=()=>{dialog.close?.();dialog.open=false;restore();};
+          const restore=()=>{const destination=$('editorDestination').closest?.('label')||$('editorDestination');$('commentPostRow').insertBefore(destination,$('postComment'));$('commentPublishSettings').insertBefore($('commentDestinationDetails'),$('commentPostRow').parentElement===$('commentPublishSettings')?$('commentPostRow'):null);};
+          header.append(make('strong','Choose where to post'),button('Close',close));
+          const confirm=button(`Post to ${providerName}`,async()=>{if(confirm.disabled)return;confirm.disabled=true;error.textContent='';try{await saveEditor(true);if(!editor)close();else error.textContent=$('commentStatus').textContent;}finally{confirm.disabled=false;}});confirm.id='confirmCommentPost';
+          actions.append(button('Back to comment',close),confirm);body.append(summary,preview,error,actions);dialog.append(header,body);document.body.append(dialog);dialog.addEventListener('close',restore);dialog.addEventListener('cancel',event=>{event.preventDefault();close();});postReview={dialog,body,summary,preview,error,actions};
+        }
+        const {dialog,body,summary,preview,error,actions}=postReview;
+        summary.textContent=`${providerName} · ${options.pullRepository||repository} · ${note.threadType||'issue'} · ${note.severity||'info'} · ${note.state||'open'}`;
+        preview.textContent=note.text;error.textContent='';
+        body.insertBefore($('editorDestination').closest?.('label')||$('editorDestination'),actions);body.insertBefore($('commentDestinationDetails'),actions);editorDestinationChanged();
+        $('commentText').blur?.();if(!dialog.open){if(dialog.showModal)dialog.showModal();else dialog.open=true;}
+        $('editorDestination').focus?.();
+      }catch(error){commentStatus(error.message,true);}
+    }
     function editorNote(){if(!editor)throw new Error("Create or select a note first.");return KiCadReviewComments.validateComment({...editor,threadType:remoteAvailable?$("editorThreadType").value||"issue":editor.threadType,text:$("commentText").value,severity:$("commentSeverity").value,state:$("commentState").value,tags:$("commentTags").value.split(",").map(tag=>tag.trim()).filter(Boolean),mentions:[...new Set([...$("commentMentions").value.split(/[\s,]+/).map(login=>login.trim()).filter(Boolean),...(root.KiCadCommentCompose?.extractMentions($("commentText").value,provider)||[])])],updatedAt:new Date(Math.max(Date.now(),Date.parse(editor.updatedAt||editor.createdAt)+1)).toISOString()});}
     async function saveEditor(post=false){
       if(pasteBusy){commentStatus("Wait for the pasted screenshot to finish preparing.",true);return;}if(!editor||$("saveComment").disabled)return;$("saveComment").disabled=$("postComment").disabled=true;
@@ -1218,7 +1248,7 @@
     $("editorAccount").onclick=$("reviewSettings").onclick;
     $("editorLoadCategories").onclick=async()=>{try{if(provider!=='github')throw new Error("GitLab discussions belong to issues and have no GitHub category.");const categories=await request("github-discussion-categories",{repository:targetRepository});$("editorCategory").replaceChildren();for(const category of categories){const item=make("option",category.name);item.value=category.id;$("editorCategory").append(item);}$("editorCategory").value=categories[0]?.id||"";}catch(error){commentStatus(error.message,true);}};
     $("editorPreview").onclick=()=>{try{$("editorMarkdown").textContent=KiCadReviewComments.toMarkdown(editorNote()).replace(/<!--[\s\S]*?-->/g,"").trim();$("editorMarkdown").hidden=false;}catch(error){commentStatus(error.message,true);}};
-    $("saveComment").onclick=()=>saveEditor();$("postComment").onclick=()=>saveEditor(true);
+    $("saveComment").onclick=()=>saveEditor();$("postComment").onclick=reviewPost;
     const download=(name,text)=>{const link=make("a");link.download=name;link.href=URL.createObjectURL(new Blob([text],{type:"application/json"}));link.click();setTimeout(()=>URL.revokeObjectURL(link.href),1000);};
     $("exportComments").onclick=()=>{try{download("kicad-review-comments.json",KiCadReviewComments.exportComments(notes));}catch(error){commentStatus(error.message,true);}};
     $("importComments").onclick=()=>$("commentFile").click();
@@ -1284,6 +1314,7 @@
     const copyDrawingText=()=>{const canvas=getCanvas(),lines=(canvas?.primitives||[]).filter(p=>p.type==='text'&&!p.hidden&&(!p.layer||!canvas.visibleLayers||canvas.visibleLayers.has(p.layer))).slice(0,5000).map(p=>String(p.text||'')).filter(Boolean);root.dispatchEvent?.(new CustomEvent('kicad:drawing-text-result',{detail:{text:lines.join('\n').slice(0,262144)}}));};
     root.addEventListener?.('kicad:request-drawing-text',copyDrawingText);resizeCleanups.push(()=>root.removeEventListener?.('kicad:request-drawing-text',copyDrawingText));
     $('highlightControls').hidden=false;$('highlightStyle').onchange=updateHighlights;$('clearHighlights').onclick=clearHighlights;
+    const unselect=button('Unselect',clearSelection);unselect.id='unselect';unselect.setAttribute('aria-label','Unselect');unselect.title='Unselect objects; keep highlights';$('highlightControls').insertBefore(unselect,$('clearHighlights'));
     $('fitHighlights').onclick=()=>{const canvas=getCanvas(),box=root.KiCadOwnedCanvas?.bounds([...canvas.netPrimitives||[]]);if(box){canvas.resize();const margin=Math.max(3,Math.max(box.w,box.h)*.1);canvas.viewport.camera.bbox={x:box.x-margin,y:box.y-margin,w:box.w+margin*2,h:box.h+margin*2};canvas.draw();}};
     $('previousConnection').onclick=()=>cycleConnection(-1);$('nextConnection').onclick=()=>cycleConnection(1);
     $('netClassSelect').onchange=renderNetClasses;
@@ -1301,7 +1332,7 @@
       const result=sources.length?root.KiCadOverviewConnectivity.resolve(netModel.nets,sources,entries.flatMap(e=>e.placements||[])):{matches:[],links:[],limits:[]};result.active=sources.length>0;
       overviewCache={model:netModel,objects,key,result};return result;
     }
-    return {attachCanvas,draw,refreshNets,refreshComments,highlightRelated,followSheet,
+    return {attachCanvas,draw,refreshNets,refreshComments,highlightRelated,followSheet,clearSelection,clearHighlights,
       overviewSheets(){return sheetOverviewEntries(model.sheets.filter(s=>s.kind==='schematic'),objects.filter(o=>o.kind==='sheet'));},
       overviewSelection(path,instanceId){const graph=overviewConnectivity();return {netIds:graph?[...new Set(graph.matches.filter(m=>m.net.path===path&&(!instanceId||m.instanceId===instanceId)).map(m=>m.net.id))]:(netSheetMatches().get(path)||[]).map(n=>n.id),instanceIds:graph?[...new Set(graph.matches.filter(m=>m.net.path===path).map(m=>m.instanceId))]:[],limits:graph?.limits||[],uuids:highlightObjects.filter(o=>o.path===path).map(o=>o.uuid).filter(Boolean),mode:$('highlightStyle').value||'dim',netActive:graph?graph.active:netSheetMatches().size>0};},
       selectOverviewNet(path,uuid,instanceId){const matches=netModel.nets.filter(n=>n.path===path&&n.uuids.includes(uuid));if(matches.length===1){selectNet(matches[0],false,false,false,false,instanceId);return true;}return false;},

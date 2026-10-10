@@ -467,6 +467,10 @@ public final class MainActivity extends Activity {
                 final JSONObject request;
                 try { request = new JSONObject(serialized); }
                 catch (Exception error) { libraryReply(id, null, "Invalid library request"); return; }
+                if(request.optString("action").equals("clear-temporary")&&activeProject!=null&&activeProject.optBoolean("temporary")) {
+                    activeProject=null;activeProviderHost=null;activePrivate=false;pendingProject=null;pendingDownload=null;downloadGeneration.incrementAndGet();
+                    webView.evaluateJavascript("document.getElementById('viewer').src='about:blank';window.KiCadAndroidProject=null;window.KiCadAndroidRevisionCache=null;window.KiCadAndroid.showHome();",null);
+                }
                 final boolean opening = request.optString("action").equals("open");
                 final int openEpoch = opening ? importGeneration.incrementAndGet() : -1;
                 if (opening) { github.cancelRequests(); gitlab.cancelRequests(); githubImportGeneration.incrementAndGet(); }

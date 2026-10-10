@@ -31,3 +31,16 @@ test('temporary library metadata and source indicators never imply permanent off
  const expiresAt=Date.now()+3600000,meta=metadata({temporary:true,diskBacked:true,offline:true,libraryId:'a'.repeat(64),expiresAt,github:{repository:'wayri/Marble',sha:'a'.repeat(40)},files:[{path:'board.kicad_pcb'}]});
  assert.equal(meta.temporary,true);assert.equal(meta.expiresAt,expiresAt);assert.equal(meta.provider,'github');assert.match(availability(meta),/^Temporary · expires/);assert.equal(availability({...meta,expiresAt:Date.now()-1}),'Temporary · expired');
 });
+const {projectName,sourceLabel,lastAccess}=require('../../android-app/web/project-library.js');
+test('project names prefer folder labels and recover generic local labels from KiCad files',()=>{
+ assert.equal(projectName({name:'Local project',files:[{path:'Subsheets/power.kicad_sch'},{path:'design/Marble.kicad_pro'}]}),'Marble');
+ assert.equal(projectName({name:'Controller',files:[{path:'board.kicad_pcb'}]}),'Controller');
+ assert.equal(metadata({name:'Local project',files:[{path:'design/main.kicad_pcb'}]}).name,'main');
+ assert.equal(projectName({github:{repository:'team/board'},files:[]}), 'team/board');
+});
+test('recent metadata labels provider and last access separately from project title',()=>{
+ assert.equal(sourceLabel({provider:'github'}),'GitHub');assert.equal(sourceLabel({provider:'gitlab'}),'GitLab');assert.equal(sourceLabel({provider:'local'}),'Local project');
+ assert.match(lastAccess({lastOpened:Date.UTC(2026,9,10,12,30)}),/^Last opened /);assert.equal(lastAccess({}),'');
+ const expired={id:'temp',name:'Marble',temporary:true,expiresAt:1,lastOpened:9,provider:'github',offline:false};
+ assert.deepEqual(recent([expired]),[expired]);assert.match(availability(expired),/expired/);
+});

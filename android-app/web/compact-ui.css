@@ -14,7 +14,7 @@ body[data-size] dialog.android-resizable-sheet>:is(.android-sheet-content,.githu
 body[data-size] .android-sheet-content :is(p,h2,h3){margin-top:8px;margin-bottom:8px}
 body[data-size] .android-sheet-content p:empty{display:none}
 body[data-size] .github-help{font-size:12px;line-height:1.4}
-body[data-size] #androidViewToolbar{overflow-x:auto;overflow-y:hidden;justify-content:flex-start;scrollbar-width:none;gap:2px;padding:0 4px}
+body[data-size] #androidViewToolbar{flex-wrap:wrap;height:auto;overflow:visible;justify-content:flex-start;gap:2px;padding:2px 4px}
 body[data-size] #androidViewToolbar>button{flex:0 0 44px;min-width:44px;width:44px;min-height:44px;height:44px;padding:4px}
 body[data-size] #androidViewToolbar>button svg{width:22px;height:22px;flex:0 0 22px}
 body[data-size] #androidViewToolbar #allSheetPagesButton{flex-direction:column;gap:0;font-size:9px;line-height:1.1}
@@ -74,3 +74,12 @@ body .android-sheet-has-dismiss>:not(.android-sheet-handle):not(.android-sheet-d
 body .android-sheet-dismiss{top:2px!important}
 body .android-sheet-has-dismiss>.android-sheet-handle{min-height:48px!important;height:48px!important}
 @media(min-width:600px){body .android-sheet-has-dismiss{padding-top:48px!important}}
+
+@media(max-width:599px){
+ body .android-resizable-sheet{transition:height 240ms cubic-bezier(.2,.8,.2,1);scroll-padding-top:52px;overscroll-behavior-y:contain}
+ body .android-resizable-sheet.sheet-dragging{transition:none!important;transform:translateY(var(--android-sheet-pull,0px))!important;will-change:height,transform;user-select:none}
+ body .android-resizable-sheet>.android-sheet-handle{touch-action:none!important;-webkit-tap-highlight-color:transparent;user-select:none;outline-offset:-4px}
+ body .android-resizable-sheet>.android-sheet-handle:active>span{background:var(--accent,var(--android-primary))}
+ body .android-resizable-sheet :is(.android-sheet-content,.github-content){touch-action:pan-y;overscroll-behavior-y:contain;-webkit-overflow-scrolling:touch}
+}
+@media(prefers-reduced-motion:reduce){body .android-resizable-sheet{transition:none!important}}

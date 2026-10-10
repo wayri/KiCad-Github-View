@@ -225,6 +225,10 @@
     }
     finishMotion(){if(this.motionTimer!==null){clearTimeout(this.motionTimer);this.motionTimer=null;}if(this.frameRequest!==null&&typeof cancelAnimationFrame==='function')cancelAnimationFrame(this.frameRequest);this.frameRequest=null;this.wheelMotion=false;if(!this.disposed)this.draw();}
     requestDraw(){if(typeof requestAnimationFrame!=='function'){this.draw();return;}if(this.frameRequest===null)this.frameRequest=requestAnimationFrame(()=>{this.frameRequest=null;if(!this.disposed&&!this.motionFrame())this.draw();});}
+    // Font metrics include alignment and baseline. Cache in world coordinates so
+    // panning avoids both measuring and painting offscreen labels; zoom/flip
+    // invalidate the entry, including minimum screen-size fonts. Without full
+    // glyph metrics, retain the previous conservative always-visible behavior.
     textBounds(p){
       const c=this.viewport.camera,cached=this.textBoundsCache.get(p);
       if(cached&&cached.zoom===c.zoom&&cached.flipped===c.flipped)return cached.box;

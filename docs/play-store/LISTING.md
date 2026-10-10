@@ -1,6 +1,6 @@
 # Pocket KiVi: Google Play listing copy
 
-Prepared 2026-10-10 for Android 1.32. Owner must confirm the final listing details before submission.
+Prepared 2026-10-10 for Android **1.48 / version code 51**. Owner must confirm the final listing details before submission. Submission gates are recorded in [COMPLIANCE-AUDIT.md](COMPLIANCE-AUDIT.md).
 
 ## App name
 
@@ -20,13 +20,13 @@ Explore schematic sheets with a hierarchy tree and sheet navigation, or arrange 
 
 Inspect boards in 3D with linked supported models and cross-selection. Missing models use approximate stand-ins. Compare saved revisions and inspect changed part fields in the properties panel.
 
-Keep recent projects, bookmark and star favorites, and save project copies for offline viewing. Large supported GitHub projects offer a download option, subject to device storage, memory and provider limits.
+Keep named recent projects with source and last-access details, bookmark and star favorites, and save project copies for offline viewing. Large supported online projects offer permanent or temporary downloads, subject to device storage, memory and provider limits. Temporary copies expire after six hours; recent entries remain marked expired. A manual cleanup action is available.
 
 Create local review notes and screenshots. When connected, explicitly publish to GitHub Issues or Discussions or GitLab issues, and read supported comment threads. Optional GitHub field editing exports a revised project copy with existing value/custom-field edits; it does not overwrite the repository.
 
 View supported saved WayriCAD analysis reports, KiCad simulation workbooks and exported waveform data. Pocket KiVi displays saved results; it does not run KiCad ERC, DRC or simulation solvers on your phone.
 
-The compact touch interface includes draggable panels, light and dark themes, long-press actions and adaptive tablet layouts.
+The compact touch interface includes draggable panels, light and dark themes, long-press actions, adaptive tablet layouts and an offline Read Me guide.
 
 Pocket KiVi is an independent project and is not an official KiCad, GitHub, GitLab, Altium or Siemens product. Rendering, net connectivity, imported reports and 3D approximations are review aids. Unsupported constructs and unavailable assets may affect the view. Validate designs and exported copies in KiCad before engineering use.
 

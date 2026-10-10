@@ -4,7 +4,7 @@ const viewState=require('../view-state.js'),core=require('../owned-canvas.js');
 const tick=()=>new Promise(resolve=>setImmediate(resolve)),plain=value=>JSON.parse(JSON.stringify(value));
 async function revision(query='',extraFiles=[],options={}){
  const listeners=new Map(),canvasListeners=new Map(),controls=new Map(),reports=[],calls={board:0,page:0,draw:0,disposed:0,attach:0};
- class Element{constructor(){this.attributes={};this.children=[];this.hidden=false;this.dataset={viewer:'auto'};this.isConnected=true;this.classList={add(){},remove(){},toggle(){}};this.style={};}setAttribute(k,v){this.attributes[k]=String(v);}getAttribute(k){return this.attributes[k]??null;}append(...children){this.children.push(...children);}addEventListener(){}remove(){}replaceChildren(){this.children=[];}click(){return this.onclick?.();}}
+ class Element{constructor(){this.attributes={};this.children=[];this.listeners=new Map();this.hidden=false;this.dataset={viewer:'auto'};this.isConnected=true;this.classList={add(){},remove(){},toggle(){}};this.style={};}setAttribute(k,v){this.attributes[k]=String(v);}getAttribute(k){return this.attributes[k]??null;}append(...children){this.children.push(...children);}addEventListener(type,fn){if(!this.listeners.has(type))this.listeners.set(type,new Set());this.listeners.get(type).add(fn);}removeEventListener(type,fn){this.listeners.get(type)?.delete(fn);}remove(){}replaceChildren(){this.children=[];}click(){const result=this.onclick?.();for(const listener of this.listeners.get('click')||[])listener();return result;}}
  Element.prototype.insertBefore=function(child,before){const index=this.children.indexOf(before);if(index<0)this.children.push(child);else this.children.splice(index,0,child);};
  const get=id=>{if(!controls.has(id)){const element=new Element();if(id==='viewerSettings')element.hidden=true;controls.set(id,element);}return controls.get(id);};
  const camera=new core.Camera(800,600),parent={postMessage:(data,origin)=>reports.push({data,origin})};
@@ -138,4 +138,16 @@ test('Android shared overview filters matching sheets then restores all pages',a
  active=false;await v.context.KiCadSheetOverview.refresh();
  assert.equal(v.canvas.design.primitives.filter(p=>p.type==='text').length,3);
  v.context.KiCadSheetOverview.close();
+});
+
+test('all-sheets Unselect and Clear highlights clear local picks and delegate to shared actions',async()=>{
+ const v=await revision('',[],{android:true});await v.context.KiCadSheetOverview.open();
+ const heading=v.get('drawingHost').children.find(node=>node.id==='sheetOverview').children[0];
+ for(const [label,id]of [['Unselect','unselect'],['Clear highlights','clearHighlights']]){
+  let invoked=0;v.get(id).onclick=()=>invoked++;v.canvas.selected={uuid:'wire'};
+  const action=heading.children.find(node=>node.textContent===label);assert.ok(action);assert.equal(action.hidden,false);action.click();
+  assert.equal(invoked,1);assert.equal(v.canvas.selected,null);
+ }
+ v.context.KiCadSheetOverview.dispose();
+ assert.equal(v.get('unselect').listeners.get('click').size,0);assert.equal(v.get('clearHighlights').listeners.get('click').size,0);
 });

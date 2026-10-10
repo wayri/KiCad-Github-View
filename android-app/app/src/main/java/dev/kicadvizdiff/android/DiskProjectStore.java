@@ -25,8 +25,41 @@ final class DiskProjectStore {
         return download(repository,sha,isPrivate,nodes,downloader,false);
     }
     JSONObject download(String repository,String sha,boolean isPrivate,JSONArray nodes,Downloader downloader,boolean temporary) throws Exception {
-        JSONObject project=importProject(repository,nodes,downloader,new JSONObject().put("github",new JSONObject().put("repository",repository).put("sha",sha)),temporary);
+        return download(repository,sha,isPrivate,nodes,downloader,temporary,"");
+    }
+    JSONObject download(String repository,String sha,boolean isPrivate,JSONArray nodes,Downloader downloader,boolean temporary,String sourceRef) throws Exception {
+        JSONObject project=importProject(repository,nodes,downloader,new JSONObject().put("github",new JSONObject().put("repository",repository).put("sha",sha).put("sourceRef",sourceRef)),temporary);
         return new JSONObject().put("repository",repository).put("sha",sha).put("private",isPrivate).put("project",project);
+    }
+    JSONObject findRemote(String provider,String host,String repository,String ref) {
+      synchronized(LOCK) {
+        JSONObject newest=null;long newestTime=-1;
+        for(File base:new File[]{tempRoot,root}) {
+            File[] directories=base.listFiles();if(directories==null)continue;
+            for(File directory:directories)try {
+                if(!directory.isDirectory()||!directory.getName().matches("[a-f0-9]{32}"))continue;
+                JSONObject project=readManifest(directory),origin=project.optJSONObject(provider);
+                if(origin==null||project.optBoolean("deletionPending")||expired(project,System.currentTimeMillis()))continue;
+                boolean sameRepository=provider.equals("github")?origin.optString("repository").equalsIgnoreCase(repository):origin.optString("repository").equals(repository);
+                if(!sameRepository||!origin.optString("host","").equals(host))continue;
+                String sha=origin.optString("sha");
+                if(!sha.matches("[a-f0-9]{40}")||!(ref.equals(sha)||ref.equals(origin.optString("sourceRef",""))))continue;
+                boolean complete=true;
+                for(String kind:new String[]{"files","assets"}) {
+                    JSONArray entries=project.optJSONArray(kind);if(entries==null){complete=false;break;}
+                    for(int i=0;i<entries.length();i++) {
+                        JSONObject item=entries.getJSONObject(i);String diskPath=item.optString("diskPath"),expectedPrefix=prefix(base.equals(tempRoot))+directory.getName()+"/";
+                        if(!diskPath.startsWith(expectedPrefix)||!diskPath.substring(expectedPrefix.length()).matches("[0-9]{1,4}")){complete=false;break;}
+                        File file=new File(directory,diskPath.substring(expectedPrefix.length()));
+                        if(!file.isFile()||file.length()!=item.optLong("size",-1)){complete=false;break;}
+                    }
+                    if(!complete)break;
+                }
+                if(complete&&directory.lastModified()>newestTime){newest=project;newestTime=directory.lastModified();}
+            }catch(Exception ignored){/* Missing or incomplete copies fall back to import. */}
+        }
+        return newest;
+      }
     }
     JSONObject importProject(String name,JSONArray nodes,Downloader downloader,JSONObject metadata,boolean temporary) throws Exception {
       synchronized(LOCK) {
@@ -94,6 +127,22 @@ final class DiskProjectStore {
                 try {JSONObject manifest=readManifest(directory);manifest.put("deletionPending",true);writeManifest(directory,manifest);scheduleCleanup();}catch(Exception ignored){}
                 throw new IOException("Unable to remove all downloaded files. Retry removal; background cleanup will also retry.");
             }}
+    }
+    int clearTemporary() throws Exception {
+      synchronized(LOCK) {
+        if(!tempRoot.exists())return 0;
+        File[] directories=tempRoot.listFiles();if(directories==null)throw new IOException("Cannot inspect temporary downloads. Retry cleanup.");
+        int removed=0;boolean failed=false;
+        String base=tempRoot.getCanonicalPath()+File.separator;
+        for(File directory:directories) {
+            if(!directory.isDirectory()||!directory.getName().matches("[a-f0-9]{32}"))continue;
+            if(!directory.getCanonicalPath().startsWith(base))throw new IOException("Invalid temporary download location");
+            try{JSONObject manifest=readManifest(directory);manifest.put("expiresAt",0).put("deletionPending",true);writeManifest(directory,manifest);}catch(Exception ignored){/* Incomplete staging directories are also disposable temporary copies. */}
+            if(deleteDirectory(directory))removed++;else failed=true;
+        }
+        if(failed){scheduleCleanup();throw new IOException("Some temporary files could not be deleted. Retry Clear temporary downloads; automatic cleanup will also retry.");}
+        return removed;
+      }
     }
     static boolean expired(JSONObject project,long now){return project.optBoolean("temporary")&&(project.optLong("expiresAt",0)<=now);}
     void cleanupExpired() {
