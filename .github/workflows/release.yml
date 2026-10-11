@@ -60,6 +60,8 @@ jobs:
         with:
           node-version: '22'
           package-manager-cache: false
+      - name: Install pinned 3D test dependency
+        run: npm install --prefix .vizdiff/build-deps --no-save --no-package-lock --ignore-scripts --no-audit --no-fund three@0.171.0
       - name: Install Python test dependencies
         run: python -m pip install '.[github]'
       - uses: actions/setup-java@v5
