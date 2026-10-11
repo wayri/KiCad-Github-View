@@ -239,7 +239,10 @@ def build(output: Path, tag: str | None = None, android: bool = False):
             browser_files.update(entry['js'])
         required = {f'extension/{name}' for name in browser_files | set(native.ASSETS)} | {f'vscode-extension/{name}' for name in native.HOST_FILES}
         if android:
-            required.update(path.relative_to(ROOT).as_posix() for path in module('package_android').source_files(ROOT))
+            # The source ZIP deliberately includes generated viewer copies. Their
+            # inputs are covered by the browser assets and tracked Android web files.
+            generated = ROOT / 'android-app/app/src/main/assets/viewer'
+            required.update(path.relative_to(ROOT).as_posix() for path in module('package_android').source_files(ROOT) if not path.is_relative_to(generated))
         audit_committed_assets(required)
     if output.is_symlink() or any(parent.is_symlink() for parent in output.parents):
         raise ValueError("Release output must not follow symbolic links.")
