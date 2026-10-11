@@ -31,10 +31,11 @@ Python 3.10+, Node 22 and Git are required. The optional `github` extra enables 
 
 ```sh
 python -m pip install '.[github]'
+npm install --prefix .vizdiff/build-deps --no-save --no-package-lock --ignore-scripts --no-audit --no-fund three@0.171.0
 python scripts/release.py --output dist/release
 ```
 
-Run `python scripts/release.py --tag v0.12.41 --output dist/release` from a clean checkout of that existing tag to validate commit binding as well. Every CLI invocation runs the required tests before assembling assets. Output directories containing unexpected files are rejected so wildcard upload cannot publish unrelated files.
+Run `python scripts/release.py --tag v0.12.41 --output dist/release` from a clean checkout of that existing tag to validate commit binding as well. Every CLI invocation runs the required tests before assembling assets. Three.js 0.171.0 is a pinned test dependency for saved 3D field geometry and probing; it stays in the ignored dependency directory. Tagged builds also reject required runtime assets absent from the committed source. Output directories containing unexpected files are rejected so wildcard upload cannot publish unrelated files.
 
 Outputs: Chromium ZIP, unsigned Firefox development ZIP, Safari macOS development payload/helper ZIP, VSIX, illustrated guides ZIP, optional hosted-viewer and App-service ZIPs, installation/comment/browser instructions, release notes, third-party notices, `release-manifest.json` and `SHA256SUMS.txt`. Browser/VSIX packaging and application ZIP normalization use fixed timestamps and file modes. The release manifest records the source commit, version, package hashes and unperformed installed Firefox/native Safari acceptance. Store signing and Mac conversion are separate steps.
 
