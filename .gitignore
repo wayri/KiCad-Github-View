@@ -33,3 +33,8 @@ kicad-review/
 /extension/vendor/kicanvas-fonts.css
 /extension/vendor/material-symbols.woff2
 /*-skill-candidates/
+
+# Required pinned PDF.js runtime assets, despite their upstream build/ directory
+!/extension/vendor/pdfjs/build/
+!/extension/vendor/pdfjs/build/pdf.min.mjs
+!/extension/vendor/pdfjs/build/pdf.worker.min.mjs

@@ -75,6 +75,17 @@ def source_commit(root: Path = ROOT, tag: str | None = None) -> str | None:
     return commit
 
 
+def audit_committed_assets(required: set[str], root: Path = ROOT):
+    """Ignored local dependencies must not masquerade as a complete source release."""
+    tracked = set(subprocess.check_output(
+        ['git', 'ls-tree', '-r', '--name-only', '-z', 'HEAD'], cwd=root
+    ).decode('utf-8').split('\0'))
+    missing = sorted(required - tracked)
+    if missing:
+        raise ValueError('Required release assets absent from committed source: ' + ', '.join(missing[:8]))
+    return len(required)
+
+
 def normalize_archive(source: Path, target: Path):
     """Normalize timestamps and permissions of existing explicitly selected app assets."""
     with zipfile.ZipFile(source) as incoming, zipfile.ZipFile(target, 'w',
@@ -220,6 +231,16 @@ def package_android(output: Path, root: Path = ROOT):
 def build(output: Path, tag: str | None = None, android: bool = False):
     version = versions(tag=tag)
     commit = source_commit(tag=tag)
+    if tag:
+        browser, native = module('package_extension'), module('package_vscode')
+        manifest = json.loads((ROOT / 'extension/manifest.json').read_text(encoding='utf-8'))
+        browser_files = set(browser.FILES) | set(browser.LEGAL_FILES) | set(manifest['icons'].values()) | {'manifest.json', manifest['background']['service_worker']}
+        for entry in manifest['content_scripts']:
+            browser_files.update(entry['js'])
+        required = {f'extension/{name}' for name in browser_files | set(native.ASSETS)} | {f'vscode-extension/{name}' for name in native.HOST_FILES}
+        if android:
+            required.update(path.relative_to(ROOT).as_posix() for path in module('package_android').source_files(ROOT))
+        audit_committed_assets(required)
     if output.is_symlink() or any(parent.is_symlink() for parent in output.parents):
         raise ValueError("Release output must not follow symbolic links.")
     output = output.resolve()

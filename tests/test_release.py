@@ -13,6 +13,25 @@ spec.loader.exec_module(release)
 
 
 class ReleaseTests(unittest.TestCase):
+    def test_ignored_local_runtime_cannot_pass_committed_source_gate(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            def git(*args):
+                return subprocess.check_output(['git', *args], cwd=root, stderr=subprocess.DEVNULL)
+            git('init', '-q')
+            (root / '.gitignore').write_text('build/\n')
+            (root / 'viewer.js').write_text('saved viewer')
+            (root / 'build').mkdir()
+            (root / 'build/runtime.js').write_text('required runtime available locally')
+            git('add', '.gitignore', 'viewer.js')
+            git('-c', 'user.name=Fixture', '-c', 'user.email=fixture@example.test', 'commit', '-qm', 'Incomplete source')
+            with self.assertRaisesRegex(ValueError, 'absent from committed source: build/runtime.js'):
+                release.audit_committed_assets({'viewer.js', 'build/runtime.js'}, root)
+            (root / '.gitignore').write_text('build/\n!build/\n!build/runtime.js\n')
+            git('add', '.gitignore', 'build/runtime.js')
+            git('-c', 'user.name=Fixture', '-c', 'user.email=fixture@example.test', 'commit', '-qm', 'Complete source')
+            self.assertEqual(release.audit_committed_assets({'viewer.js', 'build/runtime.js'}, root), 2)
+
     def test_android_binary_asset_audit_rejects_stale_missing_and_duplicate_entries(self):
         with tempfile.TemporaryDirectory() as folder:
             path = Path(folder) / 'app.apk'
