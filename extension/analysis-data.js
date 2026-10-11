@@ -32,13 +32,32 @@
  }
  function savedPlots(value){
   const plots=[];let visited=0;
-  const waveform=(title,axis,rows,xLabel)=>{if(!Array.isArray(axis)||axis.length>MAX_ROWS||!axis.length)return;const series=rows.filter(row=>Array.isArray(row.values)&&row.values.length===axis.length).map(row=>({name:row.name,points:axis.map((x,i)=>({x:numeric(x),y:numeric(row.values[i])})).filter(p=>p.x!==null).map(p=>({...p,y:p.y===null?NaN:p.y}))}));if(series.length)plots.push({title,xLabel,series});};
+  const waveform=(title,axis,rows,xLabel)=>{if(plots.length>=64||!Array.isArray(axis)||axis.length>MAX_ROWS||!axis.length)return;const series=rows.slice(0,title==='Illustrative eye diagram'?512:64).filter(row=>Array.isArray(row.values)&&row.values.length===axis.length).map(row=>({name:row.name,points:axis.map((x,i)=>({x:numeric(x),y:numeric(row.values[i])})).filter(p=>p.x!==null).map(p=>({...p,y:p.y===null?NaN:p.y}))}));if(series.length)plots.push({title,xLabel,series});};
   const walk=(item,key,depth)=>{
    if(!item||typeof item!=='object'||depth>18||++visited>12000||plots.length>=64)return;
    if(Array.isArray(item)){for(const child of item.slice(0,100))if(child&&typeof child==='object'&&!Array.isArray(child))walk(child,key,depth+1);return;}
    if(Array.isArray(item.times_s)){
     waveform(key||'Transient',item.times_s,Object.entries(item).filter(([name,v])=>Array.isArray(v)&&/_V$|_A$/.test(name)).map(([name,values])=>({name,values})),'Time (s)');
-    for(const child of [...(Array.isArray(item.loads)?item.loads:[]),...(Array.isArray(item.components)?item.components:[])])if(child&&typeof child==='object')waveform((key||'Transient')+' · '+(child.reference||child.name||child.id||'component'),item.times_s,Object.entries(child).filter(([name,v])=>Array.isArray(v)&&/_V$|_A$|temperature_c|power_W/.test(name)).map(([name,values])=>({name,values})),'Time (s)');
+    for(const child of [...(Array.isArray(item.loads)?item.loads:[]),...(Array.isArray(item.components)?item.components:[]),...(Array.isArray(item.thermal_nodes)?item.thermal_nodes:[])])if(child&&typeof child==='object')waveform((key||'Transient')+' · '+(child.reference||child.name||child.label||child.id||'component'),item.times_s,Object.entries(child).filter(([name,v])=>Array.isArray(v)&&/_V$|_A$|temperature_c|power_W/.test(name)).map(([name,values])=>({name,values})),'Time (s)');
+   }
+   if(Array.isArray(item.history)&&item.history.length&&item.history.length<=MAX_ROWS&&item.history.some(row=>numeric(row?.time_s)!==null)){
+    const history=item.history,axis=history.map(row=>row?.time_s),boards=[...new Set(history.flatMap(row=>Array.isArray(row?.boards)?row.boards.map((b,i)=>b?.name??String(i)):[]))].slice(0,32);
+    for(const name of boards){if(plots.length>=64)break;
+     const rows=history.map(row=>(Array.isArray(row?.boards)?row.boards:[]).find((b,i)=>(b?.name??String(i))===name));
+     const refs=[...new Set(rows.flatMap(row=>row?.temperatures_c&&typeof row.temperatures_c==='object'?Object.keys(row.temperatures_c):[]))].slice(0,60);
+     waveform('Saved thermal transient · '+name,axis,[...refs.map(ref=>({name:ref+' (°C)',values:rows.map(row=>row?.temperatures_c?.[ref])})),...['inlet_air_c','outlet_air_c'].filter(field=>rows.some(row=>numeric(row?.[field])!==null)).map(field=>({name:field+' (°C)',values:rows.map(row=>row?.[field])}))],'Time (s)');
+     const power=['power_w','air_heat_w','fixture_heat_w','stored_heat_w','energy_residual_w'].filter(field=>rows.some(row=>numeric(row?.[field])!==null));
+     if(power.length&&plots.length<64)waveform('Saved thermal power · '+name,axis,power.map(field=>({name:field+' (W)',values:rows.map(row=>row?.[field])})),'Time (s)');
+    }
+   }
+   const spatial=item.spatial_index,frames=item.frames;
+   if(spatial&&Array.isArray(frames)&&frames.length&&frames.length<=MAX_ROWS&&Array.isArray(spatial.x_centers_mm)&&Array.isArray(spatial.y_centers_mm)&&Array.isArray(spatial.cells)&&Array.isArray(spatial.layers)){
+    const x=spatial.x_centers_mm.map(numeric),y=spatial.y_centers_mm.map(numeric),cells=spatial.cells,layers=spatial.layers;
+    const valid=x.length&&y.length&&x.length*y.length<=1000000&&x.every(v=>v!==null)&&y.every(v=>v!==null)&&cells.length&&cells.length<=1000000&&layers.length&&layers.length<=64&&spatial.active_cells_per_layer===cells.length&&cells.every(c=>Array.isArray(c)&&c.length===2&&c.every(Number.isSafeInteger)&&c[0]>=0&&c[0]<x.length&&c[1]>=0&&c[1]<y.length)&&new Set(cells.map(c=>c.join(','))).size===cells.length&&frames.every(f=>numeric(f?.time_s)!==null&&Array.isArray(f.temperatures_c)&&f.temperatures_c.length>=cells.length*layers.length);
+    if(valid&&x.length*y.length*layers.length<=1000000)for(let layerIndex=0;layerIndex<layers.length&&plots.length<64;layerIndex++){
+     const plot={type:'heatmap',title:'Saved thermal transient field · '+(layers[layerIndex]?.name||layers[layerIndex]?.id||layerIndex),x,y,cells,frames,layerIndex,frameIndex:frames.length-1,unit:'°C',layerName:layers[layerIndex]?.name,layerZmm:numeric(layers[layerIndex]?.z_mm),zBasis:'front-depth'};
+     plot.values=frameValues(plot,plot.frameIndex);plots.push(plot);
+    }
    }
    if(Array.isArray(item.time_ui)&&Array.isArray(item.traces_v))waveform('Illustrative eye diagram',item.time_ui,item.traces_v.slice(0,512).map((values,i)=>({name:'Trace '+(i+1)+' (V)',values})),'Time (UI)');
    if(Array.isArray(item.time_ns)&&Array.isArray(item.voltage_v))waveform('Saved step response',item.time_ns,[{name:'Voltage (V)',values:item.voltage_v}],'Time (ns)');
@@ -51,7 +70,7 @@
     if(x.length&&y.length&&x.length*y.length<=1000000&&x.every(v=>numeric(v)!==null)&&y.every(v=>numeric(v)!==null)&&values.length===y.length&&values.every(row=>Array.isArray(row)&&row.length===x.length))plots.push({type:'heatmap',title:key.includes('board_thermal_view')?'Illustrative junction interpolation'+(key.endsWith('.top')?' · top':key.endsWith('.bottom')?' · bottom':''):'Saved board temperature field',x,y,values,unit:'°C',label:key});
    }
    for(const name of ['rows','samples'])if(Array.isArray(item[name])&&item[name].length){const rows=item[name].filter(row=>row&&typeof row==='object'&&!Array.isArray(row)),axis=['frequency_mhz','frequency_Hz','time_s'].find(k=>rows.some(row=>numeric(row?.[k])!==null));if(axis){const names=[...new Set(rows.flatMap(row=>Object.keys(row)))].filter(k=>k!==axis&&rows.some(row=>numeric(row?.[k])!==null));waveform(key,rows.map(row=>row[axis]),names.slice(0,32).map(name=>({name,values:rows.map(row=>row[name])})),axis);}}
-   for(const [name,child]of Object.entries(item))if(!['values_c','points_mm','triangles','vertices','faces','traces_v'].includes(name))walk(child,key?key+'.'+name:name,depth+1);
+   for(const [name,child]of Object.entries(item))if(!['values_c','points_mm','triangles','vertices','faces','traces_v','frames','spatial_index','history'].includes(name))walk(child,key?key+'.'+name:name,depth+1);
   };walk(value,'',0);
   const mesh=value?.mesh,result=value?.result;
   if(Array.isArray(mesh?.points_mm)&&Array.isArray(mesh?.triangles)&&mesh.points_mm.length<=200000&&mesh.triangles.length<=200000&&mesh.points_mm.every(p=>Array.isArray(p)&&p.length>=2&&p.slice(0,2).every(v=>numeric(v)!==null))&&mesh.triangles.every(t=>Array.isArray(t)&&t.length===3&&t.every(i=>Number.isSafeInteger(i)&&i>=0&&i<mesh.points_mm.length))){
@@ -60,7 +79,7 @@
      const layers=Array.isArray(mesh.triangle_layer)&&mesh.triangle_layer.length===mesh.triangles.length?[...new Set(mesh.triangle_layer.map(String))].slice(0,64):[null];
      for(const layer of layers){if(plots.length>=64)break;const indices=mesh.triangles.map((_,i)=>i).filter(i=>layer===null||String(mesh.triangle_layer[i])===layer);
       const label=(Array.isArray(value.geometry?.layers)?value.geometry.layers:[]).find(l=>String(l?.id)===layer)?.name||layer;
-      plots.push({type:'mesh-field',title:title+(label?' · '+label:''),points:mesh.points_mm.map(p=>p.map(numeric)),triangles:indices.map(i=>mesh.triangles[i]),values:nodal?values:indices.map(i=>values[i]),nodal,unit});}
+      plots.push({type:'mesh-field',title:title+(label?' · '+label:''),points:mesh.points_mm.map(p=>p.map(numeric)),triangles:indices.map(i=>mesh.triangles[i]),values:nodal?values:indices.map(i=>values[i]),nodal,unit,layerName:label,zBasis:typeof value.geometry?.z_convention==='string'&&value.geometry.z_convention.includes('positive Z down from the top copper surface')?'front-depth':undefined});}
     };
    add('Saved nodal potential',result?.potential_V,true,'V');add('Saved cell power',result?.cell_power_W,false,'W');
    if(Array.isArray(result?.cell_J_A_mm2))add('Saved current density magnitude',result.cell_J_A_mm2.map(v=>Array.isArray(v)&&v.every(n=>numeric(n)!==null)?Math.hypot(...v):null),false,'A/mm²');
@@ -87,7 +106,7 @@
     result.plots.push({title:key,xLabel:item.x_label||item.xLabel||(item.frequency_hz?'Frequency (Hz)':item.time_s?'Time (s)':'x'),series:[{name:item.name||item.y_label||item.yLabel||key,points:x.map((v,i)=>({x:numeric(v),y:numeric(y[i])}))}]});
    }
    for(const [name,child]of Object.entries(item).sort(([a],[b])=>(/schema|sha|source|status|coverage|findings|checks|assumptions|limit|warning/.test(a)?-1:/mesh|values|samples|points|traces|bodies|field/.test(a)?1:0)-(/schema|sha|source|status|coverage|findings|checks|assumptions|limit|warning/.test(b)?-1:/mesh|values|samples|points|traces|bodies|field/.test(b)?1:0)))visit(child,key?key+'.'+name:name,depth+1);
-  };result.plots=savedPlots(value);visit(value,'',0);
+  };result.savedSource=value;result.plots=savedPlots(value);visit(value,'',0);
   if(nodes>MAX_FIELDS)result.warnings.push('Property preview limited to '+MAX_FIELDS+' fields; full source remains available.');
   if(/\.wbk$/i.test(path))result.warnings.push('This workbook stores simulation commands, signals and display settings, not waveform samples. Add a KiCad CSV export or saved SPICE raw data to view graphs.');
   return result;
@@ -127,5 +146,40 @@
   else throw Error('Open a JSON report, KiCad .wbk, CSV/TSV export, HTML report or ASCII SPICE .raw file.');
   return {...result,path,title:path.split('/').at(-1)};
  }
- const API={parse,candidate,numeric,delimited,tablePlot,MAX_BYTES};root.KiCadAnalysisData=API;if(typeof module==='object'&&module.exports)module.exports=API;
+ // Probe saved samples only. Waveforms use nearest samples; nodal mesh fields
+ // interpolate within the saved triangle, never across missing nodes or holes.
+ function frameValues(plot,index){const frame=plot.frames?.[index];if(!frame||!Number.isSafeInteger(index))return null;const values=plot.y.map(()=>plot.x.map(()=>null));plot.cells.forEach(([x,y],i)=>{values[y][x]=numeric(frame.temperatures_c[plot.layerIndex*plot.cells.length+i]);});return values;}
+ function cellBounds(axis,i){const c=axis[i],a=axis[i-1],b=axis[i+1];if(axis.length===1)return[c-.5,c+.5];const left=a===undefined?c+(c-b)/2:(a+c)/2,right=b===undefined?c+(c-a)/2:(b+c)/2;return[Math.min(left,right),Math.max(left,right)];}
+ function probe(plot,x,y,seriesName){
+  if(!Number.isFinite(x)||!plot)return null;
+  if(plot.series){
+   const series=plot.series.find(s=>s.name===seriesName)||plot.series[0];if(!series)return null;
+   let nearest=null,distance=Infinity,min=Infinity,max=-Infinity;
+   for(const p of series.points){if(!Number.isFinite(p.x))continue;min=Math.min(min,p.x);max=Math.max(max,p.x);const d=Math.abs(p.x-x);if(d<distance){nearest=p;distance=d;}}
+   if(!nearest||x<min||x>max)return null;
+   return {x:nearest.x,value:numeric(nearest.y),name:series.name,axis:plot.xLabel,method:'Nearest saved sample'};
+  }
+  if(!Number.isFinite(y))return null;
+  if(plot.type==='heatmap'){
+   const cell=(axis,value)=>{let best=-1,distance=Infinity;for(let i=0;i<axis.length;i++){const [low,high]=cellBounds(axis,i);if(value>=low&&value<=high&&Math.abs(axis[i]-value)<distance){best=i;distance=Math.abs(axis[i]-value);}}return best;};
+   const xi=cell(plot.x,x),yi=cell(plot.y,y);if(xi<0||yi<0)return null;
+   return {x:plot.x[xi],y:plot.y[yi],value:numeric(plot.values[yi][xi]),name:plot.title,unit:plot.unit,method:'Saved cell center'};
+  }
+  if(plot.type==='mesh-field'){
+   for(let i=0;i<plot.triangles.length;i++){
+    const t=plot.triangles[i],[a,b,c]=t.map(n=>plot.points[n]),d=(b[1]-c[1])*(a[0]-c[0])+(c[0]-b[0])*(a[1]-c[1]);if(Math.abs(d)<1e-14)continue;
+    const u=((b[1]-c[1])*(x-c[0])+(c[0]-b[0])*(y-c[1]))/d,v=((c[1]-a[1])*(x-c[0])+(a[0]-c[0])*(y-c[1]))/d,w=1-u-v;if(Math.min(u,v,w)<-1e-9)continue;
+    const values=plot.nodal?t.map(n=>numeric(plot.values[n])):[numeric(plot.values[i])],value=values.some(n=>n===null)?null:plot.nodal?values[0]*u+values[1]*v+values[2]*w:values[0];
+    const z=[a,b,c].every(p=>Number.isFinite(p[2]))?a[2]*u+b[2]*v+c[2]*w:undefined;
+    return {x,y,...(z===undefined?{}:{z}),value,name:plot.title,unit:plot.unit,method:plot.nodal?'Interpolated saved nodes':'Saved cell value'};
+   }
+
+  }
+  return null;
+ }
+ function probeDifference(a,b){
+  if(!a||!b||a.name!==b.name||a.unit!==b.unit||a.axis!==b.axis)return null;
+  return {dx:b.x-a.x,...(Number.isFinite(a.y)&&Number.isFinite(b.y)?{dy:b.y-a.y,distance:Math.hypot(b.x-a.x,b.y-a.y)}:{}),delta:a.value===null||b.value===null?null:b.value-a.value};
+ }
+ const API={parse,candidate,numeric,delimited,tablePlot,cellBounds,frameValues,probe,probeDifference,MAX_BYTES};root.KiCadAnalysisData=API;if(typeof module==='object'&&module.exports)module.exports=API;
 })(globalThis);

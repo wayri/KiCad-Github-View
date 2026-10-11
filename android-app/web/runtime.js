@@ -2,7 +2,7 @@
 (() => {
  'use strict';
  window.KiCadAndroidRuntime=true;
- const project=window.top.KiCadAndroidProject;if(!project)throw Error('Open a local KiCad file first.');
+ const project=window.top.KiCadAndroidProject;if(!project)return; // Offline tools can open without a project; no project transport is granted.
  const api=KiCadAndroidLocal.transport(project,localStorage);
  const online=Boolean(project.github||project.remote);window.KiCadAndroidOnline=online;
  const provider=project.remote?.provider||'github';

@@ -285,6 +285,7 @@ const KiCadGitLabReviewApi = (() => {
     if (project.path_with_namespace !== repository || !Number.isSafeInteger(project.id) || project.id <= 0) throw fail("GitLab returned another project identity.", true);
     const policy = await commentPolicyStatus(host, repository,project.id);
     if (!policy.allowed) throw fail(`Repository comment policy blocked publication: ${policy.reason}`, true);
+    await KiCadReviewComments.reservePublication(chrome.storage.local, JSON.stringify(['gitlab',host]), Date.now());
     if((note.capture||note.attachments?.length)&&project.visibility!=='public'&&project.enforce_auth_checks_on_uploads!==true)throw fail('GitLab image uploads can be public by URL. For a private/internal project, enable Require authentication to view media files in GitLab project settings, or remove the screenshot to post text only.',true);
     const attachments=note.capture?[await uploadCapture(note,host,repository,project.id,token,current)]:note.attachments?.map(value=>checkedAttachment(value,host,repository,project.id));
     const mutationPath=`/api/v4/projects/${project.id}`;

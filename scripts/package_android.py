@@ -13,14 +13,14 @@ def source_files(root=ROOT):
                   if p.is_file() and not p.is_symlink()
                   and not any(x in {'build', '.gradle', '.git'} for x in p.relative_to(root / 'android-app').parts)
                   and p.name not in {'local.properties', 'keystore.properties', 'signing.properties'}
-                  and p.suffix.lower() not in {'.jks', '.keystore', '.pem', '.key'}
+                  and p.suffix.lower() not in {'.jks', '.keystore', '.pem', '.key', '.p12', '.pfx', '.dpapi'}
                   and not p.name.startswith('.env'))
 
 def payload(root=ROOT):
     spec = importlib.util.spec_from_file_location('extension_builder', root / 'scripts/package_extension.py')
     module = importlib.util.module_from_spec(spec); spec.loader.exec_module(module)
     excluded = {'merge-conflicts.js', 'conflict-viewer.html', 'conflict-viewer.js', 'conflict-viewer.css', 'conflict-properties.js', 'manifest.json', 'options.html', 'options.js', 'gitlab-options.js', 'gitlab-hosts.js', 'gitlab-provider.js', 'gitlab-review-api.js', 'github-review-api.js', 'mention-users.js', 'review-file-store.js', 'review-file-settings.js', 'html-sandbox.html', 'html-sandbox.js', 'credential-vault.js', 'credential-vault-host.html', 'credential-vault-host.js', 'credential-vault-worker.js'}
-    names = (module.FILES - excluded) | {'parsing.js'}
+    names = ((module.FILES | module.LEGAL_FILES) - excluded) | {'parsing.js'}
     result = {}
     for name in sorted(names):
         content = (root / 'extension' / name).read_bytes()
@@ -46,14 +46,21 @@ def payload(root=ROOT):
             content=text.encode('utf-8')
         if name.endswith('.html'):
             text = content.decode('utf-8')
-            text = text.replace('</head>', '<link rel="stylesheet" href="android.css"></head>')
+            text = text.replace('<link rel="stylesheet" href="ui-foundation.css">', '')
+            text = text.replace('</head>', '<link rel="stylesheet" href="android.css"><link rel="stylesheet" href="compact-ui.css"><link rel="stylesheet" href="copper-controls.css"><link rel="stylesheet" href="settings.css"><link rel="stylesheet" href="measurement-tools.css"><link rel="stylesheet" href="ui-foundation.css"></head>')
             text = re.sub(r'<script src=', '<script src="local-project.js"></script><script src="remote-review.js"></script><script src="revision-snapshots.js"></script><script src="runtime.js"></script><script src=', text, count=1)
-            text = text.replace('</body>', '<script src="android-project.js"></script><script src="touch-tooltips.js"></script><script src="resizable-sheets.js"></script><script src="adaptive-ui.js"></script></body>')
+            text = text.replace('</body>', '<script src="android-project.js"></script><script src="touch-tooltips.js"></script><script src="resizable-sheets.js"></script><script src="adaptive-ui.js"></script><script src="measurement-tools.js"></script><script src="presentation.js"></script><script src="engineering-tools.js"></script></body>')
             # Folder HTML is deliberately excluded: it must never execute with a native bridge.
             content = text.encode('utf-8')
         result[name] = content
     for source in (root / 'android-app/web').iterdir():
-        if source.is_file(): result[source.name] = source.read_bytes()
+        if source.is_file():
+            content=source.read_bytes()
+            if source.name=='about.html':
+                version=re.search(r"versionName '([^']+)'",(root/'android-app/app/build.gradle').read_text()).group(1)
+                content=content.replace(b'__APP_VERSION__',version.encode('utf-8'))
+            result[source.name]=content
+    result['app-logo.png']=(root/'android-app/app/src/main/res/drawable/app_icon.png').read_bytes()
     result['shared-assets.json'] = (json.dumps({'assets': {name: hashlib.sha256(data).hexdigest() for name, data in sorted(result.items())}}, indent=2)+'\n').encode()
     return result
 

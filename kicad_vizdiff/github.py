@@ -16,6 +16,15 @@ MAX_ARCHIVE = 50 * 1024 * 1024
 MAX_EXPANDED = 250 * 1024 * 1024
 
 
+class NoRedirect(urllib.request.HTTPRedirectHandler):
+    """Never forward App authorization to a redirected host."""
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        raise VizError('GitHub API redirect refused. Use the canonical repository name.')
+
+
+_api_opener = urllib.request.build_opener(NoRedirect())
+
+
 def repository_name(value):
     if not isinstance(value, str) or not re.fullmatch(r'[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+', value):
         raise VizError('Repository must be owner/name on github.com.')
@@ -25,6 +34,8 @@ def repository_name(value):
 
 
 def api(path, token=None, payload=None, method=None):
+    if not isinstance(path, str) or not path.startswith('/') or path.startswith('//') or any(ord(c) < 32 or ord(c) == 127 for c in path):
+        raise VizError('Invalid GitHub API path.')
     headers = {'Accept': 'application/vnd.github+json', 'User-Agent': 'KiCad-Visual-Review',
                'X-GitHub-Api-Version': '2022-11-28'}
     if token:
@@ -34,7 +45,7 @@ def api(path, token=None, payload=None, method=None):
     request = urllib.request.Request('https://api.github.com' + path, headers=headers,
                                      data=json.dumps(payload).encode() if payload is not None else None, method=method)
     try:
-        with urllib.request.urlopen(request, timeout=30) as response:
+        with _api_opener.open(request, timeout=30) as response:
             raw = response.read(10 * 1024 * 1024 + 1)
             if len(raw) > 10 * 1024 * 1024:
                 raise VizError('GitHub response exceeds limit.')

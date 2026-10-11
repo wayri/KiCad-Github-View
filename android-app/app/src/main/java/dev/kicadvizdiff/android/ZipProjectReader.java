@@ -8,11 +8,18 @@ import java.util.zip.*;
 
 /** Disk-backed ZIP selection: unsupported members are never decompressed. */
 final class ZipProjectReader {
-    static final long ARCHIVE_LIMIT = 512L * 1024 * 1024;
+    static final long ARCHIVE_LIMIT = 1024L * 1024 * 1024;
+    static final long DISK_FILE_LIMIT = 256L * 1024 * 1024, DISK_TOTAL_LIMIT = 1024L * 1024 * 1024;
     static final int FILE_LIMIT = 32 * 1024 * 1024, TOTAL_LIMIT = 96 * 1024 * 1024;
     static final int ENTRY_LIMIT = 10000, FILE_COUNT_LIMIT = 2000;
     interface Cancelled { boolean get(); }
     interface Sink { void accept(String path, byte[] content) throws Exception; }
+    interface Extractor { void extract(String path, File destination) throws Exception; }
+    interface DiskSink { void accept(List<Member> members, Extractor extractor) throws Exception; }
+    static final class Member {
+        final String path; final long size;
+        Member(String path, long size) { this.path=path; this.size=size; }
+    }
     private ZipProjectReader() { }
     static void check(Cancelled cancelled) throws IOException {
         if (cancelled.get() || Thread.currentThread().isInterrupted()) throw new IOException("Import cancelled");
@@ -23,13 +30,13 @@ final class ZipProjectReader {
             byte[] buffer = new byte[65536]; int count;
             while ((count = input.read(buffer)) != -1) {
                 check(cancelled); total += count;
-                if (total > ARCHIVE_LIMIT) throw new IOException("ZIP archive exceeds 512 MiB. Open the extracted project folder instead.");
+                if (total > ARCHIVE_LIMIT) throw new IOException("ZIP archive exceeds 1 GiB. Open the extracted project folder instead.");
                 output.write(buffer, 0, count);
             }
         }
     }
     static void read(File archive, Cancelled cancelled, Predicate<String> supported, Sink sink) throws Exception {
-        if (archive.length() > ARCHIVE_LIMIT) throw new IOException("ZIP archive exceeds 512 MiB");
+        if (archive.length() > ARCHIVE_LIMIT) throw new IOException("ZIP archive exceeds 1 GiB");
         Set<String> allowed = inspect(archive, cancelled, supported);
         long total = 0; int count = 0;
         try (ZipFile zip = new ZipFile(archive, java.nio.charset.Charset.forName("CP437"))) {
@@ -62,6 +69,41 @@ final class ZipProjectReader {
             }
         }
         if (!allowed.isEmpty()) throw new IOException("Incomplete ZIP archive");
+    }
+    /** Keep the ZIP open while the store streams selected members into its transaction. */
+    static void readDisk(File archive, Cancelled cancelled, Predicate<String> supported, DiskSink sink) throws Exception {
+        if (archive.length() > ARCHIVE_LIMIT) throw new IOException("ZIP archive exceeds 1 GiB");
+        Set<String> allowed=inspect(archive,cancelled,supported);
+        try (ZipFile zip=new ZipFile(archive, java.nio.charset.Charset.forName("CP437"))) {
+            Map<String,ZipEntry> selected=new LinkedHashMap<>(); List<Member> members=new ArrayList<>(); long total=0;
+            Enumeration<? extends ZipEntry> entries=zip.entries();
+            while(entries.hasMoreElements()) {
+                check(cancelled); ZipEntry entry=entries.nextElement(); if(entry.isDirectory())continue;
+                String path=entry.getName(); if(!allowed.remove(path.toLowerCase(Locale.ROOT)))throw new IOException("ZIP directory mismatch");
+                if(!supported.test(path))continue;
+                long size=entry.getSize();
+                if(size<0||size>DISK_FILE_LIMIT)throw new IOException("KiCad ZIP member exceeds 256 MiB: "+path);
+                if(size>DISK_TOTAL_LIMIT-total)throw new IOException("Supported KiCad files exceed 1 GiB");
+                if(members.size()>=FILE_COUNT_LIMIT)throw new IOException("Too many KiCad files (limit 2000)");
+                if(size>1024*1024&&entry.getCompressedSize()>0&&size/entry.getCompressedSize()>1000)
+                    throw new IOException("ZIP compression ratio exceeds safe limit: "+path);
+                total+=size; selected.put(path,entry); members.add(new Member(path,size));
+            }
+            if(!allowed.isEmpty())throw new IOException("Incomplete ZIP archive");
+            sink.accept(Collections.unmodifiableList(members),(path,destination)-> {
+                check(cancelled); ZipEntry entry=selected.get(path); if(entry==null)throw new IOException("Unknown ZIP member");
+                long bytes=0; CRC32 crc=new CRC32();
+                try(InputStream input=zip.getInputStream(entry); OutputStream output=new FileOutputStream(destination)) {
+                    byte[] buffer=new byte[65536]; int n;
+                    while((n=input.read(buffer))!=-1) {
+                        check(cancelled); bytes+=n;
+                        if(bytes>entry.getSize()||bytes>DISK_FILE_LIMIT)throw new IOException("ZIP member size mismatch: "+path);
+                        crc.update(buffer,0,n);output.write(buffer,0,n);
+                    }
+                }
+                if(bytes!=entry.getSize()||crc.getValue()!=entry.getCrc())throw new IOException("Corrupt ZIP member: "+path);
+            });
+        }
     }
     private static String safePath(String path) throws IOException {
         if (path.isEmpty() || path.length() > 500) throw new IOException("Unsafe ZIP path");

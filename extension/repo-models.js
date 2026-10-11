@@ -38,12 +38,42 @@
     return resolved.length <= MAX_PATH && isPath(resolved) ? resolved : null;
   }
 
-  function collect(source, boardPath, parser = root.KiCadDesignDiff?.parse) {
+  function collect(source, boardPath, parser = root.KiCadDesignDiff?.parse, assetPaths = []) {
     if (typeof parser !== "function") throw new Error("KiCad S-expression parser is unavailable.");
     const ast = parser(source);
     if (kind(ast) !== "kicad_pcb") throw new Error("Expected a saved KiCad PCB.");
     const models = [], diagnostics = [];
     const warn = message => { if (diagnostics.length < 48) diagnostics.push(message); };
+    const available = Array.isArray(assetPaths) ? assetPaths.slice(0, 2000).filter(path => isPath(path) &&
+      path.split('/').every(part => part && part !== '.' && part !== '..')) : [];
+    function repositoryPath(raw, ref) {
+      const relative = resolveModelPath(boardPath, raw);
+      if (relative) return relative;
+      // Library environment variables are local KiCad settings. Resolve them only
+      // against actual imported repository files; never fetch a global library URL.
+      const suffix = typeof raw === 'string' && /^\$\{KICAD\d+_3DMODEL_DIR\}[\\/]/.test(raw)
+        ? raw.replace(/^\$\{KICAD\d+_3DMODEL_DIR\}[\\/]/, '').replace(/\\/g, '/') : null;
+      if (!suffix || !isPath(suffix) || suffix.split('/').some(part => !part || part === '.' || part === '..')) return null;
+      const matches = available.filter(path => path === suffix || path.endsWith('/' + suffix));
+      if (matches.length === 1) return matches[0];
+      if (matches.length > 1) warn(`${ref}: model library path matches multiple repository files: ${suffix}`);
+      return null;
+    }
+    function embeddedFiles(node) {
+      const files = new Map();
+      for (const form of children(child(node, 'embedded_files'), 'file')) {
+        const name = scalar(form, 'name');
+        if (!isPath(name) || name.split('/').some(part => !part || part === '.' || part === '..')) continue;
+        if (files.has(name)) { files.set(name, null); warn(`Duplicate embedded model name: ${name}`); continue; }
+        const data = child(form, 'data');
+        const pieces = data?.slice(1).map(value);
+        const encoded = pieces?.join('') || '';
+        const base64 = encoded.startsWith('|') && encoded.endsWith('|') ? encoded.slice(1, -1) : '';
+        files.set(name, {base64, checksum: String(scalar(form, 'checksum') || '')});
+      }
+      return files;
+    }
+    const boardEmbedded = embeddedFiles(ast);
     for (const [footprintIndex, footprint] of children(ast, "footprint").entries()) {
       const modelForms = children(footprint, "model");
       if (!modelForms.length) continue;
@@ -59,7 +89,11 @@
       for (const entry of modelForms) {
         if (models.length >= MAX_MODELS) { warn(`Only the first ${MAX_MODELS} footprint model references are loaded.`); return { models, diagnostics }; }
         const rawPath = value(entry[1]);
-        const path = resolveModelPath(boardPath, rawPath);
+        const embeddedName = typeof rawPath === 'string' && rawPath.startsWith('kicad-embed://') ? rawPath.slice(14) : null;
+        const footprintEmbedded = embeddedName !== null ? embeddedFiles(footprint) : null;
+        const embeddedAsset = embeddedName !== null ? (footprintEmbedded.has(embeddedName) ? footprintEmbedded.get(embeddedName) : boardEmbedded.get(embeddedName)) : null;
+        if (embeddedName !== null && !embeddedAsset) { warn(`${ref}: embedded model is missing or ambiguous: ${embeddedName}`); continue; }
+        const path = embeddedName !== null ? rawPath : repositoryPath(rawPath, ref);
         if (!path) { warn(`${ref}: model path is not a repository-relative file: ${String(rawPath).slice(0, 100)}`); continue; }
         const extension = /\.([a-z\d]+)$/i.exec(path)?.[1]?.toLowerCase();
         if (!["wrl", "vrml", "glb", "step", "stp"].includes(extension)) {
@@ -77,7 +111,8 @@
           warn(`${ref}: model transform is invalid: ${path}`); continue;
         }
         models.push({ path, format: extension, footprintId: String(id), reference: ref,
-          footprint: { x, y, angle, layer }, offset, scale, rotate });
+          footprint: { x, y, angle, layer }, offset, scale, rotate,
+          ...(embeddedAsset ? {embeddedAsset, assetKey: `embedded:${footprintEmbedded.has(embeddedName) ? footprintIndex : 'board'}:${embeddedName}`} : {}) });
       }
     }
     return { models, diagnostics };

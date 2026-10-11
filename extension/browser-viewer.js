@@ -1,6 +1,7 @@
 "use strict";
 (() => {
   const params = new URLSearchParams(location.search);
+  if(/\.pdf$/i.test(params.get('file')||'')){const removed=params.get('status')==='removed';params.set('ref',params.get('ref')||(removed?params.get('base'):params.get('head'))||'');if(!removed&&params.get('headRepository'))params.set('repository',params.get('headRepository'));location.replace(chrome.runtime.getURL('pdf-viewer.html')+'?'+params);return;}
   const request = {
     repository: params.get("repository"), headRepository: params.get("headRepository") || params.get("repository"),
     file: params.get("file"), oldFile: params.get("oldFile") || params.get("file"),
@@ -126,10 +127,12 @@
       return;
     }
     holder.className = "drawing";
-    const viewer = element("iframe");
+    const viewer = element("iframe");viewer.allow="camera";
     viewer.title = `${file} at ${ref.slice(0, 12)}`;
     const query = new URLSearchParams({ repository, ref, file, workspace: '1', ...providerContext });
     if (request.pullNumber) { query.set("pullNumber", request.pullNumber); query.set("pullRepository", request.pullRepository); }
+    if(!position&&file===entryFile&&params.has('focusX')&&params.has('focusY')&&[params.get('focusX'),params.get('focusY')].every(n=>Number.isFinite(Number(n))&&Math.abs(Number(n))<=1e6))position={x:Number(params.get('focusX')),y:Number(params.get('focusY')),uuid:params.get('focusUuid')};
+    if(position?.uuid&&typeof position.uuid==='string'&&position.uuid.length<=200)query.set('focusUuid',position.uuid);
     if (position && Number.isFinite(position.x) && Number.isFinite(position.y)) {
       query.set("focusX", position.x); query.set("focusY", position.y);
     }

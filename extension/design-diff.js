@@ -196,7 +196,30 @@
     }
     return objects;
   }
-  function projectObjects(files, onParsed = null) {
+  // Job-scoped snapshots reuse validated source without retaining projects globally.
+  const preparedProjects = new WeakMap();
+  function prepareProject(files) {
+    const parsed = new Map(), records = projectObjects(files, (file, ast) => parsed.set(file.path, ast));
+    const snapshot = Object.freeze({});
+    preparedProjects.set(snapshot, {files: files.map(file => ({path: file.path, content: file.content})), parsed, records});
+    return snapshot;
+  }
+  function preparedFile(snapshot, path) {
+    const state = preparedProjects.get(snapshot);
+    if (!state || !state.parsed.has(path)) throw new Error('Prepared KiCad file is unavailable.');
+    return state.parsed.get(path);
+  }
+  function projectObjects(files, onParsed = null, snapshot = null) {
+    if (snapshot) {
+      const state = preparedProjects.get(snapshot);
+      if (!state || !Array.isArray(files) || files.length !== state.files.length ||
+          files.some((file, index) => file?.path !== state.files[index].path || file?.content !== state.files[index].content)) {
+        throw new Error('Prepared KiCad project differs from source.');
+      }
+      for (const file of files) onParsed?.(file, state.parsed.get(file.path));
+      // Consumers assign IDs to records; keep those assignments isolated.
+      return state.records.map(record => ({...record}));
+    }
     if (!Array.isArray(files) || files.length > MAX_FILES) throw new Error("Too many KiCad files to compare.");
     const paths = new Set(), objects = [];
     let total = 0;
@@ -249,6 +272,6 @@
     changes.sort((a, b) => a.path.localeCompare(b.path) || a.id.localeCompare(b.id) || a.status.localeCompare(b.status));
     return { changes, counts };
   }
-  root.KiCadDesignDiff = { compareProjects, projectObjects, parse, MAX_FILES };
+  root.KiCadDesignDiff = { compareProjects, projectObjects, parse, prepareProject, preparedFile, MAX_FILES };
   if (typeof module === "object" && module.exports) module.exports = root.KiCadDesignDiff;
 })(typeof globalThis === "object" ? globalThis : this);

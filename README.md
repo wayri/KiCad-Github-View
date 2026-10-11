@@ -6,14 +6,17 @@
 [![Status: preview](https://img.shields.io/badge/status-preview-orange)](#what-you-can-do)
 [![Chromium: Manifest V3](https://img.shields.io/badge/Chromium-Manifest%20V3-4285f4?logo=googlechrome&logoColor=white)](docs/INSTALL.md)
 [![VS Code: VSIX](https://img.shields.io/badge/VS%20Code-VSIX-007acc)](docs/INSTALL.md)
+[![Download Android APK](https://img.shields.io/badge/Download%20Android%20APK-1.52-3DDC84?logo=android&logoColor=white)](https://github.com/wayri/KiCad-Github-View/releases/download/v0.12.40/pocket-kivi-android-phone-tablet-1.52-development.apk)
 [![GitHub and GitLab: public and private repositories](https://img.shields.io/badge/GitHub%20%2B%20GitLab-public%20%2B%20private-6f42c1)](docs/GIT-HOSTS.md)
 [![Design access: read only](https://img.shields.io/badge/design%20access-read--only-2ea44f)](#what-you-can-do)
 
 **Interactive KiCad review inside GitHub and GitLab file pages.** Open schematics and PCB layouts as drawings, inspect saved parts and nets, compare revisions, and anchor review notes to the design. The viewer runs in the browser with our own schematic/PCB engine and the owner-authorized SPIKE 3D adapter. No KiCad installation, local companion process or rendering server is needed for the browser extension.
 
-[Download v0.12.28](https://github.com/wayri/KiCad-Github-View/releases/tag/v0.12.28) · [Install](docs/INSTALL.md) · [Comment integration](docs/COMMENTS.md) · [Git services](docs/GIT-HOSTS.md) · [Release notes](docs/releases/v0.12.28.md)
+[Download v0.12.40](https://github.com/wayri/KiCad-Github-View/releases/tag/v0.12.40) · [Android APK](https://github.com/wayri/KiCad-Github-View/releases/download/v0.12.40/pocket-kivi-android-phone-tablet-1.52-development.apk) · [Install](docs/INSTALL.md) · [Comment integration](docs/COMMENTS.md) · [Git services](docs/GIT-HOSTS.md) · [Release notes](docs/releases/v0.12.40.md)
 
 The workspace has **Project · Schematic · Layout** tabs, with **Split view** and **Compare commits** on the same row. Schematics automatically open their saved root; navigate with the hierarchy tree, double-click sheet symbols, or use the top Back / Forward / Up / Root icons. Parent discovery follows saved links across repository folders, with diagnostics for incomplete or ambiguous hierarchies.
+
+Android development version **1.37** adds a direct **All sheets** control: pages share one pan/zoom canvas with sheet names above them. Repeated placements of one source sheet form a stack; use **Repeated sheets** to choose its front placement. Highlighting a net keeps only connected sheets and placements, with intersheet airwires. Connectivity follows exact global labels and saved parent sheet-pin/child hierarchical-label links; implicit power connections and bus expansion are not inferred. Cyclic or incomplete hierarchies retain diagnostics. The same overview and connectivity implementation is shared with the browser viewer. Android 1.37 also provides a full-height privacy reader, consistent trailing close controls, and Menu → GitHub notifications for saved KiCad repositories. The foreground inbox supports unread, mentions/requests and all-activity filters; reconnect an existing account if GitHub notifications permission is missing. It checks at most the latest 500 account notifications, does not mark them read and does not provide background push notifications.
 
 ![Pinned explorer and auto-hide side tabs](docs/images/integration/pinned-auto-hide-panes.png)
 
@@ -80,13 +83,21 @@ Properties and analytics come from the saved source revision. Missing settings a
 
 ## Install in Chrome or Edge
 
-1. Download **`kicad-visual-review-chrome-edge-brave-opera-vivaldi-chromium-0.12.28.zip`** from [Releases](https://github.com/wayri/KiCad-Github-View/releases/tag/v0.12.28). The GitHub **Source code** archives are not the prepared extension package.
+1. Download **`kicad-visual-review-chrome-edge-brave-opera-vivaldi-chromium-0.12.40.zip`** from [Releases](https://github.com/wayri/KiCad-Github-View/releases/tag/v0.12.40). The GitHub **Source code** archives are not the prepared extension package.
 2. Extract the ZIP into a permanent folder. Select the folder containing `manifest.json`, not the ZIP itself.
 3. Open `chrome://extensions` in Chrome/Chromium or `edge://extensions` in Edge.
 4. Enable **Developer mode**, select **Load unpacked**, and choose that folder.
 5. Allow the extension on `github.com` and `gitlab.com`. Open a KiCad file page and refresh it. Connect an authorized account in Options for private projects. The drawing appears in the repository's file preview.
 
 Keep the extracted folder in place. To update, extract the new package there, click **Reload** on the extension card, and refresh repository tabs. Pin the toolbar icon for quick access; the toolbar button or `Alt+Shift+K` focuses the inline viewer. **Show source** returns to the text view; **Open full viewer** and **Pop out** provide larger views.
+
+### Extension previews
+
+| Compact PCB workspace | Schematic hierarchy and net highlighting |
+| :---: | :---: |
+| <img src="docs/images/integration/extension-compact-view.png" alt="Browser PCB viewer with compact controls and collapsed side panels" width="480"> | <img src="docs/images/integration/sheet-net-hierarchy.png" alt="Browser schematic viewer with matching sheet trees and highlighted net badges" width="480"> |
+
+These are actual viewer captures from local preview harnesses using synthetic projects and mocked repository transport. They contain the app controls without browser or Android status bars; they do not demonstrate an installed extension or live account authorization. [Capture details](docs/images/README.md).
 
 The drawing toolbar contains the active sheet selector, Back/Forward/Up/Root navigation and **View layout / View schematic**. **Review tools** holds assembly variants, highlight controls, shortcuts and rendering notes. Properties, Comments and Explorer are independent flyouts: collapse them from their headers, drag their edges to resize, or focus an edge and use the arrow keys. Comments has **Add comment** and **View comments** tabs; switching tabs preserves an unsaved draft.
 
@@ -183,10 +194,10 @@ Read [the complete comment guide](docs/COMMENTS.md) for authentication, permissi
 
 ## VS Code installation
 
-Download **`kicad-visual-review-vscode-0.12.34.vsix`** from Releases. In VS Code run **Extensions: Install from VSIX**, select the file and run **Developer: Reload Window**. Open a KiCad project folder and use **KiCad: Open Visual Viewer** or **Reopen Editor With → KiCad Visual Review**. The **KiCad Review** explorer lists saved drawings and review sidecars.
+Download **`kicad-visual-review-vscode-0.12.40.vsix`** from Releases. In VS Code run **Extensions: Install from VSIX**, select the file and run **Developer: Reload Window**. Open a KiCad project folder and use **KiCad: Open Visual Viewer** or **Reopen Editor With → KiCad Visual Review**. The **KiCad Review** explorer lists saved drawings and review sidecars.
 
 ```sh
-code --install-extension kicad-visual-review-vscode-0.12.34.vsix --force
+code --install-extension kicad-visual-review-vscode-0.12.40.vsix --force
 ```
 
 Local notes use `.kicad-review.json` in the workspace root (or drawing directory outside a workspace). Filesystem-provider permissions still apply. The VSIX is not currently published in Visual Studio Marketplace. See [the VS Code guide](vscode-extension/README.md).
@@ -218,7 +229,7 @@ See [the Actions review guide](docs/actions-review.md) for merge-base comparison
 
 ## Rendering and engineering limits
 
-Recognized KiCad 9/10 saved constructs use the shared parser; native reference fixtures were exported with KiCad 10. Future generator versions, including KiCad 11 headers, are accepted as **forward previews** with warnings; this is not full KiCad 11 certification. See [version handling](extension/docs/version-compatibility.md).
+Recognized KiCad 8/9/10 saved constructs use the shared parser; native reference fixtures were exported with KiCad 10. Future generator versions, including KiCad 11 headers, are accepted as **forward previews** with warnings; this is not full KiCad 11 certification. See [version handling](extension/docs/version-compatibility.md).
 
 The browser viewer is not pixel-identical to KiCad. Browser font metrics, custom worksheets, bitmap images and specialized constructs remain incomplete or approximate and should be checked against native KiCad. Nets are inferred from saved geometry; buses, implicit pins and complete cross-sheet/instance connectivity are not fully resolved. Saved-object comparison is not an electrical equivalence check.
 
@@ -270,9 +281,29 @@ Measurement labels have opaque theme-aware backplates. For a three-point angle, 
 
 ## Android phone and tablet app
 
+[![Download the latest published Android APK](https://img.shields.io/badge/Download%20Android%20APK-1.52-3DDC84?logo=android&logoColor=white)](https://github.com/wayri/KiCad-Github-View/releases/download/v0.12.40/pocket-kivi-android-phone-tablet-1.52-development.apk)
+
+The button downloads the latest published development APK, **1.50**, directly from release **v0.12.40**. Enable installation from your download source when Android prompts. This is a sideloaded preview; it is not a Play Store release.
+
 The [Android hybrid app](android-app/README.md) packages the same viewer
 with native file and folder pickers, touch pan/pinch zoom, shared project tabs,
 and local review notes. One APK adapts to phones and tablets. Build its assets
 with `python scripts/package_android.py`, then build the Android project with
 Gradle. Development APKs require device testing and release signing before store
 publication. Android supports native GitHub and GitLab accounts, public/private project imports, self-hosted GitLab, commit comparison and explicit review publication with screenshots. Drafts stay local until published.
+
+### Phone previews
+
+| Schematic | Layout |
+| :---: | :---: |
+| <img src="docs/images/android/phone-schematic.png" alt="Phone schematic view" width="240"> | <img src="docs/images/android/phone-layout.png" alt="Phone PCB layout view" width="240"> |
+
+![Phone landscape drawing workspace](docs/images/android/phone-landscape.png)
+
+### Tablet previews
+
+| Portrait | Landscape |
+| :---: | :---: |
+| <img src="docs/images/android/tablet-portrait.png" alt="Tablet portrait schematic workspace" width="360"> | <img src="docs/images/android/tablet-landscape.png" alt="Tablet landscape drawing workspace" width="560"> |
+
+These previews show development build **1.49** with a synthetic sensor project. Phone drawing views were captured on a connected Android phone; tablet views use a clean tablet emulator. Captures include only the app surface, excluding Android status and navigation bars. The 1.50 release contains newer tools than these 1.49 previews. See [capture details](docs/images/README.md).

@@ -60,3 +60,21 @@ The PNG `integration/loading-marble.png` was captured on 2026-10-05 from the act
 `integration/balanced-top-lighting.png` and `balanced-bottom-lighting.png` capture v0.12.23 on 2026-10-06 at a 1706 × 960 CSS viewport (75% browser scale). The local synthetic footprint fixture was extended with 12 matching tracks on each copper face and corner pads; parts were hidden to inspect copper illumination. The back view was reached by orbiting the production WebGL viewer. No Git service or linked model was used.
 
 `integration/angle-measurement.png` and `readable-distance-measurement.png` capture v0.12.24 on 2026-10-06 using the production PCB viewer with the synthetic Sensor board and local mock transport at port 8792. They show a pinned 90° three-point angle and backed, separated distance/X/Y labels. The shared tool was also inspected on a narrow light schematic. No account or remote publication was used.
+
+## README preview galleries
+
+`integration/extension-compact-view.png` is an unchanged copy of the retained `.vizdiff/extension-compact-view.png` local browser preview. It shows a synthetic PCB in the actual viewer with collapsed side panels. Its original capture date was not recorded. It contains the viewer surface without system/browser chrome. It is illustrative evidence, not verification of the currently published extension package or live GitHub/GitLab integration. The adjacent hierarchy preview retains its version/date and mock-transport provenance above.
+
+The README Android download button targets the verified published v0.12.37 asset `pocket-kivi-android-phone-tablet-1.48-development.apk`. Releases currently use prerelease status, so the button uses the concrete asset URL rather than GitHub's stable-only `/releases/latest/download/` redirect.
+
+### Android app-surface captures (2026-10-11)
+
+`android/phone-schematic.png`, `phone-layout.png` and `phone-landscape.png` show the native Android 1.49 development app on a connected Samsung SM_A366E. `android/tablet-portrait.png` and `tablet-landscape.png` show the same app on a temporary tablet emulator. The drawings are a synthetic sensor interface fixture, not a private repository or production design.
+
+The test-only capture uses Android PixelCopy restricted to the WebView's window bounds. These are real app pixels with the accelerated drawing canvas included. Android's status bar (clock, notifications and battery) and navigation bar are outside the captured surface; no image editing or generated UI was used. The app toolbar and workspace tabs remain visible. Root visually checked all five drawing captures and verified their README paths and PNG integrity. Tablet behavior here is emulator evidence, not a physical tablet acceptance claim.
+
+The Android capture build passed `assembleDebug`, `assembleDebugAndroidTest` and `lintDebug`. A cold-start system-bar controller crash found during capture was fixed by initializing the window decor before requesting its controller; launch was then verified on phone and emulator. The home preview was deliberately omitted because its real native-library readiness warning persisted after refresh. Phone app data and original rotation settings were preserved; the owned temporary tablet emulator was removed.
+
+`integration/testpoints-phone-0.12.40.png` is a local browser screenshot at 389 CSS pixels using `extension/tests/fixtures/bench-workflow/board.kicad_pcb` and mocked repository transport. It shows filtered saved testpoint data; it is not a physical-phone or live GitHub extension capture.
+
+`integration/assembly-phone-0.12.40.png` uses the same synthetic fixture at 389 CSS pixels. It shows manually recorded assembly progress and the unfinished-parts action; no physical assembly or inspection result is represented.

@@ -20,8 +20,8 @@ android {
         applicationId 'dev.kicadvizdiff.android'
         minSdk 26
         targetSdk 36
-        versionCode 35
-        versionName '1.32'
+        versionCode 55
+        versionName '1.52'
         testInstrumentationRunner 'dev.kicadvizdiff.android.LibraryInstrumentation'
     }
 
@@ -61,5 +61,5 @@ tasks.named('bundlePlayRelease').configure {
 dependencies {
     implementation 'androidx.webkit:webkit:1.17.0'
     implementation 'androidx.browser:browser:1.9.0'
+    implementation 'androidx.window:window-java:1.5.1'
 }
-

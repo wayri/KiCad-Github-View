@@ -304,8 +304,31 @@ const KiCadReviewComments = (() => {
         Date.parse(a.createdAt) - Date.parse(b.createdAt);
     });
   }
+  // Persist reservations before network writes; failures also consume the attempt.
+  // This limits this installation, not independent bots using the provider directly.
+  const publicationReservations = new Map();
+  async function reservePublication(storage, scope, now = Date.now()) {
+    if (!storage || typeof scope !== 'string' || scope.length > 512 || !Number.isSafeInteger(now) || now < 0) throw Error('Invalid publication safety context.');
+    const key = 'kivi:publication-budget:' + scope;
+    const previous = publicationReservations.get(key) || Promise.resolve();
+    const work = previous.catch(() => {}).then(async () => {
+      let saved;
+      try { saved = (await storage.get(key))[key]; } catch { throw Error('Unable to read publication safety settings. Nothing posted.'); }
+      if (saved !== undefined && (!Array.isArray(saved) || saved.length > 20 || saved.some(t => !Number.isSafeInteger(t) || t < 0 || t > now))) throw Error('Publication safety history is invalid or the device clock moved backwards. Nothing posted.');
+      const history = (saved || []).filter(t => now - t < 3600000).sort((a,b) => a-b);
+      let until = 0;
+      if (history.length) until = history.at(-1) + 3000;
+      const minute = history.filter(t => now - t < 60000);
+      if (minute.length >= 5) until = Math.max(until, minute[0] + 60000);
+      if (history.length >= 20) until = Math.max(until, history[0] + 3600000);
+      if (now < until) { const error = Error('Posting too quickly. Try again in ' + Math.ceil((until-now)/1000) + ' seconds.'); error.retryAfterSeconds = Math.ceil((until-now)/1000); throw error; }
+      try { await storage.set({[key]: [...history,now]}); } catch { throw Error('Unable to save publication safety settings. Nothing posted.'); }
+    });
+    publicationReservations.set(key,work);
+    try { await work; } finally { if (publicationReservations.get(key) === work) publicationReservations.delete(key); }
+  }
   return { normalizeScope, normalizeAnchor, validateComment, validateAttachment, toMarkdown, fromMarkdown, parseSidecar, serializeSidecar,
-    exportComments, parseComments, receiptKey, isUnread, commentType, createdDateRange, sortAndFilter };
+    reservePublication, exportComments, parseComments, receiptKey, isUnread, commentType, createdDateRange, sortAndFilter };
 })();
 
 if (typeof globalThis === "object") globalThis.KiCadReviewComments = KiCadReviewComments;

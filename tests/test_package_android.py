@@ -10,7 +10,7 @@ class AndroidPackageTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             root=Path(directory)
             app=root/'android-app';app.mkdir()
-            for name in ('build.gradle','local.properties','signing.properties','keystore.properties','upload.jks','upload.keystore','private.pem','private.key','.env.upload'):
+            for name in ('build.gradle','local.properties','signing.properties','keystore.properties','upload.jks','upload.keystore','private.pem','private.key','upload.p12','upload.pfx','password.dpapi','.env.upload'):
                 (app/name).write_text('fixture',encoding='utf-8')
             (app/'build').mkdir();(app/'build'/'cached.txt').write_text('fixture')
             self.assertEqual([p.name for p in builder.source_files(root)],['build.gradle'])
@@ -32,6 +32,9 @@ class AndroidPackageTests(unittest.TestCase):
         self.assertNotIn(b'KiCadAndroidSnapshots.create(',assets['runtime.js'])
         self.assertLess(page.index('owned-canvas.js'),page.index('touch-canvas.js'))
         self.assertLess(page.index('touch-canvas.js'),page.index('revision-viewer.js'))
+        self.assertLess(page.index('adaptive-ui.js'),page.index('measurement-tools.js'))
+        self.assertIn('measurement-tools.css',page)
+        self.assertIn(b'id="probeA"',assets['analysis-viewer.html'])
     def test_html_local_script_references_resolve_in_bundle(self):
         import re
         assets=builder.payload()

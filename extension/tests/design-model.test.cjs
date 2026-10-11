@@ -226,3 +226,11 @@ test('KiCad 6 footprint reference/value fields drive parts, BOM and search despi
  assert.equal(part.reference,'C43');assert.equal(part.label,'C43');assert.equal(part.properties.Value,'100nF');assert.equal(part.properties.Sheetname,'Power');
  const modern=buildProject([file('board.kicad_pcb',source.replace('(property "Sheetname" "Power")','(property "Reference" "C99") (property "Value" "1uF")'))]).objects.find(x=>x.kind==='footprint');assert.equal(modern.reference,'C99');assert.equal(modern.properties.Value,'1uF');
 });
+
+test("explicit DNI and DNP fields classify omitted parts without inferring from values or BoM exclusion",()=>{
+ const footprint=(ref,props,attr='')=>`(footprint "R" (at 10 20) (uuid "${ref}") (property "Reference" "${ref}") ${props} (attr smd ${attr}) (pad "1" smd rect (at 0 0) (size 1 1) (layers "F.Cu") (uuid "pad-${ref}")))`;
+ const model=buildProject([file('board.kicad_pcb',`(kicad_pcb ${footprint('R1','(property "DNI" "Yes")')}${footprint('R2','(property "DNP" "true")')}${footprint('R3','(property "DNI" "No") (property "Value" "DNP")','exclude_from_bom')}${footprint('R4','(property "dni" "TBD")')})`)],{schemaVersion:1,variants:[{id:'fitted',name:'Fitted',parts:[{path:'board.kicad_pcb',reference:'R1',populated:true}]}]});
+ const parts=model.objects.filter(o=>o.kind==='footprint');assert.deepEqual(parts.map(o=>[o.populated,o.populationReason]),[[false,'DNI'],[false,'DNP'],[true,null],[true,null]]);
+ assert.equal(model.objects.find(o=>o.uuid==='pad-R1').populationReason,'DNI');
+ const fitted=applyVariant(model,'fitted');assert.equal(fitted.find(o=>o.uuid==='R1').populated,true);assert.equal(fitted.find(o=>o.uuid==='pad-R1').populationReason,null);assert.equal(model.objects.find(o=>o.uuid==='R1').populated,false);
+});

@@ -120,10 +120,23 @@ class DeliveryQueueTests(unittest.TestCase):
         try:
             queue.enqueue('one', {})
             with self.assertRaises(VizError):
-                queue.enqueue('two', {})
+                queue.enqueue('two', {'different': True})
             self.assertEqual(queue.enqueue('one', {}), 'duplicate')
         finally:
             release.set()
+            queue.shutdown()
+
+    def test_completed_history_is_bounded_without_losing_replay_protection(self):
+        queue = DeliveryQueue(':memory:', lambda payload: None, history_capacity=1)
+        try:
+            queue.enqueue('one', {'sensitive': 'repository payload'})
+            self.assertTrue(wait_for(lambda: queue.state('one')['status'] == 'complete'))
+            with queue.lock:
+                self.assertEqual(queue.db.execute('SELECT payload FROM deliveries WHERE id=?', ('one',)).fetchone()[0], '{}')
+            self.assertEqual(queue.enqueue('one', {}), 'duplicate')
+            with self.assertRaises(VizError):
+                queue.enqueue('two', {'different': True})
+        finally:
             queue.shutdown()
 
 

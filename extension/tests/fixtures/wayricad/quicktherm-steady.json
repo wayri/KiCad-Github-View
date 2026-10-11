@@ -1,0 +1,43 @@
+{
+  "quick_therm": {
+    "model": "steady-state lumped thermal screen",
+    "environment": "air",
+    "ambient_c": 25.0,
+    "board_c": null,
+    "vacuum_board_to_environment_k_per_w": null,
+    "total_scoped_power_w": 0.5,
+    "board_path_power_w": 0.5,
+    "coverage": {
+      "scoped": 1,
+      "solved": 1,
+      "excluded": [],
+      "complete": true
+    },
+    "components": [
+      {
+        "reference": "U1",
+        "power_w": 0.5,
+        "resistance_k_per_w": 40.0,
+        "heat_path": "board",
+        "junction_c": 45.0,
+        "rise_above_ambient_k": 20.0,
+        "rise_local_k": 20.0
+      }
+    ],
+    "assumptions": [
+      "Air R\u03b8JA is a user-supplied component-to-ambient resistance for this board and airflow.",
+      "Components are thermally independent; no board temperature field or coupling is solved."
+    ],
+    "field_map": {},
+    "references": [
+      "U1"
+    ],
+    "input_source": "Explicit values entered in QuickTherm; saved PCB was not modified.",
+    "manual_values": {
+      "U1": {
+        "power_w": 0.5,
+        "theta_ja_air_k_per_w": 40.0
+      }
+    }
+  }
+}

@@ -287,9 +287,10 @@
           }
         } else {
           warn("Unfilled zone",node);
-          const polygon = child(node,"polygon"), pts = points(polygon);
-          if (pts.length >= 3) push({ type:"polygon", points:pts, layer, color:colorFor(layer),
-            fill:false, width:.15, uuid:uuid(node) || undefined, kind:"zone-outline" });
+        }
+        const outlineLayers=(child(node,'layers')||[]).slice(1).map(item=>String(value(item)));
+        for(const polygon of children(node,'polygon')){const pts=points(polygon);if(pts.length<3)continue;
+          for(const outlineLayer of outlineLayers.length?outlineLayers:[layer])push({type:'polygon',points:pts,layer:outlineLayer,color:colorFor(outlineLayer),fill:false,width:.15,uuid:uuid(node)||undefined,kind:'zone-outline'});
         }
       } else if (["gr_line","gr_arc","gr_rect","gr_circle","gr_poly","gr_text"].includes(type)) drawShape(node,layer);
       else if (["gr_curve","gr_text_box","gr_bitmap","dimension","target"].includes(type)) warn(type,node);

@@ -1,0 +1,48 @@
+{
+  "generated_date": "2026-10-11",
+  "nature": "Actual tool-produced analytical fixtures; synthetic inputs, not measured validation or production-board simulations. Working-tree module hashes distinguish local changes from the HEAD baseline.",
+  "sources": {
+    "main": {
+      "head_commit": "457ebc512b49608f5d9e91ba9ef81a49199cb7d8",
+      "module_sha256": {
+        "quick_pi_plugin/solver.py": "ce7b22afcd8120436044b52abfa8e1a5ab65b64bf52d2d608514a898ed5c3b39",
+        "quick_pi_plugin/transient.py": "52f2ffba83dd1af13786618bf9fed6ea370779bd19e739deef5a8c833f10e7a4",
+        "quick_pi_plugin/electrothermal_transient.py": "e99f6630a40bc3156541dde9b5f52332d306124b33fdd964f062d8faef3f3b7d",
+        "quick_pi_plugin/tests/test_report.py": "ce27ca2bfdabc329e2d4f71282a0ef24f2a8e347a0924e769ac99194f4a79aaf",
+        "quick_pi_plugin/tests/test_transient.py": "75218b9b55bb6c78aaa7c4fcd3ecbb6e5d2c4c4eea3a36bb4cce4828fb655ece",
+        "quick_pi_plugin/tests/test_electrothermal_transient.py": "398018e2d8f01b4013f76169bab1f855313ad11d6d5c1ede4732f34f19b19ef2",
+        "quick_therm_plugin/quick_therm.py": "470fd232c63013793c1f132b1af17a9b4d5dbd3a035fd6afbb523b252ee5bc35",
+        "quick_therm_plugin/transient.py": "fc6727665d906b681cc72c1583f4b92ca3522ecaba3ceeb17880dd7ce9b708b5",
+        "quick_therm_plugin/tests/test_quick_therm.py": "97c960dbb6427275eac1191f169a3b429075bf1b4f51f0846e61de21296658dc",
+        "quick_therm_plugin/tests/test_transient.py": "7d69a373e5c4a20c1430ee99ca2c0f22d4d25fc0104dfff9e9074560d7d13e86",
+        "signal_integrity_advisor_plugin/quick_si.py": "c6e076d9487073d11ba2d6b09d33259ae86b45bc9d53c63915b7c1687c5c1e68",
+        "signal_integrity_advisor_plugin/eye_model.py": "12b4fac21e58ca98d0a7c2b8764c1f8dd972359ce7401662b56bc550a2ac5da6"
+      }
+    },
+    "newer_thermal": {
+      "head_commit": "658ca6f52ce876c35c27cfc8fcd9cb6ac54632b8",
+      "module_sha256": {
+        "quick_therm_plugin/thermal_network.py": "6fa783a3f11167f46d7eb23dc653b73e3fea87f8a28fd50b5abf4beabe19b6b4",
+        "quick_therm_plugin/thermal_transient.py": "6d97aa312c8c1b22be16111927463977ab26fb2de5c615ab3d46353439325860",
+        "quick_therm_plugin/thermal_spatial_transient.py": "afb06114bd0f1d65bcf4cd8306891aabddf5926068e5d05780720d76243e8cdc",
+        "quick_therm_plugin/thermal_multilayer.py": "a0b4cfe4a5b38760f72586add715b99c24342802dfb17d65d191ea0796abf310",
+        "quick_therm_plugin/tests/test_thermal_network.py": "11b49b091f95f270d8f36c78ef5a48d7ee639de279515400a177b597ac77a81a",
+        "quick_therm_plugin/tests/test_thermal_transient.py": "954a451bdd9743f5e65f244edb5ac7b5ae1a9e5a149a6c589d997809860dae67",
+        "quick_therm_plugin/tests/test_thermal_multilayer.py": "107c3810f4fb93c7bb48254a0fa777f29d540ede1f4a82ec07c19b6fcc8e38d1"
+      }
+    }
+  },
+  "fixture_sha256": {
+    "quickpi-dc.json": "d46f5b7eb020602a6133bb319e178374bb576d3383f239b798a2a921a6fc51ac",
+    "quickpi-electrothermal-transient.json": "24372c6751d456ddc4d96dae7b7e4ed3230ec1f5b94f6b03488c2de28a8e4ee6",
+    "quickpi-transient.json": "b0fb993ba7256bfbb431eccad5455994418aa640ae49e57c3548766e9d8fd89a",
+    "quicksi-eye.json": "d0d65413347da510df652a0e449ae95e72bf546a8c41a83a90b5550ee104eab3",
+    "quicksi-screen.json": "1773d4461c8cecf815104ed3d226e845b189f59dab496335b17de33d83f7ac54",
+    "quicktherm-board-network.json": "cb8c7984a6d93976442efe1e542fded6cdd1bee8af3379a8bba05c36d30d4eb8",
+    "quicktherm-coupled-air.json": "35337305084efbdbbb369f9dc7357a4a8d816082b6fd86399e32baf3dfc92ba4",
+    "quicktherm-multilayer-transient.json": "b618ac33c6da7a78eb5a1d16251285ac9681b61c5d1cf76142398ff2702e7da9",
+    "quicktherm-spatial-transient.json": "0d7171902cb08b40466ee327f55594212d7120552683634e8f965d6f954ba670",
+    "quicktherm-steady.json": "f5c95bcde0763313be905a2ca088da0cdaa2b9fd08521595964bec794c903d95",
+    "quicktherm-transient.json": "3428c49bedfd310dfbc75e7df0300849a3db5ae810fc347262ab002992bada36"
+  }
+}

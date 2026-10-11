@@ -1,0 +1,11 @@
+#androidMeasurementPanel{flex:0 0 auto;min-width:0;background:var(--panel);border-bottom:1px solid var(--line);padding:6px 10px;font-size:13px;max-height:36dvh;overflow:auto;overscroll-behavior:contain}
+#androidMeasurementPanel[hidden]{display:none!important}
+.android-measurement-heading{display:flex;align-items:center;justify-content:space-between;gap:8px}
+#androidMeasurementPanel button,#androidMeasurementPanel select,#androidMeasurementPanel input{min-height:44px;font-size:14px}
+#androidMeasurementPanel #measurementStatus{display:block;min-height:20px;font-variant-numeric:tabular-nums;overflow-wrap:anywhere;color:var(--accent);user-select:text}
+#androidMeasurementPanel summary{min-height:44px;display:flex;align-items:center;cursor:pointer;list-style:revert}
+#androidMeasurementPanel label{display:flex;align-items:center;gap:6px}
+#androidMeasurementPanel .ruler-controls{gap:8px;padding:6px 0;background:transparent;border:0}
+#androidMeasurementPanel .ruler-controls .hint{display:none}
+#androidMeasurementPanel :is(#rulerSnapStatus,label){font-size:13px}
+body[data-size] #androidViewToolbar #androidMeasure{flex:0 0 62px;width:62px;font-size:11px;padding:4px}

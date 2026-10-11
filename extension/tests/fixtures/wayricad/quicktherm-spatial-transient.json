@@ -1,0 +1,286 @@
+{
+  "model": "backward-Euler spatial thermal transient",
+  "status": "completed",
+  "frames": [
+    {
+      "time_s": 0.0,
+      "temperatures_c": [
+        20.0
+      ]
+    },
+    {
+      "time_s": 0.5,
+      "temperatures_c": [
+        20.6
+      ]
+    },
+    {
+      "time_s": 1.0,
+      "temperatures_c": [
+        21.080000000000002
+      ]
+    },
+    {
+      "time_s": 1.5,
+      "temperatures_c": [
+        21.464000000000002
+      ]
+    },
+    {
+      "time_s": 2.0,
+      "temperatures_c": [
+        21.771200000000004
+      ]
+    },
+    {
+      "time_s": 2.5,
+      "temperatures_c": [
+        22.01696
+      ]
+    },
+    {
+      "time_s": 3.0,
+      "temperatures_c": [
+        22.213568
+      ]
+    },
+    {
+      "time_s": 3.5,
+      "temperatures_c": [
+        22.3708544
+      ]
+    },
+    {
+      "time_s": 4.0,
+      "temperatures_c": [
+        22.496683519999998
+      ]
+    },
+    {
+      "time_s": 4.5,
+      "temperatures_c": [
+        22.597346815999998
+      ]
+    },
+    {
+      "time_s": 5.0,
+      "temperatures_c": [
+        22.677877452799997
+      ]
+    },
+    {
+      "time_s": 5.5,
+      "temperatures_c": [
+        22.74230196224
+      ]
+    },
+    {
+      "time_s": 6.0,
+      "temperatures_c": [
+        22.793841569792
+      ]
+    },
+    {
+      "time_s": 6.5,
+      "temperatures_c": [
+        22.8350732558336
+      ]
+    },
+    {
+      "time_s": 7.0,
+      "temperatures_c": [
+        22.868058604666878
+      ]
+    },
+    {
+      "time_s": 7.5,
+      "temperatures_c": [
+        22.8944468837335
+      ]
+    },
+    {
+      "time_s": 8.0,
+      "temperatures_c": [
+        22.9155575069868
+      ]
+    },
+    {
+      "time_s": 8.5,
+      "temperatures_c": [
+        22.93244600558944
+      ]
+    },
+    {
+      "time_s": 9.0,
+      "temperatures_c": [
+        22.945956804471553
+      ]
+    },
+    {
+      "time_s": 9.5,
+      "temperatures_c": [
+        22.956765443577243
+      ]
+    },
+    {
+      "time_s": 10.0,
+      "temperatures_c": [
+        22.965412354861794
+      ]
+    }
+  ],
+  "power_schedules": {},
+  "energy_balance": [
+    {
+      "time_s": 0.5,
+      "input_w": 3.0,
+      "stored_energy_change_j": 1.2000000000000028,
+      "boundary_loss_w": 0.6000000000000014,
+      "residual_w": -7.105427357601002e-15
+    },
+    {
+      "time_s": 1.0,
+      "input_w": 3.0,
+      "stored_energy_change_j": 0.9600000000000009,
+      "boundary_loss_w": 1.0800000000000018,
+      "residual_w": -3.552713678800501e-15
+    },
+    {
+      "time_s": 1.5,
+      "input_w": 3.0,
+      "stored_energy_change_j": 0.7680000000000007,
+      "boundary_loss_w": 1.4640000000000022,
+      "residual_w": -3.552713678800501e-15
+    },
+    {
+      "time_s": 2.0,
+      "input_w": 3.0,
+      "stored_energy_change_j": 0.6144000000000034,
+      "boundary_loss_w": 1.7712000000000039,
+      "residual_w": -1.0658141036401503e-14
+    },
+    {
+      "time_s": 2.5,
+      "input_w": 3.0,
+      "stored_energy_change_j": 0.4915199999999942,
+      "boundary_loss_w": 2.016960000000001,
+      "residual_w": 1.0658141036401503e-14
+    },
+    {
+      "time_s": 3.0,
+      "input_w": 3.0,
+      "stored_energy_change_j": 0.39321599999999535,
+      "boundary_loss_w": 2.2135679999999986,
+      "residual_w": 1.0658141036401503e-14
+    },
+    {
+      "time_s": 3.5,
+      "input_w": 3.0,
+      "stored_energy_change_j": 0.31457280000000054,
+      "boundary_loss_w": 2.370854399999999,
+      "residual_w": 0.0
+    },
+    {
+      "time_s": 4.0,
+      "input_w": 3.0,
+      "stored_energy_change_j": 0.2516582399999976,
+      "boundary_loss_w": 2.4966835199999977,
+      "residual_w": 7.105427357601002e-15
+    },
+    {
+      "time_s": 4.5,
+      "input_w": 3.0,
+      "stored_energy_change_j": 0.20132659200000091,
+      "boundary_loss_w": 2.597346815999998,
+      "residual_w": 0.0
+    },
+    {
+      "time_s": 5.0,
+      "input_w": 3.0,
+      "stored_energy_change_j": 0.1610612735999979,
+      "boundary_loss_w": 2.677877452799997,
+      "residual_w": 7.105427357601002e-15
+    },
+    {
+      "time_s": 5.5,
+      "input_w": 3.0,
+      "stored_energy_change_j": 0.128849018880004,
+      "boundary_loss_w": 2.742301962239999,
+      "residual_w": -7.105427357601002e-15
+    },
+    {
+      "time_s": 6.0,
+      "input_w": 3.0,
+      "stored_energy_change_j": 0.1030792151040032,
+      "boundary_loss_w": 2.7938415697920007,
+      "residual_w": -7.105427357601002e-15
+    },
+    {
+      "time_s": 6.5,
+      "input_w": 3.0,
+      "stored_energy_change_j": 0.08246337208319687,
+      "boundary_loss_w": 2.835073255833599,
+      "residual_w": 7.105427357601002e-15
+    },
+    {
+      "time_s": 7.0,
+      "input_w": 3.0,
+      "stored_energy_change_j": 0.0659706976665575,
+      "boundary_loss_w": 2.868058604666878,
+      "residual_w": 7.105427357601002e-15
+    },
+    {
+      "time_s": 7.5,
+      "input_w": 3.0,
+      "stored_energy_change_j": 0.052776558133246,
+      "boundary_loss_w": 2.894446883733501,
+      "residual_w": 7.105427357601002e-15
+    },
+    {
+      "time_s": 8.0,
+      "input_w": 3.0,
+      "stored_energy_change_j": 0.04222124650659964,
+      "boundary_loss_w": 2.9155575069868007,
+      "residual_w": 0.0
+    },
+    {
+      "time_s": 8.5,
+      "input_w": 3.0,
+      "stored_energy_change_j": 0.03377699720527971,
+      "boundary_loss_w": 2.9324460055894406,
+      "residual_w": 0.0
+    },
+    {
+      "time_s": 9.0,
+      "input_w": 3.0,
+      "stored_energy_change_j": 0.02702159776422519,
+      "boundary_loss_w": 2.945956804471553,
+      "residual_w": -3.552713678800501e-15
+    },
+    {
+      "time_s": 9.5,
+      "input_w": 3.0,
+      "stored_energy_change_j": 0.021617278211380153,
+      "boundary_loss_w": 2.9567654435772432,
+      "residual_w": -3.552713678800501e-15
+    },
+    {
+      "time_s": 10.0,
+      "input_w": 3.0,
+      "stored_energy_change_j": 0.01729382256910128,
+      "boundary_loss_w": 2.965412354861794,
+      "residual_w": 3.552713678800501e-15
+    }
+  ],
+  "max_energy_residual_w": 1.0658141036401503e-14,
+  "steps": 20,
+  "timestep_s": 0.5,
+  "final_temperatures_c": [
+    22.965412354861794
+  ],
+  "assumptions": [
+    "Explicit volumetric heat capacities; no package die thermal capacity or circuit electrothermal feedback. Copper raster occupancy and laminate slabs approximate storage; barrel metal storage and coating storage are unresolved.",
+    "Scheduled multipliers linearly interpolate declared dissipations; no operating losses are inferred.",
+    "Time-step convergence must be checked independently; implicit stability does not establish accuracy."
+  ]
+}

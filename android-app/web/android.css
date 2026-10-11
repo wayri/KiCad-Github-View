@@ -1,4 +1,10 @@
 /* Android adaptive shell. Canvas geometry remains owned by the shared viewer. */
+body[data-fold=vertical],body[data-fold=horizontal]{position:absolute!important;left:var(--fold-x)!important;top:var(--fold-y)!important;width:var(--fold-width)!important;height:var(--fold-height)!important;overflow:hidden}
+body.android-home[data-fold=vertical] dialog,body.android-home[data-fold=horizontal] dialog{left:var(--fold-x)!important;right:auto!important;top:var(--fold-y)!important;bottom:auto!important;margin:0!important;width:var(--fold-width)!important;max-width:var(--fold-width)!important;max-height:var(--fold-height)!important}
+body.android-home[data-fold=vertical] :is(#androidLoadingScreen,#androidSlideStage),body.android-home[data-fold=horizontal] :is(#androidLoadingScreen,#androidSlideStage){inset:auto!important;left:var(--fold-x)!important;top:var(--fold-y)!important;width:var(--fold-width)!important;height:var(--fold-height)!important}
+body.android-home[data-fold=vertical] #androidPresentationBar,body.android-home[data-fold=horizontal] #androidPresentationBar{left:calc(var(--fold-x) + var(--fold-width)/2)!important;bottom:calc(100% - var(--fold-y) - var(--fold-height) + 12px)!important;width:calc(var(--fold-width) - 20px)!important}
+body[data-fold=vertical] #welcome,body[data-fold=horizontal] #welcome{overflow:auto;min-height:0}
+body[data-fold][data-size=compact] .android-welcome-actions{grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
 :root{--android-surface:#111923;--android-container:#1b2633;--android-high:#253345;--android-text:#e6edf7;--android-muted:#afbdce;--android-primary:#a7c8ff;--android-on-primary:#102f5e;--android-outline:#536175;--android-error:#ffb4ab;--android-radius:24px;--android-pane:344px;color-scheme:dark}
 body[data-ui-theme=light]{--android-surface:#f7f9ff;--android-container:#edf1fa;--android-high:#e3eaf5;--android-text:#182231;--android-muted:#49576a;--android-primary:#235eaa;--android-on-primary:#fff;--android-outline:#a3afbf;--android-error:#a6222b;color-scheme:light}
 @media(prefers-color-scheme:light){body.android-home{--android-surface:#f7f9ff;--android-container:#edf1fa;--android-high:#e3eaf5;--android-text:#182231;--android-muted:#49576a;--android-primary:#235eaa;--android-on-primary:#fff;--android-outline:#a3afbf;--android-error:#a6222b;color-scheme:light}}
@@ -339,7 +345,7 @@ body .android-comment-pin[data-severity=critical]{--pin-accent:#ff6775}body .and
 }
 
 /* Focused composition leaves the entire visible sheet to the message and a single action row. */
-@media(max-width:599px){
+@media(max-width:599px), (max-height:500px){
  body:has(#commentText:focus) #commentsSidebar{display:flex!important;flex-direction:column;overflow:hidden!important}
  body:has(#commentText:focus) #commentsSidebar>.sidebar-heading{min-height:36px!important;height:36px!important}
  body:has(#commentText:focus) #commentsSidebar>.sidebar-heading button{min-height:32px!important;height:32px!important}
@@ -373,3 +379,119 @@ body .android-comment-pin[data-severity=critical]{--pin-accent:#ff6775}body .and
 #androidViewToolbar select.android-selection-mode{flex:none;width:76px;min-width:0;min-height:40px;height:40px;border:1px solid var(--line,var(--android-outline));border-radius:9px;padding:4px;font-size:11px;background:var(--panel,var(--android-container));color:var(--ink,var(--android-text))}
 @media(max-width:599px){#androidWorkspaceNav #workspaceTabs button{min-width:0;padding:4px;gap:3px;flex-direction:column}#androidWorkspaceNav #workspaceTabs .ui-icon{width:22px;height:22px}#androidWorkspaceNav #workspaceTabs .button-label{font-size:9px;line-height:1.1}#androidViewToolbar button{min-width:32px}#androidViewToolbar select.android-selection-mode{width:66px}}
 #recentProjects{margin-top:24px;border-top:1px solid var(--android-outline);padding-top:16px}#recentProjects h2{font-size:16px;line-height:1.4;margin:0 0 12px}#recentProjectRows{display:grid;gap:8px}.recent-project-card{border:1px solid var(--android-outline);border-radius:14px;background:var(--android-container);padding:10px 12px;min-width:0}.recent-project-open{display:flex;align-items:center;gap:10px;width:100%;justify-content:flex-start;text-align:left;white-space:normal;background:transparent;border:0;padding:4px 0;font-size:13px;min-height:40px}.recent-project-open span{overflow-wrap:anywhere}.recent-project-open .ui-icon{width:28px;height:28px;flex:0 0 28px}.recent-project-state{display:inline-block;font-size:10px;padding:3px 7px;border-radius:8px;background:var(--android-surface);color:var(--android-muted);margin:4px 0}.recent-project-state[data-online=true]{color:var(--android-primary)}.recent-project-source{display:block;color:var(--android-muted);font-size:10px;overflow-wrap:anywhere}#recentProjectStatus{font-size:12px!important;line-height:1.4!important}#recentProjectStatus:empty{display:none}@media(min-width:840px){#recentProjectRows{grid-template-columns:repeat(2,minmax(0,1fr))}}
+/* Refined Android home and guide: quiet surfaces, compact labels, generous hit areas. */
+.android-home #welcome{width:100%;max-width:760px;padding:24px 20px;margin:0 auto;flex:1}
+.android-home #welcome h1{font-size:26px;margin:16px 0 6px}
+.android-home #welcome .app-subtitle{font-size:12px;margin:0;color:var(--android-primary)}
+.android-home #welcome .home-intro{font-size:14px;line-height:1.5;margin:14px 0 20px}
+.android-welcome-actions{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+.android-welcome-actions button{display:flex;flex-direction:column;align-items:flex-start;text-align:left;justify-content:center;gap:8px;min-height:88px;border:1px solid color-mix(in srgb,var(--android-outline) 55%,transparent);background:var(--android-container);border-radius:18px;padding:14px}
+.android-welcome-actions button .ui-icon{width:30px;height:30px;flex-basis:30px}
+.android-welcome-actions button .button-label{font-size:12px}
+.android-welcome-actions button:last-child{grid-column:1/-1;min-height:52px;flex-direction:row;align-items:center;justify-content:flex-start}
+.quick-start-link{margin-top:14px;background:transparent!important;border:0!important;color:var(--android-primary)!important;font-size:13px!important}
+#androidQuickStart{padding:0;width:min(520px,calc(100vw - 32px));border:1px solid var(--android-outline);border-radius:24px;background:var(--android-container);color:var(--android-text);max-height:90dvh}
+#androidQuickStart::backdrop{background:#0008}
+#androidQuickStart>header{display:flex;align-items:center;justify-content:space-between;padding:8px 20px;border-bottom:1px solid var(--android-outline)}
+#androidQuickStart>header button{border:0;background:transparent}
+.quick-start-content{padding:20px;overflow:auto}
+.quick-start-progress{font-size:12px;color:var(--android-muted);margin:0 0 12px}
+.quick-start-icon{display:flex;align-items:center;justify-content:center;background:var(--android-high);color:var(--android-primary);border-radius:18px;width:64px;height:64px;font-size:28px}
+.quick-start-icon .ui-icon{width:36px;height:36px;flex-basis:36px}
+.quick-start-content h2{font-size:22px;line-height:1.25;letter-spacing:-.3px;margin:16px 0 12px}
+.quick-start-content p{font-size:14px;line-height:1.55}
+.quick-start-hint{color:var(--android-muted);font-size:12px!important;padding:12px;background:var(--android-surface);border-radius:12px}
+.quick-start-controls{display:flex;justify-content:space-between;gap:12px;margin-top:18px}
+.quick-start-primary{background:var(--android-primary)!important;color:var(--android-on-primary)!important;border:0!important}
+.android-home :is(input,textarea){color:var(--android-text);background:var(--android-surface);border:1px solid var(--android-outline)}
+body output,body [data-copyable]{user-select:text;-webkit-user-select:text;-webkit-touch-callout:default;overflow-wrap:anywhere}
+body :is(input,textarea,select,output){touch-action:manipulation}
+@media(min-width:840px){.android-welcome-actions{grid-template-columns:repeat(4,minmax(0,1fr))}.android-welcome-actions button:last-child{grid-column:1/-1}}
+@media(prefers-reduced-motion:no-preference){button{transition:background-color 120ms ease,border-color 120ms ease}dialog[open]{animation:android-sheet-enter 160ms ease-out}@keyframes android-sheet-enter{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:translateY(0)}}}
+@media(max-width:599px){#androidQuickStart{position:fixed;inset:auto 0 0;margin:0;width:100%;max-width:100%;max-height:85dvh;border-radius:24px 24px 0 0;padding-bottom:env(safe-area-inset-bottom)}#androidQuickStart .quick-start-content{max-height:calc(85dvh - 64px);overflow:auto}.android-home #welcome .quick-start-progress{font-size:12px}}
+#appMenuDialog .android-menu-group-title{font-size:11px;letter-spacing:.06em;color:var(--android-muted);margin:14px 0 8px}
+#appMenuDialog .android-sheet-content>button{width:100%;min-height:48px;text-align:left;justify-content:flex-start;margin-bottom:6px}
+#appMenuDialog .android-sheet-content>p{font-size:12px;color:var(--android-muted);line-height:1.5}
+#appMenuDialog :is(#androidQuickStartButton,#androidPrivacyButton){background:transparent;border:0;font-size:13px}
+/* Presentation surfaces occupy the drawing area while preserving the viewer state. */
+body.android-presenting :is(#androidViewToolbar,#androidWorkspaceNav,#reviewHeader,#frameControls,.panel-heading,#designNavigator,#designInspector,#commentsSidebar,#floatingLayerSelector,#diagnostics,#shortcutHelp,#statusBar,#changesPanel,#pairControls,#splitOptions,#viewerSettings,#ruleWindow,#objectMenu,.touch-net-picker){display:none!important}
+body.android-presenting #viewer{position:absolute;inset:0;width:100%;height:100%}
+#androidPresentationBar{position:fixed;z-index:1500;bottom:max(12px,env(safe-area-inset-bottom));left:50%;transform:translateX(-50%);display:flex;align-items:center;gap:4px;width:min(680px,calc(100vw - 20px));padding:4px 6px;border:1px solid var(--android-outline);border-radius:16px;background:color-mix(in srgb,var(--android-container) 94%,transparent);color:var(--android-text);box-shadow:0 4px 24px #0005}
+#androidPresentationBar button{min-height:44px;min-width:44px;padding:6px 10px;font-size:12px;flex:none}
+#presentationPageName{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:12px}
+#androidSlideStage{position:fixed;inset:0;z-index:1400;display:flex;flex-direction:column;background:var(--android-surface);color:var(--android-text);padding:16px 16px calc(80px + env(safe-area-inset-bottom));gap:12px}
+#androidSlideStage h1{font-size:20px;margin:0;flex:none;overflow-wrap:anywhere}
+#androidSlideStage img{display:block;flex:1;min-height:0;min-width:0;width:100%;object-fit:contain}
+#androidSlideStage p{margin:0;font-size:14px;line-height:1.5;max-height:20vh;overflow:auto;white-space:pre-wrap;user-select:text}
+#androidSlideEditor{padding:0;background:var(--android-container);color:var(--android-text);border:1px solid var(--android-outline);border-radius:24px;width:min(720px,calc(100vw - 24px));max-height:90dvh}
+#androidSlideEditor::backdrop{background:#0008}#androidSlideEditor>header{display:flex;justify-content:space-between;align-items:center;padding:12px 16px;border-bottom:1px solid var(--android-outline)}
+#androidSlideEditor .android-sheet-content{padding:16px;overflow:auto}
+#androidSlideEditor label{display:grid;gap:6px;margin:14px 0;color:var(--android-muted);font-size:12px}
+#androidSlideEditor :is(input,textarea){width:100%}#androidSlideEditor .hint,#slideEditorStatus{font-size:12px;color:var(--android-muted)}
+#androidSlideEditor button{margin:3px;min-height:44px;padding:8px 10px;font-size:12px}
+.presentation-slide-row{display:flex;align-items:center;gap:4px;border-bottom:1px solid var(--android-outline);padding:8px 0;flex-wrap:wrap}
+.presentation-slide-row img{width:64px;height:44px;object-fit:contain;background:var(--android-surface);border-radius:6px}
+.presentation-slide-row button:nth-child(2){flex:1;min-width:100px;text-align:left;overflow-wrap:anywhere}
+.presentation-slide-row button[aria-pressed=true]{border-color:var(--android-primary);color:var(--android-primary)}
+.presentation-launch{display:flex;gap:8px;margin:8px 0 16px}.presentation-launch button{flex:1;min-height:44px;font-size:12px}
+#androidViewToolbar .android-all-sheets{font-size:10px;line-height:1.1;padding:4px;max-width:52px;white-space:normal;border:1px solid transparent}
+#androidViewToolbar .android-all-sheets[aria-pressed=true]{background:var(--raised,var(--android-high));border-color:var(--accent,var(--android-primary));color:var(--accent,var(--android-primary))}
+@media(max-width:599px){#sheetOverview>header{gap:4px;padding:2px 0 6px}#sheetOverview>header button,#sheetOverview>header summary{min-height:36px;padding:6px 8px;font-size:11px}#sheetOverview>header small{font-size:10px;line-height:1.35}.sheet-instance-stacks>div{width:min(320px,85vw);max-height:40dvh}.sheet-instance-stacks section>button{min-height:44px;font-size:12px}}
+/* One predictable trailing close action; document readers use the full viewport. */
+body button.android-close-button{display:inline-flex!important;align-items:center;justify-content:center;flex:0 0 44px!important;width:44px!important;height:44px!important;min-height:44px!important;min-width:44px!important;max-width:44px!important;padding:0!important;margin:0 0 0 auto!important;border-radius:50%!important;font-size:26px!important;line-height:1!important;background:transparent!important;color:inherit!important;border:1px solid transparent!important}
+body button.android-close-button:focus-visible{outline:2px solid var(--android-primary);outline-offset:2px}
+body dialog>header{display:flex;align-items:center;gap:12px;flex-wrap:nowrap}
+body dialog>header>strong{flex:1;min-width:0}
+body .android-reader-dialog[open]{display:flex!important;flex-direction:column;position:fixed!important;inset:0!important;margin:auto!important;width:min(100%,800px)!important;height:100dvh!important;max-height:100dvh!important;max-width:100%!important;padding:0!important;border-radius:0!important;overflow:hidden!important}
+body .android-reader-dialog>header{flex:none;padding:8px 16px;padding-top:max(8px,env(safe-area-inset-top));border-bottom:1px solid var(--android-outline)}
+body .android-reader-dialog>.android-sheet-content{display:flex!important;flex:1;min-height:0;padding:0!important;overflow:hidden!important}
+body .android-reader-dialog iframe{display:block;width:100%;height:100%;flex:1;min-height:0;border:0;margin:0!important;background:var(--android-surface)}
+@media(min-width:840px){body .android-reader-dialog[open]{height:90dvh!important;max-height:90dvh!important;border-radius:16px!important}}
+body .notification-tools{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin:12px 0}
+body .notification-tools select{flex:1;min-width:140px}
+body .github-notification{display:flex;flex-direction:column;gap:6px;padding:14px 12px;border-bottom:1px solid var(--android-outline);border-left:3px solid transparent}
+body .github-notification[data-unread=true]{border-left-color:var(--android-primary);background:var(--android-high)}
+body .github-notification a{font-weight:600;color:var(--android-primary);text-decoration:none;overflow-wrap:anywhere}
+body .github-notification :is(small,time){font-size:12px;color:var(--android-muted);overflow-wrap:anywhere}
+body #githubNotificationsDialog [data-error=true]{color:var(--android-error)}
+
+/* Compact delayed activity indicator shared with the viewer. */
+.loading-surface{margin:0;position:fixed;left:50%;top:50%;transform:translate(-50%,-50%);z-index:10000;display:flex;flex-direction:column;gap:8px;width:248px;max-width:calc(100vw - 48px);box-sizing:border-box;padding:12px 14px;border:1px solid #647b8a66;border-radius:12px;background:var(--android-surface,#152430);color:var(--android-text,#f5fbff);box-shadow:0 4px 24px #0005;pointer-events:none}.loading-surface[hidden]{display:none}.loading-surface>div{max-width:100%}.loading-surface strong{font-size:12px;line-height:1.3}.loading-surface p{font-size:12px;line-height:1.4;margin:4px 0;overflow-wrap:anywhere}.loading-surface small{font-size:10px;color:var(--android-muted,#b6ccdb);font-variant-numeric:tabular-nums}.loading-bar{appearance:none;-webkit-appearance:none;width:100%;height:4px;border:0;border-radius:4px;overflow:hidden;background:#526b7a55}.loading-bar::-webkit-progress-bar{background:transparent}.loading-bar::-webkit-progress-value{background:#55d4ee;transition:width .2s linear}.loading-bar::-moz-progress-bar{background:#55d4ee}.loading-bar:indeterminate{background:linear-gradient(90deg,#526b7a55 0%,#55d4ee 40%,#526b7a55 70%);background-size:220% 100%;animation:kicad-loading-bar .9s linear infinite}@keyframes kicad-loading-bar{from{background-position:100% 0}to{background-position:-100% 0}}@media(prefers-reduced-motion:reduce){.loading-bar:indeterminate{animation:none}.loading-bar::-webkit-progress-value{transition:none}}
+
+.loading-surface::backdrop{background:transparent;pointer-events:none}
+
+.recent-project-open span{font-weight:600}.recent-project-access{display:block;color:var(--android-muted);font-size:10px;line-height:1.5}.recent-project-state[data-expired=true]{color:var(--android-muted);border:1px dashed var(--android-outline)}
+
+.loading-branded{padding-left:62px;min-height:70px}.loading-logo{position:absolute;left:14px;top:50%;width:36px;height:36px;border-radius:9px;transform:translateY(-50%);animation:pocket-kivi-loading-logo 1.4s ease-in-out infinite;will-change:transform,opacity}@keyframes pocket-kivi-loading-logo{0%,100%{transform:translateY(-50%) scale(.96);opacity:.7}50%{transform:translateY(-50%) scale(1.04);opacity:1}}@media(prefers-reduced-motion:reduce){.loading-logo{animation:none;will-change:auto}}
+.temporary-download-settings{margin:12px 0;padding:10px 12px;border:1px solid var(--android-outline);border-radius:12px}
+.temporary-download-settings>summary{font-weight:600;cursor:pointer}
+.temporary-download-settings>label{display:flex;align-items:center;flex-wrap:wrap;gap:6px;margin:10px 0}
+.temporary-download-settings input{width:5.5rem;min-width:0}
+.temporary-download-settings>button{display:inline-flex;margin:4px 6px 4px 0}
+.temporary-download-settings>p{font-size:12px;color:var(--android-muted);line-height:1.5;margin:8px 0}
+
+/* Short landscape windows use drawers, leaving the drawing beside the controls. */
+#androidViewToolbar{overflow-x:auto;overscroll-behavior-x:contain;scrollbar-width:thin}
+#androidViewToolbar>button{flex-shrink:0}
+@media(min-width:600px) and (max-height:500px) and (orientation:landscape){
+ body:has(#comparison:not([hidden])) #reviewHeader{height:0;min-height:0;padding:0;border:0;overflow:visible;flex:none}
+ body:has(#comparison:not([hidden])) #androidWorkspaceHeader{position:absolute;top:48px;left:8px;right:8px;width:auto;z-index:30;justify-content:space-between;pointer-events:none}
+ body:has(#comparison:not([hidden])) #androidWorkspaceHeader strong{display:none}
+ body:has(#comparison:not([hidden])) #androidWorkspaceHeader button{pointer-events:auto;min-width:44px;min-height:44px;height:44px;padding:6px;border-radius:12px;background:var(--panel,var(--android-container));box-shadow:0 2px 8px #0003}
+ body:has(#comparison:not([hidden])) #androidWorkspaceHeader .button-label{display:none}
+ body:has(#androidViewToolbar) #reviewWorkspace.docked-sidebars{padding:0!important}
+ body:has(#androidViewToolbar) :is(#designNavigator,#designInspector,#commentsSidebar,.viewer-settings){position:fixed!important;inset:4px 4px 4px auto!important;margin:0!important;width:min(360px,44vw)!important;max-width:44vw!important;height:auto!important;max-height:calc(100dvh - 8px)!important;border-radius:12px!important;overflow:auto!important;z-index:70}
+ #pinNavigator,#pinProperties,#pinComments,.sidebar-resizer{display:none!important}
+ body dialog:not(.android-reader-dialog){max-height:calc(100dvh - 8px)!important;max-width:calc(100vw - 16px);overflow:auto}
+ body dialog>header{min-height:44px;padding:4px 12px}
+ body .android-resizable-sheet>.android-sheet-handle{display:none!important}
+ #androidWorkspaceNav{min-height:44px;padding-bottom:env(safe-area-inset-bottom)}
+ #androidWorkspaceNav button{min-height:44px;padding:2px 8px;flex-direction:row;gap:6px}
+ #androidWorkspaceNav #androidWorkspaceActions button{flex-direction:column;min-width:48px;gap:2px}
+ #androidViewToolbar{height:44px;min-height:44px;justify-content:flex-start;padding:0 4px;gap:2px}
+ #androidViewToolbar button{height:44px;min-height:44px;padding:4px 8px}
+ .android-home #welcome{margin:0 auto;padding:12px 20px}
+}
+@media(max-width:599px), (min-width:600px) and (max-height:500px){
+ body:has(iframe[data-android-overlay-open=true]) #androidWorkspaceHeader{visibility:hidden}
+}

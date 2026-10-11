@@ -82,6 +82,32 @@ class AppMetadataTests(unittest.TestCase):
 
 
 class AppHTTPTests(unittest.TestCase):
+    def test_metadata_budget_rejects_before_github_and_refills(self):
+        self.server.metadata_tokens = 0
+        with patch('kicad_vizdiff.app_server.public_designs') as lookup:
+            self.assertEqual(self.request('/api/designs?repository=owner/repo')[0], 429)
+            lookup.assert_not_called()
+        self.server.metadata_updated -= 2
+        with patch('kicad_vizdiff.app_server.public_designs', return_value={'files': []}):
+            self.assertEqual(self.request('/api/designs?repository=owner/repo')[0], 200)
+
+    def test_excess_connections_do_not_spawn_threads(self):
+        from unittest.mock import Mock
+        request = Mock()
+        for _ in range(32):
+            self.assertTrue(self.server.request_slots.acquire(blocking=False))
+        try:
+            with patch.object(self.server, 'shutdown_request') as close, patch('http.server.ThreadingHTTPServer.process_request') as spawn:
+                self.server.process_request(request, ('127.0.0.1', 123))
+                close.assert_called_once_with(request)
+                spawn.assert_not_called()
+        finally:
+            for _ in range(32):
+                self.server.request_slots.release()
+
+    def test_webhook_rejects_chunked_framing(self):
+        self.assertEqual(self.request('/api/github/webhook', b'{}', {'Transfer-Encoding': 'chunked'})[0], 400)
+
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
         root = Path(self.temp.name)
@@ -151,6 +177,8 @@ class AppHTTPTests(unittest.TestCase):
         self.assertTrue(done.wait(2))
         body = json.loads(self.request('/api/github/webhook', raw, headers)[1])
         self.assertEqual(body['status'], 'duplicate')
+        headers['X-GitHub-Delivery'] = 'forged-new-delivery-id'
+        self.assertEqual(json.loads(self.request('/api/github/webhook', raw, headers)[1])['status'], 'duplicate')
 
     def test_database_cannot_be_served_as_viewer_asset(self):
         with self.assertRaises(VizError):

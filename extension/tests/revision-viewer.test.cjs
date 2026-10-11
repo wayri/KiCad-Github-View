@@ -4,7 +4,8 @@ const viewState=require('../view-state.js'),core=require('../owned-canvas.js');
 const tick=()=>new Promise(resolve=>setImmediate(resolve)),plain=value=>JSON.parse(JSON.stringify(value));
 async function revision(query='',extraFiles=[],options={}){
  const listeners=new Map(),canvasListeners=new Map(),controls=new Map(),reports=[],calls={board:0,page:0,draw:0,disposed:0,attach:0};
- class Element{constructor(){this.attributes={};this.children=[];this.hidden=false;this.dataset={viewer:'auto'};this.isConnected=true;this.classList={add(){},remove(){},toggle(){}};this.style={};}setAttribute(k,v){this.attributes[k]=String(v);}getAttribute(k){return this.attributes[k]??null;}append(...children){this.children.push(...children);}addEventListener(){}remove(){}replaceChildren(){this.children=[];}click(){return this.onclick?.();}}
+ class Element{constructor(){this.attributes={};this.children=[];this.listeners=new Map();this.hidden=false;this.dataset={viewer:'auto'};this.isConnected=true;this.classList={add(){},remove(){},toggle(){}};this.style={};}setAttribute(k,v){this.attributes[k]=String(v);}getAttribute(k){return this.attributes[k]??null;}append(...children){this.children.push(...children);}addEventListener(type,fn){if(!this.listeners.has(type))this.listeners.set(type,new Set());this.listeners.get(type).add(fn);}removeEventListener(type,fn){this.listeners.get(type)?.delete(fn);}remove(){}replaceChildren(){this.children=[];}click(){const result=this.onclick?.();for(const listener of this.listeners.get('click')||[])listener();return result;}}
+ Element.prototype.insertBefore=function(child,before){const index=this.children.indexOf(before);if(index<0)this.children.push(child);else this.children.splice(index,0,child);};
  const get=id=>{if(!controls.has(id)){const element=new Element();if(id==='viewerSettings')element.hidden=true;controls.set(id,element);}return controls.get(id);};
  const camera=new core.Camera(800,600),parent={postMessage:(data,origin)=>reports.push({data,origin})};
  const canvas={setNetHighlights(){},canvas:new Element(),viewport:{camera},document:null,visibleLayers:new Set(),addEventListener:(type,callback)=>canvasListeners.set(type,callback),resize(){},draw(){calls.draw++;},dispose(){calls.disposed++;},
@@ -109,7 +110,7 @@ test('remote viewer pins branch before loading drawings and passes the same comm
 test('floating saved copper layer selector isolates, shows all and restores the previous view',async()=>{
  const v=await revision('',[],{pcb:true,layers:['F.Cu','In1.Cu','In2.Cu','B.Cu','Edge.Cuts']});
  const bar=v.get('drawingHost').children.find(child=>child.id==='floatingLayerSelector');
- assert.ok(bar);assert.equal(bar.hidden,false);const toggle=bar.children[0],buttons=bar.children[1].children;assert.equal(toggle.attributes['aria-expanded'],'false');toggle.click();assert.equal(toggle.attributes['aria-expanded'],'true');assert.deepEqual(buttons.map(button=>button.dataset.layer),['F.Cu','In1.Cu','In2.Cu','B.Cu','All','Overview']);
+ assert.ok(bar);assert.equal(bar.hidden,false);const toggle=bar.children[0],buttons=bar.children[1].children;assert.equal(toggle.attributes['aria-expanded'],'false');toggle.click();assert.equal(toggle.attributes['aria-expanded'],'true');assert.deepEqual(buttons.map(button=>button.dataset.layer),['F.Cu','In1.Cu','In2.Cu','B.Cu','All','Overview','Filled copper','Zone outlines']);
  v.canvas.visibleLayers=new Set(['F.Cu','Edge.Cuts']);
  buttons[1].click();assert.equal(toggle.attributes['aria-expanded'],'false');assert.equal(toggle.textContent,'In1.Cu');assert.equal(v.canvas.focusedLayer,'In1.Cu');assert.equal(v.canvas.layerFocusMode,'isolate');assert.equal(buttons[1].attributes['aria-pressed'],'true');
  buttons[4].click();assert.deepEqual([...v.canvas.visibleLayers],v.canvas.design.layers);assert.equal(v.canvas.focusedLayer,null);
@@ -126,7 +127,7 @@ test('Android all-sheet overview composes every loaded page on a single canvas',
  assert.deepEqual(v.canvas.design.primitives.filter(p=>p.type==='text').map(p=>p.text),['Root','Power supply']);
  assert.equal(v.canvas.document.filename,'all-sheets');
  v.context.KiCadSheetOverview.close();assert.equal(v.context.KiCadSheetOverview.isOpen(),false);
- const desktop=await revision();assert.equal(desktop.context.KiCadSheetOverview,undefined);
+ const desktop=await revision();assert.equal(typeof desktop.context.KiCadSheetOverview.open,'function');
 });
 
 test('Android shared overview filters matching sheets then restores all pages',async()=>{
@@ -137,4 +138,16 @@ test('Android shared overview filters matching sheets then restores all pages',a
  active=false;await v.context.KiCadSheetOverview.refresh();
  assert.equal(v.canvas.design.primitives.filter(p=>p.type==='text').length,3);
  v.context.KiCadSheetOverview.close();
+});
+
+test('all-sheets Unselect and Clear highlights clear local picks and delegate to shared actions',async()=>{
+ const v=await revision('',[],{android:true});await v.context.KiCadSheetOverview.open();
+ const heading=v.get('drawingHost').children.find(node=>node.id==='sheetOverview').children[0];
+ for(const [label,id]of [['Unselect','unselect'],['Clear highlights','clearHighlights']]){
+  let invoked=0;v.get(id).onclick=()=>invoked++;v.canvas.selected={uuid:'wire'};
+  const action=heading.children.find(node=>node.textContent===label);assert.ok(action);assert.equal(action.hidden,false);action.click();
+  assert.equal(invoked,1);assert.equal(v.canvas.selected,null);
+ }
+ v.context.KiCadSheetOverview.dispose();
+ assert.equal(v.get('unselect').listeners.get('click').size,0);assert.equal(v.get('clearHighlights').listeners.get('click').size,0);
 });

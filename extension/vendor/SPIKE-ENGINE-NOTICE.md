@@ -10,4 +10,4 @@ layerPalette.ts: cb1daf87b07b7f5b7295c2c70f85530b8a1cf92979d6b6e9f03c562e1f2b47b
 trackGeometry.ts: 99879473120331418f1969dec8fa7b972fdb2694b7b7c4e6272803ce9f995da6
 viewportScenePolicy.ts: 16f676f4b73d0b417ab5856a72064458377774e20cd02ebd615c83fe9d8b2564
 
-The bundle also includes Three.js 0.171.0 (MIT); see THREE-LICENSE.
+The bundle also includes Three.js 0.171.0 (MIT); see THREE-LICENSE, and fzstd 0.1.1 (MIT); see fzstd/LICENSE.

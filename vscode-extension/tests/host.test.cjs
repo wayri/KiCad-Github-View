@@ -169,6 +169,7 @@ test("webview HTML confines resources and points relative SPIKE loads at package
   assert.match(html,/default-src &#39;none&#39;/);assert.match(html,/connect-src https:\/\/resources.example\/extension\/media\/step-worker-vscode.js https:\/\/resources.example\/extension\/media\/vendor\/occt\/occt-import-js.wasm;/);assert.match(html,/worker-src blob:/);assert.match(html,/wasm-unsafe-eval/);assert.doesNotMatch(html,/connect-src [^;]*\*/);assert.doesNotMatch(html,/&#39;unsafe-eval&#39;/);
   assert.match(html,/"stepWorkerUrl":"https:\/\/resources.example\/extension\/media\/step-worker-vscode.js"/);assert.match(html,/"stepWasmUrl":"https:\/\/resources.example\/extension\/media\/vendor\/occt\/occt-import-js.wasm"/);
   assert.match(html,/base href="https:\/\/resources.example\/extension\/media\/"/);
+  assert.match(html,/frame-src https:\/\/resources.example\/extension\/media\/terms.html;/);assert.doesNotMatch(html,/frame-src [^;]*\*/);
   assert.match(html,/src="https:\/\/resources.example\/extension\/media\/revision-viewer.js"/);
   assert.match(html,/nonce="[a-f0-9]{48}"/);
   assert.match(html,/GitHub publishing and remote annotations are unavailable/);

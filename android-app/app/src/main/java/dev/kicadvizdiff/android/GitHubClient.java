@@ -20,7 +20,7 @@ import java.util.Locale;
 import java.util.Set;
 import javax.net.ssl.HttpsURLConnection;
 
-/** Native-only GitHub transport. Never returns credentials, response errors, or remote URLs to JS. */
+/** Native-only GitHub transport. Never returns credentials or raw response errors to JS. */
 final class GitHubClient {
     static class Failure extends IOException { Failure(String message) { super(message); } }
     private static final class Missing extends Failure { Missing() { super("Repository or revision unavailable; check its name and private repository access"); } }
@@ -33,9 +33,12 @@ final class GitHubClient {
     private String userCode = "";
     private long deviceWallExpiry;
     private final SharedPreferences reviewReceipts;
+    private final ProviderWriteGuard writeGuard;
     private int generation;
     private String token;
     private String login = "";
+    private String scopes = "";
+    private boolean scopesKnown;
     private long coreRemaining = -1;
     private boolean quotaAuthenticated;
     private boolean authExpired;
@@ -51,12 +54,13 @@ final class GitHubClient {
             if (remaining > 0 && remaining <= 1800000) { deviceCode = pending.getString("deviceCode"); userCode = pending.getString("userCode"); interval = Math.max(5, Math.min(60,pending.optInt("interval",5))); deviceWallExpiry = pending.getLong("expiresAt"); deviceExpiry = SystemClock.elapsedRealtime()+remaining; nextPoll = SystemClock.elapsedRealtime()+interval*1000L; }
             else deviceVault.clear();
         } else if (token != null) deviceVault.clear(); } catch(Exception ignored) { deviceVault.clear(); }
+        writeGuard = new ProviderWriteGuard(context);
         reviewReceipts = context.getSharedPreferences("github_review_receipts", Context.MODE_PRIVATE); }
     synchronized int generation() { return generation; }
     synchronized boolean current(int epoch) { return epoch == generation; }
     synchronized boolean authExpired() { return authExpired; }
     synchronized void reset() {
-        generation++; coreRemaining = -1; token = null; login = ""; authExpired = false; clearDevice(); vault.clear();
+        generation++; coreRemaining = -1; token = null; login = ""; scopes = ""; scopesKnown = false; authExpired = false; clearDevice(); vault.clear();
     }
     synchronized void invalidateRequests() { generation++; }
     synchronized String displayedCode() { return pendingDevice() ? userCode : ""; }
@@ -67,6 +71,10 @@ final class GitHubClient {
     synchronized boolean pendingDevice() { if(deviceCode != null && SystemClock.elapsedRealtime() >= deviceExpiry) clearDevice(); return deviceCode != null; }
     private synchronized JSONObject deviceStatus() throws Exception { return new JSONObject().put("pending",pendingDevice()).put("userCode",userCode).put("interval",interval); }
     private synchronized void saveDevice() throws Exception { deviceVault.write(new JSONObject().put("deviceCode",deviceCode).put("userCode",userCode).put("expiresAt",deviceWallExpiry).put("interval",interval).toString()); }
+    private void claimWrite(String category) throws Failure {
+        try { writeGuard.claim(category); }
+        catch (IOException error) { throw new Failure(error.getMessage()); }
+    }
     private void check(int epoch) throws IOException {
         if (!current(epoch) || Thread.currentThread().isInterrupted()) throw new Failure("GitHub request cancelled");
     }
@@ -81,11 +89,12 @@ final class GitHubClient {
                         synchronized (this) { check(epoch); login = user.getString("login"); }
                     } catch (IOException error) { if(authExpired() || !current(epoch)) throw error; }
                 }
-                synchronized (this) { check(epoch); return deviceStatus().put("connected", token != null).put("login", login); }
+                synchronized (this) { check(epoch); return accountStatus(deviceStatus()); }
             case "device-start": return start(request.optString("scope", "public"), epoch);
             case "device-poll": return poll(epoch);
             case "device-cancel": case "sign-out": return new JSONObject().put("connected", credential(epoch) != null);
             case "repositories": return repositories(request, epoch);
+            case "notifications": return notifications(request, epoch);
             case "import": case "revision-import": return importProject(request, epoch);
             case "revision-resolve": return revisionResolve(request, epoch);
             case "revision-branches": return revisionBranches(request, epoch);
@@ -106,12 +115,12 @@ final class GitHubClient {
         JSONObject user = new JSONObject(network("https://api.github.com/user", null, candidate, epoch, 1024 * 1024));
         synchronized (this) {
             check(epoch); vault.write(candidate); coreRemaining = -1; token = candidate; authExpired = false; login = user.getString("login");
-            return new JSONObject().put("connected", true).put("login", login);
+            return accountStatus(new JSONObject());
         }
     }
     private JSONObject start(String scope, int epoch) throws Exception {
         if (!scope.equals("public") && !scope.equals("private")) throw new Failure("Invalid repository access scope");
-        JSONObject result = oauth("/login/device/code", "client_id=" + CLIENT + "&scope=" + (scope.equals("private") ? "repo" : "public_repo"), epoch);
+        JSONObject result = oauth("/login/device/code", "client_id=" + CLIENT + "&scope=" + encode((scope.equals("private") ? "repo" : "public_repo") + " notifications"), epoch);
         if (result.has("error")) throw new Failure("GitHub device sign-in is unavailable; use a personal access token");
         synchronized (this) {
             check(epoch); deviceCode = result.getString("device_code");
@@ -149,12 +158,53 @@ final class GitHubClient {
         }
         String accepted = result.getString("access_token");
         if (!accepted.matches("[A-Za-z0-9_]{20,255}")) throw new Failure("GitHub returned an invalid credential");
-        synchronized(this) { check(epoch); vault.write(accepted); token = accepted; authExpired = false; coreRemaining = -1; clearDevice(); }
+        synchronized(this) { check(epoch); vault.write(accepted); token = accepted; scopes = result.optString("scope"); scopesKnown = result.has("scope"); authExpired = false; coreRemaining = -1; clearDevice(); }
         // The token endpoint already authorized this credential. Profile lookup belongs to auth-status,
         // so a second API request cannot delay or falsely undo successful authorization.
-        JSONObject connected; synchronized(this){check(epoch);connected=new JSONObject().put("connected",true).put("login",login);}
+        JSONObject connected; synchronized(this){check(epoch);connected=accountStatus(new JSONObject());}
         synchronized (this) { check(epoch); clearDevice(); }
         return connected.put("pending", false);
+    }
+    private synchronized JSONObject accountStatus(JSONObject result) throws Exception {
+        JSONArray granted = new JSONArray();
+        for (String scope : scopes.split("[ ,]+")) if (!scope.isEmpty()) granted.put(scope);
+        return result.put("connected", token != null).put("login", login).put("scopes", granted)
+                .put("scopesKnown", scopesKnown).put("notificationsAccess", scopesKnown ? notificationScope() : JSONObject.NULL);
+    }
+    private synchronized boolean notificationScope() {
+        for (String scope : scopes.split("[ ,]+")) if (scope.equals("notifications") || scope.equals("repo")) return true;
+        return false;
+    }
+    private JSONObject notifications(JSONObject request, int epoch) throws Exception {
+        String bearer = authenticated(epoch);
+        int page = positive(request, "page", 1, 5);
+        JSONArray allowlist = request.optJSONArray("repositories");
+        if (allowlist == null || allowlist.length() > 100) throw new Failure("Choose up to 100 saved GitHub projects for notifications");
+        Set<String> repositories = new HashSet<>();
+        for (int i = 0; i < allowlist.length(); i++) {
+            String repo = repository(new JSONObject().put("repository", allowlist.getString(i)));
+            repositories.add(repo.toLowerCase(Locale.ROOT));
+        }
+        JSONArray rows = new JSONArray();
+        if (repositories.isEmpty()) return new JSONObject().put("notifications", rows).put("hasMore", false).put("page", page);
+        synchronized (this) { check(epoch); if (scopesKnown && !notificationScope()) throw new Failure("GitHub notifications permission is missing. Reconnect your GitHub account to grant notifications access, or use a classic token with notifications or repo scope."); }
+        JSONArray source = new JSONArray(network("https://api.github.com/notifications?per_page=100&page=" + page
+                + "&all=" + request.optBoolean("all", false), null, bearer, epoch, 4 * 1024 * 1024));
+        for (int i = 0; i < source.length() && i < 100; i++) {
+            check(epoch); JSONObject row = source.getJSONObject(i), repoData = row.optJSONObject("repository"), subject = row.optJSONObject("subject");
+            if (repoData == null || subject == null) continue;
+            String repo = repoData.optString("full_name");
+            if (!repositories.contains(repo.toLowerCase(Locale.ROOT))) continue;
+            String type = subject.optString("type");
+            if (!type.equals("Issue") && !type.equals("PullRequest") && !type.equals("Discussion")) continue;
+            String url = GitHubNotificationLinks.subject(repo, type, subject.optString("url"));
+            if (url.isEmpty()) continue;
+            rows.put(new JSONObject().put("id", row.optString("id")).put("repository", repo)
+                    .put("title", subject.optString("title")).put("type", type).put("reason", row.optString("reason"))
+                    .put("unread", row.optBoolean("unread")).put("updatedAt", row.optString("updated_at")).put("url", url));
+        }
+        return new JSONObject().put("notifications", rows).put("hasMore", source.length() == 100 && page < 5)
+                .put("limited", source.length() == 100 && page == 5).put("page", page);
     }
     private JSONObject repositories(JSONObject request, int epoch) throws Exception {
         int page = request.optInt("page", 1);
@@ -176,6 +226,13 @@ final class GitHubClient {
         if (repository.length() > 240 || !repository.matches("[A-Za-z0-9][A-Za-z0-9-]{0,38}/[A-Za-z0-9_.-]{1,100}")
                 || repository.endsWith("/.") || repository.endsWith("/..")) throw new Failure("Enter a valid owner/repository");
         String root = "/repos/" + repository;
+        String sourceRef=request.optString("sourceRef",request.optString("ref",""));
+        if(sourceRef.length()>255||hasControl(sourceRef))throw new Failure("Invalid branch or commit");
+        synchronized(this) {
+            check(epoch);
+            JSONObject cached=diskStore.findRemote("github","",repository,request.optString("ref",""));
+            if(cached!=null)return new JSONObject().put("repository",repository).put("sha",cached.getJSONObject("github").getString("sha")).put("cached",true).put("project",cached);
+        }
         JSONObject metadata = api(root, epoch, 1024 * 1024);
         String ref = request.optString("ref", "");
         if (ref.isEmpty()) ref = metadata.getString("default_branch");
@@ -206,7 +263,9 @@ final class GitHubClient {
         }
         if (large || request.optBoolean("downloadLarge")) {
             if (!request.optBoolean("downloadLarge")) return new JSONObject().put("downloadRequired", true).put("bytes", sourceBytes).put("repository", repository).put("sha", sha);
-            return diskStore.download(repository, sha, metadata.optBoolean("private"), nodes, (path, target, size) -> downloadFile(repository, sha, path, target, size, metadata.optBoolean("private"), epoch, deadline));
+            JSONObject downloaded = diskStore.download(repository, sha, metadata.optBoolean("private"), nodes, (path, target, size) -> downloadFile(repository, sha, path, target, size, metadata.optBoolean("private"), epoch, deadline),request.optBoolean("temporaryDownload"),sourceRef);
+            downloaded.getJSONObject("project").put("repositoryTree", repositoryTree(nodes));
+            return downloaded;
         }
 
         JSONArray files = new JSONArray(), assets = new JSONArray();
@@ -218,8 +277,8 @@ final class GitHubClient {
             JSONObject node = nodes.getJSONObject(i);
             if (!node.optString("type").equals("blob")) continue;
             String path = node.getString("path"), lower = path.toLowerCase(Locale.ROOT);
-            boolean binary = lower.matches(".*\\.(step|stp|wrl)$");
-            boolean text = lower.matches(".*\\.(kicad_sch|kicad_pcb|kicad_pro|kicad_prl|kicad_dru|kicad_wks|json|gbr|ger|drl|csv|tsv|txt|wbk|raw|html|htm)$")
+            boolean binary = lower.matches(".*\\.(step|stp|wrl|vrml|glb|pdf)$");
+            boolean text = lower.matches(".*\\.(kicad_sch|kicad_pcb|kicad_pro|kicad_prl|kicad_dru|kicad_wks|json|gbr|ger|gerber|gtl|gbl|gts|gbs|gto|gbo|gtp|gbp|gko|gm\\d+|g\\d+|drl|xln|csv|tsv|txt|wbk|raw|html|htm)$")
                     || lower.equals("sym-lib-table") || lower.equals("fp-lib-table") || lower.endsWith("/sym-lib-table") || lower.endsWith("/fp-lib-table");
             if (!binary && !text) continue;
             safePath(path);
@@ -236,6 +295,7 @@ final class GitHubClient {
                 throw new Failure("Git LFS files must be downloaded locally before import");
             total += bytes.length;
             JSONObject item = new JSONObject().put("path", path);
+            if(lower.endsWith(".pdf"))item.put("encoding","base64");
             if (binary) assets.put(item.put("base64", Base64.encodeToString(bytes, Base64.NO_WRAP)));
             else {
                 String content = StandardCharsets.UTF_8.newDecoder().onMalformedInput(CodingErrorAction.REPORT)
@@ -245,12 +305,25 @@ final class GitHubClient {
             }
         }
         check(epoch);
-        if (files.length() == 0) throw new Failure("No supported KiCad files found in repository");
+        if (files.length() == 0 && assets.length() == 0) throw new Failure("No supported KiCad files found in repository");
         byte[] digest = MessageDigest.getInstance("SHA-256").digest((repository.toLowerCase(Locale.ROOT) + "@" + sha).getBytes(StandardCharsets.UTF_8));
         StringBuilder id = new StringBuilder();
         for (byte b : digest) id.append(String.format(Locale.ROOT, "%02x", b & 255));
         return new JSONObject().put("repository", metadata.getString("full_name")).put("sha", sha).put("private", metadata.getBoolean("private"))
-                .put("project", new JSONObject().put("id", id.toString()).put("files", files).put("assets", assets));
+                .put("project", new JSONObject().put("id", id.toString()).put("files", files).put("assets", assets).put("repositoryTree", repositoryTree(nodes)));
+    }
+    /** Metadata only; unsupported repository files are never downloaded into the viewer. */
+    static JSONObject repositoryTree(JSONArray nodes) throws Exception {
+        JSONArray entries = new JSONArray();
+        boolean omitted = nodes.length() > 10000;
+        for (int i = 0; i < Math.min(nodes.length(), 10000); i++) {
+            JSONObject node = nodes.getJSONObject(i);
+            String path = node.optString("path"), type = node.optString("type");
+            try { safePath(path); } catch (Exception invalid) { omitted = true; continue; }
+            if (!type.equals("blob") && !type.equals("tree") && !type.equals("commit")) continue;
+            entries.put(new JSONObject().put("path", path).put("type", type));
+        }
+        return new JSONObject().put("entries", entries).put("truncated", omitted);
     }
     private void downloadFile(String repository, String sha, String path, java.io.File target, long size, boolean isPrivate, int epoch, long projectDeadline) throws Exception {
         HttpsURLConnection connection = (HttpsURLConnection)downloadUrl(repository,sha,path,size,isPrivate).openConnection();
@@ -283,7 +356,7 @@ final class GitHubClient {
     }
     static boolean importable(String path) {
         String lower = path.toLowerCase(Locale.ROOT);
-        return lower.matches(".*\\.(step|stp|wrl|kicad_sch|kicad_pcb|kicad_pro|kicad_prl|kicad_dru|kicad_wks|json|gbr|ger|drl|csv|tsv|txt|wbk|raw|html|htm)$")
+        return lower.matches(".*\\.(step|stp|wrl|vrml|glb|pdf|kicad_sch|kicad_pcb|kicad_pro|kicad_prl|kicad_dru|kicad_wks|json|gbr|ger|gerber|gtl|gbl|gts|gbs|gto|gbo|gtp|gbp|gko|gm\\d+|g\\d+|drl|xln|csv|tsv|txt|wbk|raw|html|htm)$")
                 || lower.equals("sym-lib-table") || lower.equals("fp-lib-table") || lower.endsWith("/sym-lib-table") || lower.endsWith("/fp-lib-table");
     }
     private static String revisionFile(JSONObject request) throws Exception {
@@ -571,6 +644,7 @@ final class GitHubClient {
         }
         synchronized (this) {
             check(epoch);
+            claimWrite("publish");
             if (!reviewReceipts.edit().putString(key, new JSONObject().put("pending", true).toString()).commit()) throw new Failure("Could not protect publication against duplicate retries");
         }
         JSONObject remote; String node = "", suffix = "";
@@ -620,6 +694,7 @@ final class GitHubClient {
         if (!metadata.getString("full_name").equalsIgnoreCase(repo) || metadata.optJSONObject("permissions") == null || !metadata.getJSONObject("permissions").optBoolean("push")) throw new Failure("Screenshot upload requires repository write access");
         long repositoryId = metadata.getLong("id"); if (repositoryId <= 0) throw new Failure("Invalid GitHub repository identity");
         String response;
+        claimWrite("upload");
         try { response = networkBytes("https://uploads.github.com/user-attachments/assets?name=kicad-review-" + digest.substring(0,20) + ".png&content_type=image%2Fpng&repository_id=" + repositoryId,
                 bytes, "application/octet-stream", bearer, epoch, 16384); }
         finally { java.util.Arrays.fill(bytes, (byte)0); }
@@ -761,8 +836,12 @@ final class GitHubClient {
             if (url.getHost().equals("api.github.com") && !url.getPath().equals("/graphql")) {
                 synchronized (this) { check(epoch); coreRemaining = GitHubFailure.number(connection.getHeaderField("X-RateLimit-Remaining")); quotaAuthenticated = bearer != null; }
             }
+            if (url.getHost().equals("api.github.com") && bearer != null && status >= 200 && status < 300) {
+                String granted = connection.getHeaderField("X-OAuth-Scopes");
+                if (granted != null) synchronized (this) { check(epoch); scopes = granted; scopesKnown = true; }
+            }
             if (status == 401) {
-                synchronized (this) { check(epoch); if (bearer != null) { authExpired = true; token = null; login = ""; clearDevice(); vault.clear(); } }
+                synchronized (this) { check(epoch); if (bearer != null) { authExpired = true; token = null; login = ""; scopes = ""; scopesKnown = false; clearDevice(); vault.clear(); } }
                 throw new Failure("GitHub sign-in expired or was revoked; sign in again");
             }
             if (status == 404) throw new Missing();
@@ -772,6 +851,11 @@ final class GitHubClient {
                     if (errorStream != null) { byte[] bytes = new byte[4096]; int n = errorStream.read(bytes);
                         if (n > 0) message = new JSONObject(new String(bytes, 0, n, StandardCharsets.UTF_8)).optString("message"); }
                 } catch (Exception ignored) { /* Headers remain authoritative; never expose remote response text. */ }
+                if (status == 403 && url.getPath().equals("/notifications")
+                        && GitHubFailure.number(connection.getHeaderField("X-RateLimit-Remaining")) != 0
+                        && connection.getHeaderField("Retry-After") == null && connection.getHeaderField("X-GitHub-SSO") == null
+                        && !message.toLowerCase(Locale.ROOT).contains("rate limit"))
+                    throw new Failure("GitHub notifications access was denied. Reconnect your GitHub account to grant notifications access, or use a classic token with notifications or repo scope; fine-grained tokens do not support this endpoint.");
                 throw new Failure(GitHubFailure.forbidden(status, bearer != null, connection.getHeaderField("X-RateLimit-Remaining"),
                         connection.getHeaderField("X-RateLimit-Reset"), connection.getHeaderField("Retry-After"),
                         connection.getHeaderField("X-GitHub-SSO"), message, System.currentTimeMillis()/1000));

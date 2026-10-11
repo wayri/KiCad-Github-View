@@ -78,3 +78,14 @@ test('legacy reference and missing UUID follow SPIKE parser identity fallback', 
   assert.equal(result.models[0].reference, 'J2');
   assert.equal(result.models[0].footprintId, 'component-J2');
 });
+
+test('library variables resolve only unique files in the imported repository inventory', () => {
+  const source = '(kicad_pcb (footprint "Part" (at 1 2) (model "${KICAD9_3DMODEL_DIR}/Package.3dshapes/body.step")))';
+  const path = 'models/Package.3dshapes/body.step';
+  const result = collect(source, 'pcb/board.kicad_pcb', undefined, [path]);
+  assert.equal(result.models[0].path, path);
+  assert.equal(collect(source, 'pcb/board.kicad_pcb').models.length, 0);
+  const ambiguous = collect(source, 'pcb/board.kicad_pcb', undefined, [path, 'other/Package.3dshapes/body.step']);
+  assert.equal(ambiguous.models.length, 0);
+  assert.ok(ambiguous.diagnostics.some(message => /multiple repository files/.test(message)));
+});

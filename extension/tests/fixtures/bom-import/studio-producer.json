@@ -1,0 +1,288 @@
+{
+  "project": "BOM_Demo",
+  "variant": "<Default>",
+  "template": {
+    "name": "Full audit",
+    "columns": [
+      {
+        "field": "Reference",
+        "label": "Reference"
+      },
+      {
+        "field": "Value",
+        "label": "Value"
+      },
+      {
+        "field": "Footprint",
+        "label": "Footprint"
+      },
+      {
+        "field": "MPN",
+        "label": "MPN"
+      },
+      {
+        "field": "Manufacturer",
+        "label": "Manufacturer"
+      },
+      {
+        "field": "Assembly",
+        "label": "Assembly"
+      },
+      {
+        "field": "InBOM",
+        "label": "InBOM"
+      },
+      {
+        "field": "OnBoard",
+        "label": "OnBoard"
+      },
+      {
+        "field": "InPosFiles",
+        "label": "InPosFiles"
+      },
+      {
+        "field": "ExcludeFromSim",
+        "label": "ExcludeFromSim"
+      },
+      {
+        "field": "Sheet",
+        "label": "Sheet"
+      },
+      {
+        "field": "UUID",
+        "label": "UUID"
+      },
+      {
+        "field": "Source",
+        "label": "Source"
+      },
+      {
+        "field": "Notes",
+        "label": "Notes"
+      }
+    ],
+    "group_by": [],
+    "population": "all",
+    "include_excluded": true,
+    "delimiter": "\t",
+    "ref_ranges": false
+  },
+  "columns": [
+    "Reference",
+    "Value",
+    "Footprint",
+    "MPN",
+    "Manufacturer",
+    "Assembly",
+    "InBOM",
+    "OnBoard",
+    "InPosFiles",
+    "ExcludeFromSim",
+    "Sheet",
+    "UUID",
+    "Source",
+    "Notes"
+  ],
+  "rows": [
+    [
+      "C1",
+      "100n",
+      "Capacitor_SMD:C_0603_1608Metric",
+      "DEMO-C0603-100N",
+      "DEMO Components",
+      "FIT",
+      "Yes",
+      "Yes",
+      "Yes",
+      "No",
+      "/",
+      "/49ab0e27-e35a-54c9-b54d-aaec6120e0a7/95907355-ee25-5d41-ad1e-d7411712a718",
+      "C:\\Users\\yawar\\Documents\\agws\\KiCAD_plugins\\kiWay\\bom_studio_plugin\\examples\\BOM_Demo.kicad_sch",
+      "Synthetic demo part; revision A"
+    ],
+    [
+      "C2",
+      "100n",
+      "Capacitor_SMD:C_0603_1608Metric",
+      "DEMO-C0603-100N",
+      "DEMO Components",
+      "FIT",
+      "Yes",
+      "Yes",
+      "Yes",
+      "No",
+      "/",
+      "/49ab0e27-e35a-54c9-b54d-aaec6120e0a7/cb7334c5-268f-5ee1-b832-155f0f3e5fbe",
+      "C:\\Users\\yawar\\Documents\\agws\\KiCAD_plugins\\kiWay\\bom_studio_plugin\\examples\\BOM_Demo.kicad_sch",
+      "Synthetic demo part; revision A"
+    ],
+    [
+      "C3",
+      "10u",
+      "Capacitor_SMD:C_0603_1608Metric",
+      "DEMO-C0603-10U",
+      "DEMO Components",
+      "FIT",
+      "Yes",
+      "Yes",
+      "Yes",
+      "No",
+      "/",
+      "/49ab0e27-e35a-54c9-b54d-aaec6120e0a7/c1778752-62dc-5fa1-b986-9c9688f7ccd1",
+      "C:\\Users\\yawar\\Documents\\agws\\KiCAD_plugins\\kiWay\\bom_studio_plugin\\examples\\BOM_Demo.kicad_sch",
+      "Synthetic demo part; revision A"
+    ],
+    [
+      "D1",
+      "LED Green",
+      "LED_SMD:LED_0603_1608Metric",
+      "DEMO-LED-GREEN",
+      "DEMO Components",
+      "FIT",
+      "Yes",
+      "Yes",
+      "Yes",
+      "No",
+      "/",
+      "/49ab0e27-e35a-54c9-b54d-aaec6120e0a7/244db78e-02e7-53c0-b93f-73a04ec97161",
+      "C:\\Users\\yawar\\Documents\\agws\\KiCAD_plugins\\kiWay\\bom_studio_plugin\\examples\\BOM_Demo.kicad_sch",
+      "Synthetic demo part; revision A"
+    ],
+    [
+      "J1",
+      "Terminal 2P",
+      "Connector_PinHeader_2.54mm:PinHeader_1x02_P2.54mm_Vertical",
+      "DEMO-TERM-2P",
+      "DEMO Components",
+      "FIT",
+      "Yes",
+      "Yes",
+      "Yes",
+      "No",
+      "/",
+      "/49ab0e27-e35a-54c9-b54d-aaec6120e0a7/d1e84ca9-23f4-5c16-af70-71b89ffb6f12",
+      "C:\\Users\\yawar\\Documents\\agws\\KiCAD_plugins\\kiWay\\bom_studio_plugin\\examples\\BOM_Demo.kicad_sch",
+      "Synthetic demo part; revision A"
+    ],
+    [
+      "R1",
+      "10k",
+      "Resistor_SMD:R_0603_1608Metric",
+      "DEMO-R0603-10K",
+      "DEMO Components",
+      "FIT",
+      "Yes",
+      "Yes",
+      "Yes",
+      "No",
+      "/",
+      "/49ab0e27-e35a-54c9-b54d-aaec6120e0a7/936d48b1-8570-5c59-a906-7f1b28c129e6",
+      "C:\\Users\\yawar\\Documents\\agws\\KiCAD_plugins\\kiWay\\bom_studio_plugin\\examples\\BOM_Demo.kicad_sch",
+      "Synthetic demo part; revision A"
+    ],
+    [
+      "R2",
+      "10k",
+      "Resistor_SMD:R_0603_1608Metric",
+      "DEMO-R0603-10K",
+      "DEMO Components",
+      "FIT",
+      "Yes",
+      "Yes",
+      "Yes",
+      "No",
+      "/",
+      "/49ab0e27-e35a-54c9-b54d-aaec6120e0a7/11e51a3d-eee6-50a1-823b-f057b3c0c6c9",
+      "C:\\Users\\yawar\\Documents\\agws\\KiCAD_plugins\\kiWay\\bom_studio_plugin\\examples\\BOM_Demo.kicad_sch",
+      "Synthetic demo part; revision A"
+    ],
+    [
+      "R3",
+      "10k",
+      "Resistor_SMD:R_0603_1608Metric",
+      "DEMO-R0603-10K",
+      "DEMO Components",
+      "FIT",
+      "Yes",
+      "Yes",
+      "Yes",
+      "No",
+      "/",
+      "/49ab0e27-e35a-54c9-b54d-aaec6120e0a7/cde31206-8fa7-592d-81b0-2f8601bbad12",
+      "C:\\Users\\yawar\\Documents\\agws\\KiCAD_plugins\\kiWay\\bom_studio_plugin\\examples\\BOM_Demo.kicad_sch",
+      "Synthetic demo part; revision A"
+    ],
+    [
+      "R4",
+      "0R",
+      "Resistor_SMD:R_0603_1608Metric",
+      "DEMO-R0603-0R",
+      "DEMO Components",
+      "DNP",
+      "Yes",
+      "Yes",
+      "Yes",
+      "No",
+      "/",
+      "/49ab0e27-e35a-54c9-b54d-aaec6120e0a7/07792e4d-02f2-5b1b-8f58-cf1c06f46127",
+      "C:\\Users\\yawar\\Documents\\agws\\KiCAD_plugins\\kiWay\\bom_studio_plugin\\examples\\BOM_Demo.kicad_sch",
+      "Synthetic demo part; revision A"
+    ],
+    [
+      "R101",
+      "1k",
+      "Resistor_SMD:R_0603_1608Metric",
+      "DEMO-R0603-1K",
+      "DEMO Components",
+      "FIT",
+      "Yes",
+      "Yes",
+      "Yes",
+      "No",
+      "/Channel A/",
+      "/49ab0e27-e35a-54c9-b54d-aaec6120e0a7/0cbc449e-b544-5971-be97-75f9bfc23ce1/3a75e9a2-a6b2-535d-a7c3-6875e6d85f40",
+      "C:\\Users\\yawar\\Documents\\agws\\KiCAD_plugins\\kiWay\\bom_studio_plugin\\examples\\Channel.kicad_sch",
+      "Channel A; build DEMO-A"
+    ],
+    [
+      "R201",
+      "1k",
+      "Resistor_SMD:R_0603_1608Metric",
+      "DEMO-R0603-1K",
+      "DEMO Components",
+      "FIT",
+      "Yes",
+      "Yes",
+      "Yes",
+      "No",
+      "/Channel B/",
+      "/49ab0e27-e35a-54c9-b54d-aaec6120e0a7/8248a0eb-eda6-54b9-9d64-87bbe95dea45/3a75e9a2-a6b2-535d-a7c3-6875e6d85f40",
+      "C:\\Users\\yawar\\Documents\\agws\\KiCAD_plugins\\kiWay\\bom_studio_plugin\\examples\\Channel.kicad_sch",
+      "Channel B; build DEMO-A"
+    ]
+  ],
+  "groups": 11,
+  "boards": 1,
+  "attrition": 0.0,
+  "totals": {
+    "INR": "45.70"
+  },
+  "order_totals": {
+    "INR": "457.00"
+  },
+  "installed_totals": {
+    "INR": "45.70"
+  },
+  "pricing_basis": {
+    "field": "UnitPrice",
+    "per_pieces": "1",
+    "per_row_field": "",
+    "moq_field": "MOQ",
+    "multiple_field": "OrderMultiple",
+    "notice": "Installed totals are per board for this exported scope. LineCost uses project build quantity plus attrition; OrderCost also includes mapped MOQ/order multiples, rounded per export line. Analytics procurement pools compatible parts independently of display grouping and may use a separate build scenario."
+  },
+  "unpriced_lines": 0,
+  "issues": [],
+  "status": "draft",
+  "generated": "2026-10-11T01:24:30+00:00"
+}

@@ -668,13 +668,14 @@ test('explicit issue publication uses a fixed API origin and returns a Git sidec
 });
 
 test('GitHub auth failures are sanitized and definitive failures can be corrected', async (t) => {
+  let clock = Date.now(); t.mock.method(Date, 'now', () => clock);
   localStore.clear(); sessionStore.clear();
   const token = 'github_pat_' + 'd'.repeat(60);
   await message({ type: 'github-auth-set', token }, options);
   let count = 0;
   withPublishingFetch(t, async () => { count++; return new Response(`bad token: ${token}`, { status: 403 }); });
   const request = { type: 'github-publish-comment', comment: sampleComment(), destination: 'new-issue' };
-  const first = await message(request), second = await message(request);
+  const first = await message(request); clock += 3000; const second = await message(request);
   assert.match(first.error, /denied access/);
   assert.equal(JSON.stringify(first).includes(token), false);
   assert.match(second.error, /denied access/);
@@ -708,6 +709,7 @@ test('existing issue publication stores the exact comment link', async (t) => {
 });
 
 test('discussion categories and both discussion publication operations use GraphQL', async (t) => {
+  let clock = Date.now(); t.mock.method(Date, 'now', () => clock);
   localStore.clear(); sessionStore.clear();
   await message({ type: 'github-auth-set', token: 'github_pat_' + 'c'.repeat(60) }, options);
   const queries = [];
@@ -736,6 +738,7 @@ test('discussion categories and both discussion publication operations use Graph
   const created = await message({ type: 'github-publish-comment', destination: 'new-discussion',
     repository: 'owner/board', categoryId: 'DC_123', comment: note });
   assert.equal(created.result.remoteRef.url, 'https://github.com/owner/board/discussions/7');
+  clock += 3000;
   const replied = await message({ type: 'github-publish-comment', destination: 'discussion',
     repository: 'owner/board', number: 7, comment: note });
   assert.equal(replied.result.remoteRef.nodeId, 'DCOM_123');
@@ -1069,4 +1072,11 @@ test('trusted analysis page is read-only and only accepts exact extension sender
  const read=await message({type:'project-file',repository:'owner/board',ref:sha('a'),file:'analysis.csv'},sender);assert.equal(read.ok,true,read.error);assert.equal(read.result.content,'time,V\n0,1');assert.ok(reads.every(url=>new URL(url).searchParams.get('ref')===sha('a')));
  for(const type of ['comment-save','comment-delete','github-publish-comment','github-auth-set','open-viewer-window','project']){const response=await message({type,repository:'owner/board',ref:sha('a'),file:'analysis.csv'},sender);assert.equal(response.ok,false);assert.match(response.error,/only read/);}
  assert.equal((await message({type:'project-file',repository:'owner/board',ref:sha('a'),file:'../analysis.csv'},sender)).ok,false);
+});
+
+test('PDF page reads bounded binary on the pinned repository revision and cannot write reviews',async t=>{
+ const calls=[];withFetch(t,async(url,init)=>{calls.push({url,init});return new Response(new Uint8Array([37,80,68,70,45,49,46,55,10,0,255]),{headers:{'content-type':'application/pdf'}});});
+ const sender={id:'test-id',url:extensionOrigin+'pdf-viewer.html?file=reports/board.pdf'},request={type:'pdf-file',repository:'owner/pdfboard',ref:'c'.repeat(40),file:'reports/board.pdf'};
+ const reply=await message(request,sender);assert.equal(reply.ok,true);assert.equal(reply.result.mediaType,'application/pdf');assert.deepEqual(Array.from(Buffer.from(reply.result.base64,'base64')),[37,80,68,70,45,49,46,55,10,0,255]);assert.equal(calls[0].url,'https://api.github.com/repos/owner/pdfboard/contents/reports/board.pdf?ref='+'c'.repeat(40));
+ assert.equal((await message({...request,type:'comment-save'},sender)).ok,false);assert.equal((await message({...request,file:'../board.pdf'},sender)).ok,false);assert.equal((await message({...request,type:'repo-asset'},sender)).ok,false);assert.equal(calls.length,1);
 });

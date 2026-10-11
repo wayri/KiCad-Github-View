@@ -91,7 +91,7 @@ def normalize_archive(source: Path, target: Path):
 def audit_packages(chrome: Path, native: Path, root: Path = ROOT):
     browser_builder, native_builder = module('package_extension'), module('package_vscode')
     manifest = json.loads((root / 'extension/manifest.json').read_text(encoding='utf-8'))
-    expected = set(browser_builder.FILES) | set(manifest['icons'].values())
+    expected = set(browser_builder.FILES) | set(browser_builder.LEGAL_FILES) | set(manifest['icons'].values())
     expected.add(manifest['background']['service_worker'])
     for entry in manifest['content_scripts']:
         expected.update(entry['js'])

@@ -4,9 +4,10 @@ const source = fs.readFileSync(require.resolve('../gitlab-review-api.js'), 'utf8
 const HOST = 'https://gitlab.example.org', TOKEN = 'glpat_test_abcdefghijklmnopqrstuv';
 const note = type => ({ id: 'gitlab-note', text: 'Inspect U1 clearance', threadType: type, createdAt: '2026-10-04T01:00:00Z', anchor: { provider: 'gitlab', host: HOST, repository: 'group/sub/project', ref: 'main', file: 'board.kicad_pcb', reference: 'U1' } });
 function harness({ session = new Map(), local = new Map(), route, identity, beforeSet = async () => {} } = {}) {
+  let clock=Date.now();class TestDate extends Date{static now(){return clock;}}
   const calls = [];
   const area = map => ({ get: async key => ({ [key]: map.get(key) }), set: async value => { await beforeSet(value); for (const [k, v] of Object.entries(value)) map.set(k, v); }, remove: async keys => { for (const key of [].concat(keys)) map.delete(key); }, setAccessLevel: async () => {} });
-  const ctx = vm.createContext({ URL, URLSearchParams, TextEncoder, TextDecoder, FormData, Blob, crypto: require('node:crypto').webcrypto, btoa, atob, AbortController, setTimeout, clearTimeout,
+  const ctx = vm.createContext({ Date:TestDate, URL, URLSearchParams, TextEncoder, TextDecoder, FormData, Blob, crypto: require('node:crypto').webcrypto, btoa, atob, AbortController, setTimeout, clearTimeout,
     KiCadReviewComments: comments, KiCadGitHubReviewApi: github, chrome: { storage: { session: area(session), local: area(local) }, identity }, fetch: async (url, init) => {
       calls.push({ url, init }); assert.equal(new URL(url).origin, HOST); assert.equal(init.credentials, 'omit'); assert.equal(init.redirect, 'error');
       let data = route ? await route(url, init) : undefined;
@@ -24,7 +25,7 @@ function harness({ session = new Map(), local = new Map(), route, identity, befo
       if(data instanceof Response)return data;
       return typeof data === 'number' ? new Response('', { status: data }) : new Response(JSON.stringify(data), { headers: { 'content-type': 'application/json' } });
     } });
-  vm.runInContext(source, ctx); return { api: ctx.KiCadGitLabReviewApi, calls, local, session };
+  vm.runInContext(source, ctx); return { api: ctx.KiCadGitLabReviewApi, calls, local, session,advance(ms){clock+=ms;} };
 }
 test('GitLab vault encrypts isolated host tokens and purges across process restart', async () => {
   const h = harness(); await h.api.setToken(HOST, TOKEN); await h.api.setToken('https://gitlab.com', 'glpat_other_abcdefghijklmnopqrstuv');
@@ -51,22 +52,22 @@ test('GitLab publishes captures as multipart PNG uploads and Markdown links for 
 test('parallel destinations share one upload and reuse the receipt after a definitive posting failure',async()=>{
  let denied=true;const h=harness({route:async(url,init)=>{if(url.endsWith('/uploads'))return uploadResult(init);if(url.endsWith('/notes')&&denied){denied=false;return 403;}}});await h.api.setToken(HOST,TOKEN);
  const message={host:HOST,comment:captured('issue'),destination:'issue',number:7};await assert.rejects(h.api.publish(message),/403/);
- await Promise.all([h.api.publish(message),h.api.publish({...message,number:8})]);assert.equal(h.calls.filter(c=>c.url.endsWith('/uploads')).length,1);assert.equal(h.calls.filter(c=>c.url.endsWith('/notes')&&c.init.method==='POST').length,3);
+ h.advance(3000);await h.api.publish(message);h.advance(3000);await h.api.publish({...message,number:8});assert.equal(h.calls.filter(c=>c.url.endsWith('/uploads')).length,1);assert.equal(h.calls.filter(c=>c.url.endsWith('/notes')&&c.init.method==='POST').length,3);
 });
-test('concurrent first-time publications to different issues upload the same capture once',async()=>{
+test('concurrent publications are paced and later destinations reuse the uploaded capture',async()=>{
  const h=harness({route:async(url,init)=>url.endsWith('/uploads')?uploadResult(init):undefined});await h.api.setToken(HOST,TOKEN);
- const message={host:HOST,comment:captured('issue'),destination:'issue',number:7};await Promise.all([h.api.publish(message),h.api.publish({...message,number:8})]);assert.equal(h.calls.filter(c=>c.url.endsWith('/uploads')).length,1);
+ const message={host:HOST,comment:captured('issue'),destination:'issue',number:7};const results=await Promise.allSettled([h.api.publish(message),h.api.publish({...message,number:8})]);assert.equal(results.filter(r=>r.status==='fulfilled').length,1);assert.match(results.find(r=>r.status==='rejected').reason.message,/Posting too quickly/);h.advance(3000);await h.api.publish({...message,number:8});assert.equal(h.calls.filter(c=>c.url.endsWith('/uploads')).length,1);
 });
 test('unconfirmed uploads and invalid upload URLs never post a note or repeat the upload',async()=>{
  for(const mode of ['network','external','wrong-project','oversize',408,429,500]){
   const h=harness({route:async(url,init)=>{if(!url.endsWith('/uploads'))return;if(typeof mode==='number')return mode;if(mode==='network')throw Error('network');if(mode==='external')return{full_path:'https://evil.example/upload.png'};if(mode==='wrong-project')return{...uploadResult(init),full_path:uploadResult(init).full_path.replace('/project/9/','/project/10/')};return new Response('x'.repeat(65537));}});await h.api.setToken(HOST,TOKEN);
-  const message={host:HOST,comment:captured('issue'),destination:'new-issue'};await assert.rejects(h.api.publish(message));await assert.rejects(h.api.publish(message),/unconfirmed/);assert.equal(h.calls.filter(c=>c.init.method==='POST').length,1);
+  const message={host:HOST,comment:captured('issue'),destination:'new-issue'};await assert.rejects(h.api.publish(message));h.advance(3000);await assert.rejects(h.api.publish(message),/unconfirmed/);assert.equal(h.calls.filter(c=>c.init.method==='POST').length,1);
  }
 });
 test('definitively denied uploads can retry and older project-relative upload responses remain bounded',async()=>{
  let denied=true;const h=harness({route:async(url,init)=>{if(!url.endsWith('/uploads'))return;if(denied){denied=false;return 403;}return{url:'/uploads/'+'a'.repeat(32)+'/'+init.body.get('file').name,markdown:'![untrusted](https://evil.example/image.png)'};}});await h.api.setToken(HOST,TOKEN);
  const message={host:HOST,comment:captured('issue'),destination:'new-issue'};await assert.rejects(h.api.publish(message),/403/);assert.equal(h.calls.filter(c=>c.url.endsWith('/issues')&&c.init.method==='POST').length,0);
- const result=await h.api.publish(message);assert.equal(h.calls.filter(c=>c.url.endsWith('/uploads')).length,2);assert.ok(result.attachments[0].url.startsWith(HOST+'/group/sub/project/uploads/'));
+ h.advance(3000);const result=await h.api.publish(message);assert.equal(h.calls.filter(c=>c.url.endsWith('/uploads')).length,2);assert.ok(result.attachments[0].url.startsWith(HOST+'/group/sub/project/uploads/'));
  assert.ok(!h.calls.find(c=>c.url.endsWith('/issues')&&c.init.method==='POST').init.body.includes('evil.example'));
 });
 test('private and internal screenshots require verified media authentication before any mutation',async()=>{
@@ -78,13 +79,13 @@ test('private and internal screenshots require verified media authentication bef
 test('sign-out after upload and failed receipt persistence retain uncertainty protection',async()=>{
  for(const mode of ['signout','storage']){
   let h,failed=false;h=harness({beforeSet:async value=>{if(mode==='storage'&&Object.entries(value).some(([key,record])=>key.startsWith('gitlab-attachment:')&&record.status==='done')&&!failed){failed=true;throw Error('disk');}},route:async(url,init)=>{if(url.endsWith('/uploads')){if(mode==='signout')await h.api.clearToken(HOST);return uploadResult(init);}}});await h.api.setToken(HOST,TOKEN);
-  const message={host:HOST,comment:captured('issue'),destination:'new-issue'};await assert.rejects(h.api.publish(message));await h.api.setToken(HOST,TOKEN);await assert.rejects(h.api.publish(message),/unconfirmed/);assert.equal(h.calls.filter(c=>c.init.method==='POST').length,1);
+  const message={host:HOST,comment:captured('issue'),destination:'new-issue'};await assert.rejects(h.api.publish(message));await h.api.setToken(HOST,TOKEN);h.advance(3000);await assert.rejects(h.api.publish(message),/unconfirmed/);assert.equal(h.calls.filter(c=>c.init.method==='POST').length,1);
  }
 });
 test('malformed PNG and a recreated project cannot reuse another project upload',async()=>{
  let projectId=9;const h=harness({route:async(url,init)=>url.endsWith('/uploads')?uploadResult(init):url.endsWith('/projects/group%2Fsub%2Fproject')?{id:projectId,path_with_namespace:'group/sub/project',default_branch:'main',visibility:'public'}:undefined});await h.api.setToken(HOST,TOKEN);
  const message={host:HOST,comment:captured('issue'),destination:'issue',number:7};await assert.rejects(h.api.publish({...message,comment:{...message.comment,capture:{...message.comment.capture,width:2}}}),/dimensions/);assert.equal(h.calls.filter(c=>c.init.method==='POST').length,0);
- await h.api.publish(message);projectId=10;await assert.rejects(h.api.publish({...message,number:8}),/project/);assert.equal(h.calls.filter(c=>c.url.endsWith('/uploads')).length,1);
+ h.advance(3000);await h.api.publish(message);projectId=10;h.advance(3000);await assert.rejects(h.api.publish({...message,number:8}),/project/);assert.equal(h.calls.filter(c=>c.url.endsWith('/uploads')).length,1);
 });
 test('invalid origins and tokens are rejected without network traffic', async () => {
   const h = harness();

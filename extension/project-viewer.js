@@ -74,6 +74,7 @@
  }
  function associateBoard(path){const select=$('boardSetup');if(/\.kicad_(pro|pcb)$/i.test(path)){const candidate=path.replace(/\.kicad_pro$/i,'.kicad_pcb');select.value=inventory.some(f=>f.path===candidate)?candidate:'';$('loadBoardSetup').disabled=!select.value;}}
  async function load(path,preferredTab=null){
+  if(/\.pdf$/i.test(path)){active=path;activate('overview');$('overviewContent').replaceChildren();const pdf=node('iframe');pdf.title='PDF document: '+path;pdf.src=chrome.runtime.getURL('pdf-viewer.html')+'?'+new URLSearchParams({repository,ref,file:path,...providerContext});pdf.style.cssText='width:100%;height:75vh;border:0';$('drawingPreview').replaceChildren(pdf);$('projectFile').textContent=path;renderTree();status('Viewing PDF · '+ref);return;}
   document.body.classList.remove('has-drawing','focus-drawing');
   loadController?.abort();loadController=typeof AbortController==='function'?new AbortController():null;const controller=loadController;
   const ticket=++epoch;loading?.show('Fetching '+path+'…');status('Loading '+path+'…');try{if(!KiCadGitHub.filePath(path))throw Error('Unsupported project file.');const result=await request('project-file',{file:path});if(disposed||ticket!==epoch)return;

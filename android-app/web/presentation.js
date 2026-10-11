@@ -1,0 +1,60 @@
+/* Project walkthroughs and local slide decks. Source drawings remain unchanged. */
+((root)=>{
+ 'use strict';
+ const field=node=>Boolean(node?.closest?.('input,textarea,select,output,[contenteditable=true]'));
+ const nextIndex=(index,delta,length)=>Math.max(0,Math.min(length-1,index+delta));
+ const API={nextIndex,field};if(typeof module==='object'&&module.exports)module.exports=API;
+ if(!root.document)return;
+ const d=root.document;
+ const topApi=()=>{try{return root.top.KiCadAndroidPresentation;}catch{return null;}};
+ function attach(){
+  const api=topApi();if(!api)return;
+  for(const id of ['androidProjectActionsSheet','androidToolsSheet','androidWorkspaceSheet']){
+   const holder=d.querySelector('#'+id+' .android-sheet-content');if(!holder||holder.querySelector('.presentation-launch'))continue;
+   const row=d.createElement('div');row.className='presentation-launch';
+   for(const [label,action]of [['Present project',()=>api.start()],['Create slides',()=>api.edit()]]){const b=d.createElement('button');b.type='button';b.textContent=label;b.title=label;b.onclick=()=>{holder.closest('dialog')?.close();action();};row.append(b);}holder.prepend(row);
+  }
+ }
+ function init(){
+  if(!d.body.classList.contains('android-home')){attach();let queued=false;new MutationObserver(()=>{if(queued)return;queued=true;queueMicrotask(()=>{queued=false;attach();});}).observe(d.body,{childList:true,subtree:true});d.addEventListener('keydown',e=>topApi()?.key(e),true);return;}
+  let active=false,mode='live',slides=[],index=0,store=null,storeKey='',editingId=null;
+  const make=(tag,text)=>{const n=d.createElement(tag);if(text)n.textContent=text;return n;};
+  const setText=(node,text)=>{if(node.textContent!==text)node.textContent=text;};
+  const button=(text,action,label=text)=>{const b=make('button',text);b.type='button';b.setAttribute('aria-label',label);b.title=label;b.onclick=action;return b;};
+  const documents=()=>{const result=[];function visit(doc,depth){if(depth>5)return;result.push(doc);for(const frame of doc.querySelectorAll('iframe'))try{if(!frame.hidden&&frame.getClientRects().length&&frame.contentDocument)visit(frame.contentDocument,depth+1);}catch{}}visit(d,0);return result;};
+  const drawing=()=>documents().find(doc=>doc.getElementById('sheetSelect'));
+  const bar=make('nav');bar.id='androidPresentationBar';bar.hidden=true;bar.setAttribute('aria-label','Presentation controls');
+  const prev=button('‹',()=>advance(-1),'Previous sheet or slide'),next=button('›',()=>advance(1),'Next sheet or slide');
+  const name=make('span');name.id='presentationPageName';name.setAttribute('aria-live','polite');
+  const fit=button('Fit',()=>drawing()?.getElementById('fitDrawing')?.click(),'Fit drawing');
+  const switchView=button('Board',()=>switchDrawing(),'Switch schematic and board');
+  const stop=button('Exit',()=>API.stop(),'Exit presentation');bar.append(prev,name,next,fit,switchView,stop);d.body.append(bar);
+  const stage=make('section');stage.id='androidSlideStage';stage.hidden=true;const image=make('img'),heading=make('h1'),notes=make('p');image.alt='';stage.append(heading,image,notes);d.body.append(stage);
+  const editor=make('dialog');editor.id='androidSlideEditor';editor.setAttribute('aria-label','Project presentation slides');const header=make('header');header.append(make('strong','Presentation slides'),button('Close',()=>editor.close()));
+  const content=make('div');content.className='android-sheet-content';const help=make('p','Capture the current drawing view, then edit its title and notes. Slides are saved on this device for this project.');help.className='hint';
+  const status=make('p');status.setAttribute('role','status');status.id='slideEditorStatus';const list=make('div');list.id='presentationSlideList';
+  const title=make('input');title.maxLength=160;const note=make('textarea');note.maxLength=4000;note.rows=3;
+  const label=(text,node)=>{const l=make('label',text);l.append(node);return l;};
+  const capture=button('Add current view',()=>{try{const snapshot=captureDrawing();const result=currentStore().add({title:snapshot.title,notes:'',image:snapshot.image});editingId=result.at(-1).id;renderEditor();}catch(error){status.textContent=error.message;}});
+  const save=button('Save title and notes',()=>{try{if(editingId)currentStore().update(editingId,{title:title.value,notes:note.value});renderEditor();status.textContent='Slide saved.';}catch(error){status.textContent=error.message;}});
+  const present=button('Present slides',()=>{try{slides=currentStore().list();if(!slides.length){status.textContent='Add a drawing view first.';return;}editor.close();API.start('deck');}catch(error){status.textContent=error.message;}});
+  const exportButton=button('Export presentation',()=>{try{const html=currentStore().exportHtml();if(!root.AndroidKiCad?.exportText)throw Error('Export is available in the installed Android app.');root.AndroidKiCad.exportText('pocket-kivi-presentation.html',html,'text/html');status.textContent='Choose where to save. Export includes the captured drawings and notes.';}catch(error){status.textContent=error.message;}});
+  content.append(help,capture,list,label('Slide title',title),label('Presenter notes',note),save,present,exportButton,status);editor.append(header,content);d.body.append(editor);
+  function currentStore(){const p=root.KiCadAndroidProject;if(!p)throw Error('Open a project first.');const remote=p.remote||p.github;const key=remote?`${remote.provider||'github'}:${remote.host||'https://github.com'}/${remote.repository}`:p.id;if(key!==storeKey||!store){let storage;try{storage=root.localStorage;}catch{throw Error('Local storage is unavailable.');}store=root.KiCadAndroidPresentationDeck.create({storage,projectKey:key});storeKey=key;store.load();}return store;}
+  function renderEditor(){const items=currentStore().list();list.replaceChildren();if(!items.some(s=>s.id===editingId))editingId=items[0]?.id||null;for(const [position,s]of items.entries()){const row=make('div');row.className='presentation-slide-row';const thumb=make('img');thumb.src=s.image;thumb.alt='';const pick=button(`${position+1}. ${s.title||'Untitled slide'}`,()=>{editingId=s.id;renderEditor();});pick.setAttribute('aria-pressed',String(editingId===s.id));const up=button('↑',()=>{try{currentStore().move(s.id,position-1);renderEditor();}catch(e){status.textContent=e.message;}},'Move slide earlier');up.disabled=position===0;const down=button('↓',()=>{try{currentStore().move(s.id,position+1);renderEditor();}catch(e){status.textContent=e.message;}},'Move slide later');down.disabled=position===items.length-1;const remove=button('Remove',()=>{if(!root.confirm('Remove this captured slide?'))return;try{currentStore().remove(s.id);renderEditor();}catch(e){status.textContent=e.message;}});row.append(thumb,pick,up,down,remove);list.append(row);}const selected=items.find(s=>s.id===editingId);title.value=selected?.title||'';note.value=selected?.notes||'';title.disabled=note.disabled=!selected;save.disabled=!selected;present.disabled=exportButton.disabled=!items.length;status.textContent=items.length?`${items.length} saved slides`:'No slides yet. Open a schematic or board and add its current view.';}
+  function captureDrawing(){const doc=drawing();if(!doc)throw Error('Open a schematic or PCB drawing before capturing a slide.');if(doc.getElementById('mode3d')?.getAttribute('aria-pressed')==='true')throw Error('Switch the board to 2D to capture a slide. You can present 3D interactively using Present project.');const canvases=[...doc.querySelectorAll('canvas')].filter(c=>c.width&&c.height&&c.getClientRects().length&&c.getContext('2d')).sort((a,b)=>b.width*b.height-a.width*a.height);const canvas=canvases[0];if(!canvas)throw Error('Wait for the 2D drawing to finish loading.');const out=make('canvas'),scale=Math.min(1,1600/Math.max(canvas.width,canvas.height));out.width=Math.round(canvas.width*scale);out.height=Math.round(canvas.height*scale);const ctx=out.getContext('2d');ctx.drawImage(canvas,0,0,out.width,out.height);return{title:doc.getElementById('activeSheet')?.textContent||'Drawing',image:out.toDataURL('image/png')};}
+  function refresh(){for(const doc of documents())doc.body?.classList.toggle('android-presenting',active);bar.hidden=!active;stage.hidden=!active||mode!=='deck';fit.hidden=switchView.hidden=mode==='deck';if(!active)return;if(mode==='deck'){const s=slides[index];setText(heading,s.title||'Untitled slide');image.src=s.image;setText(notes,s.notes);setText(name,`${index+1} / ${slides.length}`);prev.disabled=index===0;next.disabled=index===slides.length-1;}else{const doc=drawing(),select=doc?.getElementById('sheetSelect');setText(name,doc?.getElementById('activeSheet')?.textContent||'Project');prev.disabled=!select||select.selectedIndex<=0;next.disabled=!select||select.selectedIndex>=select.options.length-1;setText(switchView,/\.kicad_pcb$/i.test(name.textContent)?'Schematic':'Board');}}
+  function advance(delta){if(mode==='deck'){index=nextIndex(index,delta,slides.length);refresh();return;}const doc=drawing(),select=doc?.getElementById('sheetSelect');if(!select)return;select.selectedIndex=nextIndex(select.selectedIndex,delta,select.options.length);select.dispatchEvent(new doc.defaultView.Event('change',{bubbles:true}));refresh();}
+  function switchDrawing(){const workspace=documents().find(doc=>doc.getElementById('workspaceTabs'));const kind=/\.kicad_pcb$/i.test(name.textContent)?'schematic':'layout';const b=[...workspace?.querySelectorAll('#workspaceTabs button')||[]].find(b=>(b.getAttribute('aria-label')||b.textContent).toLowerCase()===kind);b?.click();}
+  API.isActive=()=>active;
+  API.start=(kind='live')=>{if(!root.KiCadAndroidProject)return;if(kind==='deck'){slides=currentStore().list();if(!slides.length)return;}for(const doc of documents())for(const dialog of doc.querySelectorAll('dialog[open]'))dialog.close();mode=kind;index=0;active=true;if(kind==='live'&&!drawing()){const workspace=documents().find(doc=>doc.getElementById('workspaceTabs'));const tab=[...workspace?.querySelectorAll('#workspaceTabs button')||[]].find(b=>(b.getAttribute('aria-label')||b.textContent).toLowerCase()==='schematic');if(tab)tab.click();else{const file=root.KiCadAndroidProject.files.find(f=>/\.kicad_(sch|pcb)$/i.test(f.path));if(file)root.KiCadAndroid.openDrawing(file.path);}}refresh();root.AndroidKiCad?.setPresentation?.(true);for(const doc of documents())doc.defaultView?.dispatchEvent(new doc.defaultView.Event('resize'));};
+  API.stop=()=>{if(!active)return false;active=false;for(const doc of knownDocs)doc.body?.classList.remove('android-presenting');refresh();root.AndroidKiCad?.setPresentation?.(false);for(const doc of documents())doc.defaultView?.dispatchEvent(new doc.defaultView.Event('resize'));return true;};
+  API.edit=()=>{try{renderEditor();if(!editor.open)editor.showModal();}catch(error){root.KiCadAndroid?.receiveError(error.message);}};
+  API.key=e=>{if(!active||field(e.target))return;if(e.key==='Escape'){API.stop();e.preventDefault();e.stopImmediatePropagation();}else if(['ArrowRight','PageDown','ArrowLeft','PageUp'].includes(e.key)){advance(['ArrowRight','PageDown'].includes(e.key)?1:-1);e.preventDefault();e.stopImmediatePropagation();}};
+  root.KiCadAndroidPresentation=API;d.addEventListener('keydown',API.key,true);
+  root.addEventListener('kicad-project-home',()=>{API.stop();editor.close();});root.addEventListener('kicad-project-opened',()=>{API.stop();editor.close();store=null;});
+  const seen=new WeakSet(),knownDocs=new Set();let queued=false;function scan(){attach();for(const doc of [...knownDocs])if(doc!==d&&!doc.defaultView?.frameElement?.isConnected)knownDocs.delete(doc);for(const doc of documents()){knownDocs.add(doc);if(!seen.has(doc)){seen.add(doc);doc.addEventListener('load',()=>{scan();refresh();},true);new MutationObserver(()=>{if(queued)return;queued=true;queueMicrotask(()=>{queued=false;scan();refresh();});}).observe(doc.body,{childList:true,subtree:true});}}}
+  scan();
+ }
+ if(d.readyState==='loading')d.addEventListener('DOMContentLoaded',init,{once:true});else init();
+})(globalThis);

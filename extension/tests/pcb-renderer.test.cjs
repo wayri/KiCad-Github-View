@@ -44,6 +44,17 @@ test('extracts transformed front/back pads, native UUIDs, copper, drill and fill
   assert.ok(result.primitives.some((p) => p.kind === 'footprint-hit' && p.uuid === 'front' && p.pick));
 });
 
+test('filled zones retain separate saved outlines on each declared copper layer',()=>{
+ const source=`(kicad_pcb (version 20241229) (layers (0 "F.Cu" signal) (31 "B.Cu" signal))
+ (zone (net 1) (layers "F.Cu" "B.Cu") (uuid "z")
+ (polygon (pts (xy 0 0) (xy 10 0) (xy 10 10) (xy 0 10)))
+ (filled_polygon (layer "F.Cu") (pts (xy 1 1) (xy 9 1) (xy 9 9) (xy 1 9)))))`;
+ const result=build(parse(source),'board.kicad_pcb');
+ const fills=result.primitives.filter(p=>p.kind==='zone'),outlines=result.primitives.filter(p=>p.kind==='zone-outline');
+ assert.equal(fills.length,1);assert.equal(fills[0].fill,true);
+ assert.deepEqual(outlines.map(p=>p.layer),['F.Cu','B.Cu']);assert.ok(outlines.every(p=>!p.fill&&p.uuid==='z'));
+ assert.equal(outlines[0].points[0].x,0);assert.equal(fills[0].points[0].x,1);
+});
 test('preserves outline, arc and reference text in world millimetres', () => {
   const primitives = build(parse(board)).primitives;
   const outline = primitives.find((p) => p.uuid === 'edge');

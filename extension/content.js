@@ -129,7 +129,7 @@
       setStatus(status, "Opening browser-side KiCad viewer…");
       content.replaceChildren(); loaded = false;
       if (original) original.hidden = view.originalHidden;
-      const frame = element("iframe");
+      const frame = element("iframe");frame.allow="camera";
       frame.title = `KiCad visual review: ${requestBody.file}`;
       frame.style.cssText = "display:block;width:100%;height:max(790px,calc(100vh - 100px));border:0;background:#111a23";
       frame.src = viewerURL;

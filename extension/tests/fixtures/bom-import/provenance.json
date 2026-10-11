@@ -1,0 +1,23 @@
+{
+  "studio": {
+    "producer": "bom_studio_plugin/bomstudio/exporters.py:export",
+    "template": "Full audit",
+    "variant": "<Default>",
+    "draft": true,
+    "output_name": "BOM_Demo_Default_Full_audit_DRAFT.json",
+    "producer_sha256": "bf343519835560f632802af956ddb855ddf6bd09b2ac942712a3d29b154f835a",
+    "source_hashes": {
+      "BOM_Demo.kicad_pro": "ebffecf4f1f9792f0585a94f1fee7170a38d0580d6bf438ee817524b37606d21",
+      "BOM_Demo.kicad_sch": "6c9db1762bf6376e40021ec6f9fee86e8bd9658c01d68d71615d58c2aca0d4e3"
+    }
+  },
+  "ibom": {
+    "url": "https://openscopeproject.org/InteractiveHtmlBomDemo/html/hp34401a_oled.html",
+    "license": "https://github.com/openscopeproject/InteractiveHtmlBom/blob/master/LICENSE",
+    "retrieved": "2026-10-11"
+  },
+  "fixture_sha256": {
+    "ibom-public-demo.html": "fc067b5c5cec25ee8c9d71b2ef8994d2191cbbe7ef5cd117642a6f42b9b45b8e",
+    "studio-producer.json": "8b0cd71b003511cfb69599c871ad4720e259b370e19fd3526c275d96ca992754"
+  }
+}

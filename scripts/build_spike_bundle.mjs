@@ -32,5 +32,5 @@ await esbuild.build({
 });
 const hashes = ownerFiles.map((file) => `${file}: ${createHash("sha256").update(readFileSync(path.join(appSource, file))).digest("hex")}`);
 writeFileSync(path.join(project, "extension", "vendor", "SPIKE-ENGINE-NOTICE.md"),
-  `# SPIKE browser geometry bundle\n\nBuilt from the owner's SPIKE-Main source tree. The bundled code remains under the SPIKE owner's rights; this file does not assign an open-source license. A separate license is needed before public source release.\n\nSource: SPIKE-Main/app/src\n\n${hashes.join("\n")}\n\nThe bundle also includes Three.js 0.171.0 (MIT); see THREE-LICENSE.\n`);
+  `# SPIKE browser geometry bundle\n\nBuilt from the owner's SPIKE-Main source tree. The bundled code remains under the SPIKE owner's rights; this file does not assign an open-source license. A separate license is needed before public source release.\n\nSource: SPIKE-Main/app/src\n\n${hashes.join("\n")}\n\nThe bundle also includes Three.js 0.171.0 (MIT); see THREE-LICENSE, and fzstd 0.1.1 (MIT); see fzstd/LICENSE.\n`);
 console.log(outfile);

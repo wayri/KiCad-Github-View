@@ -1,7 +1,7 @@
 /* Shared, side-effect-free Git host route parsing. */
 ((root) => {
   "use strict";
-  const filePattern = /(?:\.kicad_(?:sch|pcb|pro|prl|dru|wks)|\.(?:gbr|ger|gerber|gtl|gbl|gts|gbs|gto|gbo|gtp|gbp|gko|gm\d+|g\d+|drl|xln|html?|json|csv|tsv|txt|wbk|raw)|(?:^|\/)(?:fp|sym)-lib-table)$/i;
+  const filePattern = /(?:\.kicad_(?:sch|pcb|pro|prl|dru|wks)|\.(?:gbr|ger|gerber|gtl|gbl|gts|gbs|gto|gbo|gtp|gbp|gko|gm\d+|g\d+|drl|xln|html?|json|csv|tsv|txt|wbk|raw|pdf)|(?:^|\/)(?:fp|sym)-lib-table)$/i;
   const ownerPattern = /^[A-Za-z0-9_.-]+$/;
   const repoPattern = /^[A-Za-z0-9_.-]+$/;
 

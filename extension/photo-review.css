@@ -1,0 +1,18 @@
+.photo-review canvas{display:block;width:100%;height:auto;background:#101923;touch-action:none;border:1px solid #78899c}.photo-review label{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin:8px 0}.photo-review select{max-width:65vw}.photo-review p{overflow-wrap:anywhere}.photo-review input[type=file]{max-width:100%}.photo-review button{min-height:40px}.photo-review .bom-manager-controls{align-items:center}
+.photo-review label{flex-direction:row}.photo-review canvas{width:min(100%,800px)}
+.population-review{max-width:1100px}.population-review table{border-collapse:collapse;width:100%}.population-review th,.population-review td{border-bottom:1px solid #78899c;padding:8px;text-align:left;vertical-align:top}.population-review td button{margin:3px}.population-review .bom-manager-controls{flex-wrap:wrap}.population-review{overflow:auto;max-height:90vh}
+.testpoint-table{min-width:1000px}.testpoint-table td{vertical-align:top}.testpoint-summary p{overflow-wrap:anywhere}
+@media(max-width:640px){
+ .testpoint-table-wrap{overflow:visible!important;max-height:none!important}
+ .testpoint-summary .testpoint-table{display:block;min-width:0}
+ .testpoint-table thead{position:absolute;width:1px;height:1px;padding:0;overflow:hidden;clip-path:inset(50%);white-space:nowrap}
+ .testpoint-table tbody{display:block;width:100%}
+ .testpoint-table tbody tr{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);margin:0 0 12px;border:1px solid #73809566;border-radius:8px;overflow:hidden}
+ .testpoint-table td{display:block;min-width:0;padding:8px!important;overflow-wrap:anywhere}
+ .testpoint-table td::before{content:attr(data-label);display:block;margin-bottom:4px;font-size:12px;font-weight:600;color:var(--muted,#aebacd)}
+ .testpoint-table td[data-label="Source file"],.testpoint-table td[data-label="Detection"],.testpoint-table td[data-label="Actions"],.testpoint-table td.testpoint-empty{grid-column:1/-1}
+ .testpoint-table td[data-label="Actions"]>button{margin:0 6px 6px 0}
+ .testpoint-table td[data-label="Actions"] details{width:100%}
+ .testpoint-table td[data-label="Actions"] details button{display:block;max-width:100%;margin:4px 0;text-align:left;white-space:normal}
+ .testpoint-table td.testpoint-empty::before{display:none}
+}

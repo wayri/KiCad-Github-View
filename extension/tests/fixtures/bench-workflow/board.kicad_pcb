@@ -1,0 +1,6 @@
+(kicad_pcb (version 20240108) (generator pcbnew) (general (thickness 1.6)) (paper "A4") (layers (0 "F.Cu" signal) (31 "B.Cu" signal) (44 "Edge.Cuts" user)) (net 0 "") (net 1 "GND") (net 2 "+3V3")
+(footprint "TestPoint:TestPoint_Pad_D1.0mm" (layer "F.Cu") (at 15 15) (uuid "tp1") (property "Reference" "TP1" (at 0 -2) (layer "F.SilkS")) (property "Value" "GND") (pad "1" smd circle (at 0 0) (size 1 1) (layers "F.Cu") (net 1 "GND") (uuid "tp1-pad")))
+(footprint "TestPoint:TestPoint_Pad_D1.0mm" (layer "B.Cu") (at 25 15) (uuid "tp2") (property "Reference" "TP2" (at 0 -2) (layer "B.SilkS")) (property "Value" "+3V3") (pad "1" smd circle (at 0 0) (size 1 1) (layers "B.Cu") (net 2 "+3V3") (uuid "tp2-pad")))
+(footprint "R_0603" (layer "F.Cu") (at 20 20) (uuid "r1") (property "Reference" "R1" (at 0 -2) (layer "F.SilkS")) (property "Value" "10k") (pad "1" smd rect (at -1 0) (size 1 1) (layers "F.Cu") (net 1 "GND") (uuid "r1-pad1")) (pad "2" smd rect (at 1 0) (size 1 1) (layers "F.Cu") (net 2 "+3V3") (uuid "r1-pad2")))
+(footprint "R_0603" (layer "B.Cu") (at 30 20) (uuid "r2") (property "Reference" "R2" (at 0 -2) (layer "B.SilkS")) (property "Value" "1k") (property "DNI" "yes") (pad "1" smd rect (at -1 0) (size 1 1) (layers "B.Cu") (net 1 "GND") (uuid "r2-pad1")))
+(gr_rect (start 10 10) (end 40 30) (stroke (width .1) (type default)) (layer "Edge.Cuts") (uuid "edge")))

@@ -18,6 +18,9 @@
   const validPath = (path) => typeof path === "string" && path.length <= 500 &&
     /\.kicad_(?:sch|pcb)$/i.test(path) && !path.startsWith("/") &&
     path.split("/").every((part) => part && part !== "." && part !== ".." && !/[\\\x00-\x1f]/.test(part));
+  // Variant rules also identify parts in inert imported BoM sources. Drawing
+  // traversal continues to use validPath and accepts native KiCad files only.
+  const validVariantPath = path => typeof path==='string' && path.length<=500 && /\.(?:kicad_sch|kicad_pcb|csv|tsv|json|html?)$/i.test(path) && !path.startsWith('/') && !/^[A-Za-z]:/.test(path) && path.split('/').every(p=>p&&p!=='.'&&p!=='..'&&!/[\\\x00-\x1f]/.test(p));
   const textValue = (item) => item && typeof item === "object" && !Array.isArray(item) ? item.quoted : item;
   const kindOf = (form) => Array.isArray(form) ? String(textValue(form[0])) : "";
   const child = (form, name) => form.find((item) => Array.isArray(item) && kindOf(item) === name);
@@ -38,10 +41,14 @@
   }
   function partFlags(form) {
     const attributes = child(form, "attr")?.slice(1).map((item) => String(textValue(item))) || [];
-    const dnp = nativeFlag(form, "dnp") === true || attributes.includes("dnp");
+    const nativeDnp = nativeFlag(form, "dnp") === true || attributes.includes("dnp");
+    const affirmative = value => ["yes", "true", "1", "dnp", "dni", "do not populate", "do not install"].includes(String(value ?? "").trim().toLowerCase());
+    const marked = names => children(form,"property").some(p => names.includes(String(textValue(p[1])).trim().toLowerCase()) && affirmative(textValue(p[2])));
+    const dni = marked(["dni", "do not install"]), dnp = nativeDnp || marked(["dnp", "do not populate"]) || dni;
+    const populationReason = nativeDnp ? "DNP" : dni ? "DNI" : dnp ? "DNP" : null;
     const excludeFromBom = nativeFlag(form, "in_bom") === false || attributes.includes("exclude_from_bom");
     const excludeFromBoard = nativeFlag(form, "on_board") === false || attributes.includes("exclude_from_board");
-    return { populated: !dnp, excludeFromBom, excludeFromBoard };
+    return { populated: !dnp, populationReason, excludeFromBom, excludeFromBoard };
   }
   function childPath(parent, name) {
     if (typeof name !== "string" || !/\.kicad_sch$/i.test(name) || name.startsWith("/") || name.includes("\\")) return null;
@@ -171,7 +178,7 @@
           Object.keys(rule).some((key) => !["path", "reference", "uuid", "populated", "properties"].includes(key))) {
           throw new Error("Variant part rule has unsupported fields.");
         }
-        if ((rule.path === undefined ? !csv : !validPath(rule.path)) ||
+        if ((rule.path === undefined ? !csv : !validVariantPath(rule.path)) ||
           (rule.reference === undefined) === (rule.uuid === undefined) ||
           (rule.reference !== undefined && !safeText(rule.reference)) ||
           (rule.uuid !== undefined && !safeText(rule.uuid)) ||
@@ -251,7 +258,7 @@
       const name = column("variant"), references = column("reference").split(/[,\s]+/).filter(Boolean);
       if (!safeText(name, 100) || !references.length) { warnings.push(`CSV row ${line}: missing variant or reference; row skipped.`); continue; }
       const file = column("file/path") || column("file") || column("path");
-      if (file && !validPath(file)) { warnings.push(`CSV row ${line}: unsafe or unsupported file path; row skipped.`); continue; }
+      if (file && !validVariantPath(file)) { warnings.push(`CSV row ${line}: unsafe or unsupported file path; row skipped.`); continue; }
       const populated = csvBoolean(column("populated")), dnp = csvBoolean(column("dnp"));
       if (populated === undefined || dnp === undefined ||
         (populated !== null && dnp !== null && populated === dnp)) {
@@ -298,7 +305,7 @@
     normalizeConfig(config);
     return config;
   }
-  function buildProject(files, variantConfig = null) {
+  function buildProject(files, variantConfig = null, snapshot = null) {
     if (!diff?.projectObjects || !diff.parse) throw new Error("Load design-diff.js before design-model.js.");
     if (!Array.isArray(files) || files.some((file) => !validPath(file?.path))) {
       throw new Error("Project contains an unsafe or unsupported KiCad path.");
@@ -319,7 +326,7 @@
         definitionsByPath.set(file.path, definitions);
       }
       if (hasNativeVariant(parsed)) warnings.push(`${file.path}: saved native KiCad variant data is present but is not interpreted by this review overlay.`);
-    });
+    },snapshot);
     for (const item of raw) if (item.kind === "sheet") {
       const target = childPath(item.path, item.metadata.properties.Sheetfile ?? item.metadata.properties['Sheet file']);
       if (target && paths.has(target)) labels.set(target, item.metadata.properties.Sheetname || item.metadata.properties['Sheet name'] || target.split("/").at(-1));
@@ -352,6 +359,7 @@
         reference: part ? props.Reference || null : parent?.reference || null,
         parentId: parent?.id || null,
         populated: part ? flags.populated : parent ? parent.populated : null,
+        populationReason: part ? flags.populationReason : parent?.populationReason || null,
         excludeFromBom: part ? flags.excludeFromBom : parent ? parent.excludeFromBom : null };
       objects.push(record);
       if (!byRawKey.has(item.key)) byRawKey.set(item.key, record);
@@ -395,13 +403,14 @@
       if (!record) continue;
       Object.assign(record.properties, overlay.properties);
       if (overlay.populated !== undefined) {
+        record.populationReason = overlay.populated ? null : record.populationReason || "DNP";
         record.populated = overlay.populated;
         record.properties.DNP = yesNo(!overlay.populated);
       }
     }
     for (const record of records) if (record.kind === "pad" && record.parentId) {
       const parent = byId.get(record.parentId);
-      if (parent) { record.populated = parent.populated; record.excludeFromBom = parent.excludeFromBom; }
+      if (parent) { record.populated = parent.populated; record.populationReason = parent.populationReason; record.excludeFromBom = parent.excludeFromBom; }
     }
     return records;
   }

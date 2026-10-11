@@ -19,8 +19,14 @@ import javax.net.ssl.HttpsURLConnection;
 final class GitLabClient {
     static final class Failure extends IOException { final int status; Failure(String message) { this(message,0); } Failure(String message,int status) { super(message);this.status=status; } }
     private static final int FILE_LIMIT=32*1024*1024, TOTAL_LIMIT=96*1024*1024;
+    private static final class DownloadRequired extends IOException {}
+    interface ConnectionFactory { HttpsURLConnection open(URL url) throws IOException; }
+    private final ConnectionFactory connections;
+    private DiskProjectStore diskStore;
+    synchronized void setDiskProjectStore(DiskProjectStore store) { diskStore=store; }
     private final Context context;
     private final android.content.SharedPreferences journal;
+    private final ProviderWriteGuard writeGuard;
     private int generation;
     private final Map<String,String> tokens=new HashMap<>();
     private final Map<String,JSONObject> refreshRecords=new HashMap<>();
@@ -28,13 +34,18 @@ final class GitLabClient {
     private boolean authExpired;
     private String oauthHost,oauthClient,oauthState,oauthVerifier;
     private long oauthExpiry;
-    GitLabClient(Context context) { this.context=context.getApplicationContext();journal=context.getSharedPreferences("gitlab_publication_journal",Context.MODE_PRIVATE); }
+    GitLabClient(Context context) { this(context,url->(HttpsURLConnection)url.openConnection()); }
+    GitLabClient(Context context,ConnectionFactory connections) { this.context=context.getApplicationContext();this.connections=connections;writeGuard=new ProviderWriteGuard(context);journal=context.getSharedPreferences("gitlab_publication_journal",Context.MODE_PRIVATE); }
     synchronized int generation() { return generation; }
     synchronized boolean current(int epoch) { return epoch==generation; }
     synchronized boolean authExpired() { return authExpired; }
     synchronized void cancelRequests() { generation++;oauthState=null;oauthVerifier=null; }
     synchronized void reset(String host) throws Exception {
         host=validateHost(host); generation++;oauthState=null;oauthVerifier=null; tokens.remove(host);refreshRecords.remove(host); vault(host).clear(); authExpired=false;
+    }
+    private void claimWrite(String category) throws Failure {
+        try { writeGuard.claim(category); }
+        catch (IOException error) { throw new Failure(error.getMessage()); }
     }
     private void check(int epoch) throws IOException {
         if (!current(epoch)||Thread.currentThread().isInterrupted()) throw new Failure("GitLab request cancelled");
@@ -203,7 +214,7 @@ final class GitLabClient {
         if(credential(host,epoch)==null) throw new Failure("Sign in to publish to GitLab");
         JSONObject publicationPolicy=policy(host,request,epoch);if(!publicationPolicy.getBoolean("allowed"))throw new Failure("Repository policy blocks publication");
         String root="/projects/"+publicationPolicy.getLong("projectId"), destination=request.optString("destination","new-issue"),body=request.getString("body");
-        if(body.isEmpty()||body.length()>65536||body.indexOf('\0')>=0) throw new Failure("Comment text is empty or too long");
+        if(body.isEmpty()||body.getBytes(StandardCharsets.UTF_8).length>65536||body.indexOf('\0')>=0) throw new Failure("Comment text is empty or too long");
         String operation=request.getString("operationId");if(!operation.matches("[a-fA-F0-9]{32,64}"))throw new Failure("Invalid publication operation identifier");
         String journalKey="publish_"+hash(host+"/"+repository(request)+"/"+destination+"/"+request.optInt("number",0)+"/"+operation);
         String marker="<!-- kicad-android-operation:"+operation.toLowerCase(Locale.ROOT)+" -->";body+="\n\n"+marker;
@@ -224,6 +235,7 @@ final class GitLabClient {
         } else if(destination.equals("issue")||destination.equals("discussion")) {
             path=root+"/issues/"+number(request)+(destination.equals("discussion")?"/discussions":"/notes");payload.put("body",body);
         } else throw new Failure("Choose a new issue or an existing issue/discussion");
+        claimWrite("publish");
         if(!journal.edit().putBoolean(journalKey,true).commit())throw new Failure("Cannot record publication recovery status");
         JSONObject result=new JSONObject(network(host,path,"POST",payload.toString().getBytes(StandardCharsets.UTF_8),credential(host,epoch),epoch,4*1024*1024));
         int issue=destination.equals("new-issue")?result.getInt("iid"):number(request);
@@ -245,6 +257,7 @@ final class GitLabClient {
         String filename="kicad-review-"+imageHash.substring(0,20)+".png";
         String boundary="KiCadAndroid"+UUID.randomUUID().toString().replace("-","");ByteArrayOutputStream form=new ByteArrayOutputStream();
         form.write(("--"+boundary+"\r\nContent-Disposition: form-data; name=\"file\"; filename=\""+filename+"\"\r\nContent-Type: image/png\r\n\r\n").getBytes(StandardCharsets.US_ASCII));form.write(bytes);form.write(("\r\n--"+boundary+"--\r\n").getBytes(StandardCharsets.US_ASCII));
+        claimWrite("upload");
         if(!journal.edit().putString(uploadKey,"pending").commit())throw new Failure("Cannot record screenshot recovery status");
         JSONObject uploaded=new JSONObject(network(host,root+"/uploads","POST",form.toByteArray(),bearer,epoch,1024*1024,"multipart/form-data; boundary="+boundary));
         String url=uploaded.getString("url");if(!url.matches("/uploads/[a-fA-F0-9]{32}/"+filename.replace(".","\\.")))throw new Failure("Unexpected GitLab upload location");
@@ -258,7 +271,12 @@ final class GitLabClient {
         validateRevisionRequest(request);String ref=request.getString("ref"),commit=sha(json(host,project(request)+"/repository/commits/"+encode(ref),epoch).getString("id"));return new JSONObject().put("repository",repository(request)).put("ref",ref).put("sha",commit);
     }
     private JSONObject importProject(String host,JSONObject request,int epoch) throws Exception {
-        long deadline=SystemClock.elapsedRealtime()+8*60*1000;String repository=repository(request),root=project(request);
+        long deadline=SystemClock.elapsedRealtime()+(request.optBoolean("downloadLarge")?30L:8L)*60*1000;String repository=repository(request),root=project(request);
+        String sourceRef=request.optString("sourceRef",request.optString("ref",""));if(sourceRef.length()>255||controls(sourceRef))throw new Failure("Invalid branch or commit");
+        synchronized(this) {
+            check(epoch);JSONObject cached=diskStore==null?null:diskStore.findRemote("gitlab",host,repository,request.optString("ref",""));
+            if(cached!=null)return new JSONObject().put("provider","gitlab").put("host",host).put("repository",repository).put("sha",cached.getJSONObject("gitlab").getString("sha")).put("cached",true).put("project",cached);
+        }
         JSONObject metadata=json(host,root,epoch);String ref=request.optString("ref","");if(ref.isEmpty())ref=metadata.optString("default_branch","");
         if(ref.isEmpty()||ref.length()>255||controls(ref))throw new Failure("Invalid branch or commit");
         String sha=sha(json(host,root+"/repository/commits/"+encode(ref),epoch).getString("id"));
@@ -269,25 +287,78 @@ final class GitLabClient {
             for(int i=0;i<chunk.length();i++) nodes.put(chunk.getJSONObject(i));more=chunk.length()==100;
         }
         if(more)throw new Failure("Repository tree is too large; incomplete imports are refused");
+        if(request.optBoolean("downloadLarge")) {
+            DiskProjectStore store; synchronized(this) { check(epoch);store=diskStore; }
+            if(store==null)throw new Failure("Project download storage is unavailable");
+            Map<String,String> identities=new HashMap<>();JSONArray sources=new JSONArray();
+            for(int i=0;i<nodes.length();i++) {JSONObject node=nodes.getJSONObject(i);String path=node.optString("path");
+                if(!node.optString("type").equals("blob")||!GitHubClient.importable(path))continue;
+                safePath(path);identities.put(path,sha(node.getString("id")));
+                sources.put(new JSONObject().put("path",path).put("type","blob").put("mode",node.optString("mode")).put("size",-1));
+            }
+            final String projectRoot=root;
+            JSONObject origin=new JSONObject().put("host",host).put("repository",metadata.getString("path_with_namespace")).put("sha",sha).put("sourceRef",sourceRef);
+            JSONObject downloaded=store.importProject(metadata.getString("path_with_namespace"),sources,
+                (path,target,size)->downloadBlob(host,projectRoot,identities.get(path),target,epoch,deadline),
+                new JSONObject().put("gitlab",origin),request.optBoolean("temporaryDownload"));
+            downloaded.put("repositoryTree",GitHubClient.repositoryTree(nodes));
+            check(epoch);return new JSONObject().put("provider","gitlab").put("host",host).put("repository",metadata.getString("path_with_namespace")).put("sha",sha)
+                .put("private",!metadata.optString("visibility").equals("public")).put("project",downloaded);
+        }
         JSONArray files=new JSONArray(),assets=new JSONArray();Set<String> paths=new HashSet<>();int total=0,count=0;
         for(int i=0;i<nodes.length();i++) {
             check(epoch);if(SystemClock.elapsedRealtime()>deadline)throw new Failure("Repository download timed out");
             JSONObject node=nodes.getJSONObject(i);if(!node.optString("type").equals("blob"))continue;
-            String path=node.getString("path"),lower=path.toLowerCase(Locale.ROOT);boolean binary=lower.matches(".*\\.(step|stp|wrl)$");
-            boolean text=lower.matches(".*\\.(kicad_sch|kicad_pcb|kicad_pro|kicad_prl|kicad_dru|kicad_wks|json|gbr|ger|drl|csv|tsv|txt|wbk|raw|html|htm)$")||lower.equals("sym-lib-table")||lower.equals("fp-lib-table")||lower.endsWith("/sym-lib-table")||lower.endsWith("/fp-lib-table");
+            String path=node.getString("path"),lower=path.toLowerCase(Locale.ROOT);boolean binary=lower.matches(".*\\.(step|stp|wrl|vrml|glb|pdf)$");
+            boolean text=lower.matches(".*\\.(kicad_sch|kicad_pcb|kicad_pro|kicad_prl|kicad_dru|kicad_wks|json|gbr|ger|gerber|gtl|gbl|gts|gbs|gto|gbo|gtp|gbp|gko|gm\\d+|g\\d+|drl|xln|csv|tsv|txt|wbk|raw|html|htm)$")||lower.equals("sym-lib-table")||lower.equals("fp-lib-table")||lower.endsWith("/sym-lib-table")||lower.endsWith("/fp-lib-table");
             if(!binary&&!text)continue;safePath(path);
             if(!node.optString("mode").equals("100644")&&!node.optString("mode").equals("100755"))throw new Failure("Symbolic links cannot be imported");
             if(!paths.add(lower)||++count>2000)throw new Failure("Duplicate paths or too many KiCad files (limit 2000)");
-            byte[] bytes=networkBytes(host,root+"/repository/blobs/"+sha(node.getString("id"))+"/raw","GET",null,credential(host,epoch),epoch,Math.min(FILE_LIMIT,TOTAL_LIMIT-total),"application/json");total+=bytes.length;
+            byte[] bytes;
+            try { bytes=networkBytes(host,root+"/repository/blobs/"+sha(node.getString("id"))+"/raw","GET",null,credential(host,epoch),epoch,Math.min(FILE_LIMIT,TOTAL_LIMIT-total),"application/json"); }
+            catch(DownloadRequired required) {return new JSONObject().put("downloadRequired",true).put("provider","gitlab").put("host",host).put("repository",metadata.getString("path_with_namespace")).put("sha",sha).put("bytes",-1);}
+            total+=bytes.length;
             if(bytes.length>=42&&new String(bytes,0,42,StandardCharsets.US_ASCII).startsWith("version https://git-lfs.github.com/spec/"))throw new Failure("Git LFS files must be downloaded locally before import");
             MessageDigest objectDigest=MessageDigest.getInstance("SHA-1");objectDigest.update(("blob "+bytes.length+"\0").getBytes(StandardCharsets.US_ASCII));objectDigest.update(bytes);StringBuilder actualBlob=new StringBuilder();for(byte b:objectDigest.digest())actualBlob.append(String.format(Locale.ROOT,"%02x",b&255));if(!actualBlob.toString().equals(sha(node.getString("id"))))throw new Failure("Repository blob identity mismatch");
-            JSONObject item=new JSONObject().put("path",path);if(binary)assets.put(item.put("base64",Base64.encodeToString(bytes,Base64.NO_WRAP)));else files.put(item.put("content",utf8(bytes)));
+            JSONObject item=new JSONObject().put("path",path);if(lower.endsWith(".pdf"))item.put("encoding","base64");if(binary)assets.put(item.put("base64",Base64.encodeToString(bytes,Base64.NO_WRAP)));else files.put(item.put("content",utf8(bytes)));
         }
-        if(files.length()==0)throw new Failure("No supported KiCad files found in project");check(epoch);
+        if(files.length()==0&&assets.length()==0)throw new Failure("No supported KiCad files found in project");check(epoch);
         repository=metadata.getString("path_with_namespace");
         return new JSONObject().put("provider","gitlab").put("host",host).put("repository",repository).put("sha",sha).put("private",!metadata.optString("visibility").equals("public"))
-            .put("project",new JSONObject().put("id",hash(host+"/"+repository+"@"+sha)).put("files",files).put("assets",assets)
+            .put("project",new JSONObject().put("id",hash(host+"/"+repository+"@"+sha)).put("files",files).put("assets",assets).put("repositoryTree",GitHubClient.repositoryTree(nodes))
             .put("gitlab",new JSONObject().put("host",host).put("repository",repository).put("sha",sha)));
+    }
+    /** Bounded file transfer: raw bytes never pass through the WebView or a whole-file byte array. */
+    private void downloadBlob(String host,String root,String identity,File target,int epoch,long deadline)throws Exception {
+        check(epoch);host=validateHost(host);identity=sha(identity);
+        String path=root+"/repository/blobs/"+identity+"/raw";
+        URL url=new URL(host+"/api/v4"+path);
+        if(!url.getProtocol().equals("https")||url.getUserInfo()!=null||!url.getHost().equals(new URI(host).getHost())||url.getPort()!=-1)throw new Failure("Unsupported GitLab endpoint");
+        String bearer=credential(host,epoch);HttpsURLConnection connection=connections.open(url);
+        connection.setInstanceFollowRedirects(false);connection.setConnectTimeout(15000);connection.setReadTimeout(20000);connection.setUseCaches(false);
+        connection.setRequestProperty("Accept","application/octet-stream");connection.setRequestProperty("User-Agent","Pocket-KiVi-Android");
+        if(bearer!=null)connection.setRequestProperty("Authorization","Bearer "+bearer);
+        long written=0;
+        try {
+            int status=connection.getResponseCode();check(epoch);
+            if(status==401){synchronized(this){check(epoch);authExpired=bearer!=null;tokens.remove(host);refreshRecords.remove(host);vault(host).clear();}throw new Failure("GitLab sign-in expired or was revoked; sign in again");}
+            if(status==403||status==429)throw new Failure("GitLab denied access or rate limited this request");
+            if(status==404)throw new Failure("Project or revision unavailable; check private project access",404);
+            if(status<200||status>=300)throw new Failure("GitLab request failed (HTTP "+status+")");
+            long declared=connection.getContentLengthLong();if(declared>DiskProjectStore.FILE_LIMIT)throw new Failure("Downloaded projects support up to 256 MiB per file");
+            try(InputStream input=connection.getInputStream();OutputStream output=new FileOutputStream(target)) {
+                byte[] buffer=new byte[65536];int n;
+                while((n=input.read(buffer))!=-1) {check(epoch);if(SystemClock.elapsedRealtime()>deadline)throw new Failure("Repository download timed out");
+                    if(n>DiskProjectStore.FILE_LIMIT-written)throw new Failure("Downloaded projects support up to 256 MiB per file");
+                    output.write(buffer,0,n);written+=n;
+                }
+            }
+            if(declared>=0&&written!=declared)throw new Failure("Repository file size mismatch");
+            MessageDigest digest=MessageDigest.getInstance("SHA-1");digest.update(("blob "+written+"\0").getBytes(StandardCharsets.US_ASCII));
+            try(InputStream input=new FileInputStream(target)) {byte[] buffer=new byte[65536];int n;while((n=input.read(buffer))!=-1){check(epoch);digest.update(buffer,0,n);}}
+            StringBuilder actual=new StringBuilder();for(byte b:digest.digest())actual.append(String.format(Locale.ROOT,"%02x",b&255));
+            if(!actual.toString().equals(identity))throw new Failure("Repository blob identity mismatch");
+        } finally {connection.disconnect();}
     }
     private static String repository(JSONObject request) throws Exception {
         String value=request.getString("repository");if(value.length()>300||!value.matches("[A-Za-z0-9_.-]+(?:/[A-Za-z0-9_.-]+)+"))throw new Failure("Invalid GitLab project path");
@@ -310,7 +381,7 @@ final class GitLabClient {
     private byte[] networkBytes(String host,String path,String method,byte[] body,String bearer,int epoch,int limit,String contentType)throws Exception {
         check(epoch);host=validateHost(host);if(!path.startsWith("/projects/")&&!path.equals("/user")&&!path.startsWith("/projects?")&&!path.equals("/oauth/token"))throw new Failure("Unsupported GitLab endpoint");
         URL url=new URL(host+(path.equals("/oauth/token")?"":"/api/v4")+path);if(!url.getProtocol().equals("https")||url.getUserInfo()!=null||!url.getHost().equals(new URI(host).getHost())||url.getPort()!=-1)throw new Failure("Unsupported GitLab endpoint");
-        HttpsURLConnection connection=(HttpsURLConnection)url.openConnection();connection.setInstanceFollowRedirects(false);connection.setConnectTimeout(15000);connection.setReadTimeout(20000);connection.setUseCaches(false);connection.setRequestProperty("Accept","application/json");connection.setRequestProperty("User-Agent","KiCadVizDiff-Android");connection.setRequestMethod(method);
+        HttpsURLConnection connection=connections.open(url);connection.setInstanceFollowRedirects(false);connection.setConnectTimeout(15000);connection.setReadTimeout(20000);connection.setUseCaches(false);connection.setRequestProperty("Accept","application/json");connection.setRequestProperty("User-Agent","KiCadVizDiff-Android");connection.setRequestMethod(method);
         if(path.equals("/oauth/token")&&bearer!=null)throw new Failure("Unsupported GitLab OAuth credential");
         if(bearer!=null)connection.setRequestProperty("Authorization","Bearer "+bearer);long deadline=SystemClock.elapsedRealtime()+90000;
         try {
@@ -320,9 +391,9 @@ final class GitLabClient {
             if(status==403||status==429)throw new Failure("GitLab denied access or rate limited this request");
             if(status==404)throw new Failure("Project or revision unavailable; check private project access",404);
             if(status<200||status>=300)throw new Failure("GitLab request failed (HTTP "+status+")");
-            if(connection.getContentLengthLong()>limit)throw new Failure("GitLab response exceeds import limits");
+            if(connection.getContentLengthLong()>limit){if(path.matches("/projects/.*/repository/blobs/[a-f0-9]{40}/raw"))throw new DownloadRequired();throw new Failure("GitLab response exceeds import limits");}
             try(InputStream stream=connection.getInputStream();ByteArrayOutputStream output=new ByteArrayOutputStream()) {
-                byte[] buffer=new byte[32768];int n;while((n=stream.read(buffer))!=-1){check(epoch);if(SystemClock.elapsedRealtime()>deadline)throw new Failure("GitLab request timed out");if(n>limit-output.size())throw new Failure("GitLab response exceeds import limits");output.write(buffer,0,n);}return output.toByteArray();
+                byte[] buffer=new byte[32768];int n;while((n=stream.read(buffer))!=-1){check(epoch);if(SystemClock.elapsedRealtime()>deadline)throw new Failure("GitLab request timed out");if(n>limit-output.size()){if(path.matches("/projects/.*/repository/blobs/[a-f0-9]{40}/raw"))throw new DownloadRequired();throw new Failure("GitLab response exceeds import limits");}output.write(buffer,0,n);}return output.toByteArray();
             }
         } finally {connection.disconnect();}
     }

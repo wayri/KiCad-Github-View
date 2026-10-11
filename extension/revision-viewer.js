@@ -12,7 +12,7 @@
 
   const loading=globalThis.KiCadLoading?.indicator(document.body);
   const loadController=typeof AbortController==='function'?new AbortController():null;
-  let sheetOverview=null;
+  let sheetOverview=null,compatibilityUI=null;
   let dark=pcb,workspace=null,canvas=null,scene=null,modelAssetCache=null,disposed=false,applying=false,crossApplying=false,lastView='',lastFile='';
 
   const own=new URL(chrome.runtime.getURL('browser-viewer.html')),ownOrigin=`${own.protocol}//${own.host}`;
@@ -54,7 +54,13 @@
     // buildProject enforces source/file/project limits before the geometry parser runs.
 
     loading?.show('Preparing saved objects and drawing geometry…');
-    const prepare=()=>({model:KiCadDesignModel.buildProject(files)});
+    const prepare=()=>{
+      const snapshot=KiCadDesignDiff.prepareProject(files),model=KiCadDesignModel.buildProject(files,null,snapshot);
+      const sheets=files.filter(file=>/\.kicad_sch$/i.test(file.path));
+      const design=(pcb?KiCadPCBRenderer:KiCadSchematicRenderer).build(KiCadDesignDiff.preparedFile(snapshot,initialFile),initialFile,{sheetNumber:sheets.findIndex(file=>file.path===initialFile)+1,sheetCount:sheets.length,sheetName:'/'});
+      const nets=globalThis.KiCadNetModel?.build(files,new Map([[initialFile,design]]),snapshot);
+      return {model,design,nets};
+    };
     const prepared=globalThis.KiCadLoading?await KiCadLoading.run('drawing',{files,rootFile:initialFile,pcb},prepare,{signal:loadController?.signal,onStage:stage=>loading.show(stage)}):prepare();
     if(disposed)return;
     if(prepared.rules)Object.defineProperty(prepared.model,'_rules',{value:new Map(prepared.rules)});
@@ -64,6 +70,7 @@
     const designs=new Map(prepared.design?[[initialFile,prepared.design]]:[]),host=$('drawingHost');globalThis.KiCadUIIcons?.decorate();$('frameControls').hidden=false;
 
     canvas=KiCadOwnedCanvas.mount(host,{dark,pcb,acceleration:preferences.acceleration});status.remove();
+    compatibilityUI=globalThis.KiCadFileCompatibility?.mountStatus($('frameControls'),()=>canvas.design?.compatibility);
 
     const currentFile=()=>canvas.document?.filename||initialFile;
 
@@ -127,9 +134,11 @@
         for(const layer of copper)add(layer,'Show only '+layer,()=>{canvas.focusLayer(layer,'isolate');$('layerFocusMode').value='isolate';},KiCadPCBRenderer.colorFor?.(layer)||'#8c9cab');
         add('All','Show all saved board layers',()=>canvas.layerPreset('all'));
         add('Overview','Restore layer view before focusing',()=>canvas.restoreLayers());
+        add('Filled copper','Toggle saved filled copper zones',()=>canvas.setZoneVisibility({filled:canvas.showFilledCopper===false}));
+        add('Zone outlines','Toggle saved zone boundary outlines',()=>canvas.setZoneVisibility({outlines:canvas.showZoneOutlines===false}));
       }
       for(const [name,button] of floatingButtons){
-        const selected=name==='All'?!canvas.focusedLayer&&(canvas.design.layers||[]).every(layer=>canvas.visibleLayers.has(layer)):name==='Overview'?!canvas.focusedLayer&&!canvas.layerSnapshot:canvas.focusedLayer===name;
+        const selected=name==='Filled copper'?canvas.showFilledCopper!==false:name==='Zone outlines'?canvas.showZoneOutlines!==false:name==='All'?!canvas.focusedLayer&&(canvas.design.layers||[]).every(layer=>canvas.visibleLayers.has(layer)):name==='Overview'?!canvas.focusedLayer&&!canvas.layerSnapshot:canvas.focusedLayer===name;
         button.setAttribute('aria-pressed',String(selected));
       }
       if(floatingToggle)floatingToggle.textContent=canvas.focusedLayer||'Layers';
@@ -195,7 +204,7 @@
 
       buildSheet(path);
 
-      canvas.setDocument(designs.get(path),path);layers();workspace?.attachCanvas(canvas);workspace?.draw();
+      canvas.setDocument(designs.get(path),path);compatibilityUI?.refresh();layers();workspace?.attachCanvas(canvas);workspace?.draw();
 
       $('engineNotice').textContent=canvas.design.warnings?.join(' ')||'';$('engineNotice').hidden=!$('engineNotice').textContent;updateDiagnostics();
 
@@ -214,22 +223,30 @@
       onCommentsChanged(){if(globalThis.KiCadVSCodeBridge?.onCommentsChanged)globalThis.KiCadVSCodeBridge.onCommentsChanged();else parent.postMessage({type:'kicad-review:comments-changed'},ownOrigin);},pullNumber:Number(params.get('pullNumber'))||null,pullRepository:params.get('pullRepository')||repository});
 
     workspace.attachCanvas(canvas);openSheet(initialFile);loading?.hide();
-    if(!pcb&&globalThis.KiCadAndroidUI){
+    if(!pcb){
       const gallery=document.createElement('section');gallery.id='sheetOverview';gallery.hidden=true;gallery.setAttribute('aria-label','All schematic sheets');host.append(gallery);
-      const heading=document.createElement('header'),title=document.createElement('strong'),back=document.createElement('button'),clear=document.createElement('button'),fitAll=document.createElement('button'),help=document.createElement('small');
-      title.textContent='All sheets';back.type=clear.type=fitAll.type='button';back.textContent='Single sheet';clear.textContent='Show all sheets';fitAll.textContent='Fit';clear.hidden=true;clear.onclick=()=>$('clearHighlights').click();heading.append(title,back,clear,fitAll,help);gallery.append(heading);
+      const heading=document.createElement('header'),title=document.createElement('strong'),back=document.createElement('button'),unselect=document.createElement('button'),clear=document.createElement('button'),fitAll=document.createElement('button'),help=document.createElement('small');
+      title.textContent='All sheets';back.type=unselect.type=clear.type=fitAll.type='button';back.textContent='Single sheet';unselect.textContent='Unselect';unselect.setAttribute('aria-label','Unselect');clear.textContent='Clear highlights';clear.setAttribute('aria-label','Clear highlights');fitAll.textContent='Fit';unselect.onclick=()=>$('unselect').click();clear.onclick=()=>$('clearHighlights').click();heading.append(title,back,unselect,clear,fitAll,help);gallery.append(heading);
+      const stacks=document.createElement('details'),stackTitle=document.createElement('summary'),stackList=document.createElement('div');stacks.className='sheet-instance-stacks';stackTitle.textContent='Repeated sheets';stacks.append(stackTitle,stackList);heading.insertBefore(stacks,help);
       const surface=document.createElement('div');surface.className='sheet-shared-canvas';gallery.append(surface);
-      let overviewView=null,opened=false,ticket=0,composition=null;
+      let overviewView=null,opened=false,ticket=0,composition=null;const frontInstances=new Map();
+      const clearOverviewSelection=()=>{if(overviewView){overviewView.selected=null;overviewView.draw();}};
+      $('unselect').addEventListener('click',clearOverviewSelection);$('clearHighlights').addEventListener('click',clearOverviewSelection);
       const fitOverview=()=>{if(!overviewView||!composition)return;overviewView.resize();overviewView.viewport.camera.bbox={x:-12,y:-4,w:composition.design.page.width+12,h:composition.design.page.height+4};overviewView.draw();};
       const rebuild=async()=>{
         const generation=++ticket,entries=workspace.overviewSheets().filter(entry=>entry.sheet);
-        const active=entries.some(entry=>workspace.overviewSelection(entry.sheet.path).netActive);clear.hidden=!active;
-        help.textContent='Drag to pan · pinch to zoom · tap a net · double-tap a sheet to enter';
+        const active=entries.some(entry=>workspace.overviewSelection(entry.sheet.path).netActive);
+        const limits=entries.flatMap(e=>workspace.overviewSelection(e.sheet.path).limits||[]);
+        help.textContent=(active?'Connected sheets only · ':'')+'Pan and zoom · select a net · double-click/tap a sheet to enter'+(entries.some(e=>e.instanceCount>1)?' · Choose a placement in Repeated sheets.':'')+(entries.some(e=>e.instanceTruncated)?' · Instance counts capped at 4,096 placements.':'')+(limits.length?' · '+[...new Set(limits)].join(' '):'');
         const shown=active?entries.filter(entry=>workspace.overviewSelection(entry.sheet.path).netIds.length):entries,rendered=[];
+        const repeated=shown.filter(entry=>entry.instanceCount>1);stacks.hidden=!repeated.length;stackList.replaceChildren();
+        for(const entry of repeated){const group=document.createElement('section'),name=document.createElement('strong');name.textContent=`${entry.sheet.path} · ${entry.instanceCount} instances`;group.append(name);const selection=workspace.overviewSelection(entry.sheet.path),placements=(entry.placements||[]).filter(p=>!active||!selection.instanceIds?.length||selection.instanceIds.includes(p.id));for(const placement of placements.slice(0,256)){const choice=document.createElement('button');choice.type='button';choice.textContent=placement.label;choice.setAttribute('aria-pressed',String((frontInstances.get(entry.sheet.path)||placements[0]?.id)===placement.id));choice.onclick=()=>{frontInstances.set(entry.sheet.path,placement.id);rebuild();};group.append(choice);}if(placements.length>256){const note=document.createElement('p');note.textContent='First 256 placements shown.';group.append(note);}stackList.append(group);}
         for(const entry of shown){
           await new Promise(resolve=>setTimeout(resolve,0));if(!opened||generation!==ticket)return;
-          const path=entry.sheet.path,design=buildSheet(path),nets=KiCadNetModel.build([files.find(file=>file.path===path)],new Map([[path,design]])).nets;
-          rendered.push({path,label:[...new Set((entry.parents||[]).map(link=>link.label).filter(Boolean))].join(' / ')||entry.sheet.label||path,design,groups:KiCadReviewWorkspace.sheetPageHighlights(nets,workspace.overviewSelection(path),design,path)});
+          const path=entry.sheet.path,design=buildSheet(path),nets=KiCadNetModel.build([files.find(file=>file.path===path)],new Map([[path,design]])).nets,selection=workspace.overviewSelection(path);
+          const placements=(entry.placements||[]).filter(p=>!active||!selection.instanceIds?.length||selection.instanceIds.includes(p.id));
+          const front=placements.find(p=>p.id===frontInstances.get(path))||placements[0];if(front)frontInstances.set(path,front.id);
+          rendered.push({path,label:entry.instanceCount>1?path:(entry.sheet.label||path),instanceCount:placements.length||entry.instanceCount,totalInstanceCount:entry.instanceCount,instances:placements.map(p=>p.label),placements:front?[front,...placements.filter(p=>p!==front)]:placements,instanceId:front?.id,instanceLabel:entry.instanceCount>1?front?.label:null,design,groups:KiCadReviewWorkspace.sheetPageHighlights(nets,workspace.overviewSelection(path,front?.id),design,path)});
         }
         if(!opened||generation!==ticket)return;
         composition=KiCadReviewWorkspace.composeSheetOverview(rendered,workspace.overviewNetLinks?.()||[],dark);
@@ -239,7 +256,7 @@
             baseDraw();if(!composition)return;const ctx=overviewView.ctx;if(!ctx)return;
             ctx.save();ctx.setLineDash([6,4]);for(const wire of composition.airwires)overviewView.paint(wire);ctx.restore();
           };
-          overviewView.addEventListener('kicad:select',()=>{const hit=overviewView.selected;if(hit?.sourcePath&&hit.uuid)workspace.selectOverviewNet?.(hit.sourcePath,hit.uuid);});
+          overviewView.addEventListener('kicad:select',()=>{const hit=overviewView.selected;if(hit?.sourcePath&&hit.uuid)workspace.selectOverviewNet?.(hit.sourcePath,hit.uuid,hit.sourceInstanceId);});
           overviewView.canvas.addEventListener('dblclick',event=>{
             const rect=overviewView.canvas.getBoundingClientRect(),at=overviewView.viewport.camera.screen_to_world({x:event.clientX-rect.left,y:event.clientY-rect.top});
             const page=composition.pages.find(p=>at.x>=p.x&&at.x<=p.x+p.w&&at.y>=p.y&&at.y<=p.y+p.h);if(page){close();workspace.followSheet(page.path);}
@@ -252,7 +269,7 @@
       const open=()=>{if(opened)return;opened=true;gallery.hidden=false;canvas.canvas.hidden=true;toggle.setAttribute('aria-pressed','true');return rebuild();};
       const toggle=document.createElement('button');toggle.id='allSheetPagesButton';toggle.type='button';toggle.textContent='All sheets';toggle.title='See every loaded schematic page on one canvas';toggle.setAttribute('aria-pressed','false');toggle.onclick=()=>opened?close():open();
       ($('sheetHome')?.parentElement||$('frameControls')).append(toggle);back.onclick=close;fitAll.onclick=fitOverview;
-      sheetOverview={open,close,isOpen:()=>opened,toggle:()=>opened?close():open(),refresh(){if(opened)return rebuild();},dispose(){close();gallery.remove();toggle.remove();}};globalThis.KiCadSheetOverview=sheetOverview;
+      sheetOverview={open,close,isOpen:()=>opened,toggle:()=>opened?close():open(),refresh(){if(opened)return rebuild();},dispose(){close();$('unselect').removeEventListener('click',clearOverviewSelection);$('clearHighlights').removeEventListener('click',clearOverviewSelection);gallery.remove();toggle.remove();}};globalThis.KiCadSheetOverview=sheetOverview;
       addEventListener('keydown',event=>{if(event.key==='Escape'&&opened){event.preventDefault();close();}});
     }
 
@@ -300,6 +317,9 @@
       modelAssetCache=KiCadBrowserData.createModelAssetCache(async path=>{const result=await send({type:'repo-asset',repository,ref,file:path});if(!result?.ok)throw new Error(result?.error||'Repository model unavailable.');return result.result;});
 
       const mode=$('mode3d'),pane=$('threePane');mode.hidden=false;let busy=false,loading=null;
+      let modelIndex=null;
+      const assetPaths=()=>modelIndex||=send({type:'repo-model-index',repository,ref}).then(result=>
+        result?.ok && Array.isArray(result.result?.paths) ? result.result.paths.slice(0,2000).filter(path=>KiCadBrowserData.validPath(path)) : []).catch(()=>[]);
 
       const load=()=>loading||=new Promise((resolve,reject)=>{if(globalThis.SpikeBoard3D?.mountBoard3D){resolve(SpikeBoard3D);return;}const script=document.createElement('script');script.src='vendor/spike-board3d.bundle.js';script.onload=()=>globalThis.SpikeBoard3D?.mountBoard3D?resolve(SpikeBoard3D):reject(new Error('SPIKE 3D did not initialize.'));script.onerror=()=>{loading=null;reject(new Error('SPIKE 3D could not be loaded.'));};document.head.append(script);});
 
@@ -311,9 +331,9 @@
 
         busy=true;mode.disabled=true;
 
-        try{const engine=await load();if(disposed)return;pane.hidden=false;canvas.canvas.hidden=true;
+        try{const engine=await load(),modelPaths=await assetPaths();if(disposed)return;pane.hidden=false;canvas.canvas.hidden=true;
 
-          scene=engine.mountBoard3D(pane,files.find(file=>file.path===rootFile).content,{dark,boardPath:rootFile,loadAsset:modelAssetCache.load,externalInspector:true,onSelect:record=>workspace?.select3D(record),onComment:record=>workspace?.comment3D(record)});
+          scene=engine.mountBoard3D(pane,files.find(file=>file.path===rootFile).content,{dark,boardPath:rootFile,assetPaths:modelPaths,loadAsset:modelAssetCache.load,externalInspector:true,onSelect:record=>workspace?.select3D(record),onComment:record=>workspace?.comment3D(record)});
 
           workspace.setScene(scene);syncFloatingLayers();$('drawingLegend').hidden=true;lock(true);mode.setAttribute('aria-pressed','true');if($('renderMode'))$('renderMode').textContent='3D';
 
@@ -354,11 +374,12 @@
 
     });
 
+    if(params.get('focusUuid'))workspace?.focusSaved(requestedFile,params.get('focusUuid'));
     if(params.has('focusX')&&params.has('focusY'))focus({x:Number(params.get('focusX')),y:Number(params.get('focusY'))});
 
   }
 
-  addEventListener('pagehide',()=>{disposed=true;loadController?.abort();loading?.dispose();modelAssetCache?.clear();sheetOverview?.dispose();workspace?.dispose();scene?.dispose();canvas?.dispose();});
+  addEventListener('pagehide',()=>{disposed=true;loadController?.abort();loading?.dispose();modelAssetCache?.clear();sheetOverview?.dispose();compatibilityUI?.dispose();workspace?.dispose();scene?.dispose();canvas?.dispose();});
 
   start().catch(error=>{loading?.hide();if(disposed)return;status.textContent=error.message;status.classList.add('error');if(!status.isConnected)$('drawingHost').append(status);});
 

@@ -2,14 +2,32 @@
 ((root)=>{
   'use strict';
   const workerURL=new URL('load-worker.js',document.currentScript?.src||location.href).href;
+  const logoURL=new URL('app-logo.png',document.currentScript?.src||location.href).href;
   function indicator(host){
     const pane=document.createElement('div');pane.className='loading-surface';pane.hidden=true;pane.setAttribute('role','status');pane.setAttribute('aria-live','polite');
-    const spinner=document.createElement('span');spinner.className='loading-spinner';spinner.setAttribute('aria-hidden','true');
-    const copy=document.createElement('div'),title=document.createElement('strong'),detail=document.createElement('p');title.textContent='Loading KiCad project';copy.append(title,detail);pane.append(spinner,copy);host.append(pane);
-    let started=0,timer=null;
+    if(typeof pane.showPopover==='function')pane.setAttribute('popover','manual');
+    const bar=document.createElement('progress');bar.className='loading-bar';bar.setAttribute('aria-label','Loading');
+    const copy=document.createElement('div'),title=document.createElement('strong'),detail=document.createElement('p');title.textContent='Loading';copy.append(title,detail);pane.append(bar,copy);if(root.KiCadAndroidRuntime||document.body?.classList?.contains('android-home')){const logo=document.createElement('img');logo.className='loading-logo';logo.src=logoURL;logo.alt='';logo.width=36;logo.height=36;logo.setAttribute('aria-hidden','true');pane.append(logo);pane.classList.add('loading-branded');}host.append(pane);
+    let started=0,timer=null,delay=null,active=false;
     const elapsed=document.createElement('small');copy.append(elapsed);
-    return {show(stage){if(pane.hidden){started=Date.now();elapsed.textContent='';timer=setInterval(()=>{elapsed.textContent=`${Math.floor((Date.now()-started)/1000)} seconds elapsed`;},1000);}pane.hidden=false;detail.textContent=stage;host.setAttribute('aria-busy','true');},hide(){pane.hidden=true;host.setAttribute('aria-busy','false');clearInterval(timer);timer=null;},dispose(){this.hide();pane.remove();}};
+    return {show(stage,progress){
+      detail.textContent=stage||'Please wait…';
+      if(Number.isFinite(progress)){bar.max=1;bar.value=Math.max(0,Math.min(1,progress));}else bar.removeAttribute?.('value');
+      host.setAttribute('aria-busy','true');
+      if(active)return;active=true;started=Date.now();elapsed.textContent='';
+      delay=setTimeout(()=>{delay=null;if(!active)return;pane.hidden=false;try{pane.showPopover?.();}catch{}
+        const tick=()=>{elapsed.textContent=`${((Date.now()-started)/1000).toFixed(1)} s`;};tick();timer=setInterval(tick,250);
+      },300);
+    },hide(){active=false;try{pane.hidePopover?.();}catch{}pane.hidden=true;host.setAttribute('aria-busy','false');clearTimeout(delay);delay=null;clearInterval(timer);timer=null;},dispose(){this.hide();pane.remove();}};
   }
+  const activities=new Map();let activityUI=null;
+  function activity(stage){
+    if(!activityUI)activityUI=indicator(document.body);
+    const token={};activities.set(token,stage);activityUI.show(stage);
+    let ended=false;
+    return {update(text,progress){if(!ended){activities.set(token,text);activityUI.show(text,progress);}},end(){if(ended)return;ended=true;activities.delete(token);if(activities.size)activityUI.show([...activities.values()].at(-1));else activityUI.hide();}};
+  }
+  function track(promise,stage='Loading…'){const task=activity(stage);return Promise.resolve(promise).finally(()=>task.end());}
   function paint(){return typeof requestAnimationFrame==='function'?new Promise(resolve=>requestAnimationFrame(()=>setTimeout(resolve,0))):Promise.resolve();}
   function run(job,payload,fallback,{onStage=()=>{},signal}={}){
     if(signal?.aborted)return Promise.reject(new Error('Loading cancelled.'));
@@ -25,5 +43,5 @@
       try{worker.postMessage({job,payload});}catch(error){finish(error);}
     });
   }
-  root.KiCadLoading={indicator,paint,run};
+  root.KiCadLoading={indicator,activity,track,paint,run};
 })(globalThis);

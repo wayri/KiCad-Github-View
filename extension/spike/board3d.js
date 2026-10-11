@@ -4,6 +4,8 @@ import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 import { VRMLLoader } from "three/addons/loaders/VRMLLoader.js";
 import "../design-diff.js";
 import "../repo-models.js";
+import fzstd from "../vendor/fzstd/fzstd.js";
+import "../embedded-models.js";
 import "../step-decoder.js";
 import { parseKicadBoard } from "@spike/boardParser";
 import { layerThreeColor } from "@spike/layerPalette";
@@ -13,6 +15,8 @@ import { populationMask, uniqueComponentIndexes } from "./componentState.mjs";
 import { footprintProxies } from "./footprintProxies.mjs";
 import { selectionMatcher, tapGesture } from "./selectionState.mjs";
 import { sphereFitDistance } from "./fitPolicy.mjs";
+import { createResultOverlay } from "./result3d.js";
+export { mountResultScene } from "./result3d.js";
 
 const STYLE = `
   :host{display:block;width:100%;height:100%;font:12px/1.4 system-ui,-apple-system,"Segoe UI",sans-serif;
@@ -242,13 +246,15 @@ export function mountBoard3D(container, source, options = {}) {
     return [...(descriptor.buffers || []), ...(descriptor.images || [])]
       .every(item => !item.uri || /^data:/i.test(item.uri));
   }
-  async function sceneFromAsset(entry, asset) {
+  async function sceneFromAsset(entry, asset, consumeBytes) {
     const base64 = asset?.base64;
     if (typeof base64 !== "string" || base64.length > 11_200_000 || !/^[A-Za-z0-9+/]*={0,2}$/.test(base64)) {
       throw new Error("invalid or oversized model asset response");
     }
-    const binary = atob(base64), bytes = Uint8Array.from(binary, char => char.charCodeAt(0));
+    const bytes = entry.embeddedAsset ? await globalThis.KiCadEmbeddedModels.decode(asset, fzstd.decompress)
+      : Uint8Array.from(atob(base64), char => char.charCodeAt(0));
     if (bytes.byteLength > 8 * 1024 * 1024) throw new Error("model asset exceeds 8 MiB");
+    consumeBytes(bytes.byteLength);
     if (["step","stp"].includes(entry.format)) {
       stepClient ||=new globalThis.KiCadStepDecoder.Client(new URL("step-worker.js",location.href).href);
       const meshes=await stepClient.decode(bytes), group=new THREE.Group();
@@ -271,9 +277,9 @@ export function mountBoard3D(container, source, options = {}) {
     return new VRMLLoader().parse(text);
   }
   async function loadRepositoryModels() {
-    if (!options.boardPath || typeof options.loadAsset !== "function") return;
+    if (!options.boardPath) return;
     let inventory;
-    try { inventory = globalThis.KiCadRepoModels.collect(source, options.boardPath); }
+    try { inventory = globalThis.KiCadRepoModels.collect(source, options.boardPath, undefined, options.assetPaths); }
     catch (error) { modelDiagnostics.push(`Cannot read model references: ${error.message}`); showModelDiagnostics(); return; }
     modelDiagnostics.push(...inventory.diagnostics);
     showModelDiagnostics();
@@ -284,14 +290,15 @@ export function mountBoard3D(container, source, options = {}) {
       const index = componentIndexes.get(entry.footprintId);
       if (index === undefined) { modelDiagnostics.push(`${entry.reference}: footprint identity not found`); return; }
       try {
-        if (!cache.has(entry.path)) cache.set(entry.path, (async () => {
-          const asset = await options.loadAsset(entry.path);
-          const bytes = Math.floor((asset?.base64?.length || 0) * 3 / 4);
-          totalBytes += bytes;
-          if (totalBytes > 24 * 1024 * 1024) throw new Error("3D model assets exceed 24 MiB in this viewer");
-          return sceneFromAsset(entry, asset);
+        const key = entry.assetKey || entry.path;
+        if (!cache.has(key)) cache.set(key, (async () => {
+          const asset = entry.embeddedAsset || await options.loadAsset?.(entry.path);
+          return sceneFromAsset(entry, asset, bytes => {
+            totalBytes += bytes;
+            if (totalBytes > 24 * 1024 * 1024) throw new Error("Decoded 3D model assets exceed 24 MiB in this viewer");
+          });
         })());
-        const template = await cache.get(entry.path);
+        const template = await cache.get(key);
         if (!active) return;
         const clone = template.clone(true);
         let meshCount = 0;
@@ -447,6 +454,10 @@ export function mountBoard3D(container, source, options = {}) {
     const rect = renderer.domElement.getBoundingClientRect();
     pointer.set(((event.clientX - rect.left) / rect.width) * 2 - 1, -((event.clientY - rect.top) / rect.height) * 2 + 1);
     raycaster.setFromCamera(pointer, camera);
+    if (analysisOverlay?.mesh.visible) {
+      const result = analysisOverlay.sample(raycaster.intersectObject(analysisOverlay.mesh, false)[0]);
+      if (result) { options.onAnalysisProbe?.(result); return; }
+    }
     const visible = item => { for (let node = item; node; node = node.parent) if (!node.visible) return false; return true; };
     const hit = raycaster.intersectObjects(pickables.filter(visible), false)[0];
     if (!hit) { clearSelection(); return; }
@@ -455,7 +466,15 @@ export function mountBoard3D(container, source, options = {}) {
     select(record, hit.point, hit.object, hit.instanceId);
   }
   renderer.domElement.addEventListener("pointerdown", (event) => { gesture.down(event); menu.hidden = true; });
-  renderer.domElement.addEventListener("pointermove", event => gesture.move(event));
+  renderer.domElement.addEventListener("pointermove", event => {
+    gesture.move(event);
+    if (analysisOverlay && options.onAnalysisHover) {
+      const rect = renderer.domElement.getBoundingClientRect();
+      pointer.set(((event.clientX - rect.left) / rect.width) * 2 - 1, -((event.clientY - rect.top) / rect.height) * 2 + 1);
+      raycaster.setFromCamera(pointer, camera);
+      options.onAnalysisHover(analysisOverlay.mesh.visible ? analysisOverlay.sample(raycaster.intersectObject(analysisOverlay.mesh, false)[0]) : null);
+    }
+  });
   renderer.domElement.addEventListener("pointercancel", event => gesture.cancel(event));
   renderer.domElement.addEventListener("pointerup", (event) => {
     if (gesture.up(event) && (event.button === 0 || event.pointerType === 'touch')) pick(event);
@@ -478,12 +497,28 @@ export function mountBoard3D(container, source, options = {}) {
   const resize = () => { const width = Math.max(1, canvasHost.clientWidth), height = Math.max(1, canvasHost.clientHeight);
     renderer.setSize(width, height, false); camera.aspect = width / height; camera.updateProjectionMatrix(); };
   const observer = new ResizeObserver(resize); observer.observe(canvasHost); resize();
-  let active = true, frame = 0;
+  let active = true, frame = 0, analysisOverlay = null;
   const layoutFrame = requestAnimationFrame(() => { if (active) { resize(); fit(); } });
   const animate = () => { if (!active) return; frame = requestAnimationFrame(animate); controls.update(); renderer.render(scene, camera); };
   animate();
   void loadRepositoryModels();
   return { host, board,
+    setAnalysisOverlay(surface) {
+      if (!active) return { placed: false, reason: "3D viewer is closed." };
+      if (!surface) { analysisOverlay?.dispose(); analysisOverlay = null; return { placed: false, reason: "Overlay cleared." }; }
+      const basis = surface.zBasis;
+      const savedLayer = surface.layer;
+      if ((surface.zKnown && !["front-depth", "board-center"].includes(basis)) || (!surface.zKnown && !["F.Cu", "B.Cu"].includes(savedLayer))) return { placed: false, reason: "Saved result elevation basis or board layer is unknown; use the standalone result scene." };
+      const transform = ([x, y, z]) => [x - centerX, centerY - y, surface.zKnown ? (basis === "front-depth" ? thickness / 2 - z : z) : (savedLayer === "F.Cu" ? thickness / 2 : -thickness / 2)];
+      const next = createResultOverlay(surface, transform);
+      // Internal copper/thermal layers must remain inspectable on the opaque PCB.
+      // The result UI identifies this as showing the selected field through the board.
+      next.mesh.material.depthTest = false; next.mesh.renderOrder = 20;
+      analysisOverlay?.dispose(); analysisOverlay = next; scene.add(next.group);
+      return { placed: true, basis: surface.zKnown ? basis : savedLayer, flat: !surface.zKnown };
+    },
+    setAnalysisProbes(probes) { analysisOverlay?.setProbes(probes); },
+    setAnalysisOpacity(value) { analysisOverlay?.setOpacity(value); },
     setSelection,
     fit(topView=false){if(active)fit(topView);},
     zoom(factor){if(!active||!Number.isFinite(factor)||factor<=0)return;const offset=camera.position.clone().sub(controls.target);const distance=Math.max(controls.minDistance,Math.min(controls.maxDistance,offset.length()/factor));if(offset.length()>0)camera.position.copy(controls.target).add(offset.setLength(distance));controls.update();},
@@ -525,7 +560,7 @@ export function mountBoard3D(container, source, options = {}) {
         if (index != null && !population[index]) clearSelection();
       }
     },
-    dispose() { active = false; stepClient?.dispose(); cancelAnimationFrame(frame); cancelAnimationFrame(layoutFrame); observer.disconnect(); controls.dispose();
+    dispose() { active = false; analysisOverlay?.dispose(); stepClient?.dispose(); cancelAnimationFrame(frame); cancelAnimationFrame(layoutFrame); observer.disconnect(); controls.dispose();
     const resources = new Set(); scene.traverse((object) => { if (object.geometry) resources.add(object.geometry);
       const materials = Array.isArray(object.material) ? object.material : object.material ? [object.material] : [];
       materials.forEach((item) => resources.add(item)); }); resources.forEach((item) => item.dispose()); renderer.dispose(); host.remove(); } };

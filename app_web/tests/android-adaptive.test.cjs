@@ -1,5 +1,13 @@
 const test=require('node:test'),assert=require('node:assert/strict'),vm=require('node:vm'),fs=require('node:fs');
 
+test('short landscape windows use phone drawers while tablets retain expanded panes',()=>{
+ const {sizeClass}=require('../../android-app/web/adaptive-ui.js');
+ assert.equal(sizeClass(412,800),'compact');
+ assert.equal(sizeClass(915,412),'medium');
+ assert.equal(sizeClass(1280,800),'expanded');
+ assert.equal(sizeClass(800,1280),'medium');
+});
+
 test('workspace shortcuts preserve split handlers, comparison focus and companion chooser lifecycle',()=>{
  const nodes=new Map(),observers=new Map();let splits=0,focused=0;
  const make=tag=>({tagName:tag.toUpperCase(),children:[],dataset:{},attrs:{},append(...children){this.children.push(...children);for(const child of children)if(child.id)nodes.set(child.id,child);},setAttribute(k,v){this.attrs[k]=v;},getAttribute(k){return this.attrs[k];}});

@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "KiCad Visual Review for GitHub and GitLab",
-  "version": "0.12.34",
+  "version": "0.12.40",
   "description": "Browser-only KiCad schematic and PCB review on GitHub, GitLab.com and configured GitLab servers, with issue comments.",
   "host_permissions": [
     "https://github.com/*",
@@ -35,7 +35,8 @@
         "schematic-viewer.html",
         "revision-viewer.html",
         "project-viewer.html",
-        "analysis-viewer.html"
+        "analysis-viewer.html",
+        "pdf-viewer.html"
       ],
       "matches": [
         "https://*/*"

@@ -8,7 +8,6 @@ import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
 import android.provider.DocumentsContract;
-import android.webkit.JavascriptInterface;
 import android.webkit.PermissionRequest;
 import android.webkit.WebChromeClient;
 import android.webkit.WebResourceRequest;
@@ -25,6 +24,13 @@ import android.widget.FrameLayout;
 import android.widget.Toast;
 
 import androidx.webkit.WebViewAssetLoader;
+import androidx.webkit.WebViewCompat;
+import androidx.webkit.WebViewFeature;
+import androidx.webkit.WebMessageCompat;
+import androidx.window.layout.WindowInfoTracker;
+import androidx.window.layout.WindowLayoutInfo;
+import androidx.window.layout.FoldingFeature;
+import androidx.window.java.layout.WindowInfoTrackerCallbackAdapter;
 
 import org.json.JSONObject;
 
@@ -44,6 +50,13 @@ public final class MainActivity extends Activity {
     private static final int REQUEST_DOWNLOAD = 1003;
     private static final int REQUEST_TEXT_EXPORT = 1004;
     private static final int REQUEST_WEB_FILE = 1005;
+    private static final int REQUEST_TEMPORARY_NOTIFICATIONS = 1006;
+    private static final int REQUEST_CAMERA = 1007;
+    private PermissionRequest pendingCameraRequest;
+    private boolean cameraRuntimeRequested;
+    private boolean cameraRuntimeGranted;
+    private int temporaryPermissionReply = -1;
+    private boolean temporaryRefreshInFlight;
 
     private final ExecutorService importExecutor = Executors.newSingleThreadExecutor();
     private final AtomicInteger importGeneration = new AtomicInteger();
@@ -68,6 +81,9 @@ public final class MainActivity extends Activity {
     private String copiedGitHubCode;
     private boolean activityResumed;
     private final Runnable githubPollTask = () -> checkGitHubLogin();
+    private final NativeRequestGuard bridgeMessageGuard = new NativeRequestGuard();
+    private boolean nativeBridgeReady;
+    private final NativeRequestGuard providerRequestGuard = new NativeRequestGuard();
     private final ExecutorService githubExecutor = Executors.newSingleThreadExecutor();
     private final AtomicInteger githubImportGeneration = new AtomicInteger();
     private GitHubClient github;
@@ -75,6 +91,28 @@ public final class MainActivity extends Activity {
     private ProjectLibrary projectLibrary;
     private DiskProjectStore diskProjectStore;
     private final ExecutorService gitlabExecutor = Executors.newSingleThreadExecutor();
+    private WindowInfoTrackerCallbackAdapter foldTracker;
+    private boolean foldListening;
+    private android.graphics.Rect foldBounds;
+    private boolean foldVertical;
+    private String foldState = "unknown";
+    private final androidx.core.util.Consumer<WindowLayoutInfo> foldListener = info -> {
+        if (!foldListening || destroyed) return;
+        foldBounds = null; foldState = "unknown";
+        for (androidx.window.layout.DisplayFeature feature : info.getDisplayFeatures()) {
+            if (!(feature instanceof FoldingFeature)) continue;
+            FoldingFeature fold = (FoldingFeature) feature;
+            if (!fold.isSeparating() && fold.getOcclusionType() != FoldingFeature.OcclusionType.FULL) continue;
+            foldBounds = new android.graphics.Rect(fold.getBounds());
+            foldVertical = fold.getOrientation() == FoldingFeature.Orientation.VERTICAL;
+            foldState = fold.getState() == FoldingFeature.State.HALF_OPENED ? "half-opened"
+                    : fold.getState() == FoldingFeature.State.FLAT ? "flat" : "unknown";
+            break;
+        }
+        publishFold();
+    };
+    private final android.view.View.OnLayoutChangeListener foldLayoutListener =
+            (view,left,top,right,bottom,oldLeft,oldTop,oldRight,oldBottom) -> publishFold();
 
     @Override
     protected void onCreate(Bundle state) {
@@ -83,6 +121,8 @@ public final class MainActivity extends Activity {
         gitlab = new GitLabClient(this);
         projectLibrary = new ProjectLibrary(this);
         diskProjectStore = new DiskProjectStore(this);
+        gitlab.setDiskProjectStore(diskProjectStore);
+        importExecutor.execute(() -> { diskProjectStore.cleanupExpired(); diskProjectStore.scheduleCleanup(); });
         configureWindow();
         createViewer();
         registerBackCallback();
@@ -117,7 +157,22 @@ public final class MainActivity extends Activity {
         settings.setDefaultTextEncodingName("UTF-8");
         applyTextScale();
         WebView.setWebContentsDebuggingEnabled(false);
-        webView.addJavascriptInterface(new NativeBridge(), "NativeKiCadHost");
+        nativeBridgeReady = WebViewFeature.isFeatureSupported(WebViewFeature.WEB_MESSAGE_LISTENER);
+        if (nativeBridgeReady) {
+            NativeBridge nativeApi = new NativeBridge();
+            WebViewCompat.addWebMessageListener(webView, "NativeKiCadBridge",
+                Collections.singleton("https://appassets.androidplatform.net"),
+                (view, message, sourceOrigin, mainFrame, replyProxy) -> {
+                    if (!trustedPage() || !NativeBridgePolicy.trustedOrigin(sourceOrigin.toString(), mainFrame)
+                            || message.getType() != WebMessageCompat.TYPE_STRING) return;
+                    String payload = message.getData();
+                    if (payload == null || payload.length() > 26 * 1024 * 1024
+                            || !bridgeMessageGuard.admit(android.os.SystemClock.elapsedRealtime())) return;
+                    try { dispatchNativeMessage(nativeApi, new JSONObject(payload)); }
+                    catch (Exception ignored) { /* Never echo parser values or untrusted payloads. */ }
+                    finally { bridgeMessageGuard.release(); }
+                });
+        } else Toast.makeText(this, "Update Android System WebView to enable secure file and account access.", Toast.LENGTH_LONG).show();
         webView.setWebChromeClient(new WebChromeClient() {
             @Override
             public boolean onShowFileChooser(WebView view, android.webkit.ValueCallback<Uri[]> callback, FileChooserParams params) {
@@ -130,22 +185,22 @@ public final class MainActivity extends Activity {
 
             @Override
             public void onPermissionRequest(PermissionRequest request) {
-                request.deny();
+                requestCamera(request);
+            }
+
+            @Override
+            public void onPermissionRequestCanceled(PermissionRequest request) {
+                if (pendingCameraRequest == request) clearCameraRequest(false);
             }
         });
         webView.setWebViewClient(new WebViewClient() {
             @Override
             public WebResourceResponse shouldInterceptRequest(WebView view, WebResourceRequest request) {
                 Uri uri = request.getUrl();
-                if (!"https".equals(uri.getScheme())
-                        || !"appassets.androidplatform.net".equals(uri.getHost())
-                        || (uri.getPort() != -1 && uri.getPort() != 443)
-                        || uri.getPath() == null
-                        || !uri.getPath().startsWith(VIEWER_PREFIX)) {
-                    return forbidden();
-                }
-                if(uri.getPath().startsWith("/assets/viewer/downloaded/")) { WebResourceResponse disk=diskProjectStore.response(uri); return disk!=null?disk:forbidden(); }
+                if (!NativeBridgePolicy.viewerResource(uri.toString())) return forbidden();
+                if(uri.getPath().startsWith("/assets/viewer/downloaded/") || uri.getPath().startsWith("/assets/viewer/temporary-downloads/")) { WebResourceResponse disk=diskProjectStore.response(uri); return disk!=null?disk:forbidden(); }
                 WebResourceResponse response = assetLoader.shouldInterceptRequest(uri);
+                if(response!=null&&uri.getPath().endsWith(".mjs"))response.setMimeType("application/javascript");
                 return response != null ? response : forbidden();
             }
 
@@ -156,16 +211,12 @@ public final class MainActivity extends Activity {
                 }
                 Uri uri = request.getUrl();
                 // Imported HTML is inert source data, never a native-bridge document.
-                if (uri.getPath() != null && uri.getPath().startsWith("/assets/viewer/downloaded/")) return true;
-                return !"https".equals(uri.getScheme())
-                        || !"appassets.androidplatform.net".equals(uri.getHost())
-                        || (uri.getPort() != -1 && uri.getPort() != 443)
-                        || uri.getPath() == null
-                        || !uri.getPath().startsWith(VIEWER_PREFIX);
+                return !NativeBridgePolicy.viewerResource(uri.toString()) || NativeBridgePolicy.importedResource(uri.toString());
             }
 
             @Override
             public void onPageStarted(WebView view, String url, Bitmap favicon) {
+                clearCameraRequest(true);
                 pageReady = false;
                 if (webFileCallback != null) { webFileCallback.onReceiveValue(null); webFileCallback = null; }
                 github.invalidateRequests();
@@ -176,9 +227,23 @@ public final class MainActivity extends Activity {
             @Override
             public void onPageFinished(WebView view, String url) {
                 if (!VIEWER_URL.equals(url) || destroyed) return;
+                if (!nativeBridgeReady) {
+                    pageReady = true;
+                    publishFold();
+                    view.evaluateJavascript("window.KiCadAndroidNativeUnavailable='Update Android System WebView to enable secure file and account access';window.dispatchEvent(new Event('kicad-android-security-unavailable'));", null);
+                    return;
+                }
+                view.evaluateJavascript(
+                    "(function(){var transport=window.NativeKiCadBridge;var host={};" +
+                    "['openFiles','openFolder','downloadProject','openRepositorySource','composeReport','setPresentation','exportCandidateProject','exportText','libraryRequest','githubRequest','gitlabRequest'].forEach(function(name){" +
+                    "host[name]=function(){transport.postMessage(JSON.stringify({method:name,args:Array.from(arguments)}));};});" +
+                    "Object.defineProperty(window,'NativeKiCadHost',{value:Object.freeze(host),writable:false,configurable:false});})()", null);
                 view.evaluateJavascript(
                         "window.AndroidKiCad=Object.assign(window.AndroidKiCad||{}," +
                         "{openFiles:function(){NativeKiCadHost.openFiles()}," +
+                        "openRepositorySource:function(url){NativeKiCadHost.openRepositorySource(String(url))}," +
+                        "composeReport:function(body){NativeKiCadHost.composeReport(String(body))}," +
+                        "setPresentation:function(active){NativeKiCadHost.setPresentation(Boolean(active))}," +
                         "openFolder:function(){NativeKiCadHost.openFolder()}," +
                         "downloadProject:function(){NativeKiCadHost.downloadProject()}," +
                         "exportCandidateProject:function(value){NativeKiCadHost.exportCandidateProject(JSON.stringify(value))}," +
@@ -188,6 +253,7 @@ public final class MainActivity extends Activity {
                         "gitlabRequest:function(id,message){NativeKiCadHost.gitlabRequest(id,JSON.stringify(message))}});" +
                         "window.dispatchEvent(new Event('kicad-android-ready'));", null);
                 pageReady = true;
+                publishFold();
                 deliverPendingProject();
                 deliverPendingProjectLink();
                 checkGitHubLogin();
@@ -235,7 +301,39 @@ public final class MainActivity extends Activity {
             });
         }
         setContentView(viewport);
+        webView.addOnLayoutChangeListener(foldLayoutListener);
         viewport.requestApplyInsets();
+    }
+
+    @Override protected void onStart() {
+        super.onStart();
+        if (foldTracker == null) foldTracker = new WindowInfoTrackerCallbackAdapter(WindowInfoTracker.getOrCreate(this));
+        foldListening = true;
+        foldTracker.addWindowLayoutInfoListener(this, command -> loginHandler.post(command), foldListener);
+        publishFold();
+    }
+
+    @Override protected void onStop() {
+        clearCameraRequest(true);
+        if (foldTracker != null && foldListening) foldTracker.removeWindowLayoutInfoListener(foldListener);
+        foldListening = false;
+        super.onStop();
+    }
+
+    private void publishFold() {
+        if (destroyed || webView == null || !trustedPage() || webView.getWidth() <= 0 || webView.getHeight() <= 0) return;
+        int[] location = new int[2];webView.getLocationInWindow(location);
+        double[] region = foldBounds == null ? null : FoldGeometry.project(foldVertical,
+                foldBounds.left,foldBounds.top,foldBounds.right,foldBounds.bottom,
+                location[0],location[1],webView.getWidth(),webView.getHeight());
+        try {
+            JSONObject state = new JSONObject().put("orientation",region == null ? "none" : foldVertical ? "vertical" : "horizontal")
+                    .put("x",region == null ? 0 : region[0]).put("y",region == null ? 0 : region[1])
+                    .put("width",region == null ? 0 : region[2]).put("height",region == null ? 0 : region[3])
+                    .put("separating",region != null).put("state",region == null ? "unknown" : foldState);
+            // Android bounds use window physical pixels; inset offsets above and current CSS viewport scales below.
+            webView.evaluateJavascript("(()=>{const value="+state+";const sx=innerWidth/"+webView.getWidth()+",sy=innerHeight/"+webView.getHeight()+";value.x*=sx;value.width*=sx;value.y*=sy;value.height*=sy;const before=window.KiCadAndroidFold;window.KiCadAndroidFold=value;if(JSON.stringify(before)!==JSON.stringify(value))window.dispatchEvent(new CustomEvent('kicad-fold-changed',{detail:value}));})()",null);
+        } catch (org.json.JSONException impossible) { throw new IllegalStateException(impossible); }
     }
 
     private void invalidateUpgradedViewerAssets() {
@@ -255,11 +353,30 @@ public final class MainActivity extends Activity {
     }
 
     private void configureWindow() {
+        applySystemBarAppearance();
         if (Build.VERSION.SDK_INT >= 30) {
             getWindow().setDecorFitsSystemWindows(false);
             getWindow().setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_NOTHING);
         } else {
             getWindow().setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE);
+        }
+    }
+
+    @SuppressWarnings("deprecation")
+    private void applySystemBarAppearance() {
+        boolean light = (getResources().getConfiguration().uiMode
+                & Configuration.UI_MODE_NIGHT_MASK) != Configuration.UI_MODE_NIGHT_YES;
+        if (Build.VERSION.SDK_INT >= 30) {
+            getWindow().getDecorView(); // Create decor before PhoneWindow.getInsetsController on cold start.
+            int mask = android.view.WindowInsetsController.APPEARANCE_LIGHT_STATUS_BARS
+                    | android.view.WindowInsetsController.APPEARANCE_LIGHT_NAVIGATION_BARS;
+            android.view.WindowInsetsController controller = getWindow().getInsetsController();
+            if (controller != null) controller.setSystemBarsAppearance(light ? mask : 0, mask);
+        } else {
+            int mask = android.view.View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR
+                    | android.view.View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR;
+            int flags = getWindow().getDecorView().getSystemUiVisibility();
+            getWindow().getDecorView().setSystemUiVisibility(light ? flags | mask : flags & ~mask);
         }
     }
 
@@ -278,7 +395,7 @@ public final class MainActivity extends Activity {
         }
     }
 
-    // API 26–32 compatibility only: API 33+ back gestures use the platform
+    // API 26ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Å“32 compatibility only: API 33+ back gestures use the platform
     // OnBackInvokedDispatcher registered above, with the same UI-first handler.
     @Override
     @android.annotation.SuppressLint("GestureBackNavigation")
@@ -290,6 +407,7 @@ public final class MainActivity extends Activity {
     private void handleViewerBack() {
         if (destroyed || backPending) return;
         if (!trustedPage()) return;
+        clearCameraRequest(true);
         final WebView current = webView;
         backPending = true;
         current.evaluateJavascript(
@@ -314,11 +432,67 @@ public final class MainActivity extends Activity {
                 Collections.emptyMap(), new ByteArrayInputStream(new byte[0]));
     }
 
+    private void dispatchNativeMessage(NativeBridge api, JSONObject message) throws Exception {
+        if (message.length() != 2) return;
+        String method = message.getString("method"); org.json.JSONArray args = message.getJSONArray("args");
+        switch (method) {
+            case "openFiles": if (args.length() == 0) api.openFiles(); break;
+            case "openFolder": if (args.length() == 0) api.openFolder(); break;
+            case "downloadProject": if (args.length() == 0) api.downloadProject(); break;
+            case "openRepositorySource": if (args.length() == 1 && args.get(0) instanceof String) api.openRepositorySource(args.getString(0)); break;
+            case "composeReport": if (args.length() == 1 && args.get(0) instanceof String) api.composeReport(args.getString(0)); break;
+            case "setPresentation": if (args.length() == 1 && args.get(0) instanceof Boolean) api.setPresentation(args.getBoolean(0)); break;
+            case "exportCandidateProject": if (args.length() == 1 && args.get(0) instanceof String) api.exportCandidateProject(args.getString(0)); break;
+            case "exportText": if (args.length() == 3 && args.get(0) instanceof String && args.get(1) instanceof String && args.get(2) instanceof String) api.exportText(args.getString(0), args.getString(1), args.getString(2)); break;
+            case "libraryRequest": case "githubRequest": case "gitlabRequest":
+                if (args.length() != 2 || !(args.get(0) instanceof Number) || !(args.get(1) instanceof String)
+                        || args.getDouble(0) != args.getInt(0) || args.getInt(0) < 0) return;
+                int id = args.getInt(0); String body = args.getString(1);
+                if (method.equals("libraryRequest")) api.libraryRequest(id, body);
+                else if (method.equals("githubRequest")) api.githubRequest(id, body);
+                else api.gitlabRequest(id, body);
+                break;
+            default: break;
+        }
+    }
+
     private final class NativeBridge {
-        @JavascriptInterface
-        public void githubRequest(int id, String json) {
-            if (id < 0 || json == null || json.length() > 1600000) return;
+        public void openRepositorySource(String url) {
+            if (url == null || url.length() > 4096) return;
             runOnUiThread(() -> {
+                if (!trustedPage() || activeProject == null || activeProviderHost == null) return;
+                try {
+                    if (!NativeBridgePolicy.repositorySource(url, activeProviderHost)) return;
+                    openBrowser(Uri.parse(url));
+                } catch (Exception ignored) { }
+            });
+        }
+
+        public void composeReport(String body) {
+            if (body == null || body.length() > 8192) return;
+            runOnUiThread(() -> {
+                if (!trustedPage()) return;
+                Intent draft = new Intent(Intent.ACTION_SENDTO, Uri.parse("mailto:support.kiview@sigharmonic.com?subject="
+                        + Uri.encode("Pocket KiView content/user report") + "&body=" + Uri.encode(body)));
+                draft.putExtra(Intent.EXTRA_SUBJECT, "Pocket KiView content/user report");
+                draft.putExtra(Intent.EXTRA_TEXT, body);
+                try { startActivity(draft); }
+                catch (android.content.ActivityNotFoundException error) {
+                    android.widget.Toast.makeText(MainActivity.this, "Email support.kiview@sigharmonic.com to report this concern.", android.widget.Toast.LENGTH_LONG).show();
+                }
+            });
+        }
+        public void setPresentation(boolean active) {
+            runOnUiThread(() -> {
+                if (!trustedPage()) return;
+                if (active) getWindow().addFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+                else getWindow().clearFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+            });
+        }
+        public void githubRequest(int id, String json) {
+            if (id < 0 || json == null || json.length() > 1600000
+                    || !providerRequestGuard.admit(android.os.SystemClock.elapsedRealtime())) return;
+            providerRequestGuard.dispatch(MainActivity.this::runOnUiThread, () -> {
                 if (!trustedPage()) return;
                 try {
                     JSONObject request = new JSONObject(json);
@@ -343,7 +517,7 @@ public final class MainActivity extends Activity {
                     if (action.equals("token-connect")) { showTokenDialog(id, epoch); return; }
                     final int importEpoch = action.equals("import") ? githubImportGeneration.incrementAndGet() : -1;
                     if (action.equals("import")) importGeneration.incrementAndGet();
-                    githubExecutor.execute(() -> {
+                    providerRequestGuard.execute(githubExecutor, () -> {
                         try { JSONObject result = github.handle(request, epoch); githubReply(id, epoch, importEpoch, result, null);
                             if (action.equals("device-start") || action.equals("auth-status")) runOnUiThread(MainActivity.this::checkGitHubLogin);
                         }
@@ -354,10 +528,10 @@ public final class MainActivity extends Activity {
                 }
             });
         }
-        @JavascriptInterface
         public void gitlabRequest(int id, String json) {
-            if (id < 0 || json == null || json.length() > 1600000) return;
-            runOnUiThread(() -> {
+            if (id < 0 || json == null || json.length() > 1600000
+                    || !providerRequestGuard.admit(android.os.SystemClock.elapsedRealtime())) return;
+            providerRequestGuard.dispatch(MainActivity.this::runOnUiThread, () -> {
                 if (!trustedPage()) return;
                 try {
                     JSONObject request = new JSONObject(json);
@@ -370,7 +544,7 @@ public final class MainActivity extends Activity {
                     }
                     final int epoch = gitlab.generation();
                     if (action.equals("token-connect")) { showGitLabTokenDialog(id, host, epoch); return; }
-                    gitlabExecutor.execute(() -> {
+                    providerRequestGuard.execute(gitlabExecutor, () -> {
                         try {
                             JSONObject result;
                             if (action.equals("oauth-start")) {
@@ -393,12 +567,10 @@ public final class MainActivity extends Activity {
                 } catch (Exception ignored) { gitlabReply(id, gitlab.generation(), null, "Invalid GitLab connection request"); }
             });
         }
-        @JavascriptInterface
         public void downloadProject() {
             runOnUiThread(() -> { if (trustedPage()) launchDownload(); });
         }
 
-        @JavascriptInterface
         public void exportCandidateProject(String serialized) {
             runOnUiThread(() -> {
                 if (!trustedPage() || activeProject == null || serialized == null || serialized.length() > 24 * 1024 * 1024) return;
@@ -437,17 +609,16 @@ public final class MainActivity extends Activity {
             });
         }
 
-        @JavascriptInterface
         public void exportText(String name, String text, String mime) {
             runOnUiThread(() -> {
-                if (!trustedPage() || text == null || text.length() > 4 * 1024 * 1024 || name == null || !name.matches("[A-Za-z0-9._-]{1,100}") || !("text/csv".equals(mime) || "application/json".equals(mime))) return;
+                final boolean presentation = "text/html".equals(mime) && "pocket-kivi-presentation.html".equals(name);
+                if (!trustedPage() || text == null || text.length() > (presentation ? 16 : 4) * 1024 * 1024 || name == null || !name.matches("[A-Za-z0-9._-]{1,100}") || !(presentation || "text/csv".equals(mime) || "application/json".equals(mime))) return;
                 if (pendingTextExport != null || pendingDownload != null) { sendError("Finish the current export first"); return; }
                 pendingTextExport = text; pendingTextEpoch = downloadGeneration.get();
                 Intent intent = new Intent(Intent.ACTION_CREATE_DOCUMENT); intent.addCategory(Intent.CATEGORY_OPENABLE); intent.setType(mime); intent.putExtra(Intent.EXTRA_TITLE, name); intent.addFlags(Intent.FLAG_GRANT_WRITE_URI_PERMISSION); startActivityForResult(intent, REQUEST_TEXT_EXPORT);
             });
         }
 
-        @JavascriptInterface
         public void libraryRequest(int id, String serialized) {
             runOnUiThread(() -> {
                 if (!trustedPage() || id < 1 || serialized == null || serialized.length() > 16384) return;
@@ -455,6 +626,11 @@ public final class MainActivity extends Activity {
                 final JSONObject request;
                 try { request = new JSONObject(serialized); }
                 catch (Exception error) { libraryReply(id, null, "Invalid library request"); return; }
+                if(request.optString("action").equals("enable-temporary-reminders")){enableTemporaryReminders(id);return;}
+                if(request.optString("action").equals("clear-temporary")&&activeProject!=null&&activeProject.optBoolean("temporary")) {
+                    activeProject=null;activeProviderHost=null;activePrivate=false;pendingProject=null;pendingDownload=null;downloadGeneration.incrementAndGet();
+                    webView.evaluateJavascript("document.getElementById('viewer').src='about:blank';window.KiCadAndroidProject=null;window.KiCadAndroidRevisionCache=null;window.KiCadAndroid.showHome();",null);
+                }
                 final boolean opening = request.optString("action").equals("open");
                 final int openEpoch = opening ? importGeneration.incrementAndGet() : -1;
                 if (opening) { github.cancelRequests(); gitlab.cancelRequests(); githubImportGeneration.incrementAndGet(); }
@@ -481,14 +657,12 @@ public final class MainActivity extends Activity {
             });
         }
 
-        @JavascriptInterface
         public void openFiles() {
             runOnUiThread(() -> {
                 if (trustedPage()) launchFiles();
             });
         }
 
-        @JavascriptInterface
         public void openFolder() {
             runOnUiThread(() -> {
                 if (trustedPage()) launchFolder();
@@ -596,11 +770,98 @@ public final class MainActivity extends Activity {
                 && VIEWER_URL.equals(webView.getUrl());
     }
 
+    private void checkTemporaryExpiry() {
+        if(destroyed||activeProject==null||!activeProject.optBoolean("temporary")||temporaryRefreshInFlight)return;
+        final JSONObject original=activeProject;temporaryRefreshInFlight=true;
+        importExecutor.execute(()->{
+            JSONObject kept=null;try{kept=projectLibrary.keptTemporary(original.optString("id"));}catch(Exception ignored){}
+            final JSONObject retained=kept;
+            runOnUiThread(()->{
+                temporaryRefreshInFlight=false;if(destroyed||activeProject!=original)return;
+                if(retained!=null){recordProject(retained,null,false);pendingProject=retained.toString();deliverPendingProject();return;}
+                if(!DiskProjectStore.expired(original,System.currentTimeMillis()))return;
+                activeProject=null;activeProviderHost=null;activePrivate=false;pendingProject=null;pendingDownload=null;downloadGeneration.incrementAndGet();
+                if(trustedPage())webView.evaluateJavascript("document.getElementById('viewer').src='about:blank';window.KiCadAndroidProject=null;window.KiCadAndroidRevisionCache=null;window.KiCadAndroid.showHome();window.KiCadAndroid.receiveError('Temporary project expired. Reopen the source or use a saved offline copy.');window.KiCadAndroidLibrary?.refresh();",null);
+            });
+        });
+    }
+
+    private void enableTemporaryReminders(int replyId) {
+        try {
+            TemporaryProjectSettings settings=new TemporaryProjectSettings(this);settings.enableReminders();
+            if(Build.VERSION.SDK_INT>=33&&checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS)!=android.content.pm.PackageManager.PERMISSION_GRANTED){
+                if(temporaryPermissionReply!=-1){if(replyId>0)libraryReply(replyId,null,"Finish the current notification permission request");return;}
+                temporaryPermissionReply=replyId>0?replyId:-2;
+                requestPermissions(new String[]{android.Manifest.permission.POST_NOTIFICATIONS},REQUEST_TEMPORARY_NOTIFICATIONS);return;
+            }
+            completeTemporaryPermission(replyId);
+            if(!settings.notificationsAllowed())new android.app.AlertDialog.Builder(this).setTitle("Notifications disabled")
+                .setMessage("Temporary downloads still work. Enable Pocket KiView notifications in Android settings to receive the Keep reminder.")
+                .setPositiveButton("Android settings",(dialog,which)->startActivity(new Intent(android.provider.Settings.ACTION_APP_NOTIFICATION_SETTINGS).putExtra(android.provider.Settings.EXTRA_APP_PACKAGE,getPackageName())))
+                .setNegativeButton("Later",null).show();
+        }catch(Exception error){if(replyId>0)libraryReply(replyId,null,"Could not enable temporary reminders");}
+    }
+    private void completeTemporaryPermission(int replyId) {
+        try {JSONObject settings=new TemporaryProjectSettings(this).result();if(replyId>0)libraryReply(replyId,settings,null);
+            if(trustedPage())webView.evaluateJavascript("window.dispatchEvent(new CustomEvent('kicad-temporary-settings-changed',{detail:"+settings.toString()+"}));",null);
+            importExecutor.execute(()->{diskProjectStore.showDueReminders();diskProjectStore.scheduleCleanup();});
+        }catch(Exception ignored){if(replyId>0)libraryReply(replyId,null,"Could not read temporary reminder settings");}
+    }
+    @Override public void onRequestPermissionsResult(int requestCode,String[] permissions,int[] results){
+        super.onRequestPermissionsResult(requestCode,permissions,results);
+        if(requestCode==REQUEST_CAMERA){
+            cameraRuntimeRequested=false;
+            cameraRuntimeGranted=results.length==1 && results[0]==android.content.pm.PackageManager.PERMISSION_GRANTED
+                    && permissions.length==1 && android.Manifest.permission.CAMERA.equals(permissions[0]);
+            if(!cameraRuntimeGranted)clearCameraRequest(true);
+            else if(activityResumed)finishCameraRequest();
+        }
+        if(requestCode==REQUEST_TEMPORARY_NOTIFICATIONS){int reply=temporaryPermissionReply;temporaryPermissionReply=-1;completeTemporaryPermission(reply);}
+    }
+
+    private boolean eligibleCameraRequest(PermissionRequest request) {
+        return !destroyed && request != null && CameraPermissionPolicy.eligible(request.getOrigin().toString(),
+                request.getResources(), trustedPage(), activityResumed);
+    }
+
+    private void requestCamera(PermissionRequest request) {
+        if (!eligibleCameraRequest(request) || pendingCameraRequest != null || cameraRuntimeRequested) {
+            request.deny(); return;
+        }
+        pendingCameraRequest=request;
+        if(checkSelfPermission(android.Manifest.permission.CAMERA)==android.content.pm.PackageManager.PERMISSION_GRANTED){
+            cameraRuntimeGranted=true;finishCameraRequest();
+        }else{
+            cameraRuntimeRequested=true;
+            requestPermissions(new String[]{android.Manifest.permission.CAMERA},REQUEST_CAMERA);
+        }
+    }
+
+    private void finishCameraRequest() {
+        PermissionRequest request=pendingCameraRequest;
+        boolean grant=cameraRuntimeGranted && eligibleCameraRequest(request)
+                && checkSelfPermission(android.Manifest.permission.CAMERA)==android.content.pm.PackageManager.PERMISSION_GRANTED;
+        clearCameraRequest(false);
+        if(request!=null){if(grant)request.grant(new String[]{PermissionRequest.RESOURCE_VIDEO_CAPTURE});else request.deny();}
+    }
+
+    private void clearCameraRequest(boolean deny) {
+        PermissionRequest request=pendingCameraRequest;pendingCameraRequest=null;cameraRuntimeGranted=false;
+        if(deny && request!=null)request.deny();
+    }
+    private void offerTemporaryReminders(JSONObject project){
+        TemporaryProjectSettings settings=new TemporaryProjectSettings(this);
+        if(!project.optBoolean("temporary")||settings.notificationsAllowed()||!settings.offerOnce())return;
+        new android.app.AlertDialog.Builder(this).setTitle("Temporary project reminder")
+            .setMessage("Allow a private notification shortly before this temporary copy expires? You can keep it offline then. Downloads work even if you choose Later.")
+            .setPositiveButton("Enable",(dialog,which)->enableTemporaryReminders(-1)).setNegativeButton("Later",null).show();
+    }
     private void recordProject(JSONObject project, String providerHost, boolean isPrivate) {
         if (project == null) return;
         activeProject = project;
         activeProviderHost = providerHost;
         activePrivate = isPrivate;
+        if(project.optBoolean("temporary")){loginHandler.postDelayed(this::checkTemporaryExpiry,Math.max(1,project.optLong("expiresAt")-System.currentTimeMillis()));offerTemporaryReminders(project);}
         downloadGeneration.incrementAndGet();
         pendingDownload = null;
     }
@@ -651,7 +912,7 @@ public final class MainActivity extends Activity {
             sendError("Project download cancelled because the active project changed");
             return;
         }
-        sendLoading("Saving project ZIP…");
+        sendLoading("Saving project ZIPÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¦");
         importExecutor.execute(() -> {
             try {
                 ProjectExporter.write(getContentResolver(), destination, project,
@@ -712,7 +973,7 @@ public final class MainActivity extends Activity {
             return;
         }
         if (resultCode != RESULT_OK || data == null || data.getData() == null) {
-            if (requestCode == REQUEST_TEXT_EXPORT) { pendingTextExport = null; sendDownloadResult("BoM export cancelled"); }
+            if (requestCode == REQUEST_TEXT_EXPORT) { pendingTextExport = null; sendDownloadResult("Export cancelled"); }
             if (requestCode == REQUEST_DOWNLOAD) {
                 pendingDownload = null;
                 sendDownloadResult("Project download cancelled");
@@ -727,8 +988,8 @@ public final class MainActivity extends Activity {
                 try (java.io.OutputStream output = getContentResolver().openOutputStream(uri, "wt")) {
                     if (output == null) throw new java.io.IOException("Cannot write selected destination");
                     output.write(text.getBytes(java.nio.charset.StandardCharsets.UTF_8));
-                    runOnUiThread(() -> sendDownloadResult("BoM file saved"));
-                } catch (Exception error) { deleteIncompleteDownload(uri); runOnUiThread(() -> sendError("Cannot save BoM file")); }
+                    runOnUiThread(() -> sendDownloadResult("Export saved"));
+                } catch (Exception error) { deleteIncompleteDownload(uri); runOnUiThread(() -> sendError("Cannot save export")); }
             });
         } else if (requestCode == REQUEST_DOWNLOAD) {
             exportProject(uri);
@@ -829,17 +1090,25 @@ public final class MainActivity extends Activity {
         webView.evaluateJavascript("window.KiCadAndroidLinks.receive(" + JSONObject.quote(link).replace("\u2028", "\\u2028").replace("\u2029", "\\u2029") + ");", null);
     }
 
-    private void importSource(Uri uri, boolean folder) {
+    private void importSource(Uri uri, boolean folder) { importSource(uri,folder,null); }
+
+    private void importSource(Uri uri, boolean folder, Boolean temporary) {
         github.cancelRequests();
                 gitlab.cancelRequests();
         githubImportGeneration.incrementAndGet();
         final int generation = importGeneration.incrementAndGet();
-        sendLoading("Opening " + (folder ? "folder" : "file") + "…");
+        sendLoading("Opening " + (folder ? "folder" : "file") + "ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¦");
         importExecutor.execute(() -> {
             try {
-                JSONObject project = ProjectImporter.read(
+                JSONObject project = temporary == null ? ProjectImporter.read(
                         getContentResolver(), getCacheDir(), uri, folder,
-                        () -> generation != importGeneration.get() || destroyed);
+                        () -> generation != importGeneration.get() || destroyed) : ProjectImporter.readDisk(
+                        getContentResolver(), getCacheDir(), diskProjectStore, uri, folder,
+                        () -> generation != importGeneration.get() || destroyed, temporary);
+                if(project.optBoolean("diskBacked")) {
+                    try { projectLibrary.handle(new JSONObject().put("action","save").put("offline",true).put("remember",true),project); }
+                    catch(Exception registration) {try{diskProjectStore.remove(project);}catch(Exception cleanup){registration.addSuppressed(cleanup);}throw registration;}
+                }
                 String json = project.toString();
                 runOnUiThread(() -> {
                     if (generation != importGeneration.get() || destroyed) return;
@@ -851,6 +1120,16 @@ public final class MainActivity extends Activity {
                 runOnUiThread(() -> {
                     if (generation != importGeneration.get() || destroyed) return;
                     String message = error.getMessage() == null ? "Unable to open project" : error.getMessage();
+                    if(temporary == null && (message.contains("32 MiB") || message.contains("96 MiB") || message.equals("File or project size limit exceeded"))) {
+                        sendLoading("Large project: choose how to open it.");
+                        new android.app.AlertDialog.Builder(this).setTitle("Open large project?")
+                            .setMessage("This project needs a disk copy. Keep it offline, or use a temporary copy that expires after "+new TemporaryProjectSettings(this).durationMinutes()+" minutes. Original files are unchanged. Copies are unencrypted in private app storage; large drawings still need available memory.")
+                            .setPositiveButton("Download and keep",(dialog,which)->{if(generation==importGeneration.get())importSource(uri,folder,false);})
+                            .setNeutralButton("Temporary ("+new TemporaryProjectSettings(this).durationMinutes()+" min)",(dialog,which)->{if(generation==importGeneration.get())importSource(uri,folder,true);})
+                            .setNegativeButton("Cancel",(dialog,which)->sendError("Opening cancelled."))
+                            .setOnCancelListener(dialog->sendError("Opening cancelled.")).show();
+                        return;
+                    }
                     sendError(message);
                     Toast.makeText(this, message, Toast.LENGTH_LONG).show();
                 });
@@ -881,6 +1160,8 @@ public final class MainActivity extends Activity {
 
     @Override
     protected void onPause() {
+        if(!cameraRuntimeRequested)clearCameraRequest(true);
+        if(trustedPage())webView.evaluateJavascript("window.dispatchEvent(new Event('kicad-android-paused'));",null);
         activityResumed = false;
         if (webView != null) webView.onPause();
         super.onPause();
@@ -889,7 +1170,9 @@ public final class MainActivity extends Activity {
     @Override
     protected void onResume() {
         super.onResume();
+        if(diskProjectStore!=null) importExecutor.execute(() -> { diskProjectStore.cleanupExpired(); diskProjectStore.showDueReminders(); diskProjectStore.scheduleCleanup(); runOnUiThread(this::checkTemporaryExpiry); });
         activityResumed = true;
+        if(cameraRuntimeGranted)finishCameraRequest();
         if(github != null && !github.pendingDevice()) clearCopiedGitHubCode();
         if (webView != null) { webView.onResume(); if(trustedPage()) webView.evaluateJavascript("window.dispatchEvent(new Event('kicad-android-resumed'));",null); }
         checkGitHubLogin();
@@ -898,13 +1181,17 @@ public final class MainActivity extends Activity {
     @Override
     public void onConfigurationChanged(Configuration newConfig) {
         super.onConfigurationChanged(newConfig);
+        applySystemBarAppearance();
         applyTextScale();
-        if (webView != null) webView.requestApplyInsets();
+        if (webView != null) {webView.requestLayout();webView.requestApplyInsets();}
     }
 
     @Override
     protected void onDestroy() {
+        clearCameraRequest(true);
         destroyed = true;
+        if (foldTracker != null && foldListening) foldTracker.removeWindowLayoutInfoListener(foldListener);
+        foldListening = false;
         loginHandler.removeCallbacks(githubPollTask);
         activeProject = null;
         activeProviderHost = null;
@@ -924,6 +1211,7 @@ public final class MainActivity extends Activity {
         gitlabExecutor.shutdownNow();
         pendingProject = null;
         if (webView != null) {
+            webView.removeOnLayoutChangeListener(foldLayoutListener);
             webView.removeJavascriptInterface("NativeKiCadHost");
             webView.loadUrl("about:blank");
             if (webView.getParent() instanceof android.view.ViewGroup) {

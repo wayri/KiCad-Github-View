@@ -7,6 +7,7 @@ import os
 from pathlib import Path
 import re
 import threading
+import time
 from urllib.parse import parse_qs, unquote, urlsplit
 
 from .app_review import changed_designs, check_payload, public_designs, public_repository, public_review, service_origin
@@ -74,6 +75,8 @@ class Handler(BaseHTTPRequestHandler):
                 return self.respond(200, {'githubApp': True, 'browserRendering': True,
                                          'privateRepositories': False, 'installUrl': self.server.install_url})
             if path in ('/api/review', '/api/designs'):
+                if not self.server.allow_metadata():
+                    return self.respond(429, {'error': 'Repository lookup rate limit reached. Retry in a minute.'})
                 query = parse_qs(parsed.query)
                 def field(name, default=None):
                     values = query.get(name, [default])
@@ -97,7 +100,7 @@ class Handler(BaseHTTPRequestHandler):
                 target = (self.server.web_root / relative).resolve()
                 if not target.is_relative_to(self.server.web_root) or not target.is_file():
                     return self.respond(404, {'error': 'Not found.'})
-                mime = mimetypes.guess_type(target.name)[0] or 'application/octet-stream'
+                mime = 'application/javascript' if target.suffix.lower() == '.mjs' else (mimetypes.guess_type(target.name)[0] or 'application/octet-stream')
                 return self.respond(200, target.read_bytes(), mime)
             return self.respond(404, {'error': 'Not found.'})
         except (VizError, ValueError, TypeError, KeyError) as exc:
@@ -109,10 +112,14 @@ class Handler(BaseHTTPRequestHandler):
         if urlsplit(self.path).path != '/api/github/webhook':
             return self.respond(404, {'error': 'Not found.'})
         try:
+            if self.headers.get('Transfer-Encoding') or len(self.headers.get_all('Content-Length', [])) != 1:
+                return self.respond(400, {'error': 'Exactly one Content-Length and no Transfer-Encoding required.'})
             length = int(self.headers.get('Content-Length', '0'))
             if not 0 < length <= 1024 * 1024:
                 return self.respond(413, {'error': 'Webhook must be between 1 byte and 1 MiB.'})
             raw = self.rfile.read(length)
+            if len(raw) != length:
+                return self.respond(400, {'error': 'Incomplete webhook body.'})
             if not verify_webhook(self.server.webhook_secret, raw, self.headers.get('X-Hub-Signature-256')):
                 return self.respond(401, {'error': 'Invalid webhook signature.'})
             payload = json.loads(raw)
@@ -147,7 +154,39 @@ class AppServer(ThreadingHTTPServer):
         self.install_url = install_url
         self.webhook_secret = webhook_secret
         self.metadata_slots = threading.BoundedSemaphore(4)
+        self.request_slots = threading.BoundedSemaphore(32)
+        self.rate_lock = threading.Lock()
+        self.metadata_tokens = 20.0
+        self.metadata_updated = time.monotonic()
         self.worker = DeliveryQueue(state_path, lambda payload: self.process_pr(payload))
+
+    def allow_metadata(self):
+        # Global budget also bounds rotated-IP bots and does not trust proxy headers.
+        with self.rate_lock:
+            now = time.monotonic()
+            self.metadata_tokens = min(20.0, self.metadata_tokens + now - self.metadata_updated)
+            self.metadata_updated = now
+            if self.metadata_tokens < 1:
+                return False
+            self.metadata_tokens -= 1
+            return True
+
+    def process_request(self, request, client_address):
+        if not self.request_slots.acquire(blocking=False):
+            self.shutdown_request(request)
+            return
+        request.settimeout(10)
+        try:
+            super().process_request(request, client_address)
+        except Exception:
+            self.request_slots.release()
+            raise
+
+    def process_request_thread(self, request, client_address):
+        try:
+            super().process_request_thread(request, client_address)
+        finally:
+            self.request_slots.release()
 
     def process_pr(self, payload):
         token = installation_token(os.environ['GITHUB_APP_ID'], os.environ['GITHUB_PRIVATE_KEY_PATH'], payload['installation']['id'])
@@ -160,7 +199,7 @@ class AppServer(ThreadingHTTPServer):
         check = check_payload(self.origin, repo, number, pr['head']['sha'], designs)
         same = None
         page = 1
-        while True:
+        while page <= 30:
             existing = api(f'/repos/{repo}/commits/{pr["head"]["sha"]}/check-runs?check_name=KiCad%20visual%20review&filter=all&per_page=100&page={page}', token)
             batch = existing.get('check_runs', [])
             same = next((item for item in batch
@@ -168,6 +207,8 @@ class AppServer(ThreadingHTTPServer):
             if same or len(batch) < 100:
                 break
             page += 1
+        if page > 30:
+            raise VizError('Check history exceeds bounded lookup limit.')
         if same:
             update = {key: value for key, value in check.items() if key != 'head_sha'}
             api(f'/repos/{repo}/check-runs/{same["id"]}', token, update, method='PATCH')

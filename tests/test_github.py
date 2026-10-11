@@ -4,8 +4,10 @@ import tempfile
 import unittest
 import zipfile
 from pathlib import Path
+from urllib.request import Request
+from unittest.mock import patch
 
-from kicad_vizdiff.github import extract_archive, repository_name, verify_webhook
+from kicad_vizdiff.github import extract_archive, repository_name, verify_webhook, api, NoRedirect
 from kicad_vizdiff.git import VizError
 
 
@@ -18,6 +20,19 @@ def archive(entries):
 
 
 class GitHubBoundaryTests(unittest.TestCase):
+    def test_authorized_api_redirect_never_forwards_credentials(self):
+        request = Request('https://api.github.com/repos/owner/repo', headers={'Authorization': 'Bearer secret'})
+        for url in ('https://attacker.example/collect', 'https://api.github.com/repos/renamed/repo'):
+            with self.subTest(url=url), self.assertRaises(VizError):
+                NoRedirect().redirect_request(request, None, 302, 'Found', {}, url)
+
+    def test_invalid_api_paths_do_not_send_requests(self):
+        with patch('kicad_vizdiff.github._api_opener.open') as transport:
+            for path in ('https://attacker.example', '//attacker.example', '/repos/x\r\nInjected: yes', None):
+                with self.subTest(path=path), self.assertRaises(VizError):
+                    api(path, 'private-token')
+            transport.assert_not_called()
+
     def test_public_repository_name(self):
         self.assertEqual(repository_name('KiCad/examples'), 'KiCad/examples')
         for value in ('../repo', 'org/../repo', 'owner/repo/extra', 'owner repo/x', None):

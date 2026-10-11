@@ -316,13 +316,14 @@ function validAssetRef(ref) {
     !ref.endsWith("/") && ref.split("/").every((part) => part && part !== "." && part !== "..") &&
     !ref.includes("..");
 }
-function validAssetPath(path) {
-  return typeof path === "string" && path.length <= 500 && ASSET_SUFFIX.test(path) &&
+function validAssetPath(path, pdf = false) {
+  return typeof path === "string" && path.length <= 500 && (pdf ? /\.pdf$/i.test(path) : ASSET_SUFFIX.test(path)) &&
     !path.startsWith("/") && !/[\\\x00-\x1f\x7f]/.test(path) &&
     path.split("/").every((part) => part && part !== "." && part !== "..");
 }
-async function githubAsset(repository, ref, file) {
-  if (!validRepository(repository) || !validAssetRef(ref) || !validAssetPath(file)) {
+async function githubAsset(repository, ref, file, pdf = false) {
+  const assetMax = pdf ? 32 * 1024 * 1024 : ASSET_MAX_BYTES;
+  if (!validRepository(repository) || !validAssetRef(ref) || !validAssetPath(file,pdf)) {
     throw new Error("Invalid repository, revision, or 3D model path.");
   }
   const key = `${repository.toLowerCase()}:${ref}`;
@@ -346,7 +347,7 @@ async function githubAsset(repository, ref, file) {
     if (response.status === 404) throw new Error("GitHub 3D model retrieval returned HTTP 404: the model may be absent or your extension account lacks access to this private repository. Check the saved model path and token repository permissions.");
     if (!response.ok) throw githubReadError(response);
     const jsonBody = response.headers.get("content-type")?.includes("json");
-    const responseLimit = jsonBody ? 12 * 1024 * 1024 : ASSET_MAX_BYTES;
+    const responseLimit = jsonBody ? Math.ceil(assetMax * 1.5) : assetMax;
     if (Number(response.headers.get("content-length")) > responseLimit) {
       throw new Error("3D model response exceeds the preview size limit.");
     }
@@ -372,7 +373,7 @@ async function githubAsset(repository, ref, file) {
       try { data = JSON.parse(new TextDecoder().decode(bytes)); }
       catch { throw new Error("GitHub did not return an encoded 3D model."); }
       if (data?.encoding !== "base64" || typeof data.content !== "string" ||
-          data.content.length > 11.5 * 1024 * 1024 || !/^[A-Za-z0-9+/=\r\n]+$/.test(data.content)) {
+          data.content.length > Math.ceil(assetMax * 1.4) || !/^[A-Za-z0-9+/=\r\n]+$/.test(data.content)) {
         throw new Error("GitHub did not return a supported 3D model payload.");
       }
       base64 = data.content.replace(/\s/g, "");
@@ -386,12 +387,12 @@ async function githubAsset(repository, ref, file) {
       }
       base64 = btoa(binary);
     }
-    if (decodedLength > ASSET_MAX_BYTES || budget.bytes + decodedLength > 32 * 1024 * 1024) {
+    if (decodedLength > assetMax || budget.bytes + decodedLength > 32 * 1024 * 1024) {
       throw new Error("3D model exceeds the per-asset or revision retrieval budget.");
     }
     budget.bytes += decodedLength;
     const mediaType = /\.(step|stp)$/i.test(file)?"model/step":file.toLowerCase().endsWith(".glb") ? "model/gltf-binary" : "model/vrml";
-    return { base64, mediaType };
+    return { base64, mediaType:pdf?'application/pdf':mediaType };
   } finally { clearTimeout(timeout); }
 }
 
@@ -497,6 +498,7 @@ function viewerSender(sender) {
 }
 
 // The analysis page only reads imported/repository source; it never receives review write privileges.
+function pdfSender(sender) { return sender?.id === chrome.runtime.id && sender.url?.split(/[?#]/, 1)[0] === chrome.runtime.getURL('pdf-viewer.html'); }
 function analysisSender(sender) {
   return sender?.id === chrome.runtime.id && sender.url?.split(/[?#]/, 1)[0] === chrome.runtime.getURL("analysis-viewer.html");
 }
@@ -782,7 +784,7 @@ async function gitlabDispatch(message, sender) {
     if(message.type==='gitlab-client-set')return auth.setClientId(host,message.clientId);
     return auth.startOAuth(host);
   }
-  if (!viewerSender(sender) && !(analysisSender(sender)&&['project-inventory','project-file'].includes(message.type)) && !['project','gitlab-merge-request'].includes(message.type)) throw new Error('Only extension viewers can use GitLab repository tools.');
+  if (!viewerSender(sender) && !(pdfSender(sender)&&['pdf-file','project-inventory'].includes(message.type)) && !(analysisSender(sender)&&['project-inventory','project-file'].includes(message.type)) && !['project','gitlab-merge-request'].includes(message.type)) throw new Error('Only extension viewers can use GitLab repository tools.');
   if (optionsSender(sender)) throw new Error('Options cannot load GitLab projects.');
   switch(message.type) {
     case 'gitlab-merge-request': {
@@ -814,17 +816,19 @@ async function gitlabDispatch(message, sender) {
       if (!result) throw new Error('Report was not found at this revision.');
       return {content:new TextDecoder().decode(result.bytes),path:message.reportPath};
     }
+    case 'pdf-file':
     case 'repo-asset': {
-      if(!api.validRepository(repository)||!validAssetRef(ref)||!validAssetPath(file))throw new Error('Invalid GitLab model location.');
+      const pdf=message.type==='pdf-file',assetMax=pdf?32*1024*1024:8*1024*1024;
+      if(!api.validRepository(repository)||!validAssetRef(ref)||!validAssetPath(file,pdf))throw new Error('Invalid GitLab model location.');
       const key=host+':'+repository.toLowerCase()+':'+ref,now=Date.now();let budget=gitlabAssetBudgets.get(key);
       if(!budget||budget.resetAt<=now)budget={requests:0,bytes:0,resetAt:now+300000};
       if(budget.requests>=32||budget.bytes>=32*1024*1024)throw new Error('The 3D model retrieval budget was reached; retry after five minutes.');
       budget.requests++;gitlabAssetBudgets.set(key,budget);if(gitlabAssetBudgets.size>128)gitlabAssetBudgets.delete(gitlabAssetBudgets.keys().next().value);
-      const result=await api.response(`${api.endpoint(repository)}/files/${encodeURIComponent(file)}/raw?ref=${encodeURIComponent(ref)}`,8*1024*1024);
+      const result=await api.response(`${api.endpoint(repository)}/files/${encodeURIComponent(file)}/raw?ref=${encodeURIComponent(ref)}`,assetMax);
       if(!result)throw new Error('GitLab model was not found at this revision.');
       if(budget.bytes+result.bytes.length>32*1024*1024)throw new Error('Revision model retrieval budget exceeded.');budget.bytes+=result.bytes.length;
       let binary='';for(let i=0;i<result.bytes.length;i+=8192)binary+=String.fromCharCode(...result.bytes.subarray(i,i+8192));
-      return {base64:btoa(binary),mediaType:file.toLowerCase().endsWith('.glb')?'model/gltf-binary':'model/vrml'};
+      return {base64:btoa(binary),mediaType:pdf?'application/pdf':file.toLowerCase().endsWith('.glb')?'model/gltf-binary':'model/vrml'};
     }
     case 'open-project-overview':
     case 'open-viewer-window': {
@@ -858,9 +862,10 @@ async function gitlabDispatch(message, sender) {
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   const customHostSender=sender?.id===chrome.runtime.id&&typeof sender.url==='string'&&sender.url.startsWith('https://')&&message?.provider==='gitlab';
-  if (!(senderAllowed(sender) || analysisSender(sender) || optionsSender(sender)||customHostSender) || !message || typeof message !== "object") return false;
+  if (!(senderAllowed(sender) || pdfSender(sender) || analysisSender(sender) || optionsSender(sender)||customHostSender) || !message || typeof message !== "object") return false;
   (async () => {
     if (message.provider !== undefined && !['github','gitlab'].includes(message.provider)) throw new Error('Unsupported repository provider.');
+    if(pdfSender(sender)&&!['pdf-file','project-inventory'].includes(message.type))throw new Error('PDF viewer only reads PDF files and project inventory.');
     if(analysisSender(sender)&&!['project-inventory','project-file'].includes(message.type))throw new Error('Analysis viewers can only read project inventory and source files.');
     let senderOrigin;try{senderOrigin=new URL(sender.url).origin;}catch{}
     if(senderOrigin?.startsWith('https://')&&senderOrigin!=='https://github.com'&&message.provider!=='gitlab')throw new Error('GitLab pages must specify the GitLab provider.');
@@ -927,6 +932,9 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       case "comment-store-status":
         if (!viewerSender(sender) && !optionsSender(sender)) throw new Error("Only extension pages can inspect comment storage.");
         return KiCadReviewFileStore.status();
+      case "pdf-file":
+        if(!viewerSender(sender)&&!pdfSender(sender))throw Error("Only owned viewers can retrieve PDFs.");
+        return githubAsset(message.repository,message.ref,message.file,true);
       case "repo-asset":
         if (!viewerSender(sender)) throw new Error("Only extension viewers can retrieve 3D models.");
         return githubAsset(message.repository, message.ref, message.file);
@@ -937,7 +945,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         const content=await githubFile(message.repository,message.ref,path);if(content===null)throw new Error("Report was not found at this revision.");if(new TextEncoder().encode(content).byteLength>4*1024*1024)throw new Error("Rule report exceeds 4 MiB.");return {content,path};
       }
       case "project-inventory":
-        if(!viewerSender(sender)&&!analysisSender(sender))throw new Error('Only extension viewers can inspect project files.');return projectInventory(message.repository,message.ref,message.file);
+        if(!viewerSender(sender)&&!pdfSender(sender)&&!analysisSender(sender))throw new Error('Only extension viewers can inspect project files.');return projectInventory(message.repository,message.ref,message.file);
       case 'revision-branches':
         if(!viewerSender(sender))throw new Error('Only extension viewers can list branches.');return revisionBranches(message.repository,message.ref,message.file);
       case 'revision-commits':
@@ -945,7 +953,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       case 'revision-resolve':
         if(!viewerSender(sender))throw new Error('Only extension viewers can resolve revisions.');return revisionResolve(message.repository,message.ref,message.file);
       case "project-file":
-        if(!viewerSender(sender)&&!analysisSender(sender))throw new Error('Only extension viewers can read project settings.');return projectFile(message.repository,message.ref,message.file);
+        if(!viewerSender(sender)&&!pdfSender(sender)&&!analysisSender(sender))throw new Error('Only extension viewers can read project settings.');return projectFile(message.repository,message.ref,message.file);
       case "open-project-overview":
         if(!viewerSender(sender))throw new Error('Only extension viewers can open projects.');return openProjectWindow(message.repository,message.ref,message.file);
       case "project-search-files":

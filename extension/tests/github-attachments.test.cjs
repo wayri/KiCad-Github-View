@@ -6,11 +6,12 @@ const note = type => ({id: 'capture-' + type, text: 'Inspect U1', threadType: ty
   anchor: {repository: 'owner/board', ref: 'main', file: 'board.kicad_pcb', reference: 'U1'},
   capture: {mime: 'image/png', width: 1, height: 1, dataUrl: 'data:image/png;base64,' + png.toString('base64')}});
 async function harness(options = {}) {
+  let clock=Date.now();class TestDate extends Date{static now(){return clock;}}
   const local = new Map(), session = new Map(), calls = [];
   const area = map => ({get: async key => ({[key]: map.get(key)}), set: async values => {for (const [key, value] of Object.entries(values)) map.set(key, value);}, remove: async keys => {for (const key of [].concat(keys)) map.delete(key);}});
   const json = value => new Response(JSON.stringify(value), {headers: {'content-type': 'application/json'}});
   let api, issueFailures = options.issueFailures || 0;
-  const context = vm.createContext({crypto: require('node:crypto').webcrypto, TextEncoder, TextDecoder, URLSearchParams, AbortController, setTimeout, clearTimeout, atob, KiCadReviewComments: comments,
+  const context = vm.createContext({Date:TestDate,crypto: require('node:crypto').webcrypto, TextEncoder, TextDecoder, URLSearchParams, AbortController, setTimeout, clearTimeout, atob, KiCadReviewComments: comments,
     chrome: {storage: {session: area(session), local: area(local)}}, fetch: async (url, init) => {
       calls.push({url, init: {...init, body: init.body instanceof Uint8Array || Object.prototype.toString.call(init.body) === '[object Uint8Array]' ? Buffer.from(init.body) : init.body}});
       assert.equal(init.redirect, 'error'); assert.equal(init.credentials, 'omit');
@@ -42,7 +43,7 @@ async function harness(options = {}) {
   vm.runInContext(fs.readFileSync(require.resolve('../github-review-api.js'), 'utf8'), context);
   api = context.KiCadGitHubReviewApi;
   await api.setToken(options.token || 'gho_capture_token_1234567890');
-  return {api, calls, local};
+  return {api, calls, local,advance(ms){clock+=ms;}};
 }
 const uploads = h => h.calls.filter(call => call.url.startsWith('https://uploads.github.com/'));
 const posts = h => h.calls.filter(call => call.url.includes('/issues') || call.url.endsWith('/graphql') && JSON.parse(call.init.body).query.includes('mutation'));
@@ -91,7 +92,7 @@ test('upload failures and untrusted attachment URLs never publish a text-only re
 test('definitive post failure retains the upload receipt and retries only the Issue', async () => {
   const h = await harness({issueFailures: 1}); await assert.rejects(h.api.publish(message('new-issue')), /rejected/);
   assert.equal(uploads(h).length, 1);
-  const result = await h.api.publish(message('new-issue')); assert.equal(result.attachments[0].url, asset);
+  h.advance(3000);const result = await h.api.publish(message('new-issue')); assert.equal(result.attachments[0].url, asset);
   assert.equal(uploads(h).length, 1); assert.equal(posts(h).length, 2);
 });
 test('unconfirmed post failure retains pending receipt and never retries upload or publication automatically', async () => {

@@ -909,6 +909,7 @@ const KiCadGitHubReviewApi = (() => {
     const policy = await commentPolicyStatus(repository);
     if (!policy.allowed) throw fail(`Repository comment policy blocked publication: ${policy.reason}`, true);
     if (publicationEpoch !== authEpoch) throw fail("GitHub account changed or signed out. Review and publish again.", true);
+    await KiCadReviewComments.reservePublication(chrome.storage.local, JSON.stringify(['github','https://github.com']), Date.now());
     const attachments = note.capture ? [await uploadCapture(note, repository, token, publicationEpoch)] : note.attachments;
     const body = KiCadReviewComments.toMarkdown(attachments ? { ...note, attachments } : note);
     await assertCurrentToken(token, publicationEpoch);

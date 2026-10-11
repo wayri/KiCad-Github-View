@@ -7,7 +7,15 @@ test('Android imported source transport discovers scattered schematic hierarchy 
  const api=local.transport(project(),store()),reply=await api.send({type:'project',repository:api.scope,ref:api.ref,file:'design/main.kicad_sch'});assert.equal(reply.ok,true);assert.ok(reply.result.some(f=>f.path==='shared/power.kicad_sch'));
  const inventory=await api.send({type:'project-inventory'});assert.equal(inventory.result.files.length,4);
  const asset=await api.send({type:'repo-asset',file:'models/header.step'});assert.equal(asset.result.base64,'QUJD');
+ const models=await api.send({type:'repo-model-index'});assert.deepEqual(models.result.paths,['models/header.step']);
+ assert.equal((await api.send({type:'repo-model-index',repository:'other/repo'})).ok,false);
  assert.equal((await api.send({type:'project-file',file:'../private.kicad_sch'})).ok,false);assert.equal((await api.send({type:'project-file',file:'design/main.kicad_pro',repository:'other/repo'})).ok,false);
+});
+test('GLB and VRML repository geometry remains binary in local project transport',async()=>{
+ const value=project();value.assets=[{path:'models/body.glb',base64:'QUJD'},{path:'models/body.vrml',base64:'QUJD'}];
+ const api=local.transport(value,store());
+ assert.deepEqual((await api.send({type:'repo-model-index'})).result.paths,['models/body.glb','models/body.vrml']);
+ assert.equal((await api.send({type:'repo-asset',file:'models/body.glb'})).result.base64,'QUJD');
 });
 test('Android imports reject traversal, executable sources, duplicates, invalid binaries and missing drawings',()=>{
  for(const path of ['../x.kicad_sch','/x.kicad_sch','x\\evil.kicad_sch','x:kicad_sch','executable.js'])assert.throws(()=>local.validate({files:[{path,content:''}]}));
@@ -65,4 +73,11 @@ test('disk manifests refuse external URLs, oversized files and oversized combine
 });
 test('local project retains its bounded display name for the compact header',()=>{
  const project=local.validate({id:'named',name:'Marble board',files:[{path:'root.kicad_sch',content:'(kicad_sch)'}]});assert.equal(project.name,'Marble board');
+});
+test('temporary disk projects preserve expiry and prevent stale or substituted paths',async()=>{
+ const entry={path:'main.kicad_pcb',size:50*1024*1024,diskPath:'/assets/viewer/temporary-downloads/'+ 'b'.repeat(32)+'/0'};
+ const input={id:'temp',temporary:true,diskBacked:true,expiresAt:Date.now()+3600000,files:[entry],assets:[]};
+ const project=local.validate(input);assert.equal(project.temporary,true);assert.equal(project.expiresAt,input.expiresAt);
+ for(const patch of [{expiresAt:Date.now()-1},{diskBacked:false},{files:[{...entry,diskPath:entry.diskPath.replace('temporary-downloads','downloaded')}]},{files:[{...entry,diskPath:'/assets/viewer/temporary-downloads/../0'}]}])assert.throws(()=>local.validate({...input,...patch}));
+ project.expiresAt=Date.now()-1;const transport=local.transport(project,{getItem:()=>null,setItem(){}});assert.match((await transport.send({type:'project-file',file:entry.path})).error,/expired/);
 });

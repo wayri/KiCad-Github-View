@@ -1,0 +1,1411 @@
+{
+  "model": "coupled-air lumped electrothermal RC transient",
+  "status": "computed_unqualified",
+  "model_sha256": "59bbec58969f0a1d9963e58b8a1af2d5efed36fba72c72170c865e278e5734a8",
+  "air_topology": "serial_boards",
+  "air_flow_direction": null,
+  "blade_pitch_mm": null,
+  "passage_flow_fractions": null,
+  "passage_flow_allocation": null,
+  "fan_operating_point": {
+    "total_m3_s": 0.012360679774997899,
+    "board_channel_m3_s": 0.011124611797498109,
+    "bypass_fraction": 0.1,
+    "pressure_pa": 38.196601125010524,
+    "fans_parallel": 1,
+    "source": "declared_fan_curve_system_intersection"
+  },
+  "max_energy_residual_w": 8.526512829121202e-14,
+  "history": [
+    {
+      "time_s": 1.0,
+      "boards": [
+        {
+          "name": "B0",
+          "inlet_air_c": 40.0,
+          "outlet_air_c": 40.00428051319775,
+          "power_w": 2.0,
+          "flow_m3_s": 0.011124611797498109,
+          "air_stages": [],
+          "air_heat_w": 0.05714285714285694,
+          "fixture_heat_w": 0.0,
+          "stored_heat_w": 1.942857142857136,
+          "energy_residual_w": 7.105427357601002e-15,
+          "temperatures_c": {
+            "board": 40.05714285714286,
+            "Q1": 40.68571428571428
+          }
+        },
+        {
+          "name": "B1",
+          "inlet_air_c": 40.00428051319775,
+          "outlet_air_c": 40.00826786170372,
+          "power_w": 2.0,
+          "flow_m3_s": 0.011124611797498109,
+          "air_stages": [],
+          "air_heat_w": 0.053229245076344966,
+          "fixture_heat_w": 0.0,
+          "stored_heat_w": 1.9467707549236763,
+          "energy_residual_w": -2.1316282072803006e-14,
+          "temperatures_c": {
+            "board": 40.057509758274094,
+            "Q1": 40.68583658609137
+          }
+        },
+        {
+          "name": "B2",
+          "inlet_air_c": 40.00826786170372,
+          "outlet_air_c": 40.01198212384323,
+          "power_w": 2.0,
+          "flow_m3_s": 0.011124611797498109,
+          "air_stages": [],
+          "air_heat_w": 0.04958366929945157,
+          "fixture_heat_w": 0.0,
+          "stored_heat_w": 1.95041633070052,
+          "energy_residual_w": 2.842170943040401e-14,
+          "temperatures_c": {
+            "board": 40.05785153100317,
+            "Q1": 40.68595051033439
+          }
+        },
+        {
+          "name": "B3",
+          "inlet_air_c": 40.01198212384323,
+          "outlet_air_c": 40.01544200281302,
+          "power_w": 2.0,
+          "flow_m3_s": 0.011124611797498109,
+          "air_stages": [],
+          "air_heat_w": 0.046187772486185,
+          "fixture_heat_w": 0.0,
+          "stored_heat_w": 1.9538122275137795,
+          "energy_residual_w": 3.552713678800501e-14,
+          "temperatures_c": {
+            "board": 40.05816989632942,
+            "Q1": 40.6860566321098
+          }
+        }
+      ]
+    },
+    {
+      "time_s": 2.0,
+      "boards": [
+        {
+          "name": "B0",
+          "inlet_air_c": 40.0,
+          "outlet_air_c": 40.01088473356,
+          "power_w": 2.0,
+          "flow_m3_s": 0.011124611797498109,
+          "air_stages": [],
+          "air_heat_w": 0.14530612244897867,
+          "fixture_heat_w": 0.0,
+          "stored_heat_w": 1.8546938775510284,
+          "energy_residual_w": -7.105427357601002e-15,
+          "temperatures_c": {
+            "board": 40.14530612244898,
+            "Q1": 41.17224489795919
+          }
+        },
+        {
+          "name": "B1",
+          "inlet_air_c": 40.01088473356,
+          "outlet_air_c": 40.02104807257487,
+          "power_w": 2.0,
+          "flow_m3_s": 0.011124611797498109,
+          "air_stages": [],
+          "air_heat_w": 0.13567584132815824,
+          "fixture_heat_w": 0.0,
+          "stored_heat_w": 1.8643241586718062,
+          "energy_residual_w": 3.552713678800501e-14,
+          "temperatures_c": {
+            "board": 40.146560574888156,
+            "Q1": 41.17274458235696
+          }
+        },
+        {
+          "name": "B2",
+          "inlet_air_c": 40.02104807257487,
+          "outlet_air_c": 40.030537774775546,
+          "power_w": 2.0,
+          "flow_m3_s": 0.011124611797498109,
+          "air_stages": [],
+          "air_heat_w": 0.12668310366765922,
+          "fixture_heat_w": 0.0,
+          "stored_heat_w": 1.8733168963323266,
+          "energy_residual_w": 1.4210854715202004e-14,
+          "temperatures_c": {
+            "board": 40.14773117624253,
+            "Q1": 41.17321073230377
+          }
+        },
+        {
+          "name": "B3",
+          "inlet_air_c": 40.030537774775546,
+          "outlet_air_c": 40.03939844000839,
+          "power_w": 2.0,
+          "flow_m3_s": 0.011124611797498109,
+          "air_stages": [],
+          "air_heat_w": 0.11828575317955625,
+          "fixture_heat_w": 0.0,
+          "stored_heat_w": 1.8817142468203798,
+          "energy_residual_w": 6.394884621840902e-14,
+          "temperatures_c": {
+            "board": 40.1488235279551,
+            "Q1": 41.17364559739157
+          }
+        }
+      ]
+    },
+    {
+      "time_s": 3.0,
+      "boards": [
+        {
+          "name": "B0",
+          "inlet_air_c": 40.0,
+          "outlet_air_c": 40.018628094577316,
+          "power_w": 2.0,
+          "flow_m3_s": 0.011124611797498109,
+          "air_stages": [],
+          "air_heat_w": 0.24867638483964782,
+          "fixture_heat_w": 0.0,
+          "stored_heat_w": 1.751323615160345,
+          "energy_residual_w": 7.105427357601002e-15,
+          "temperatures_c": {
+            "board": 40.24867638483965,
+            "Q1": 41.531055393586016
+          }
+        },
+        {
+          "name": "B1",
+          "inlet_air_c": 40.018628094577316,
+          "outlet_air_c": 40.03606306868863,
+          "power_w": 2.0,
+          "flow_m3_s": 0.011124611797498109,
+          "air_stages": [],
+          "air_heat_w": 0.23274878242527564,
+          "fixture_heat_w": 0.0,
+          "stored_heat_w": 1.7672512175747812,
+          "energy_residual_w": -5.684341886080802e-14,
+          "temperatures_c": {
+            "board": 40.25137687700259,
+            "Q1": 41.53228868057217
+          }
+        },
+        {
+          "name": "B2",
+          "inlet_air_c": 40.03606306868863,
+          "outlet_air_c": 40.05238110959056,
+          "power_w": 2.0,
+          "flow_m3_s": 0.011124611797498109,
+          "air_stages": [],
+          "air_heat_w": 0.2178382443956437,
+          "fixture_heat_w": 0.0,
+          "stored_heat_w": 1.782161755604406,
+          "energy_residual_w": -4.973799150320701e-14,
+          "temperatures_c": {
+            "board": 40.25390131308427,
+            "Q1": 41.533440925897274
+          }
+        },
+        {
+          "name": "B3",
+          "inlet_air_c": 40.05238110959056,
+          "outlet_air_c": 40.067653555896,
+          "power_w": 2.0,
+          "flow_m3_s": 0.011124611797498109,
+          "air_stages": [],
+          "air_heat_w": 0.20388004361537782,
+          "fixture_heat_w": 0.0,
+          "stored_heat_w": 1.7961199563846293,
+          "energy_residual_w": -7.105427357601002e-15,
+          "temperatures_c": {
+            "board": 40.25626115320594,
+            "Q1": 41.53451744932969
+          }
+        }
+      ]
+    },
+    {
+      "time_s": 4.0,
+      "boards": [
+        {
+          "name": "B0",
+          "inlet_air_c": 40.0,
+          "outlet_air_c": 40.02680115422561,
+          "power_w": 2.0,
+          "flow_m3_s": 0.011124611797498109,
+          "air_stages": [],
+          "air_heat_w": 0.35778292378175536,
+          "fixture_heat_w": 0.0,
+          "stored_heat_w": 1.6422170762182446,
+          "energy_residual_w": 0.0,
+          "temperatures_c": {
+            "board": 40.357782923781755,
+            "Q1": 41.8066312369846
+          }
+        },
+        {
+          "name": "B1",
+          "inlet_air_c": 40.02680115422561,
+          "outlet_air_c": 40.05194541682756,
+          "power_w": 2.0,
+          "flow_m3_s": 0.011124611797498109,
+          "air_stages": [],
+          "air_heat_w": 0.3356641924572159,
+          "fixture_heat_w": 0.0,
+          "stored_heat_w": 1.6643358075427699,
+          "energy_residual_w": 1.4210854715202004e-14,
+          "temperatures_c": {
+            "board": 40.362465346682825,
+            "Q1": 41.80901423594239
+          }
+        },
+        {
+          "name": "B2",
+          "inlet_air_c": 40.05194541682756,
+          "outlet_air_c": 40.075534614293645,
+          "power_w": 2.0,
+          "flow_m3_s": 0.011124611797498109,
+          "air_stages": [],
+          "air_heat_w": 0.31490479730973675,
+          "fixture_heat_w": 0.0,
+          "stored_heat_w": 1.685095202690249,
+          "energy_residual_w": 1.4210854715202004e-14,
+          "temperatures_c": {
+            "board": 40.366850214137294,
+            "Q1": 41.81124402197728
+          }
+        },
+        {
+          "name": "B3",
+          "inlet_air_c": 40.075534614293645,
+          "outlet_air_c": 40.09766435779703,
+          "power_w": 2.0,
+          "flow_m3_s": 0.011124611797498109,
+          "air_stages": [],
+          "air_heat_w": 0.295421766784024,
+          "fixture_heat_w": 0.0,
+          "stored_heat_w": 1.7045782332159405,
+          "energy_residual_w": 3.552713678800501e-14,
+          "temperatures_c": {
+            "board": 40.37095638107767,
+            "Q1": 41.81333042657902
+          }
+        }
+      ]
+    },
+    {
+      "time_s": 5.0,
+      "boards": [
+        {
+          "name": "B0",
+          "inlet_air_c": 40.0,
+          "outlet_air_c": 40.0349862399588,
+          "power_w": 2.0,
+          "flow_m3_s": 0.011124611797498109,
+          "air_stages": [],
+          "air_heat_w": 0.46705000535491337,
+          "fixture_heat_w": 0.0,
+          "stored_heat_w": 1.5329499946451222,
+          "energy_residual_w": -3.552713678800501e-14,
+          "temperatures_c": {
+            "board": 40.46705000535491,
+            "Q1": 42.02677082644137
+          }
+        },
+        {
+          "name": "B1",
+          "inlet_air_c": 40.0349862399588,
+          "outlet_air_c": 40.06788718298134,
+          "power_w": 2.0,
+          "flow_m3_s": 0.011124611797498109,
+          "air_stages": [],
+          "air_heat_w": 0.43921226267680424,
+          "fixture_heat_w": 0.0,
+          "stored_heat_w": 1.5607877373232526,
+          "energy_residual_w": -5.684341886080802e-14,
+          "temperatures_c": {
+            "board": 40.4741985026356,
+            "Q1": 42.03074232484013
+          }
+        },
+        {
+          "name": "B2",
+          "inlet_air_c": 40.06788718298134,
+          "outlet_air_c": 40.09882588614434,
+          "power_w": 2.0,
+          "flow_m3_s": 0.011124611797498109,
+          "air_stages": [],
+          "air_heat_w": 0.4130172746477285,
+          "fixture_heat_w": 0.0,
+          "stored_heat_w": 1.5869827253522573,
+          "energy_residual_w": 1.4210854715202004e-14,
+          "temperatures_c": {
+            "board": 40.480904457629066,
+            "Q1": 42.03446416719455
+          }
+        },
+        {
+          "name": "B3",
+          "inlet_air_c": 40.09882588614434,
+          "outlet_air_c": 40.127918231281114,
+          "power_w": 2.0,
+          "flow_m3_s": 0.011124611797498109,
+          "air_stages": [],
+          "air_heat_w": 0.388369255110554,
+          "fixture_heat_w": 0.0,
+          "stored_heat_w": 1.6116307448894958,
+          "energy_residual_w": -4.973799150320701e-14,
+          "temperatures_c": {
+            "board": 40.487195141254894,
+            "Q1": 42.03795199813764
+          }
+        }
+      ]
+    },
+    {
+      "time_s": 6.0,
+      "boards": [
+        {
+          "name": "B0",
+          "inlet_air_c": 40.0,
+          "outlet_air_c": 40.04294433814812,
+          "power_w": 2.0,
+          "flow_m3_s": 0.011124611797498109,
+          "air_stages": [],
+          "air_heat_w": 0.5732869089580035,
+          "fixture_heat_w": 0.0,
+          "stored_heat_w": 1.4267130910420036,
+          "energy_residual_w": -7.105427357601002e-15,
+          "temperatures_c": {
+            "board": 40.573286908958,
+            "Q1": 42.20894285394692
+          }
+        },
+        {
+          "name": "B1",
+          "inlet_air_c": 40.04294433814812,
+          "outlet_air_c": 40.08342348400247,
+          "power_w": 2.0,
+          "flow_m3_s": 0.011124611797498109,
+          "air_stages": [],
+          "air_heat_w": 0.5403777402288128,
+          "fixture_heat_w": 0.0,
+          "stored_heat_w": 1.4596222597711517,
+          "energy_residual_w": 3.552713678800501e-14,
+          "temperatures_c": {
+            "board": 40.58332207837693,
+            "Q1": 42.214935576019066
+          }
+        },
+        {
+          "name": "B2",
+          "inlet_air_c": 40.08342348400247,
+          "outlet_air_c": 40.12157679089593,
+          "power_w": 2.0,
+          "flow_m3_s": 0.011124611797498109,
+          "air_stages": [],
+          "air_heat_w": 0.5093288735766279,
+          "fixture_heat_w": 0.0,
+          "stored_heat_w": 1.4906711264233934,
+          "energy_residual_w": -2.1316282072803006e-14,
+          "temperatures_c": {
+            "board": 40.5927523575791,
+            "Q1": 42.22056023065607
+          }
+        },
+        {
+          "name": "B3",
+          "inlet_air_c": 40.12157679089593,
+          "outlet_air_c": 40.157535886070896,
+          "power_w": 2.0,
+          "flow_m3_s": 0.011124611797498109,
+          "air_stages": [],
+          "air_heat_w": 0.4800371692929204,
+          "fixture_heat_w": 0.0,
+          "stored_heat_w": 1.5199628307070299,
+          "energy_residual_w": 4.973799150320701e-14,
+          "temperatures_c": {
+            "board": 40.60161396018885,
+            "Q1": 42.22583931882138
+          }
+        }
+      ]
+    },
+    {
+      "time_s": 7.0,
+      "boards": [
+        {
+          "name": "B0",
+          "inlet_air_c": 40.0,
+          "outlet_air_c": 40.05054535493554,
+          "power_w": 2.0,
+          "flow_m3_s": 0.011124611797498109,
+          "air_stages": [],
+          "air_heat_w": 0.6747569421895392,
+          "fixture_heat_w": 0.0,
+          "stored_heat_w": 1.3252430578104395,
+          "energy_residual_w": 2.1316282072803006e-14,
+          "temperatures_c": {
+            "board": 40.67475694218954,
+            "Q1": 42.364214216694464
+          }
+        },
+        {
+          "name": "B1",
+          "inlet_air_c": 40.05054535493554,
+          "outlet_air_c": 40.0982989359819,
+          "power_w": 2.0,
+          "flow_m3_s": 0.011124611797498109,
+          "air_stages": [],
+          "air_heat_w": 0.6374880612973968,
+          "fixture_heat_w": 0.0,
+          "stored_heat_w": 1.3625119387026103,
+          "energy_residual_w": -7.105427357601002e-15,
+          "temperatures_c": {
+            "board": 40.68803341623293,
+            "Q1": 42.37263485609036
+          }
+        },
+        {
+          "name": "B2",
+          "inlet_air_c": 40.0982989359819,
+          "outlet_air_c": 40.14341153261288,
+          "power_w": 2.0,
+          "flow_m3_s": 0.011124611797498109,
+          "air_stages": [],
+          "air_heat_w": 0.60223214963613,
+          "fixture_heat_w": 0.0,
+          "stored_heat_w": 1.3977678503639481,
+          "energy_residual_w": -7.815970093361102e-14,
+          "temperatures_c": {
+            "board": 40.70053108561803,
+            "Q1": 42.38055051564339
+          }
+        },
+        {
+          "name": "B3",
+          "inlet_air_c": 40.14341153261288,
+          "outlet_air_c": 40.18602602851007,
+          "power_w": 2.0,
+          "flow_m3_s": 0.011124611797498109,
+          "air_stages": [],
+          "air_heat_w": 0.5688836685627479,
+          "fixture_heat_w": 0.0,
+          "stored_heat_w": 1.4311163314372806,
+          "energy_residual_w": -2.842170943040401e-14,
+          "temperatures_c": {
+            "board": 40.71229520117563,
+            "Q1": 42.387991279606126
+          }
+        }
+      ]
+    },
+    {
+      "time_s": 8.0,
+      "boards": [
+        {
+          "name": "B0",
+          "inlet_air_c": 40.0,
+          "outlet_air_c": 40.05772515329937,
+          "power_w": 2.0,
+          "flow_m3_s": 0.011124611797498109,
+          "air_stages": [],
+          "air_heat_w": 0.7706039056878637,
+          "fixture_heat_w": 0.0,
+          "stored_heat_w": 1.229396094312193,
+          "energy_residual_w": -5.684341886080802e-14,
+          "temperatures_c": {
+            "board": 40.770603905687864,
+            "Q1": 42.49967744635894
+          }
+        },
+        {
+          "name": "B1",
+          "inlet_air_c": 40.05772515329937,
+          "outlet_air_c": 40.1123853106036,
+          "power_w": 2.0,
+          "flow_m3_s": 0.011124611797498109,
+          "air_stages": [],
+          "air_heat_w": 0.7296876369596816,
+          "fixture_heat_w": 0.0,
+          "stored_heat_w": 1.2703123630403468,
+          "energy_residual_w": -2.842170943040401e-14,
+          "temperatures_c": {
+            "board": 40.787412790259054,
+            "Q1": 42.510894167479925
+          }
+        },
+        {
+          "name": "B2",
+          "inlet_air_c": 40.1123853106036,
+          "outlet_air_c": 40.16413822117846,
+          "power_w": 2.0,
+          "flow_m3_s": 0.011124611797498109,
+          "air_stages": [],
+          "air_heat_w": 0.6908772474432112,
+          "fixture_heat_w": 0.0,
+          "stored_heat_w": 1.3091227525567461,
+          "energy_residual_w": 4.263256414560601e-14,
+          "temperatures_c": {
+            "board": 40.80326255804681,
+            "Q1": 42.52145452977787
+          }
+        },
+        {
+          "name": "B3",
+          "inlet_air_c": 40.16413822117846,
+          "outlet_air_c": 40.21313386455243,
+          "power_w": 2.0,
+          "flow_m3_s": 0.011124611797498109,
+          "air_stages": [],
+          "air_heat_w": 0.6540690147648718,
+          "fixture_heat_w": 0.0,
+          "stored_heat_w": 1.345930985235185,
+          "energy_residual_w": -5.684341886080802e-14,
+          "temperatures_c": {
+            "board": 40.81820723594333,
+            "Q1": 42.53139659838519
+          }
+        }
+      ]
+    },
+    {
+      "time_s": 9.0,
+      "boards": [
+        {
+          "name": "B0",
+          "inlet_air_c": 40.0,
+          "outlet_air_c": 40.06445911832504,
+          "power_w": 2.0,
+          "flow_m3_s": 0.011124611797498109,
+          "air_stages": [],
+          "air_heat_w": 0.8604992018101072,
+          "fixture_heat_w": 0.0,
+          "stored_heat_w": 1.1395007981898857,
+          "energy_residual_w": 7.105427357601002e-15,
+          "temperatures_c": {
+            "board": 40.86049920181011,
+            "Q1": 42.61995136484266
+          }
+        },
+        {
+          "name": "B1",
+          "inlet_air_c": 40.06445911832504,
+          "outlet_air_c": 40.12563082004928,
+          "power_w": 2.0,
+          "flow_m3_s": 0.011124611797498109,
+          "air_stages": [],
+          "air_heat_w": 0.8166137216094356,
+          "fixture_heat_w": 0.0,
+          "stored_heat_w": 1.1833862783905857,
+          "energy_residual_w": -2.1316282072803006e-14,
+          "temperatures_c": {
+            "board": 40.881072839934475,
+            "Q1": 42.63428705829811
+          }
+        },
+        {
+          "name": "B2",
+          "inlet_air_c": 40.12563082004928,
+          "outlet_air_c": 40.18367586222171,
+          "power_w": 2.0,
+          "flow_m3_s": 0.011124611797498109,
+          "air_stages": [],
+          "air_heat_w": 0.7748742731252349,
+          "fixture_heat_w": 0.0,
+          "stored_heat_w": 1.225125726874822,
+          "energy_residual_w": -5.684341886080802e-14,
+          "temperatures_c": {
+            "board": 40.900505093174516,
+            "Q1": 42.647804717576754
+          }
+        },
+        {
+          "name": "B3",
+          "inlet_air_c": 40.18367586222171,
+          "outlet_air_c": 40.23874762380928,
+          "power_w": 2.0,
+          "flow_m3_s": 0.011124611797498109,
+          "air_stages": [],
+          "air_heat_w": 0.735182362399307,
+          "fixture_heat_w": 0.0,
+          "stored_heat_w": 1.2648176376007427,
+          "energy_residual_w": -4.973799150320701e-14,
+          "temperatures_c": {
+            "board": 40.91885822462102,
+            "Q1": 42.66055047379714
+          }
+        }
+      ]
+    },
+    {
+      "time_s": 10.0,
+      "boards": [
+        {
+          "name": "B0",
+          "inlet_air_c": 40.0,
+          "outlet_air_c": 40.07074592244246,
+          "power_w": 2.0,
+          "flow_m3_s": 0.011124611797498109,
+          "air_stages": [],
+          "air_heat_w": 0.9444251081139612,
+          "fixture_heat_w": 0.0,
+          "stored_heat_w": 1.0555748918860672,
+          "energy_residual_w": -2.842170943040401e-14,
+          "temperatures_c": {
+            "board": 40.94442510811396,
+            "Q1": 42.72810927926643
+          }
+        },
+        {
+          "name": "B1",
+          "inlet_air_c": 40.07074592244246,
+          "outlet_air_c": 40.13802893327748,
+          "power_w": 2.0,
+          "flow_m3_s": 0.011124611797498109,
+          "air_stages": [],
+          "air_heat_w": 0.8981968513277607,
+          "fixture_heat_w": 0.0,
+          "stored_heat_w": 1.101803148672218,
+          "energy_residual_w": 2.1316282072803006e-14,
+          "temperatures_c": {
+            "board": 40.96894277377022,
+            "Q1": 42.74583896345548
+          }
+        },
+        {
+          "name": "B2",
+          "inlet_air_c": 40.13802893327748,
+          "outlet_air_c": 40.20200941382447,
+          "power_w": 2.0,
+          "flow_m3_s": 0.011124611797498109,
+          "air_stages": [],
+          "air_heat_w": 0.8541096104431318,
+          "fixture_heat_w": 0.0,
+          "stored_heat_w": 1.1458903895568824,
+          "energy_residual_w": -1.4210854715202004e-14,
+          "temperatures_c": {
+            "board": 40.992138543720614,
+            "Q1": 42.762582659624705
+          }
+        },
+        {
+          "name": "B3",
+          "inlet_air_c": 40.20200941382447,
+          "outlet_air_c": 40.26284095640775,
+          "power_w": 2.0,
+          "flow_m3_s": 0.011124611797498109,
+          "air_stages": [],
+          "air_heat_w": 0.8120727555383382,
+          "fixture_heat_w": 0.0,
+          "stored_heat_w": 1.187927244461676,
+          "energy_residual_w": -1.4210854715202004e-14,
+          "temperatures_c": {
+            "board": 41.01408216936281,
+            "Q1": 42.77839437231903
+          }
+        }
+      ]
+    },
+    {
+      "time_s": 11.0,
+      "boards": [
+        {
+          "name": "B0",
+          "inlet_air_c": 40.0,
+          "outlet_air_c": 40.076597583066096,
+          "power_w": 2.0,
+          "flow_m3_s": 0.011124611797498109,
+          "air_stages": [],
+          "air_heat_w": 1.0225420514843293,
+          "fixture_heat_w": 0.0,
+          "stored_heat_w": 0.977457948515621,
+          "energy_residual_w": 4.973799150320701e-14,
+          "temperatures_c": {
+            "board": 41.02254205148433,
+            "Q1": 42.8262535366724
+          }
+        },
+        {
+          "name": "B1",
+          "inlet_air_c": 40.076597583066096,
+          "outlet_air_c": 40.14959924970697,
+          "power_w": 2.0,
+          "flow_m3_s": 0.011124611797498109,
+          "air_stages": [],
+          "air_heat_w": 0.974538242340067,
+          "fixture_heat_w": 0.0,
+          "stored_heat_w": 1.0254617576598548,
+          "energy_residual_w": 7.815970093361102e-14,
+          "temperatures_c": {
+            "board": 41.05113582540616,
+            "Q1": 42.84760458410571
+          }
+        },
+        {
+          "name": "B2",
+          "inlet_air_c": 40.14959924970697,
+          "outlet_air_c": 40.21916218139111,
+          "power_w": 2.0,
+          "flow_m3_s": 0.011124611797498109,
+          "air_stages": [],
+          "air_heat_w": 0.9286327325784285,
+          "fixture_heat_w": 0.0,
+          "stored_heat_w": 1.071367267421607,
+          "energy_residual_w": -3.552713678800501e-14,
+          "temperatures_c": {
+            "board": 41.078231982285395,
+            "Q1": 42.867799100511604
+          }
+        },
+        {
+          "name": "B3",
+          "inlet_air_c": 40.21916218139111,
+          "outlet_air_c": 40.285437504253274,
+          "power_w": 2.0,
+          "flow_m3_s": 0.011124611797498109,
+          "air_stages": [],
+          "air_heat_w": 0.8847446863144768,
+          "fixture_heat_w": 0.0,
+          "stored_heat_w": 1.1152553136855232,
+          "energy_residual_w": 0.0,
+          "temperatures_c": {
+            "board": 41.10390686770559,
+            "Q1": 42.886898537447884
+          }
+        }
+      ]
+    },
+    {
+      "time_s": 12.0,
+      "boards": [
+        {
+          "name": "B0",
+          "inlet_air_c": 40.0,
+          "outlet_air_c": 40.082033399961176,
+          "power_w": 2.0,
+          "flow_m3_s": 0.011124611797498109,
+          "air_stages": [],
+          "air_heat_w": 1.0951076747964237,
+          "fixture_heat_w": 0.0,
+          "stored_heat_w": 0.904892325203619,
+          "energy_residual_w": -4.263256414560601e-14,
+          "temperatures_c": {
+            "board": 41.095107674796424,
+            "Q1": 42.915871582713734
+          }
+        },
+        {
+          "name": "B1",
+          "inlet_air_c": 40.082033399961176,
+          "outlet_air_c": 40.16037581294332,
+          "power_w": 2.0,
+          "flow_m3_s": 0.011124611797498109,
+          "air_stages": [],
+          "air_heat_w": 1.0458347180468195,
+          "fixture_heat_w": 0.0,
+          "stored_heat_w": 0.9541652819531947,
+          "energy_residual_w": -1.4210854715202004e-14,
+          "temperatures_c": {
+            "board": 41.127868118007996,
+            "Q1": 42.941025762073146
+          }
+        },
+        {
+          "name": "B2",
+          "inlet_air_c": 40.16037581294332,
+          "outlet_air_c": 40.235178918953,
+          "power_w": 2.0,
+          "flow_m3_s": 0.011124611797498109,
+          "air_stages": [],
+          "air_heat_w": 0.9985866187256818,
+          "fixture_heat_w": 0.0,
+          "stored_heat_w": 1.0014133812743609,
+          "energy_residual_w": -4.263256414560601e-14,
+          "temperatures_c": {
+            "board": 41.158962431669,
+            "Q1": 42.96485354423074
+          }
+        },
+        {
+          "name": "B3",
+          "inlet_air_c": 40.235178918953,
+          "outlet_air_c": 40.30658917472281,
+          "power_w": 2.0,
+          "flow_m3_s": 0.011124611797498109,
+          "air_stages": [],
+          "air_heat_w": 0.9532936485590682,
+          "fixture_heat_w": 0.0,
+          "stored_heat_w": 1.0467063514408892,
+          "energy_residual_w": 4.263256414560601e-14,
+          "temperatures_c": {
+            "board": 41.188472567512065,
+            "Q1": 42.98742321413595
+          }
+        }
+      ]
+    },
+    {
+      "time_s": 13.0,
+      "boards": [
+        {
+          "name": "B0",
+          "inlet_air_c": 40.0,
+          "outlet_air_c": 40.08707628281437,
+          "power_w": 2.0,
+          "flow_m3_s": 0.011124611797498109,
+          "air_stages": [],
+          "air_heat_w": 1.1624278116948616,
+          "fixture_heat_w": 0.0,
+          "stored_heat_w": 0.8375721883051455,
+          "energy_residual_w": -7.105427357601002e-15,
+          "temperatures_c": {
+            "board": 41.16242781169486,
+            "Q1": 42.99805699237412
+          }
+        },
+        {
+          "name": "B1",
+          "inlet_air_c": 40.08707628281437,
+          "outlet_air_c": 40.17040001222367,
+          "power_w": 2.0,
+          "flow_m3_s": 0.011124611797498109,
+          "air_stages": [],
+          "air_heat_w": 1.112332971837894,
+          "fixture_heat_w": 0.0,
+          "stored_heat_w": 0.8876670281621273,
+          "energy_residual_w": -2.1316282072803006e-14,
+          "temperatures_c": {
+            "board": 41.19940925465227,
+            "Q1": 43.027153592932855
+          }
+        },
+        {
+          "name": "B2",
+          "inlet_air_c": 40.17040001222367,
+          "outlet_air_c": 40.25011553789423,
+          "power_w": 2.0,
+          "flow_m3_s": 0.011124611797498109,
+          "air_stages": [],
+          "air_heat_w": 1.0641651327821222,
+          "fixture_heat_w": 0.0,
+          "stored_heat_w": 0.935834867217963,
+          "energy_residual_w": -8.526512829121202e-14,
+          "temperatures_c": {
+            "board": 41.234565145005796,
+            "Q1": 43.05475741115576
+          }
+        },
+        {
+          "name": "B3",
+          "inlet_air_c": 40.25011553789423,
+          "outlet_air_c": 40.32636287746866,
+          "power_w": 2.0,
+          "flow_m3_s": 0.011124611797498109,
+          "air_stages": [],
+          "air_heat_w": 1.0178664640290975,
+          "fixture_heat_w": 0.0,
+          "stored_heat_w": 0.9821335359708883,
+          "energy_residual_w": 1.4210854715202004e-14,
+          "temperatures_c": {
+            "board": 41.26798200192333,
+            "Q1": 43.080942810065075
+          }
+        }
+      ]
+    },
+    {
+      "time_s": 14.0,
+      "boards": [
+        {
+          "name": "B0",
+          "inlet_air_c": 40.0,
+          "outlet_air_c": 40.09175054956211,
+          "power_w": 2.0,
+          "flow_m3_s": 0.011124611797498109,
+          "air_stages": [],
+          "air_heat_w": 1.224827095302686,
+          "fixture_heat_w": 0.0,
+          "stored_heat_w": 0.7751729046972997,
+          "energy_residual_w": 1.4210854715202004e-14,
+          "temperatures_c": {
+            "board": 41.224827095302686,
+            "Q1": 43.073647026683645
+          }
+        },
+        {
+          "name": "B1",
+          "inlet_air_c": 40.09175054956211,
+          "outlet_air_c": 40.179716309813855,
+          "power_w": 2.0,
+          "flow_m3_s": 0.011124611797498109,
+          "air_stages": [],
+          "air_heat_w": 1.1743019211270322,
+          "fixture_heat_w": 0.0,
+          "stored_heat_w": 0.8256980788729322,
+          "energy_residual_w": 3.552713678800501e-14,
+          "temperatures_c": {
+            "board": 41.26605247068914,
+            "Q1": 43.10678655218496
+          }
+        },
+        {
+          "name": "B2",
+          "inlet_air_c": 40.179716309813855,
+          "outlet_air_c": 40.26403288980005,
+          "power_w": 2.0,
+          "flow_m3_s": 0.011124611797498109,
+          "air_stages": [],
+          "air_heat_w": 1.1255870645269184,
+          "fixture_heat_w": 0.0,
+          "stored_heat_w": 0.8744129354731172,
+          "energy_residual_w": -3.552713678800501e-14,
+          "temperatures_c": {
+            "board": 41.305303374340774,
+            "Q1": 43.13827273221743
+          }
+        },
+        {
+          "name": "B3",
+          "inlet_air_c": 40.26403288980005,
+          "outlet_air_c": 40.344832484453086,
+          "power_w": 2.0,
+          "flow_m3_s": 0.011124611797498109,
+          "air_stages": [],
+          "air_heat_w": 1.0786369486922425,
+          "fixture_heat_w": 0.0,
+          "stored_heat_w": 0.9213630513077788,
+          "energy_residual_w": -2.1316282072803006e-14,
+          "temperatures_c": {
+            "board": 41.34266983849229,
+            "Q1": 43.16818515287415
+          }
+        }
+      ]
+    },
+    {
+      "time_s": 15.0,
+      "boards": [
+        {
+          "name": "B0",
+          "inlet_air_c": 40.0,
+          "outlet_air_c": 40.09608062805679,
+          "power_w": 2.0,
+          "flow_m3_s": 0.011124611797498109,
+          "air_stages": [],
+          "air_heat_w": 1.2826316260699429,
+          "fixture_heat_w": 0.0,
+          "stored_heat_w": 0.7173683739300998,
+          "energy_residual_w": -4.263256414560601e-14,
+          "temperatures_c": {
+            "board": 41.28263162606994,
+            "Q1": 43.14330855981241
+          }
+        },
+        {
+          "name": "B1",
+          "inlet_air_c": 40.09608062805679,
+          "outlet_air_c": 40.18836970639809,
+          "power_w": 2.0,
+          "flow_m3_s": 0.011124611797498109,
+          "air_stages": [],
+          "air_heat_w": 1.2320162036350553,
+          "fixture_heat_w": 0.0,
+          "stored_heat_w": 0.7679837963649874,
+          "energy_residual_w": -4.263256414560601e-14,
+          "temperatures_c": {
+            "board": 41.328096831691845,
+            "Q1": 43.180556645353924
+          }
+        },
+        {
+          "name": "B2",
+          "inlet_air_c": 40.18836970639809,
+          "outlet_air_c": 40.27699305802957,
+          "power_w": 2.0,
+          "flow_m3_s": 0.011124611797498109,
+          "air_stages": [],
+          "air_heat_w": 1.1830804597119808,
+          "fixture_heat_w": 0.0,
+          "stored_heat_w": 0.8169195402880973,
+          "energy_residual_w": -7.815970093361102e-14,
+          "temperatures_c": {
+            "board": 41.37145016611007,
+            "Q1": 43.215998543514985
+          }
+        },
+        {
+          "name": "B3",
+          "inlet_air_c": 40.27699305802957,
+          "outlet_air_c": 40.36207400999615,
+          "power_w": 2.0,
+          "flow_m3_s": 0.011124611797498109,
+          "air_stages": [],
+          "air_heat_w": 1.1357910743877468,
+          "fixture_heat_w": 0.0,
+          "stored_heat_w": 0.8642089256123313,
+          "energy_residual_w": -7.815970093361102e-14,
+          "temperatures_c": {
+            "board": 41.412784132417315,
+            "Q1": 43.2497181460552
+          }
+        }
+      ]
+    },
+    {
+      "time_s": 16.0,
+      "boards": [
+        {
+          "name": "B0",
+          "inlet_air_c": 40.0,
+          "outlet_air_c": 40.10009031102131,
+          "power_w": 2.0,
+          "flow_m3_s": 0.011124611797498109,
+          "air_stages": [],
+          "air_heat_w": 1.3361590257635143,
+          "fixture_heat_w": 0.0,
+          "stored_heat_w": 0.6638409742364502,
+          "energy_residual_w": 3.552713678800501e-14,
+          "temperatures_c": {
+            "board": 41.336159025763514,
+            "Q1": 43.20759204846278
+          }
+        },
+        {
+          "name": "B1",
+          "inlet_air_c": 40.10009031102131,
+          "outlet_air_c": 40.19640427279822,
+          "power_w": 2.0,
+          "flow_m3_s": 0.011124611797498109,
+          "air_stages": [],
+          "air_heat_w": 1.2857465225366056,
+          "fixture_heat_w": 0.0,
+          "stored_heat_w": 0.7142534774633873,
+          "energy_residual_w": 7.105427357601002e-15,
+          "temperatures_c": {
+            "board": 41.38583683355792,
+            "Q1": 43.248983374755255
+          }
+        },
+        {
+          "name": "B2",
+          "inlet_air_c": 40.19640427279822,
+          "outlet_air_c": 40.289057190937896,
+          "power_w": 2.0,
+          "flow_m3_s": 0.011124611797498109,
+          "air_stages": [],
+          "air_heat_w": 1.2368732954511188,
+          "fixture_heat_w": 0.0,
+          "stored_heat_w": 0.7631267045488954,
+          "energy_residual_w": -1.4210854715202004e-14,
+          "temperatures_c": {
+            "board": 41.43327756824934,
+            "Q1": 43.28842488509311
+          }
+        },
+        {
+          "name": "B3",
+          "inlet_air_c": 40.289057190937896,
+          "outlet_air_c": 40.37816277248316,
+          "power_w": 2.0,
+          "flow_m3_s": 0.011124611797498109,
+          "air_stages": [],
+          "air_heat_w": 1.1895180044176286,
+          "fixture_heat_w": 0.0,
+          "stored_heat_w": 0.8104819955823217,
+          "energy_residual_w": 4.973799150320701e-14,
+          "temperatures_c": {
+            "board": 41.478575195355525,
+            "Q1": 43.32600382915531
+          }
+        }
+      ]
+    },
+    {
+      "time_s": 17.0,
+      "boards": [
+        {
+          "name": "B0",
+          "inlet_air_c": 40.0,
+          "outlet_air_c": 40.10380234845532,
+          "power_w": 2.0,
+          "flow_m3_s": 0.011124611797498109,
+          "air_stages": [],
+          "air_heat_w": 1.385712996280887,
+          "fixture_heat_w": 0.0,
+          "stored_heat_w": 0.6142870037191415,
+          "energy_residual_w": -2.842170943040401e-14,
+          "temperatures_c": {
+            "board": 41.38571299628089,
+            "Q1": 43.266965697735486
+          }
+        },
+        {
+          "name": "B1",
+          "inlet_air_c": 40.10380234845532,
+          "outlet_air_c": 40.203862333547264,
+          "power_w": 2.0,
+          "flow_m3_s": 0.011124611797498109,
+          "air_stages": [],
+          "air_heat_w": 1.3357541887336453,
+          "fixture_heat_w": 0.0,
+          "stored_heat_w": 0.6642458112662695,
+          "energy_residual_w": 8.526512829121202e-14,
+          "temperatures_c": {
+            "board": 41.43955653718896,
+            "Q1": 43.31250776223316
+          }
+        },
+        {
+          "name": "B2",
+          "inlet_air_c": 40.203862333547264,
+          "outlet_air_c": 40.30028427952107,
+          "power_w": 2.0,
+          "flow_m3_s": 0.011124611797498109,
+          "air_stages": [],
+          "air_heat_w": 1.2871880612615385,
+          "fixture_heat_w": 0.0,
+          "stored_heat_w": 0.7128119387384544,
+          "energy_residual_w": 7.105427357601002e-15,
+          "temperatures_c": {
+            "board": 41.4910503948088,
+            "Q1": 43.35596672166501
+          }
+        },
+        {
+          "name": "B3",
+          "inlet_air_c": 40.30028427952107,
+          "outlet_air_c": 40.39317177242402,
+          "power_w": 2.0,
+          "flow_m3_s": 0.011124611797498109,
+          "air_stages": [],
+          "air_heat_w": 1.2400047592657728,
+          "fixture_heat_w": 0.0,
+          "stored_heat_w": 0.7599952407342272,
+          "energy_residual_w": 0.0,
+          "temperatures_c": {
+            "board": 41.540289038786845,
+            "Q1": 43.39743223236582
+          }
+        }
+      ]
+    },
+    {
+      "time_s": 18.0,
+      "boards": [
+        {
+          "name": "B0",
+          "inlet_air_c": 40.0,
+          "outlet_air_c": 40.10723824451664,
+          "power_w": 2.0,
+          "flow_m3_s": 0.011124611797498109,
+          "air_stages": [],
+          "air_heat_w": 1.4315806081113607,
+          "fixture_heat_w": 0.0,
+          "stored_heat_w": 0.5684193918886535,
+          "energy_residual_w": -1.4210854715202004e-14,
+          "temperatures_c": {
+            "board": 41.43158060811136,
+            "Q1": 43.321837334527444
+          }
+        },
+        {
+          "name": "B1",
+          "inlet_air_c": 40.10723824451664,
+          "outlet_air_c": 40.21078404671816,
+          "power_w": 2.0,
+          "flow_m3_s": 0.011124611797498109,
+          "air_stages": [],
+          "air_heat_w": 1.382288223302936,
+          "fixture_heat_w": 0.0,
+          "stored_heat_w": 0.6177117766970497,
+          "energy_residual_w": 1.4210854715202004e-14,
+          "temperatures_c": {
+            "board": 41.48952646781957,
+            "Q1": 43.371513997428636
+          }
+        },
+        {
+          "name": "B2",
+          "inlet_air_c": 40.21078404671816,
+          "outlet_air_c": 40.31073051085994,
+          "power_w": 2.0,
+          "flow_m3_s": 0.011124611797498109,
+          "air_stages": [],
+          "air_heat_w": 1.3342387369318018,
+          "fixture_heat_w": 0.0,
+          "stored_heat_w": 0.6657612630682479,
+          "energy_residual_w": -4.973799150320701e-14,
+          "temperatures_c": {
+            "board": 41.54502278364996,
+            "Q1": 43.418985408993336
+          }
+        },
+        {
+          "name": "B3",
+          "inlet_air_c": 40.31073051085994,
+          "outlet_air_c": 40.4071708141071,
+          "power_w": 2.0,
+          "flow_m3_s": 0.011124611797498109,
+          "air_stages": [],
+          "air_heat_w": 1.2874331223091176,
+          "fixture_heat_w": 0.0,
+          "stored_heat_w": 0.7125668776909464,
+          "energy_residual_w": -6.394884621840902e-14,
+          "temperatures_c": {
+            "board": 41.59816363316906,
+            "Q1": 43.46434269930023
+          }
+        }
+      ]
+    },
+    {
+      "time_s": 19.0,
+      "boards": [
+        {
+          "name": "B0",
+          "inlet_air_c": 40.0,
+          "outlet_air_c": 40.110418177048956,
+          "power_w": 2.0,
+          "flow_m3_s": 0.011124611797498109,
+          "air_stages": [],
+          "air_heat_w": 1.4740312260684476,
+          "fixture_heat_w": 0.0,
+          "stored_heat_w": 0.5259687739315382,
+          "energy_residual_w": 1.4210854715202004e-14,
+          "temperatures_c": {
+            "board": 41.47403122606845,
+            "Q1": 43.37256863170778
+          }
+        },
+        {
+          "name": "B1",
+          "inlet_air_c": 40.110418177048956,
+          "outlet_air_c": 40.217207222541546,
+          "power_w": 2.0,
+          "flow_m3_s": 0.011124611797498109,
+          "air_stages": [],
+          "air_heat_w": 1.4255840103965056,
+          "fixture_heat_w": 0.0,
+          "stored_heat_w": 0.5744159896034375,
+          "energy_residual_w": 5.684341886080802e-14,
+          "temperatures_c": {
+            "board": 41.53600218744546,
+            "Q1": 43.42634339410091
+          }
+        },
+        {
+          "name": "B2",
+          "inlet_air_c": 40.217207222541546,
+          "outlet_air_c": 40.32044897002523,
+          "power_w": 2.0,
+          "flow_m3_s": 0.011124611797498109,
+          "air_stages": [],
+          "air_heat_w": 1.3782292344616067,
+          "fixture_heat_w": 0.0,
+          "stored_heat_w": 0.6217707655384572,
+          "energy_residual_w": -6.394884621840902e-14,
+          "temperatures_c": {
+            "board": 41.59543645700315,
+            "Q1": 43.47780242499661
+          }
+        },
+        {
+          "name": "B3",
+          "inlet_air_c": 40.32044897002523,
+          "outlet_air_c": 40.42022607900168,
+          "power_w": 2.0,
+          "flow_m3_s": 0.011124611797498109,
+          "air_stages": [],
+          "air_heat_w": 1.331977924367564,
+          "fixture_heat_w": 0.0,
+          "stored_heat_w": 0.6680220756324218,
+          "energy_residual_w": 1.4210854715202004e-14,
+          "temperatures_c": {
+            "board": 41.652426894392796,
+            "Q1": 43.52703743099775
+          }
+        }
+      ]
+    },
+    {
+      "time_s": 20.0,
+      "boards": [
+        {
+          "name": "B0",
+          "inlet_air_c": 40.0,
+          "outlet_air_c": 40.11336098949234,
+          "power_w": 2.0,
+          "flow_m3_s": 0.011124611797498109,
+          "air_stages": [],
+          "air_heat_w": 1.5133164012991145,
+          "fixture_heat_w": 0.0,
+          "stored_heat_w": 0.4866835987008926,
+          "energy_residual_w": -7.105427357601002e-15,
+          "temperatures_c": {
+            "board": 41.513316401299114,
+            "Q1": 43.41948455490489
+          }
+        },
+        {
+          "name": "B1",
+          "inlet_air_c": 40.11336098949234,
+          "outlet_air_c": 40.22316728394948,
+          "power_w": 2.0,
+          "flow_m3_s": 0.011124611797498109,
+          "air_stages": [],
+          "air_heat_w": 1.4658628785088723,
+          "fixture_heat_w": 0.0,
+          "stored_heat_w": 0.5341371214910708,
+          "energy_residual_w": 5.684341886080802e-14,
+          "temperatures_c": {
+            "board": 41.579223868001215,
+            "Q1": 43.47730355206768
+          }
+        },
+        {
+          "name": "B2",
+          "inlet_air_c": 40.22316728394948,
+          "outlet_air_c": 40.329489550414195,
+          "power_w": 2.0,
+          "flow_m3_s": 0.011124611797498109,
+          "air_stages": [],
+          "air_heat_w": 1.419352727820126,
+          "fixture_heat_w": 0.0,
+          "stored_heat_w": 0.5806472721798599,
+          "energy_residual_w": 1.4210854715202004e-14,
+          "temperatures_c": {
+            "board": 41.642520011769605,
+            "Q1": 43.53270828725428
+          }
+        },
+        {
+          "name": "B3",
+          "inlet_air_c": 40.329489550414195,
+          "outlet_air_c": 40.432399970925694,
+          "power_w": 2.0,
+          "flow_m3_s": 0.011124611797498109,
+          "air_stages": [],
+          "air_heat_w": 1.3738061737292924,
+          "fixture_heat_w": 0.0,
+          "stored_heat_w": 0.626193826270736,
+          "energy_residual_w": -2.842170943040401e-14,
+          "temperatures_c": {
+            "board": 41.70329572414349,
+            "Q1": 43.585790195379666
+          }
+        }
+      ]
+    }
+  ],
+  "checks": [],
+  "check_status": "UNKNOWN",
+  "assumptions": [
+    "Air topology, passage flow fractions, bypass and direction are explicit inputs; the model does not derive passage flow from blade pitch.",
+    "Parallel passages use streamwise lumped air stages from high X to low X, not a CFD velocity/pressure field.",
+    "Fan P-Q, pressure loss, convection curves, heat capacities and contact resistances are explicit inputs.",
+    "This lumped RC model does not resolve copper fields, package hotspots, recirculation, radiation or CFD.",
+    "R(T) is an entered ohmic loss law, not a MOSFET linear-mode SOA model.",
+    "Numerical convergence and energy balance do not qualify installed hardware."
+  ]
+}

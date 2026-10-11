@@ -1,13 +1,13 @@
 # Viewer and companion-app references
 
-User direction, recorded 2026-10-10: use Siemens Xpedition and Altium as feature and workflow references for Pocket KiVi and the shared browser/VS Code viewer. This is a design direction, not a claim of feature parity or support for their native file formats.
+User direction, recorded 2026-10-10: use Siemens Xpedition and Altium as feature and workflow references for Pocket KiView and the shared browser/VS Code viewer. This is a design direction, not a claim of feature parity or support for their native file formats.
 
 ## Verified reference capabilities
 
 - [Altium 365 Web Viewer](https://www.altium.com/documentation/altium-365/viewers/web-viewer?version=4): linked schematic, PCB, 3D and BOM inspection; component/net cross-probing; searchable object information; contextual comments and tasks; layer inspection; access-controlled links to a particular view. Documentation checked 2026-10-10.
 - [Siemens Xpedition Viewer](https://intercom.help/sw-siemens-eda/en/articles/11421232-what-is-the-xpedition-viewer-application): project and ancillary-file organization, measurements, design markup, multiple-document viewing, cross-probing, graphical and connectivity/version comparisons, and controlled guest review. Several collaboration features are Standard-tier capabilities. Documentation checked 2026-10-10.
 
-## Apply to Pocket KiVi
+## Apply to Pocket KiView
 
 | Workflow | Product direction | Acceptance evidence |
 | --- | --- | --- |

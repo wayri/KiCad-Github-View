@@ -11,13 +11,17 @@ ASSETS = ('analysis-data.js', 'analysis-viewer.html', 'analysis-viewer.css', 'an
     'vendor/occt/license.occt-import-js.txt', 'vendor/occt/license.occt.txt', 'vendor/occt/OCCT_LGPL_EXCEPTION.txt', 'vendor/occt/EMSCRIPTEN-LICENSE.txt',
     'loading-ui.js', 'load-worker.js', 'bom-analytics.js', 'file-compatibility.js', 'html-preview.js', 'html-sandbox.html', 'html-sandbox.js',
     'parsing.js', 'project-viewer.html', 'project-viewer.css', 'project-viewer.js', 'project-settings.js', 'project-settings-ui.js', 'gerber-renderer.js',
-    'revision-viewer.html', 'revision-viewer.css', 'revision-viewer.js',
+    'revision-viewer.html', 'revision-viewer.css', 'revision-viewer.js', 'terms.html',
     'ui-icons.js', 'browser-data.js', 'design-diff.js', 'design-model.js',
-    'net-model.js', 'ratsnest.js', 'paired-review.js', 'project-search.js', 'rule-reports.js', 'review-navigation.js', 'view-state.js', 'review-comments.js', 'comment-compose.js', 'review-workspace.js', 'review-tools.js', 'repo-models.js',
+    'net-model.js', 'overview-connectivity.js', 'ratsnest.js', 'paired-review.js', 'project-search.js', 'rule-reports.js', 'review-navigation.js', 'view-state.js', 'review-comments.js', 'comment-compose.js', 'review-workspace.js', 'review-tools.js', 'repo-models.js',
     'worksheet.js', 'schematic-renderer.js', 'pcb-renderer.js', 'owned-canvas.js', 'touch-canvas.js', 'motion-webgl.js',
     'vendor/spike-board3d.bundle.js', 'vendor/SPIKE-ENGINE-NOTICE.md', 'vendor/THREE-LICENSE',
 )
+ASSETS += ('population-inspection.js','population-photo.js','population-review.js','testpoint-tools.js','photo-alignment.js','component-links.js','photo-review.js','photo-review.css')
+ASSETS += ('ui-foundation.css','gerber-camera.js')
+ASSETS += ('pdf-tools.js','pdf-viewer.html','pdf-viewer.css','pdf-viewer.js','vendor/pdfjs/FILES.json') + tuple('vendor/pdfjs/'+name for name in json.loads((ROOT/'extension/vendor/pdfjs/FILES.json').read_text())['files'])
 BUILD_INPUTS = ('step-decoder.js', 'step-worker.js', 'vendor/occt/occt-import-js.js')
+ASSETS += ('variant-manager.js', 'bom-import.js', 'bom-viewer.html', 'bom-viewer.js','bom-workspace.js', 'bom-viewer.css', 'calculator-tools.js', 'calculator-viewer.html', 'calculator-viewer.js', 'calculator-viewer.css', 'analysis-spatial.js', 'analysis-overlay.js', 'analysis-bom-link.js')
 HOST_FILES = ('conflict-host.js', 'package.json', 'extension.js', 'webview-bridge.js', 'README.md', 'icon.png')
 
 
