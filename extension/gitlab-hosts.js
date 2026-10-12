@@ -21,7 +21,12 @@ const KiCadGitLabHosts = (() => {
   async function register(host) {
     if(!chrome.scripting?.registerContentScripts)throw new Error('This browser cannot register self-hosted GitLab previews.');
     const existing=await chrome.scripting.getRegisteredContentScripts({ids:[id(host)]});
-    if(!existing.length)await chrome.scripting.registerContentScripts([{id:id(host),matches:[host+'/*'],js:['parsing.js','content.js'],runAt:'document_idle'}]);
+    const configuration={id:id(host),matches:[host+'/*'],js:['parsing.js','gitlab-session-reader.js','content.js'],runAt:'document_idle'};
+    if(!existing.length)await chrome.scripting.registerContentScripts([configuration]);
+    else if(JSON.stringify(existing[0].js)!==JSON.stringify(configuration.js)){
+      if(chrome.scripting.updateContentScripts)await chrome.scripting.updateContentScripts([configuration]);
+      else {await chrome.scripting.unregisterContentScripts({ids:[id(host)]});await chrome.scripting.registerContentScripts([configuration]);}
+    }
   }
   async function add(value) {
     const host=normalize(value);

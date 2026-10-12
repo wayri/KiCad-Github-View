@@ -1,7 +1,7 @@
 /* GitLab transport, bound to one explicitly authorized HTTPS origin. */
 ((root) => {
   'use strict';
-  function forHost(host='https://gitlab.com'){
+  function forHost(host='https://gitlab.com',{sessionRead}={}){
     const parsed=new URL(host);if(parsed.protocol!=='https:'||parsed.username||parsed.password||parsed.search||parsed.hash||parsed.pathname!=='/')throw new Error('Invalid GitLab host.');host=parsed.origin;
   const MIB=1024*1024, SHA=/^[a-f0-9]{40}$/i;
   const validRepository=value=>typeof value==='string'&&value.length<=300&&/^[A-Za-z0-9_.-]+(?:\/[A-Za-z0-9_.-]+)+$/.test(value)&&value.split('/').every(p=>p!=='.'&&p!=='..');
@@ -12,6 +12,7 @@
     if(new URL(url).origin!==host||!url.startsWith(host+'/api/v4/projects/'))throw new Error('Invalid GitLab API endpoint.');
     const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),60000);
     try{const headers=await root.KiCadGitLabReviewApi?.authorizationHeaders(host);const result=await fetch(url,{...(headers&&Object.keys(headers).length?{headers}:{}),credentials:'omit',cache:'no-store',redirect:'error',signal:controller.signal});
+      if([401,403,404].includes(result.status)&&sessionRead){const session=await sessionRead(url,limit);if(session)return session;}
       if(result.status===404)return null;
       if(!result.ok)throw new Error(`GitLab returned HTTP ${result.status}; check the server, repository access and GitLab connection in extension settings.`);
       if(Number(result.headers.get('content-length'))>limit)throw new Error('GitLab response exceeds its size limit.');

@@ -38,3 +38,9 @@ kicad-review/
 !/extension/vendor/pdfjs/build/
 !/extension/vendor/pdfjs/build/pdf.min.mjs
 !/extension/vendor/pdfjs/build/pdf.worker.min.mjs
+
+# Generated iOS viewer payload and Xcode local build state
+ios-app/PocketKiView/web/
+ios-app/DerivedData/
+*.xcuserstate
+xcuserdata/

@@ -6,6 +6,11 @@ File previews replace the source pane; **Show source** restores it. Pull-request
 
 ## Viewer interaction
 
+Private source previews can reuse an already signed-in GitHub repository tab;
+keep that tab open while viewing. No pasted token is required for session-based
+drawing and text project reads. API history, binary assets and remote reviews
+still use **Sign in with GitHub**. See [access and limits](../docs/GITHUB-SIGNIN.md).
+
 Dedicated schematic and PCB entry points share a review workspace. Click a symbol, footprint, pad, track or drawing feature to inspect saved properties; search the parts list or use the context menu to focus it and add an annotation. Schematics navigate loaded subsheets through the sheet selector or sheet context menu. PCB controls include layer visibility, front/back flip, grid and dark mode. The initial board view shows front/back copper and silkscreen plus Edge.Cuts; other layers can be enabled explicitly.
 
 Wheel zoom anchors to the pointer. Right/middle drag pans; `+` / `-` zoom, `F` fits the drawing or board, `Home` fits the full sheet, `D` switches the theme and `M` measures two points in millimetres. The page view displays the paper boundary, the standard KiCad drawing sheet, coordinate zones and saved title metadata. Matching PR sheets have linked camera controls; **Changes** compares saved objects and before/after properties.

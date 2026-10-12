@@ -10,6 +10,10 @@ const schematic = (content,path="root.kicad_sch") => file(path,`(kicad_sch ${con
 const wire = (id,a,b) => `(wire (pts (xy ${a[0]} ${a[1]}) (xy ${b[0]} ${b[1]})) (uuid "${id}"))`;
 const label = (id,name,x,y,type="label") => `(${type} "${name}" (at ${x} ${y}) (uuid "${id}"))`;
 const rendered = (files) => new Map(files.map((f)=>[f.path,pcb.build(diff.parse(f.content),f.path)]));
+test('KiCad 10 saved named nets keep per-file identities and rendered track membership',()=>{
+ const fs=require('node:fs'),path=require('node:path'),content=fs.readFileSync(path.join(__dirname,'fixtures/board-analytics/tracks.kicad_pcb'),'utf8'),files=[file('a.kicad_pcb',content),file('b.kicad_pcb',content)];
+ const result=build(files,rendered(files));assert.equal(result.nets.length,2);assert.equal(new Set(result.nets.map(n=>n.id)).size,2);assert.equal(result.nets[0].name,'GND');assert.equal(result.nets[0].code,'name:GND');assert.equal(result.nets[0].primitives.length,3);assert.equal(result.nets[0].stats.tracks,3);assert.deepEqual(result.warnings,[]);
+});
 
 test("PCB saved net codes define membership; same names and files remain distinct",()=> {
   const a=board(`(net 0 "") (net 1 "GND") (net 2 "GND") (net 3 "Unused")

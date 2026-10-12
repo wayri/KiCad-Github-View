@@ -2,6 +2,7 @@
 ((root)=>{
   'use strict';
   const paths={
+    analytics:'M3 3v18h18 M7 17v-5h3v5 M12 17V7h3v10 M17 17v-8h3v8',
     star:'m12 3 3 6 7 1-5 5 1 7-6-3-6 3 1-7-5-5 7-1z',
     bookmark:'M6 3h12v19l-6-4-6 4z',
     folder:'M3 6h7l2 3h9v11H3z M3 6V4h7l2 2',
@@ -14,6 +15,16 @@
     back:'M19 12H5m6-6-6 6 6 6',forward:'M5 12h14m-6-6 6 6-6 6',up:'M12 19V5m-6 6 6-6 6 6',home:'M3 11 12 3l9 8 M5 10v11h14V10 M10 21v-7h4v7',
     gear:'M9 3h6l.5 3 2.5 1.5 3-.5 2 5-2.5 1.5-.5 3 2 2.5-4 3-2.5-2-3 .5L10 23l-5-2 .5-3L4 15.5 1 15V9l3-.5L5.5 6l-.5-3 5-2z M16 12a4 4 0 1 1-8 0 4 4 0 0 1 8 0z',
     rules:'M12 3 22 21H2z M12 9v5m0 3v1',
+    erc:'M3 12h4l3-7 4 14 3-7h4 M18 3h3v3',
+    drc:'M3 5h6v6H3z M15 13h6v6h-6z M9 8h8v5 M5 21l3-3 3 3 M13 3h7',
+    eye:'M2 12s4-7 10-7 10 7 10 7-4 7-10 7S2 12 2 12z M15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0z',
+    'eye-off':'M3 3l18 18 M9 5.5A11 11 0 0 1 12 5c6 0 10 7 10 7a20 20 0 0 1-4 4 M6 7a20 20 0 0 0-4 5s4 7 10 7a11 11 0 0 0 4-1 M10 10a3 3 0 0 0 4 4',
+    calculator:'M5 2h14v20H5z M8 5h8v4H8z M8 13h1m3 0h1m3 0h1M8 17h1m3 0h1m3 0h1',
+    pdf:'M5 2h10l4 4v16H5z M15 2v5h4 M8 17l2-7 3 7m-4-2h7',
+    tools:'m15 3 2 2-3 3 2 2 3-3 2 2a6 6 0 0 1-7 7l-7 7-4-4 7-7a6 6 0 0 1 5-7z',
+    copy:'M8 8h13v13H8z M16 8V3H3v13h5',
+    text:'M3 5h18M12 5v15m-4 0h8',
+    save:'M3 3h15l3 3v15H3z M7 3v6h10V3 M7 21v-8h10v8',
     board:'M4 3h13l3 3v14H4z M7 7h7v7H7z M17 9h1m-1 3h1M8 17h6 M2 6h2M2 10h2M2 14h2',
     unfitted:'M7 7h10v10H7z M9 3v4m6-4v4M9 17v4m6-4v4M3 9h4m-4 6h4m10-6h4m-4 6h4 M3 3l18 18',
     parts:'M7 7h10v10H7z M9 3v4m6-4v4M9 17v4m6-4v4M3 9h4m-4 6h4m10-6h4m-4 6h4',
@@ -47,12 +58,14 @@
   };
   const brands={"github":{"viewBox":"0 0 98 96","paths":[{"d":"M41.4395 69.3848C28.8066 67.8535 19.9062 58.7617 19.9062 46.9902C19.9062 42.2051 21.6289 37.0371 24.5 33.5918C23.2559 30.4336 23.4473 23.7344 24.8828 20.959C28.7109 20.4805 33.8789 22.4902 36.9414 25.2656C40.5781 24.1172 44.4062 23.543 49.0957 23.543C53.7852 23.543 57.6133 24.1172 61.0586 25.1699C64.0254 22.4902 69.2891 20.4805 73.1172 20.959C74.457 23.543 74.6484 30.2422 73.4043 33.4961C76.4668 37.1328 78.0937 42.0137 78.0937 46.9902C78.0937 58.7617 69.1934 67.6621 56.3691 69.2891C59.623 71.3945 61.8242 75.9883 61.8242 81.252L61.8242 91.2051C61.8242 94.0762 64.2168 95.7031 67.0879 94.5547C84.4102 87.9512 98 70.6289 98 49.1914C98 22.1074 75.9883 6.69539e-07 48.9043 4.309e-07C21.8203 1.92261e-07 -1.9479e-07 22.1074 -4.3343e-07 49.1914C-6.20631e-07 70.4375 13.4941 88.0469 31.6777 94.6504C34.2617 95.6074 36.75 93.8848 36.75 91.3008L36.75 83.6445C35.4102 84.2188 33.6875 84.6016 32.1562 84.6016C25.8398 84.6016 22.1074 81.1563 19.4277 74.7441C18.375 72.1602 17.2266 70.6289 15.0254 70.3418C13.877 70.2461 13.4941 69.7676 13.4941 69.1934C13.4941 68.0449 15.4082 67.1836 17.3223 67.1836C20.0977 67.1836 22.4902 68.9063 24.9785 72.4473C26.8926 75.2227 28.9023 76.4668 31.2949 76.4668C33.6875 76.4668 35.2187 75.6055 37.4199 73.4043C39.0469 71.7773 40.291 70.3418 41.4395 69.3848Z","fill":"currentColor"}]},"gitlab":{"viewBox":"110 110 160 160","paths":[{"d":"M265.26416,174.37243l-.2134-.55822-21.19899-55.30908c-.4236-1.08359-1.18542-1.99642-2.17699-2.62689-.98837-.63373-2.14749-.93253-3.32305-.87014-1.1689.06239-2.29195.48925-3.20809,1.21821-.90957.73554-1.56629,1.73047-1.87493,2.85346l-14.31327,43.80662h-57.90965l-14.31327-43.80662c-.30864-1.12299-.96536-2.11791-1.87493-2.85346-.91614-.72895-2.03911-1.15582-3.20809-1.21821-1.17548-.06239-2.33468.23641-3.32297.87014-.99166.63047-1.75348,1.5433-2.17707,2.62689l-21.19891,55.31237-.21348.55493c-6.28158,16.38521-.92929,34.90803,13.05891,45.48782.02621.01641.04922.03611.07552.05582l.18719.14119,32.29094,24.17392,15.97151,12.09024,9.71951,7.34871c2.34117,1.77316,5.57877,1.77316,7.92002,0l9.71943-7.34871,15.96822-12.09024,32.48142-24.31511c.02958-.02299.05588-.04269.08538-.06568,13.97834-10.57977,19.32735-29.09604,13.04905-45.47796Z","fill":"#e24329"},{"d":"M265.26416,174.37243l-.2134-.55822c-10.5174,2.16062-20.20405,6.6099-28.49844,12.81593-.1346.0985-25.20497,19.05805-46.55171,35.19699,15.84998,11.98517,29.6477,22.40405,29.6477,22.40405l32.48142-24.31511c.02958-.02299.05588-.04269.08538-.06568,13.97834-10.57977,19.32735-29.09604,13.04905-45.47796Z","fill":"#fc6d26"},{"d":"M160.34962,244.23117l15.97151,12.09024,9.71951,7.34871c2.34117,1.77316,5.57877,1.77316,7.92002,0l9.71943-7.34871,15.96822-12.09024s-13.79772-10.41888-29.6477-22.40405c-15.85327,11.98517-29.65099,22.40405-29.65099,22.40405Z","fill":"#fca326"},{"d":"M143.44561,186.63014c-8.29111-6.20274-17.97446-10.65531-28.49507-12.81264l-.21348.55493c-6.28158,16.38521-.92929,34.90803,13.05891,45.48782.02621.01641.04922.03611.07552.05582l.18719.14119,32.29094,24.17392s13.79772-10.41888,29.65099-22.40405c-21.34673-16.13894-46.42031-35.09848-46.55499-35.19699Z","fill":"#fc6d26"}]}};
   function icon(name){if(brands[name]){const svg=document.createElementNS("http://www.w3.org/2000/svg","svg");svg.setAttribute("viewBox",brands[name].viewBox);svg.setAttribute("class","ui-icon ui-brand ui-brand-"+name);svg.setAttribute("aria-hidden","true");svg.setAttribute("focusable","false");for(const entry of brands[name].paths){const path=document.createElementNS(svg.namespaceURI,"path");path.setAttribute("d",entry.d);path.setAttribute("fill",entry.fill);svg.append(path);}return svg;}const svg=document.createElementNS('http://www.w3.org/2000/svg','svg');svg.setAttribute('viewBox','0 0 24 24');svg.setAttribute('class','ui-icon');svg.setAttribute('aria-hidden','true');svg.setAttribute('focusable','false');const path=document.createElementNS(svg.namespaceURI,'path');path.setAttribute('d',paths[name]||paths.parts);path.setAttribute('fill','none');path.setAttribute('stroke','currentColor');path.setAttribute('stroke-width','1.6');path.setAttribute('stroke-linecap','round');path.setAttribute('stroke-linejoin','round');svg.append(path);return svg;}
-  function decorate(scope=document){for(const node of scope.querySelectorAll('[data-icon]')){if(node.querySelector('svg'))continue;const name=node.dataset.icon;if(node.tagName==='BUTTON'){const label=document.createElement('span');label.className='button-label';label.textContent=node.textContent;if(!node.hasAttribute('aria-label'))node.setAttribute('aria-label',label.textContent.trim());node.replaceChildren(icon(name),label);}else node.prepend(icon(name));}}
+  function decorate(scope=document){const nodes=[...(scope.matches?.('[data-icon]')?[scope]:[]),...scope.querySelectorAll('[data-icon]')];for(const node of nodes){const name=node.dataset.icon,existing=node.querySelector('svg');if(existing){if(node.dataset.uiIcon&&node.dataset.uiIcon!==name){existing.replaceWith(icon(name));node.dataset.uiIcon=name;}continue;}if(node.tagName==='BUTTON'){const label=document.createElement('span');label.className='button-label';label.textContent=node.textContent;if(!node.hasAttribute('aria-label'))node.setAttribute('aria-label',label.textContent.trim());node.replaceChildren(icon(name),label);}else node.prepend(icon(name));node.dataset.uiIcon=name;}}
   function label(node,text){const span=node.querySelector('.button-label');if(span)span.textContent=text;else node.textContent=text;}
   root.KiCadUIIcons={icon,decorate,label};
   // Only decorate simple action labels. Never replace inputs, connection badges,
   // rich file rows, or existing icons; original button nodes and handlers survive.
   const actions={
+    'Present project':['page','Present project'],'Create slides':['sheet','Create slides'],
+    'File features':['info','File features'],'3D':['cube','3D'],'Ratsnest':['net','Ratsnest'],
     'Project':['folder','Project'],'Schematic':['sheet','Schematic'],'Layout':['board','Layout'],
     'Overview':['inspect','Overview'],'All settings':['settings','Settings'],'Constraints & rules':['rules','Rules'],
     'Stackup':['layers','Stackup'],'Gerbers & drills':['layers','Fabrication'],'Saved source':['page','Source'],
@@ -77,7 +90,29 @@
     'Add comment':['plus','Add'],'View comments':['comment','Threads'],'New comment':['plus','New comment'],
     'Publish to GitHub':['send','Publish'],'Publish to GitLab':['send','Publish'],'Download screenshot':['import','Screenshot'],
     'Split schematic + PCB':['flip','Split view'],'Compare commits':['compare','Compare'],
-    'Browse designs':['folder','Browse'],'Open review':['comment','Review']
+    'Browse designs':['folder','Browse'],'Open review':['comment','Review'],
+    'Engineering tools':['tools','Tools'],'Engineering calculators':['calculator','Calculators'],'Calculate':['calculator','Calculate'],
+    'PDF viewer':['pdf','PDF viewer'],'Project PDFs':['pdf','Project PDFs'],'Close document':['close','Close document'],
+    'Gerber viewer & analyzer':['layers','Gerber analyzer'],'Open Gerber analyzer':['layers','Gerber analyzer'],
+    'Import fabrication files':['import','Import files'],'Run analysis':['analytics','Run analysis'],
+    'Import BoM / iBOM':['assembly','Import BoM / iBOM'],'BoM manager':['assembly','BoM manager'],
+    'Manage variants':['assembly','Manage variants'],'Import variants':['import','Import variants'],
+    'Manage':['settings','Manage'],'Manage group':['settings','Manage group'],'Advance assembly':['assembly','Advance assembly'],
+    'Next unfinished part':['forward','Next unfinished part'],'Export visible CSV':['import','Export visible CSV'],
+    'Export metadata JSON':['import','Export metadata JSON'],'Reset filters':['refresh','Reset filters'],
+    'Save management draft':['save','Save management draft'],'Edit KiCad fields':['settings','Edit KiCad fields'],
+    'Testpoints & nets':['pin','Testpoints & nets'],'Board analytics':['analytics','Board analytics'],
+    'Open selected results report':['analytics','Results report'],'Export CSV':['import','Export CSV'],'Export JSON':['import','Export JSON'],
+    'Fit drawing':['fit','Fit drawing'],'Measure':['ruler','Measure'],'New measurement':['ruler','New measurement'],
+    'ERC':['erc','ERC'],'DRC':['drc','DRC'],'ERC / DRC':['rules','ERC / DRC'],
+    'Show all':['eye','Show all'],'Hide all':['eye-off','Hide all'],'Restore view':['refresh','Restore view'],
+    'Previous connection':['back','Previous connection'],'Next connection':['forward','Next connection'],
+    'Previous item':['back','Previous item'],'Next item':['forward','Next item'],'Clear reports':['close','Clear reports'],
+    'Library':['folder','Library'],'This project':['folder','This project'],'Temporary download':['import','Temporary download'],
+    'All sheets':['sheet','All sheets'],'Select text mode':['text','Select text'],'Copy drawing text':['copy','Copy text'],
+    'Select all':['text','Select all'],'Save comment':['save','Save comment'],'Cancel':['close','Cancel'],
+    'Next unread':['forward','Next unread'],'Post to GitHub':['send','Post to GitHub'],'Post to GitLab':['send','Post to GitLab'],
+    'Privacy policy':['info','Privacy policy']
   };
   function actionIcons(scope){
     const links=scope.matches?.('a')?[scope]:[...scope.querySelectorAll('#sourceLink,#githubLink,#installLink')];
@@ -86,7 +121,7 @@
     const nodes=scope.matches?.('button')?[scope,...scope.querySelectorAll('button')]:[...scope.querySelectorAll('button')];
     for(const node of nodes){if(node.childElementCount)continue;const full=node.textContent.trim(),entry=actions[full];if(!entry)continue;
       const provider=(node.id.startsWith('github')||node.id==='connectGitHub')?'github':(node.id.startsWith('gitlab')||node.id==='connectGitLab')?'gitlab':entry[0];node.dataset.icon=provider;node.classList.add('icon-caption');node.title=node.title||full;
-      node.setAttribute('aria-label',node.getAttribute('aria-label')||full);node.replaceChildren(icon(provider),Object.assign(document.createElement('span'),{className:'button-label',textContent:entry[1]}));
+      node.setAttribute('aria-label',node.getAttribute('aria-label')||full);node.replaceChildren(icon(provider),Object.assign(document.createElement('span'),{className:'button-label',textContent:entry[1]}));node.dataset.uiIcon=provider;
     }
   }
   function start(){

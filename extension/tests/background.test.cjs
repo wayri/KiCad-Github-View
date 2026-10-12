@@ -1042,7 +1042,7 @@ test('concealed private-repository 404 stays on the requested revision and yield
   withFetch(t,async ()=>{calls++;return new Response(null,{status:404});});
   const response=await message({type:'project',repository:'owner/private',ref:sha('e'),file:'Hardware/HPBM-SMALL.kicad_pcb'});
   assert.equal(response.ok,false);
-  assert.match(response.error,/HTTP 404.*owner\/private.*eeee.*Hardware\/HPBM-SMALL.*access.*website sign-in.*Contents read/);
+  assert.match(response.error,/HTTP 404.*owner\/private.*eeee.*Hardware\/HPBM-SMALL.*access.*signed-in GitHub tab.*Sign in with GitHub.*Contents read/);
   assert.equal(calls,1);
 });
 
@@ -1079,4 +1079,28 @@ test('PDF page reads bounded binary on the pinned repository revision and cannot
  const sender={id:'test-id',url:extensionOrigin+'pdf-viewer.html?file=reports/board.pdf'},request={type:'pdf-file',repository:'owner/pdfboard',ref:'c'.repeat(40),file:'reports/board.pdf'};
  const reply=await message(request,sender);assert.equal(reply.ok,true);assert.equal(reply.result.mediaType,'application/pdf');assert.deepEqual(Array.from(Buffer.from(reply.result.base64,'base64')),[37,80,68,70,45,49,46,55,10,0,255]);assert.equal(calls[0].url,'https://api.github.com/repos/owner/pdfboard/contents/reports/board.pdf?ref='+'c'.repeat(40));
  assert.equal((await message({...request,type:'comment-save'},sender)).ok,false);assert.equal((await message({...request,file:'../board.pdf'},sender)).ok,false);assert.equal((await message({...request,type:'repo-asset'},sender)).ok,false);assert.equal(calls.length,1);
+});
+
+test('private schematic projects open through the existing repository tab without an API token',async t=>{
+ const previousQuery=chrome.tabs.query,previousSend=chrome.tabs.sendMessage,seen=[];
+ chrome.tabs.query=async()=>[{id:51,url:'https://github.com/owner/private/blob/main/design/root.kicad_sch'}];
+ chrome.tabs.sendMessage=async(id,request,options)=>{
+  assert.equal(id,51);assert.equal(options.frameId,0);seen.push(request);assert.equal(request.type,'github-session-read');
+  if(request.action==='resolve')return {ok:true,result:{sha:sha('a'),items:[]}};
+  assert.equal(request.ref,sha('a'));
+  if(request.action==='directory')return {ok:true,result:{sha:sha('a'),items:request.path==='design'?[{path:'design/root.kicad_sch',type:'file'}]:[]}};
+  return {ok:true,result:{sha:sha('a'),content:request.path==='design/root.kicad_sch'?'(kicad_sch (sheet (property "Sheetfile" "../shared/leaf.kicad_sch")))':'(kicad_sch)'}};
+ };
+ t.after(()=>{chrome.tabs.query=previousQuery;chrome.tabs.sendMessage=previousSend;});
+ withFetch(t,async()=>new Response(null,{status:404}));
+ const result=await message({type:'project',repository:'owner/private',ref:'main',file:'design/root.kicad_sch'});
+ assert.equal(result.ok,true,result.error);assert.deepEqual(result.result.map(f=>f.path),['design/root.kicad_sch','shared/leaf.kicad_sch']);
+ assert.ok(seen.some(r=>r.action==='file'&&r.path==='shared/leaf.kicad_sch'));assert.ok(seen.every(r=>!r.token&&!r.cookie&&!r.url));
+});
+
+test('website session fallback rejects tabs belonging to a different repository',async t=>{
+ const previous=chrome.tabs.query;chrome.tabs.query=async()=>[{id:9,url:'https://github.com/owner/private-evil/blob/main/file.kicad_pcb'}];t.after(()=>{chrome.tabs.query=previous;});
+ withFetch(t,async()=>new Response(null,{status:404}));
+ const before=calls.messages.length,result=await message({type:'project',repository:'owner/private',ref:sha('a'),file:'file.kicad_pcb'});
+ assert.equal(result.ok,false);assert.equal(calls.messages.length,before);
 });

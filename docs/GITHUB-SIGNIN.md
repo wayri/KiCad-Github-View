@@ -16,8 +16,12 @@ A developer can enter their own client ID under **Advanced connection settings**
 
 ## Private file access
 
-GitHub website cookies do not authenticate extension API requests. For private schematic, PCB, project and model reads, authorize private access through the configured App, or use a fine-grained token with the target repository selected and **Contents: read** permission (with normal metadata access). Add Issues/Discussions permissions only when needed for publication. An inaccessible private file may appear as HTTP 404; check the exact branch/path and token repository access.
+The extension can fall back to the website session for private drawings, schematic hierarchies, text project files and directory reads. Open the repository in a signed-in `github.com` tab and keep that tab open while using the viewer. No pasted token or extra authorization is needed for that read-only path. Branches are resolved to a commit before reading source. Cookies, CSRF tokens and signed raw download URLs are never exported or stored. Directory data is validated against GitHub's page format; unavailable, changed or truncated data fails visibly. Inventory discovery is limited to 64 directories and 1000 supported files; each source download is limited to 32 MiB.
 
-Private pull-request comparison and private annotation readback remain unsupported. Publication to an authorized private repository requires identity verification and authenticated Contents read access to verify its review policy. Ordinary file viewing does not imply those capabilities. GitLab account connection is not implemented.
+Website cookies do not authenticate GitHub API requests. History, private PR comparisons, binary model/PDF retrieval and remote review operations still use **Sign in with GitHub**, with private access selected. Android also uses this one-time authorization rather than another browser's cookies. Neither flow requires users to paste a token. Advanced users can instead supply a fine-grained token with the repository selected and **Contents: read**, adding publication permissions only when needed. An inaccessible private file can appear as HTTP 404; check the exact branch/path and account repository access.
+
+The website-session fallback only reads source. Private publication, PR comparison and annotation readback require the separately connected account and applicable repository permissions.
+
+Session-reader tests cover revision pinning, matching repository tabs, denied access, incomplete trees, redirects and response limits. Public tree and raw-download formats were checked against live GitHub responses. Installed-extension acceptance in a signed-in private repository remains to be checked.
 
 See [authentication security and cleanup](../SECURITY.md) for encryption boundaries, uninstall behavior and remote revocation.

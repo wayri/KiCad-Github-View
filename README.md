@@ -75,7 +75,7 @@ These collaboration captures show the local UI and a mocked policy response. No 
 | Review notes | Part, point and rectangular area anchors; severity, tags, mentions, timestamps, read/unread state, Open/Skipped/Resolved/Won't fix triage; optional visible 2D area captures |
 | Project inspection | Compact project tree; saved project settings, constraints, net classes, layer details and physical stackup where present; read-only forms and tables |
 | Fabrication | Browser Gerber/drill viewer with disclosed unsupported constructs; file selection and layer review |
-| Assembly and analytics | BOM/Stats, JSON/CSV assembly variants, fitted/DNP counts and highlights, component navigation, saved board/zone/copper statistics |
+| Assembly and analytics | BOM/Stats, JSON/CSV assembly variants, fitted/DNP counts and highlights, component navigation, saved board/zone/copper statistics, straight/arc lengths by net and layer, placement/routing candidates, imported DRC evidence and analytics JSON export |
 | 3D | SPIKE board preview, source footprint/model transforms and repository-linked WRL/VRML or self-contained GLB assets; missing models have procedural proxies |
 | HTML/iBOM | Isolated preview for self-contained HTML; interactive browser preview has no network or extension bridge; VS Code uses a static preview |
 
@@ -307,3 +307,8 @@ publication. Android supports native GitHub and GitLab accounts, public/private 
 | <img src="docs/images/android/tablet-portrait.png" alt="Tablet portrait schematic workspace" width="360"> | <img src="docs/images/android/tablet-landscape.png" alt="Tablet landscape drawing workspace" width="560"> |
 
 These previews show development build **1.49** with a synthetic sensor project. Phone drawing views were captured on a connected Android phone; tablet views use a clean tablet emulator. Captures include only the app surface, excluding Android status and navigation bars. The 1.50 release contains newer tools than these 1.49 previews. See [capture details](docs/images/README.md).
+
+App/extension shared tools and portable review transfer: [platform parity](extension/docs/platform-parity.md).
+
+Read local saved projects alongside KiCad, with file/folder drag-and-drop and parallel views: [local browser workspace and native launcher](docs/LOCAL-VIEWER.md).
+

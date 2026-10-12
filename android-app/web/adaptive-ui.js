@@ -88,7 +88,7 @@
   search.content.append($('universalSearch').closest('.universal-search'),$('universalSearchResults'));
   $('universalSearch').addEventListener('keydown',e=>{if(e.key==='Enter'&&$('universalSearchResults').hidden)search.dialog.close();});
   $('universalSearchResults').addEventListener('click',event=>{if(event.target.closest('[role=option]'))search.dialog.close();});
-  const allSheets=button('All sheets',()=>{root.KiCadSheetOverview?.open?.();tools.dialog.close();});allSheets.id='androidAllSheetsButton';allSheets.hidden=!root.KiCadSheetOverview;const shortcuts=make('div');shortcuts.className='android-pane-actions';shortcuts.append(allSheets,button('BoM manager',()=>{$('openBomManager')?.click();}),button('Sheets and parts',()=>showPane('designNavigator','partsButton')),button('Properties',()=>showPane('designInspector','propertiesButton')));tools.content.append(shortcuts);
+  const allSheets=button('All sheets',()=>{root.KiCadSheetOverview?.open?.();tools.dialog.close();});allSheets.id='androidAllSheetsButton';allSheets.hidden=!root.KiCadSheetOverview;const shortcuts=make('div');shortcuts.className='android-pane-actions';shortcuts.append(allSheets,button('Sheets and parts',()=>showPane('designNavigator','partsButton')),button('Properties',()=>showPane('designInspector','propertiesButton')));tools.content.append(shortcuts);
   for(const id of ['topSheetNavigation','drawingTools','highlightControls','variantBar'])if($(id))tools.content.append($(id));
   const selectText=button('Select text mode',()=>{API.setTextSelection(!d.body.classList.contains('text-select-mode'));tools.dialog.close();},'Select text mode');selectText.id='androidSelectText';selectText.setAttribute('aria-pressed','false');tools.content.append(selectText);
   const textSheet=sheet('androidTextSheet','Select and copy drawing text'),textBox=make('textarea');textBox.id='androidCopyText';textBox.readOnly=true;textBox.setAttribute('aria-label','Text from the active drawing');
@@ -120,6 +120,28 @@
   const chooser=$('pairChooser');if(chooser&&!chooser.dataset.androidBound){chooser.dataset.androidBound='true';let showing=false;new MutationObserver(()=>{if(!chooser.hidden){showing=true;openSheet(tools);}else if(showing){showing=false;tools.close();}}).observe(chooser,{attributes:true,attributeFilter:['hidden']});}
  }
  API.workspaceActions=workspaceActions;
+ function organizeDrawingTools(){
+  const content=$('androidToolsSheet')?.querySelector('.android-sheet-content'),drawing=$('drawingTools');if(!content||!drawing)return;
+  if(!content.dataset.organized){
+   content.dataset.organized='true';drawing.classList.add('android-primary-tools');content.prepend(drawing);
+   for(const [id,title]of [['display','Display'],['highlight','Highlighting'],['navigation','Navigation & properties'],['more','More tools']]){const group=make('details');group.id='androidToolGroup-'+id;group.className='android-tool-section';const body=make('div');body.className='android-tool-section-body';group.append(make('summary',title),body);content.append(group);}
+  }
+  const groups=Object.fromEntries(['display','highlight','navigation','more'].map(id=>[id,$('androidToolGroup-'+id).querySelector('.android-tool-section-body')]));
+  const primary=new Set(['openBomManager','openTestpoints','measureButton','viewRuleChecks','openBoardAnalytics','openCalculators']);
+  const display=new Set(['populationHighlight','gridButton','flipButton','toggleRuleMarkers','themeButton','settingsButton','androidCopperControls','variantBar','mode3d','netClassColors','ratsnestButton']);
+  const highlight=new Set(['highlightControls','androidUnselect','androidClearHighlights']);
+  const nav=new Set(['topSheetNavigation','fitPage','zoomOut','zoomIn','androidAllSheetsButton']);
+  const move=(node,target)=>{if(node.parentElement!==target)target.append(node);};
+  // Move existing controls, preserving listeners, values and accessibility names.
+  for(const node of [...drawing.children,...content.children]){
+   if(node===drawing||node.classList.contains('android-tool-section'))continue;
+   let target=primary.has(node.id)?drawing:display.has(node.id)?groups.display:highlight.has(node.id)?groups.highlight:nav.has(node.id)||node.classList.contains('android-pane-actions')?groups.navigation:groups.more;
+   if(node.classList.contains('presentation-launch'))target=groups.more;
+   move(node,target);
+  }
+  root.KiCadUIIcons?.decorate?.(content);
+ }
+ API.organizeDrawingTools=organizeDrawingTools;
  function copperControls(){
   const strip=$('floatingLayerSelector'),tools=$('androidToolsSheet')?.querySelector('.android-sheet-content');if(!strip||!tools||$('androidCopperControls'))return;
   const group=make('fieldset');group.id='androidCopperControls';group.append(make('legend','Copper zones'));const controls=[];
@@ -145,6 +167,6 @@
   d.addEventListener('pointerdown',event=>{if(sizeClass(root.innerWidth)==='expanded'||isField(event.target))return;for(const[id,close]of panes){const pane=$(id);if(visible(pane)&&!pane.contains(event.target)&&!event.target.closest?.('button,dialog,[role=dialog]'))$(close)?.click();}},true);
   // A field tap must never bubble into drawing selection or outside-dismiss handlers.
   for(const type of ['click','dblclick','contextmenu'])d.addEventListener(type,event=>{if(isField(event.target))event.stopPropagation();});
-  resize();shell();drawing();workspace();workspaceActions();compactLayers();root.KiCadAndroidProjectUI?.mount();normalizeCloseButtons();let queued=false;new MutationObserver(()=>{if(queued)return;queued=true;queueMicrotask(()=>{queued=false;drawing();workspace();workspaceActions();compactLayers();propertyBasics();normalizeCloseButtons();syncWorkspaceOverlay();});}).observe(d.body,{childList:true,subtree:true});new MutationObserver(syncWorkspaceOverlay).observe(d.body,{attributes:true,subtree:true,attributeFilter:['hidden','open','class']});root.addEventListener('resize',resize);root.addEventListener('kicad-usable-viewport-changed',resize);d.addEventListener('keydown',e=>{if(e.key==='Escape'&&API.handleBack()){e.preventDefault();e.stopPropagation();}},true);}
+  resize();shell();drawing();workspace();workspaceActions();compactLayers();root.KiCadAndroidProjectUI?.mount();normalizeCloseButtons();organizeDrawingTools();let queued=false;new MutationObserver(()=>{if(queued)return;queued=true;queueMicrotask(()=>{queued=false;drawing();workspace();workspaceActions();compactLayers();propertyBasics();normalizeCloseButtons();organizeDrawingTools();syncWorkspaceOverlay();});}).observe(d.body,{childList:true,subtree:true});new MutationObserver(syncWorkspaceOverlay).observe(d.body,{attributes:true,subtree:true,attributeFilter:['hidden','open','class']});root.addEventListener('resize',resize);root.addEventListener('kicad-usable-viewport-changed',resize);d.addEventListener('keydown',e=>{if(e.key==='Escape'&&API.handleBack()){e.preventDefault();e.stopPropagation();}},true);}
  if(d.readyState==='loading')d.addEventListener('DOMContentLoaded',init,{once:true});else init();
 })(globalThis);

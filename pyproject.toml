@@ -16,6 +16,7 @@ github = ["cryptography>=43"]
 kicad-vizdiff = "kicad_vizdiff.cli:main"
 git-kicad = "kicad_vizdiff.cli:main"
 kicad-github-app = "kicad_vizdiff.app_server:main"
+pocket-kiview = "kicad_vizdiff.local_viewer:main"
 
 [tool.setuptools.package-data]
 kicad_vizdiff = ["viewer.html"]
