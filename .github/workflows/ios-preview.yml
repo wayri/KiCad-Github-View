@@ -66,7 +66,7 @@ jobs:
           if-no-files-found: error
           retention-days: 14
       - name: Retain private draft preview when artifact storage is unavailable
-        if: steps.artifact.outcome == 'failure' && steps.build.outcome == 'success' && steps.smoke.outcome == 'success'
+        if: always() && steps.artifact.outcome == 'failure' && steps.build.outcome == 'success'
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
@@ -75,6 +75,6 @@ jobs:
         run: |
           gh release create "$PREVIEW_TAG" --target "$PREVIEW_COMMIT" --draft --prerelease \
             --title 'Pocket KiView unsigned iOS preview' \
-            --notes 'Unsigned simulator app and source. Native build and simulator startup passed. This draft is not published and cannot be installed on a physical iPhone without signing.' \
+            --notes 'Unsigned simulator app, source and startup evidence. Check the linked workflow for validation results. This draft is not published and cannot be installed on a physical iPhone without signing.' \
             dist/PocketKiView-iOS-simulator.zip dist/pocket-kiview-ios-source.zip \
             dist/ios-build.log dist/ios-simulator-startup.png
