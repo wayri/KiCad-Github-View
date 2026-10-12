@@ -43,6 +43,10 @@ Mac. It is not an installable physical-iPhone IPA and does not use signing secre
 or an Apple Developer membership. The build also retains logs and the prepared
 source archive. A successful compile is not device/runtime acceptance.
 
+If GitHub Actions artifact storage is unavailable, the workflow retains the
+same files in an unpublished draft prerelease. That fallback requires repository
+contents write permission and never publishes the draft or uploads to Apple.
+
 ## Later TestFlight preparation
 
 Apple Developer membership, an available bundle ID, distribution signing and

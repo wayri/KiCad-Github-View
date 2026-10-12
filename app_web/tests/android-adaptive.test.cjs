@@ -50,7 +50,7 @@ test('Android Back dismisses the current overlay and child pane before allowing 
 });
 
 test('Android uses a background parser when available and falls back safely if WebView refuses workers',async()=>{
- const source=fs.readFileSync('android-app/app/src/main/assets/viewer/loading-ui.js','utf8');let worker;class Worker{constructor(){worker=this;}postMessage(){}terminate(){this.terminated=true;}}
+ const source=require('node:child_process').execFileSync(process.env.PYTHON||'python',['-c',"from scripts.package_android import payload; print(payload()['loading-ui.js'].decode('utf-8'))"],{encoding:'utf8'});let worker;class Worker{constructor(){worker=this;}postMessage(){}terminate(){this.terminated=true;}}
  const context={document:{currentScript:{src:'https://appassets.androidplatform.net/assets/viewer/loading-ui.js'}},location:{href:'https://appassets.androidplatform.net/assets/viewer/index.html'},URL,Worker,KiCadVSCodeContext:{},KiCadAndroidRuntime:true,setTimeout,clearTimeout,console};vm.createContext(context);vm.runInContext(source,context);let fallback=0;const job=context.KiCadLoading.run('drawing',{},()=>{fallback++;return {ready:true};});assert.ok(worker);worker.onmessage({data:{ok:true,result:{prepared:true}}});assert.equal((await job).prepared,true);assert.equal(fallback,0);
  const blocked=context.KiCadLoading.run('drawing',{},()=>{fallback++;return {ready:true};});worker.onerror();assert.equal((await blocked).ready,true);assert.equal(fallback,1);assert.equal(worker.terminated,true);
 });

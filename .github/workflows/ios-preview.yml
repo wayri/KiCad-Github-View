@@ -11,7 +11,7 @@ on:
       - '.github/workflows/ios-preview.yml'
 
 permissions:
-  contents: read
+  contents: write
 
 concurrency:
   group: ios-preview-${{ github.ref }}
@@ -37,6 +37,7 @@ jobs:
           plutil -lint ios-app/PocketKiView.xcodeproj/project.pbxproj
           xcodebuild -version
       - name: Build unsigned iPhone and iPad simulator app
+        id: build
         shell: bash
         run: |
           set -o pipefail
@@ -48,8 +49,11 @@ jobs:
             ios-app/DerivedData/Build/Products/Debug-iphonesimulator/PocketKiView.app \
             dist/PocketKiView-iOS-simulator.zip
       - name: Launch the unsigned simulator app
+        id: smoke
         run: python scripts/ios_simulator_smoke.py --app ios-app/DerivedData/Build/Products/Debug-iphonesimulator/PocketKiView.app
       - name: Retain preview and build evidence
+        id: artifact
+        continue-on-error: true
         if: always()
         uses: actions/upload-artifact@v7
         with:
@@ -61,3 +65,16 @@ jobs:
             dist/ios-simulator-startup.png
           if-no-files-found: error
           retention-days: 14
+      - name: Retain private draft preview when artifact storage is unavailable
+        if: steps.artifact.outcome == 'failure' && steps.build.outcome == 'success' && steps.smoke.outcome == 'success'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          PREVIEW_TAG: ios-preview-${{ github.run_id }}
+          PREVIEW_COMMIT: ${{ github.sha }}
+        run: |
+          gh release create "$PREVIEW_TAG" --target "$PREVIEW_COMMIT" --draft --prerelease \
+            --title 'Pocket KiView unsigned iOS preview' \
+            --notes 'Unsigned simulator app and source. Native build and simulator startup passed. This draft is not published and cannot be installed on a physical iPhone without signing.' \
+            dist/PocketKiView-iOS-simulator.zip dist/pocket-kiview-ios-source.zip \
+            dist/ios-build.log dist/ios-simulator-startup.png
