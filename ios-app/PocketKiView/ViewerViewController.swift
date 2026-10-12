@@ -199,7 +199,7 @@ final class ViewerViewController: UIViewController, WKNavigationDelegate, WKUIDe
         let suffix = (name as NSString).pathExtension.lowercased()
         guard name.utf8.count <= 120, !name.isEmpty, !name.contains("/"), !name.contains("\\"),
               !name.hasPrefix("."), !name.unicodeScalars.contains(where: { CharacterSet.controlCharacters.contains($0) }),
-              extensions[suffix] == mime.split(separator: ";").first.map { String($0) }, text.utf8.count <= 4 * 1024 * 1024 else {
+              extensions[suffix] == mime.split(separator: ";").first.map({ String($0) }), text.utf8.count <= 4 * 1024 * 1024 else {
             throw NSError(domain: "PocketKiView", code: 3, userInfo: [NSLocalizedDescriptionKey: "This export format or size is unsupported."])
         }
         let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
@@ -233,6 +233,25 @@ final class ViewerViewController: UIViewController, WKNavigationDelegate, WKUIDe
 
     func webViewWebContentProcessDidTerminate(_ webView: WKWebView) {
         showError("The viewer ran out of resources. Reopen the app or import a smaller project.")
+    }
+
+    func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: Error) {
+        showError("The bundled viewer could not load: " + error.localizedDescription)
+    }
+
+    func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) {
+        showError("The bundled viewer could not load: " + error.localizedDescription)
+    }
+
+    func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
+        #if DEBUG
+        guard webView.url?.lastPathComponent == "local-viewer.html" else { return }
+        webView.evaluateJavaScript("document.body.innerText.includes('Pocket KiView for iPhone and iPad') && document.querySelector('#chooseFiles').getBoundingClientRect().width > 0 && !!window.KiCadLocalWorkspace") { [weak self] value, error in
+            guard let self = self, value as? Bool == true, error == nil else { return }
+            let marker = self.storageURL.deletingLastPathComponent().appendingPathComponent("preview-ready.txt")
+            try? Data("Rendered native welcome page".utf8).write(to: marker, options: .atomic)
+        }
+        #endif
     }
 
     private func showError(_ text: String) {

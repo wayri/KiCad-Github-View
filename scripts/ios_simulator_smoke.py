@@ -27,6 +27,8 @@ def main():
         command('boot', device)
         command('bootstatus', device, '-b', timeout=240)
         command('install', device, str(args.app.resolve()))
+        container = Path(command('get_app_container', device, 'dev.kicadvizdiff.ios', 'data').strip())
+        marker = container / 'Library/Application Support/PocketKiView/preview-ready.txt'
         print(command('launch', device, 'dev.kicadvizdiff.ios').strip(), flush=True)
         deadline = time.monotonic() + 30
         while True:
@@ -44,7 +46,14 @@ def main():
         except HTTPError as error:
             if error.code != 403:
                 raise SystemExit(f'Unexpected unauthenticated API response: {error.code}')
-        # Give WebKit its initial layout before retaining visual startup evidence.
+        # Native Debug readiness requires the actual rendered iOS welcome page.
+        deadline = time.monotonic() + 60
+        while not marker.is_file():
+            if time.monotonic() >= deadline:
+                args.output.parent.mkdir(parents=True, exist_ok=True)
+                command('io', device, 'screenshot', str(args.output))
+                raise SystemExit('WebKit did not render the native welcome page; inspect the startup screenshot.')
+            time.sleep(.5)
         time.sleep(3)
         args.output.parent.mkdir(parents=True, exist_ok=True)
         command('io', device, 'screenshot', str(args.output))
