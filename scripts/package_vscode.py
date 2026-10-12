@@ -20,6 +20,7 @@ ASSETS = ('analysis-data.js', 'analysis-viewer.html', 'analysis-viewer.css', 'an
 ASSETS += ('population-inspection.js','population-photo.js','population-review.js','testpoint-tools.js','photo-alignment.js','component-links.js','photo-review.js','photo-review.css')
 ASSETS += ('ui-foundation.css','gerber-camera.js')
 ASSETS += ('pdf-tools.js','pdf-viewer.html','pdf-viewer.css','pdf-viewer.js','vendor/pdfjs/FILES.json') + tuple('vendor/pdfjs/'+name for name in json.loads((ROOT/'extension/vendor/pdfjs/FILES.json').read_text())['files'])
+ASSETS += ('engineering-launcher.js', 'review-handoff.js', 'local-runtime.js')
 BUILD_INPUTS = ('step-decoder.js', 'step-worker.js', 'vendor/occt/occt-import-js.js')
 ASSETS += ('variant-manager.js', 'bom-import.js', 'bom-viewer.html', 'bom-viewer.js','bom-workspace.js', 'bom-viewer.css', 'calculator-tools.js', 'calculator-viewer.html', 'calculator-viewer.js', 'calculator-viewer.css', 'analysis-spatial.js', 'analysis-overlay.js', 'analysis-bom-link.js')
 HOST_FILES = ('conflict-host.js', 'package.json', 'extension.js', 'webview-bridge.js', 'README.md', 'icon.png')

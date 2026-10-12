@@ -14,6 +14,7 @@ FILES = {'analysis-data.js', 'analysis-viewer.html', 'analysis-viewer.css', 'ana
          'vendor/SPIKE-ENGINE-NOTICE.md', 'vendor/THREE-LICENSE', 'credential-vault.js',
          'credential-vault-host.html', 'credential-vault-host.js', 'credential-vault-worker.js'}
 FILES.update(MODEL_FILES)
+FILES.update({'engineering-launcher.js', 'review-handoff.js', 'local-project.js', 'local-import.js', 'local-runtime.js', 'local-viewer.html', 'local-viewer.js', 'local-viewer.css'})
 FILES.update({'analysis-spatial.js', 'analysis-overlay.js'})
 FILES.update({'variant-manager.js', 'bom-import.js', 'bom-viewer.html', 'bom-viewer.js','bom-workspace.js', 'bom-viewer.css', 'calculator-tools.js', 'calculator-viewer.html', 'calculator-viewer.js', 'calculator-viewer.css', 'analysis-bom-link.js', 'gerber-analysis.js', 'gerber-viewer.html', 'gerber-viewer.js', 'gerber-viewer.css'})
 

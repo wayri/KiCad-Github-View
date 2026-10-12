@@ -1,0 +1,37 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {};
+	objectVersion = 56;
+	objects = {
+		00000000000000000000000A = { isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppDelegate.swift; sourceTree = "<group>"; };
+		000000000000000000000014 = { isa = PBXBuildFile; fileRef = 00000000000000000000000A; };
+		00000000000000000000000B = { isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ViewerViewController.swift; sourceTree = "<group>"; };
+		000000000000000000000015 = { isa = PBXBuildFile; fileRef = 00000000000000000000000B; };
+		00000000000000000000000C = { isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocalViewerServer.swift; sourceTree = "<group>"; };
+		000000000000000000000016 = { isa = PBXBuildFile; fileRef = 00000000000000000000000C; };
+		00000000000000000000000D = { isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ImportedProjectStore.swift; sourceTree = "<group>"; };
+		000000000000000000000017 = { isa = PBXBuildFile; fileRef = 00000000000000000000000D; };
+		00000000000000000000000E = { isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		00000000000000000000000F = { isa = PBXFileReference; lastKnownFileType = folder; path = web; sourceTree = "<group>"; };
+		000000000000000000000010 = { isa = PBXFileReference; lastKnownFileType = text.xml; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
+		000000000000000000000019 = { isa = PBXBuildFile; fileRef = 00000000000000000000000F; };
+		00000000000000000000001A = { isa = PBXBuildFile; fileRef = 000000000000000000000010; };
+		000000000000000000000011 = { isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = PocketKiView.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		00000000000000000000001E = { isa = PBXGroup; children = (00000000000000000000001F, 000000000000000000000020); sourceTree = "<group>"; };
+		00000000000000000000001F = { isa = PBXGroup; children = (00000000000000000000000A, 00000000000000000000000B, 00000000000000000000000C, 00000000000000000000000D, 00000000000000000000000E, 00000000000000000000000F, 000000000000000000000010); path = PocketKiView; sourceTree = "<group>"; };
+		000000000000000000000020 = { isa = PBXGroup; children = (000000000000000000000011); name = Products; sourceTree = "<group>"; };
+		000000000000000000000028 = { isa = PBXSourcesBuildPhase; buildActionMask = 2147483647; files = (000000000000000000000014, 000000000000000000000015, 000000000000000000000016, 000000000000000000000017); runOnlyForDeploymentPostprocessing = 0; };
+		000000000000000000000029 = { isa = PBXResourcesBuildPhase; buildActionMask = 2147483647; files = (000000000000000000000019, 00000000000000000000001A); runOnlyForDeploymentPostprocessing = 0; };
+		00000000000000000000002A = { isa = PBXFrameworksBuildPhase; buildActionMask = 2147483647; files = (); runOnlyForDeploymentPostprocessing = 0; };
+		000000000000000000000032 = { isa = PBXNativeTarget; buildConfigurationList = 00000000000000000000003D; buildPhases = (000000000000000000000028, 00000000000000000000002A, 000000000000000000000029); buildRules = (); dependencies = (); name = PocketKiView; productName = PocketKiView; productReference = 000000000000000000000011; productType = "com.apple.product-type.application"; };
+		000000000000000000000001 = { isa = PBXProject; attributes = { LastUpgradeCheck = 1600; }; buildConfigurationList = 00000000000000000000003C; compatibilityVersion = "Xcode 14.0"; developmentRegion = en; hasScannedForEncodings = 0; knownRegions = (en, Base); mainGroup = 00000000000000000000001E; productRefGroup = 000000000000000000000020; projectDirPath = ""; projectRoot = ""; targets = (000000000000000000000032); };
+		000000000000000000000046 = { isa = XCBuildConfiguration; buildSettings = { CLANG_ENABLE_MODULES = YES; SDKROOT = iphoneos; IPHONEOS_DEPLOYMENT_TARGET = 16.0; }; name = Debug; };
+		000000000000000000000047 = { isa = XCBuildConfiguration; buildSettings = { CLANG_ENABLE_MODULES = YES; SDKROOT = iphoneos; IPHONEOS_DEPLOYMENT_TARGET = 16.0; }; name = Release; };
+		000000000000000000000048 = { isa = XCBuildConfiguration; buildSettings = { PRODUCT_BUNDLE_IDENTIFIER = dev.kicadvizdiff.ios; PRODUCT_NAME = "$(TARGET_NAME)"; INFOPLIST_FILE = PocketKiView/Info.plist; GENERATE_INFOPLIST_FILE = NO; SWIFT_VERSION = 5.0; SWIFT_STRICT_CONCURRENCY = minimal; TARGETED_DEVICE_FAMILY = "1,2"; IPHONEOS_DEPLOYMENT_TARGET = 16.0; MARKETING_VERSION = 1.0; CURRENT_PROJECT_VERSION = 1; CODE_SIGN_STYLE = Automatic; LD_RUNPATH_SEARCH_PATHS = ("$(inherited)", "@executable_path/Frameworks"); SWIFT_OPTIMIZATION_LEVEL = "-Onone"; DEBUG_INFORMATION_FORMAT = dwarf;  }; name = Debug; };
+		000000000000000000000049 = { isa = XCBuildConfiguration; buildSettings = { PRODUCT_BUNDLE_IDENTIFIER = dev.kicadvizdiff.ios; PRODUCT_NAME = "$(TARGET_NAME)"; INFOPLIST_FILE = PocketKiView/Info.plist; GENERATE_INFOPLIST_FILE = NO; SWIFT_VERSION = 5.0; SWIFT_STRICT_CONCURRENCY = minimal; TARGETED_DEVICE_FAMILY = "1,2"; IPHONEOS_DEPLOYMENT_TARGET = 16.0; MARKETING_VERSION = 1.0; CURRENT_PROJECT_VERSION = 1; CODE_SIGN_STYLE = Automatic; LD_RUNPATH_SEARCH_PATHS = ("$(inherited)", "@executable_path/Frameworks"); SWIFT_OPTIMIZATION_LEVEL = "-O"; DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";  }; name = Release; };
+		00000000000000000000003C = { isa = XCConfigurationList; buildConfigurations = (000000000000000000000046, 000000000000000000000047); defaultConfigurationIsVisible = 0; defaultConfigurationName = Release; };
+		00000000000000000000003D = { isa = XCConfigurationList; buildConfigurations = (000000000000000000000048, 000000000000000000000049); defaultConfigurationIsVisible = 0; defaultConfigurationName = Release; };
+	};
+	rootObject = 000000000000000000000001;
+}

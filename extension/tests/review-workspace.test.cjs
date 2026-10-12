@@ -60,10 +60,11 @@ function workspaceRuntime(respond=async()=>[], hooks={}){
   const keyHandlers=new Set();
   let resizeCallback;
   const context={innerWidth:hooks.width||800,innerHeight:hooks.frameHeight||600,EventTarget,CustomEvent,TextEncoder,Map,Set,console,crypto:require('node:crypto').webcrypto,localStorage,document:{body,querySelectorAll:selector=>{const found=[];const visit=n=>{if(selector==='dialog[open]'&&n.tagName==='DIALOG'&&n.open)found.push(n);for(const c of n.children)visit(c);};visit(body);return found;},getElementById:id=>{const node=elements.get(id);return node&&body.contains(node)?node:null;},createElement:tag=>new Element(tag),createElementNS:(_,tag)=>new Element(tag)},addEventListener:(type,fn)=>{if(type==='keydown')keyHandlers.add(fn);if(type==='resize')resizeCallback=fn;},removeEventListener:(type,fn)=>{if(type==='keydown')keyHandlers.delete(fn);},matchMedia:()=>({matches:true}),
-    KiCadCommentCompose:{...require('../comment-compose.js'),...(hooks.compose||{})},KiCadReviewTools:require('../review-tools.js'),KiCadDesignModel:require('../design-model.js'),KiCadNetModel:require('../net-model.js'),KiCadReviewComments:require('../review-comments.js'),KiCadBrowserData:require('../browser-data.js'),KiCadOwnedCanvas:require('../owned-canvas.js'),
-    top:hooks.top||{},KiCadTestpointTools:hooks.testpointTools,KiCadPhotoReview:hooks.photoReview,KiCadComponentLinks:require('../component-links.js'),KiCadPairedReview:require('../paired-review.js'),KiCadBomAnalytics:require('../bom-analytics.js'),
-    chrome:{runtime:{sendMessage:async message=>({ok:true,result:await respond(message)})}},setTimeout,clearTimeout,URL,Blob};
+    KiCadViewState:require('../view-state.js'),KiCadBomManager:require('../bom-manager.js'),KiCadReviewHandoff:hooks.handoff,KiCadEngineeringLauncher:hooks.engineeringLauncher,KiCadCommentCompose:{...require('../comment-compose.js'),...(hooks.compose||{})},KiCadReviewTools:require('../review-tools.js'),KiCadDesignModel:require('../design-model.js'),KiCadNetModel:require('../net-model.js'),KiCadReviewComments:require('../review-comments.js'),KiCadBrowserData:require('../browser-data.js'),KiCadOwnedCanvas:require('../owned-canvas.js'),
+    top:hooks.top||{},KiCadRatsnest:require('../ratsnest.js'),KiCadTestpointTools:hooks.testpointTools,KiCadPhotoReview:hooks.photoReview,KiCadComponentLinks:require('../component-links.js'),KiCadPairedReview:require('../paired-review.js'),KiCadBomAnalytics:require('../bom-analytics.js'),
+    chrome:{storage:{local:hooks.chromeStorage||{get:async()=>({}),set:async()=>{}}},runtime:{sendMessage:async message=>({ok:true,result:await respond(message)})}},setTimeout,clearTimeout,URL,Blob};
   if(hooks.android)context.KiCadAndroidRuntime=true;
+  if(hooks.localRuntime)context.KiCadLocalRuntime=true;
   if(hooks.vscode)context.KiCadVSCodeContext={};
   if(hooks.navigation){Object.assign(context,{KiCadProjectSearch:require('../project-search.js'),KiCadRuleReports:require('../rule-reports.js'),KiCadDesignDiff:diff,KiCadPCBRenderer:require('../pcb-renderer.js'),KiCadSchematicRenderer:require('../schematic-renderer.js')});vm.runInNewContext(fs.readFileSync(path.join(__dirname,'../review-navigation.js'),'utf8'),context);get('ruleSeverity').value='all';get('showRuleMarkers').checked=true;}
   canvas.setNetHighlights=(nets,options)=>{canvas.highlightNets=nets;canvas.netHighlight=nets[0]||null;canvas.netPrimitives=new Set(nets.flatMap(n=>n.primitives||[]));canvas.highlightMode=options.mode;};
@@ -322,8 +323,25 @@ test('BOM reflects saved DNP and exposes counts, safe component navigation and c
 });
 test('zone analytics navigation selects saved zone UUID and displays square-millimetre sums',()=>{
  const source='(kicad_pcb (zone (uuid "zone") (net_name "GND") (layer "F.Cu") (polygon (pts (xy 0 0)(xy 10 0)(xy 10 10)(xy 0 10))) (filled_polygon (layer "F.Cu") (pts (xy 1 1)(xy 9 1)(xy 9 9)(xy 1 9)))))';
- const view=workspaceRuntime(undefined,{source});view.load();view.get('navBom').click();view.get('zoneStats').children.find(e=>e.onclick).click();
+ const view=workspaceRuntime(undefined,{source});view.load();view.get('navBom').click();view.get('zoneStats').children.find(e=>e.onclick&&e.textContent.includes('64.000 mm² fill sum')).click();
  assert.match(view.get('propertyList').textContent,/Outline polygon area sum 100.000 mm²/);assert.match(view.get('propertyList').textContent,/Saved fill polygon area sum 64.000 mm²/);assert.match(view.get('propertyList').textContent,/overlaps are counted repeatedly/);assert.ok(view.canvas.netPrimitives.size>0);
+});
+test('board analytics selects source-bound nets and placement candidates and exports routing provenance',()=>{
+ const exports=[],source='(kicad_pcb(net 1 "GND")(footprint "x"(uuid "a")(at 0 0)(property "Reference" "R1")(pad "1" smd circle(at 0 0)(size 1 1)(layers "F.Cu")(net 1 "GND")))(footprint "x"(uuid "b")(at 20 20)(property "Reference" "R2")(pad "1" smd circle(at 0 0)(size 1 1)(layers "F.Cu")(net 1 "GND")))(segment(start 10 10)(end 13 14)(width .2)(layer "F.Cu")(net 1)))';
+ const view=workspaceRuntime(undefined,{source,top:{AndroidKiCad:{exportText:(...args)=>exports.push(args)}}});view.load();view.get('openBoardAnalytics').click();
+ assert.match(view.get('boardStats').textContent,/Total track length 5.000 mm/);assert.match(view.get('boardStats').textContent,/Candidate airwires 1/);
+ view.get('zoneStats').children.find(e=>e.textContent==='GND: 5.000 mm').click();assert.equal(view.canvas.netHighlight.name,'GND');
+ view.get('zoneStats').children.find(e=>e.textContent.startsWith('R1 · Footprint origin')).click();assert.equal(view.get('selectedName').textContent,'R1');
+ view.get('zoneStats').children.find(e=>e.textContent==='Export board analytics JSON').click();const [name,text,mime]=exports[0],data=JSON.parse(text);
+ assert.equal(name,'board-analytics.json');assert.equal(mime,'application/json');assert.equal(data.source.path,'board.kicad_pcb');assert.equal(data.source.ref,'main');assert.equal(data.board.totalTrackLengthMm,5);assert.equal(data.routing.lines.length,1);assert.equal(data.routing.status,'candidate-connections');assert.match(data.routing.warnings.join(' '),/not KiCad unrouted/);view.workspace.dispose();
+});
+test('board analytics keeps imported DRC unconnected evidence distinct and clears it with reports',async()=>{
+ const exports=[],view=workspaceRuntime(undefined,{navigation:true,top:{AndroidKiCad:{exportText:(...args)=>exports.push(args)}}});view.load();
+ const finding={type:'unconnected_items',description:'Unconnected pads',severity:'error',items:[]},report={source:'board.kicad_pcb',date:'2026-10-04T00:00:00Z',kicad_version:'9.0.0',coordinate_units:'mm',violations:[],unconnected_items:[finding,{...finding,excluded:true}]};
+ view.get('ruleReportFile').files=[{size:500,name:'board-drc.json',text:async()=>JSON.stringify(report)}];await view.get('ruleReportFile').onchange();view.get('openBoardAnalytics').click();
+ assert.match(view.get('zoneStats').textContent,/board-drc.json: 1 saved unconnected findings · 1 excluded/);assert.match(view.get('zoneStats').textContent,/Report revision is unverified/);
+ view.get('zoneStats').children.find(e=>e.textContent==='Export board analytics JSON').click();const data=JSON.parse(exports[0][1]);assert.equal(data.savedRoutingReports[0].unconnectedFindings,1);assert.equal(data.savedRoutingReports[0].metadata.associationVerified,false);
+ view.get('clearRuleReports').click();view.get('navBom').click();assert.doesNotMatch(view.get('zoneStats').textContent,/board-drc.json/);view.workspace.dispose();
 });
 
 const {sheetEntries}=require('../review-workspace.js');
@@ -995,4 +1013,43 @@ test('core assembly and testpoint actions are direct tools; photo inspection sta
  assert.equal(view.get('openPhotoReview').parentElement.id,'assemblyInspectionTools');
  assert.notEqual(view.get('assemblyInspectionTools').open,true);
  const drawer=view.document.createElement('dialog');drawer.id='androidToolsSheet';view.document.body.append(drawer);drawer.open=true;view.get('openTestpoints').click();assert.equal(drawer.open,false);assert.equal(opened.model.nets[0].name,'SIGNAL');view.workspace.dispose();
+});
+
+test('portable review transfers assembly and camera to Android, retains local work and never publishes',async()=>{
+ const api=require('../review-handoff.js'),bom=require('../bom-manager.js');let transfer;const calls=[],exports=[],notes=[];
+ const view=workspaceRuntime(async message=>{calls.push(message);if(message.type==='comment-list')return notes;if(message.type==='comment-save'){notes.push(message.comment);return message.comment;}return[];},{handoff:{...api,open:options=>transfer=options},top:{AndroidKiCad:{exportText:(...args)=>exports.push(args)}}});
+ view.load();view.get('openReviewHandoff').click();await new Promise(r=>setImmediate(r));
+ const sourceState=await transfer.getState(),files=transfer.getFiles(),part=bom.model(require('../design-model.js').buildProject(files).objects,'footprint')[0];
+ const incoming={...sourceState,scope:{repository:'other/design',ref:'saved-copy',file:files[0].path},bom:{scope:api.bomScope({repository:'other/design',ref:'saved-copy',file:files[0].path}),parts:{[part.id]:{Assembly:'placed',Notes:'Incoming inspection'}}},comments:[{id:'portable-note',text:'Verify resistor',createdAt:'2026-10-10T00:00:00Z',anchor:{repository:'other/design',ref:'saved-copy',file:files[0].path}}],view:{...sourceState.view,camera:{x:12,y:34,zoom:5},ruler:{kind:'distance',points:[{x:0,y:0},{x:3,y:4}]}}};
+ const text=await api.create(incoming,files),key='kicad-bom-manager:v1:'+sourceState.bom.scope;
+ view.receipts.set(key,bom.metadataJSON(sourceState.bom.scope,{[part.id]:{Assembly:'verified',MPN:'Local-MPN'}}));
+ const prepared=await api.prepare(text,transfer.getTarget('default'),files);assert.equal(prepared.translated,true);
+ assert.match(await transfer.onApply(prepared),/Imported 1 notes/);assert.equal(notes[0].anchor.repository,'wayri/fixture');
+ const merged=bom.validateMetadata(view.receipts.get(key),sourceState.bom.scope);assert.equal(merged[part.id].Assembly,'verified');assert.equal(merged[part.id].MPN,'Local-MPN');assert.equal(merged[part.id].Notes,'Incoming inspection');
+ assert.equal(view.canvas.viewport.camera.center.x,12);assert.equal(view.canvas.viewport.camera.center.y,34);assert.equal(view.canvas.viewport.camera.zoom,5);assert.equal(view.get('rulerControls').hidden,false);
+ assert.match(await transfer.onApply(prepared),/Imported 0 notes · 1 existing note IDs retained/);assert.equal(notes.length,1);
+ transfer.onExport('pocket-kiview-review.json',text,'application/json');assert.equal(exports[0][0],'pocket-kiview-review.json');assert.equal(exports[0][1],text);
+ assert.equal(calls.some(m=>/publish|post|discussion-create/.test(m.type)),false);view.workspace.dispose();
+});
+
+test('handoff persists variants through host storage and refuses overfull note imports before mutation',async()=>{
+ const api=require('../review-handoff.js');let transfer;const saved={},notes=Array.from({length:100},(_,i)=>({id:'old-'+i}));
+ const view=workspaceRuntime(async m=>m.type==='comment-list'?notes:[],{handoff:{...api,open:options=>transfer=options},chromeStorage:{get:async()=>saved,set:async values=>Object.assign(saved,values)}});view.load();view.get('openReviewHandoff').click();await new Promise(r=>setImmediate(r));
+ const state=await transfer.getState();state.comments=[];state.variant='prototype';state.config={schemaVersion:1,variants:[{id:'prototype',name:'Prototype',parts:[{path:'board.kicad_pcb',reference:'R1',populated:false}]}]};state.bom.scope=api.bomScope(state.scope,state.variant);
+ const text=await api.create(state,transfer.getFiles()),prepared=await api.prepare(text,transfer.getTarget(state.variant),transfer.getFiles());
+ await transfer.onApply(prepared);assert.equal(view.get('variantSelect').value,'prototype');assert.equal(Object.values(saved)[0].variants[0].id,'prototype');
+ const key='kicad-bom-manager:v1:'+prepared.data.bom.scope,before=view.receipts.get(key);prepared.comments=[{id:'new',anchor:{file:'board.kicad_pcb'}}];
+ await assert.rejects(()=>transfer.onApply(prepared),/exceed 100 notes/);assert.equal(view.receipts.get(key),before);view.workspace.dispose();
+});
+
+
+test('local browser review remains offline after asynchronous mounting',async()=>{
+ const calls=[];const view=workspaceRuntime(async m=>{calls.push(m);return[];},{localRuntime:true});view.load();await new Promise(r=>setImmediate(r));
+ assert.equal(view.get('githubPane').hidden,true);assert.equal(view.get('commentPublishSettings').hidden,true);assert.equal(view.get('postComment').hidden,true);assert.match(view.get('reviewStorageHint').textContent,/Notes stay in this browser/);assert.equal(calls.some(m=>m.type.startsWith('github-')||m.type==='comment-policy-status'),false);view.workspace.dispose();
+});
+
+
+test('iOS review export uses native Share with the same bounded payload as Android',async()=>{
+ const api=require('../review-handoff.js');let handoff;const exported=[];const view=workspaceRuntime(async()=>[],{localRuntime:true,handoff:{...api,open:o=>handoff=o},top:{KiViewIOS:{exportText:(...args)=>exported.push(args)}}});view.load();view.get('openReviewHandoff').click();
+ const text=await api.create(await handoff.getState(),handoff.getFiles());handoff.onExport('pocket-kiview-review.json',text,'application/json;charset=utf-8');assert.equal(exported.length,1);assert.equal(exported[0][0],'pocket-kiview-review.json');assert.equal(exported[0][1],text);assert.equal(exported[0][2],'application/json');assert.throws(()=>handoff.onExport('too-large.json','x'.repeat(4*1024*1024+1),'application/json'),/exceeds 4 MiB/);view.workspace.dispose();
 });

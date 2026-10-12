@@ -78,3 +78,9 @@ The Android capture build passed `assembleDebug`, `assembleDebugAndroidTest` and
 `integration/testpoints-phone-0.12.40.png` is a local browser screenshot at 389 CSS pixels using `extension/tests/fixtures/bench-workflow/board.kicad_pcb` and mocked repository transport. It shows filtered saved testpoint data; it is not a physical-phone or live GitHub extension capture.
 
 `integration/assembly-phone-0.12.40.png` uses the same synthetic fixture at 389 CSS pixels. It shows manually recorded assembly progress and the unfinished-parts action; no physical assembly or inspection result is represented.
+
+`integration/board-analytics-phone.png` is a local browser capture at 389 CSS pixels using the retained synthetic `extension/tests/fixtures/board-analytics/tracks.kicad_pcb`, saved by native KiCad 10.0.6, with mocked repository transport. It shows saved straight/curved lengths and per-layer totals. It is not a physical-phone, complete-board or live GitHub acceptance capture. Both drawing themes and the desktop layout were checked.
+
+`integration/review-handoff-phone.png`: shared transfer dialog after browser export/import, at 389 CSS pixels. Synthetic board fixture and mocked repository transport; controls are 44 CSS pixels high, with no horizontal dialog overflow. This is browser evidence, not a physical-phone capture.
+
+`integration/local-parallel-view.png`: offline local workspace reading the retained sensor schematic hierarchy and PCB over the session-bound loopback transport. Browser file import, saved-source reload and R1 cross-probing were exercised. No KiCad renderer or Git host transport is used; native KiCad menu launch is not demonstrated by this capture.

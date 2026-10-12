@@ -2,6 +2,7 @@
 ((root)=>{
   'use strict';
   const paths={
+    analytics:'M3 3v18h18 M7 17v-5h3v5 M12 17V7h3v10 M17 17v-8h3v8',
     star:'m12 3 3 6 7 1-5 5 1 7-6-3-6 3 1-7-5-5 7-1z',
     bookmark:'M6 3h12v19l-6-4-6 4z',
     folder:'M3 6h7l2 3h9v11H3z M3 6V4h7l2 2',

@@ -1,0 +1,63 @@
+name: Build iOS preview
+
+on:
+  workflow_dispatch:
+  push:
+    branches: ['work/**']
+    paths:
+      - 'ios-app/**'
+      - 'extension/**'
+      - 'scripts/package_ios.py'
+      - '.github/workflows/ios-preview.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ios-preview-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  simulator:
+    runs-on: macos-15
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.11'
+      - name: Stage the offline viewer
+        run: python scripts/package_ios.py
+      - name: Validate native metadata
+        run: |
+          plutil -lint ios-app/PocketKiView/Info.plist
+          plutil -lint ios-app/PocketKiView/PrivacyInfo.xcprivacy
+          plutil -lint ios-app/PocketKiView.xcodeproj/project.pbxproj
+          xcodebuild -version
+      - name: Build unsigned iPhone and iPad simulator app
+        shell: bash
+        run: |
+          set -o pipefail
+          xcodebuild -project ios-app/PocketKiView.xcodeproj -scheme PocketKiView \
+            -configuration Debug -sdk iphonesimulator -destination 'generic/platform=iOS Simulator' \
+            -derivedDataPath ios-app/DerivedData CODE_SIGNING_ALLOWED=NO build \
+            | tee dist/ios-build.log
+          ditto -c -k --sequesterRsrc --keepParent \
+            ios-app/DerivedData/Build/Products/Debug-iphonesimulator/PocketKiView.app \
+            dist/PocketKiView-iOS-simulator.zip
+      - name: Launch the unsigned simulator app
+        run: python scripts/ios_simulator_smoke.py --app ios-app/DerivedData/Build/Products/Debug-iphonesimulator/PocketKiView.app
+      - name: Retain preview and build evidence
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: pocket-kiview-ios-preview-${{ github.run_id }}
+          path: |
+            dist/PocketKiView-iOS-simulator.zip
+            dist/pocket-kiview-ios-source.zip
+            dist/ios-build.log
+            dist/ios-simulator-startup.png
+          if-no-files-found: error
+          retention-days: 14

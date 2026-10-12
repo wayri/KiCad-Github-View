@@ -37,10 +37,11 @@
     const nets=new Map(), names=new Map();
     const codeOf=(form)=> {
       const raw=value(form?.[1]);
+      if(Number(field(ast,'version'))>=20260206&&typeof raw==='string'&&raw&&form.length===2)return `name:${raw}`;
       return typeof raw === "number" && Number.isSafeInteger(raw) && raw >= 0 ? String(raw) : null;
     };
     const declare=(form)=> {
-      const code=codeOf(form), name=value(form?.[2]);
+      const code=codeOf(form), name=code?.startsWith('name:')?value(form?.[1]):value(form?.[2]);
       if (!code || code === "0" || typeof name !== "string" || !name) return;
       if (names.has(code) && names.get(code) !== name) warn(`${path}: net code ${code} has conflicting saved names; using ${names.get(code)}.`);
       else names.set(code,name);
