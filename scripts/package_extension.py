@@ -16,12 +16,15 @@ FILES = {'analysis-data.js', 'analysis-viewer.html', 'analysis-viewer.css', 'ana
 FILES.update(MODEL_FILES)
 FILES.update({'engineering-launcher.js', 'review-handoff.js', 'local-project.js', 'local-import.js', 'local-runtime.js', 'local-viewer.html', 'local-viewer.js', 'local-viewer.css'})
 FILES.update({'analysis-spatial.js', 'analysis-overlay.js'})
-FILES.update({'variant-manager.js', 'bom-import.js', 'bom-viewer.html', 'bom-viewer.js','bom-workspace.js', 'bom-viewer.css', 'calculator-tools.js', 'calculator-viewer.html', 'calculator-viewer.js', 'calculator-viewer.css', 'analysis-bom-link.js', 'gerber-analysis.js', 'gerber-viewer.html', 'gerber-viewer.js', 'gerber-viewer.css'})
+FILES.update({'variant-manager.js', 'bom-import.js', 'bom-viewer.html', 'bom-viewer.js','bom-workspace.js', 'bom-field-table.js', 'bom-viewer.css', 'calculator-tools.js', 'calculator-viewer.html', 'calculator-viewer.js', 'calculator-viewer.css', 'analysis-bom-link.js', 'gerber-analysis.js', 'gerber-viewer.html', 'gerber-viewer.js', 'gerber-viewer.css'})
+FILES.update({'calculator-catalog.js','calculator-visuals.js'})
+FILES.update({'tool-header.css','tool-header.js'})
 
 FILES.update({'population-inspection.js','population-photo.js','population-review.js','testpoint-tools.js','photo-alignment.js','component-links.js','photo-review.js','photo-review.css'})
 FILES.update({'ui-foundation.css','gerber-camera.js'})
 PDF_FILES = {'pdf-tools.js','pdf-viewer.html','pdf-viewer.css','pdf-viewer.js','vendor/pdfjs/FILES.json'} | {'vendor/pdfjs/'+name for name in json.loads((ROOT/'extension/vendor/pdfjs/FILES.json').read_text())['files']}
 FILES.update(PDF_FILES)
+FILES.update({'section-pages.js','section-pages.css','board-setup-ui.js','board-setup-ui.css','mobile-sidebar.js','mobile-sidebar.css','testpoint-tools.css','sheet-hierarchy-links.js','responsive-controls.js','phone-polish.css'})
 
 def package(root: Path = ROOT, output: Path | None = None) -> Path:
     source = root / 'extension'

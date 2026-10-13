@@ -1,0 +1,26 @@
+@media(max-width:839px){
+ body :is(dialog,.viewer-settings,.review-sidebar,#objectMenu,.review-control-popover,#companionChooser,#sheetOverview) :is(button,input,select,textarea){box-sizing:border-box;max-width:100%;min-height:44px}
+ body :is(dialog,.viewer-settings,.review-sidebar,#objectMenu,.review-control-popover,#companionChooser,#sheetOverview) button:not(.icon-only):not(.android-close-button):not(.section-page-back):not(.object-row):not(.project-file-row):not(.sheet-open){flex-shrink:0;white-space:normal!important;word-break:normal!important;overflow-wrap:normal!important;min-width:44px;line-height:1.35;writing-mode:horizontal-tb!important}
+ body :is(dialog,.viewer-settings,.review-sidebar,#companionChooser) label{min-width:0;max-width:100%}
+ body :is(dialog,.viewer-settings,.review-sidebar,#companionChooser) select{min-width:0;max-width:100%;text-overflow:ellipsis;white-space:nowrap;min-height:44px}
+ body :is(dialog,.viewer-settings,.review-sidebar) :is(.tool-group,.inspector-actions,.android-pane-actions,.github-account-tools,.comment-post-row){display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+ body :is(#objectMenu,.touch-net-picker,.review-control-popover){max-width:calc(100vw - 16px)!important;max-height:calc(100dvh - 16px)!important;overflow:auto!important;overscroll-behavior:contain}
+ body #objectMenu button,body .touch-net-picker button{width:100%;justify-content:flex-start;text-align:left;padding:10px 12px}
+ body #sheetOverview>header{display:flex;flex-wrap:wrap;gap:6px;align-items:center;padding:8px;max-width:100%;overflow:visible}
+ body #sheetOverview>header>strong{font-size:14px;flex-basis:100%}
+ body #sheetOverview>header>button{padding:8px 10px;min-width:44px;max-width:100%;height:auto}
+ body #sheetOverview>header>small{flex-basis:100%;white-space:normal;line-height:1.4;font-size:11px;max-height:64px;overflow:auto}
+ body #sheetOverview .sheet-instance-stacks{position:static;max-width:100%;min-width:0}
+ body #sheetOverview .sheet-instance-stacks[open]{flex-basis:100%;max-height:35dvh;overflow:auto}
+ body #sheetOverview .sheet-instance-stacks section{display:flex;flex-wrap:wrap;gap:6px;align-items:center;padding:8px 0}
+ body #sheetOverview .sheet-instance-stacks section>strong{flex-basis:100%;overflow-wrap:anywhere;font-size:12px}
+ body #companionChooser{gap:8px;min-width:0;padding:8px}body #companionChooser select{flex:1 1 180px;width:100%;max-width:100%}
+ body #androidViewToolbar button{flex-shrink:0;white-space:nowrap;min-width:44px!important;max-width:none}
+ body #androidViewToolbar button.android-3d-toggle{width:44px;padding:8px;font-size:12px}
+ body #androidViewToolbar .ui-icon{flex:none}
+}
+.android-home #engineeringToolViewer{width:100%;border:0;flex:1;min-height:0;display:block}.android-home #engineeringToolViewer[hidden]{display:none!important}
+/* Drawing actions use icons; titles and accessible names retain their labels. */
+#androidViewToolbar button .button-label,#frameControls button.icon-caption .button-label{display:none!important}
+#androidViewToolbar button{width:44px!important;min-width:44px!important;max-width:44px!important;height:44px;padding:8px!important;flex:0 0 44px!important;display:inline-flex;align-items:center;justify-content:center;overflow:hidden}
+#androidViewToolbar button svg{width:22px;height:22px;flex:0 0 22px}

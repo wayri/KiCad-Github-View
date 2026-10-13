@@ -435,6 +435,13 @@ test('standalone viewer never offers current PR and VS Code remote collaboration
   assert.equal(calls.some(m=>m.type.startsWith('github-')||m.type==='comment-policy-status'),false);
  }
 });
+
+test('Android local projects explain phone repository collaboration without extension-only messaging',async()=>{
+ const calls=[];const view=workspaceRuntime(async m=>{calls.push(m);return[];},{android:true,vscode:true});view.load();await new Promise(resolve=>setImmediate(resolve));view.get('showGitHub').click();
+ const message=view.get('githubAvailability').textContent;
+ assert.match(message,/Library and accounts/);assert.match(message,/open the repository/);assert.doesNotMatch(message,/extension|VS Code/);
+ assert.equal(view.get('githubAvailableControls').hidden,true);assert.equal(calls.some(m=>m.type==='comment-policy-status'),false);
+});
 test('new discussion publication requires the selected category and saved notes expose linked conversations',async()=>{
  const calls=[];let notes=[];const remoteRef={kind:'discussion',repository:'wayri/fixture',number:8,url:'https://github.com/wayri/fixture/discussions/8',publishedAt:'2026-10-04T00:00:00.000Z'};
  const view=workspaceRuntime(async m=>{calls.push(m);if(m.type==='comment-list')return notes;if(m.type==='comment-save'){notes=[m.comment];return m.comment;}if(m.type==='github-discussion-categories')return[{id:'category-1',name:'Design review'}];if(m.type==='github-publish-comment')return{remoteRef};return[];});view.load();await new Promise(resolve=>setImmediate(resolve));

@@ -3,6 +3,11 @@ const assert = require("node:assert/strict");
 const { build, relatedSchematicNets } = require("../net-model.js");
 const diff = require("../design-diff.js");
 const pcb = require("../pcb-renderer.js");
+test('PCB net version detection is constant work as track count grows',()=>{
+ const files=[{path:'large.kicad_pcb',content:'(kicad_pcb (version 20240108) (net 1 "SIGNAL") '+Array.from({length:1000},(_,i)=>`(segment (start ${i} 0) (end ${i+1} 0) (width 0.2) (layer "F.Cu") (net 1) (uuid "track-${i}"))`).join('')+')'}];
+ const snapshot=diff.prepareProject(files),ast=diff.preparedFile(snapshot,files[0].path),version=ast.find(form=>Array.isArray(form)&&form[0]==='version');let reads=0;Object.defineProperty(version,1,{get(){reads++;return 20240108;}});
+ const result=build(files,new Map(),snapshot);assert.equal(result.nets[0].stats.tracks,1000);assert.equal(result.nets[0].stats.lengthMm,1000);assert.equal(reads,1,'the board version must not be scanned again for each net-bearing object');
+});
 const sch = require("../schematic-renderer.js");
 const file = (path,content) => ({path,content});
 const board = (content,path="board.kicad_pcb") => file(path,`(kicad_pcb (layers (0 "F.Cu" signal) (31 "B.Cu" signal)) ${content})`);

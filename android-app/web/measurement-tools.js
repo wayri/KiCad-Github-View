@@ -11,7 +11,7 @@
  API.mount=()=>{
   const toolbar=$('androidViewToolbar'),original=$('measureButton'),controls=$('rulerControls');
   if(!toolbar||!original||!controls||$('androidMeasure'))return false;
-  const quick=make('button','Measure');quick.id='androidMeasure';quick.type='button';quick.setAttribute('aria-label','Measure layout distance or angle');quick.onclick=()=>original.click();toolbar.insertBefore(quick,toolbar.lastElementChild);
+  const quick=make('button','Measure');quick.id='androidMeasure';quick.type='button';quick.setAttribute('aria-label','Measure layout distance or angle');quick.title='Measure layout distance or angle';const ruler=root.KiCadUIIcons?.icon('ruler');if(ruler)quick.replaceChildren(ruler);quick.onclick=()=>original.click();toolbar.insertBefore(quick,toolbar.lastElementChild);
   const panel=make('section');panel.id='androidMeasurementPanel';panel.setAttribute('aria-label','Drawing measurement');
   const heading=make('div');heading.className='android-measurement-heading';
   const instructions=make('span');instructions.id='androidMeasurementInstructions';

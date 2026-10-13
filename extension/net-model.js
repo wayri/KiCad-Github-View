@@ -35,9 +35,10 @@
   }
   function pcb(path, ast, records, primitives, warn) {
     const nets=new Map(), names=new Map();
+    const modernNamedNets=Number(field(ast,'version'))>=20260206;
     const codeOf=(form)=> {
       const raw=value(form?.[1]);
-      if(Number(field(ast,'version'))>=20260206&&typeof raw==='string'&&raw&&form.length===2)return `name:${raw}`;
+      if(modernNamedNets&&typeof raw==='string'&&raw&&form.length===2)return `name:${raw}`;
       return typeof raw === "number" && Number.isSafeInteger(raw) && raw >= 0 ? String(raw) : null;
     };
     const declare=(form)=> {
