@@ -4,7 +4,15 @@ Prepared 2026-10-10 for a **new** Play listing. This directory prepares the subm
 
 Use [OWNER-DECISIONS.md](OWNER-DECISIONS.md) to supply the remaining contact/account facts, [APP-ACCESS.md](APP-ACCESS.md) for prepared reviewer instructions and the non-sensitive sample ZIP, and [ACCEPTANCE.md](ACCEPTANCE.md) to record the exact Play-delivered build's device checks. Empty acceptance fields are pending evidence, not passes.
 
-Current candidate: **Android 1.50/code53**, `dist/play-android-1.50/pocket-kiview-play-1.50.aab`. See [deployment evidence](DEPLOYMENT-1.50.md) for current hashes and pending gates. The 1.49 references below are retained as earlier evidence.
+Latest retained upload-signed candidate: **Android 1.53/code56**, `dist/play-android-1.53/pocket-kiview-play-1.53.aab`. See [deployment evidence](DEPLOYMENT-1.53.md). It predates the current Android **1.57/code60** release. The 1.49 references below are historical evidence.
+
+## Readiness checkpoint — 2026-10-14
+
+Android 1.57 and extension 0.12.44 share the updated drawing BoM field table and grouping presets. Shared engineering features are documented in [platform parity](../../extension/docs/platform-parity.md). The GitHub 1.57 APK is development-signed and its AAB is unsigned; neither establishes a current Play upload candidate.
+
+Start with internal testing, then a closed beta after the current upload-signed bundle has passed acceptance. Source targets API 36. Fresh Play-delivered phone, tablet/foldable and 16 KB runtime acceptance, pre-launch reports, hosted policy parity, Data Safety answers, reviewer access and publisher/account verification remain gates. Android 1.57 installation on a Samsung phone does not establish these checks. The updated BoM grid/grouping was checked at phone size in a browser; the new Marble BoM journey on the physical phone remains pending.
+
+The initial positioning is board inspection and assembly at the bench: source-linked testpoints, measurements, assembly variants, board analytics and portable reviews. Automatic population detection and photo alignment must retain their documented limitations; imported ERC/DRC findings are not native checks, and saved simulation visualization is not a simulation solver. Pricing and willingness to pay remain unvalidated.
 
 ## Upload identity and signing
 
