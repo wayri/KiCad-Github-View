@@ -1138,8 +1138,8 @@
         choice.onclick=()=>{dismissTouchPicker();choose(entry);};picker.append(choice);
       }
       const close=make('button','Cancel');close.type='button';close.style.minHeight='40px';close.onclick=dismissTouchPicker;picker.append(close);document.body.append(picker);
-      const box=picker.getBoundingClientRect();picker.style.left=Math.max(8,Math.min(event.clientX-40,root.innerWidth-box.width-8))+'px';picker.style.top=Math.max(8,Math.min(event.clientY+12,root.innerHeight-box.height-8))+'px';
-      picker.addEventListener('keydown',e=>{if(e.key==='Escape'){e.stopPropagation();dismissTouchPicker();canvas.canvas.focus();}});picker.querySelector('button')?.focus();return true;
+      if(root.KiCadResponsiveControls?.place)root.KiCadResponsiveControls.place(picker,{x:event.clientX,y:event.clientY});else{const box=picker.getBoundingClientRect();picker.style.left=Math.max(8,Math.min(event.clientX+12,root.innerWidth-box.width-8))+'px';picker.style.top=Math.max(8,Math.min(event.clientY+12,root.innerHeight-box.height-8))+'px';}
+      picker.addEventListener('keydown',e=>{if(e.key==='Escape'){e.stopPropagation();dismissTouchPicker();canvas.canvas.focus();}});picker.querySelector('button')?.focus({preventScroll:true});return true;
     }
     function attachCanvas(canvas) {
       if (attach?.canvas === canvas) return;

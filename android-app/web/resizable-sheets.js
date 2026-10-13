@@ -15,12 +15,12 @@
   const reveal=target=>{if(!target?.scrollIntoView)return;if(scrollTimer!==null)host.clearTimeout?.(scrollTimer);const show=()=>{scrollTimer=null;if(target===doc.activeElement)target.scrollIntoView({block:'nearest',behavior:'auto'});};if(host.setTimeout)scrollTimer=host.setTimeout(show,100);else host.requestAnimationFrame?.(show);};
   const viewport=()=>viewportGeometry(host).height;
   const mobile=()=>host.innerWidth<600;
-  const targets='dialog:not(#androidQuickStart):not(.android-reader-dialog),.touch-net-picker,#objectMenu,#designNavigator,#designInspector,#commentsSidebar,.viewer-settings,#ruleWindow';
+  const targets='dialog:not(#androidQuickStart):not(.android-reader-dialog),#objectMenu,#designNavigator,#designInspector,#commentsSidebar,.viewer-settings,#ruleWindow';
   const closeIds={designNavigator:'closeNavigator',designInspector:'closeInspector',commentsSidebar:'closeComments',viewerSettings:'closeSettings',ruleWindow:'closeRuleWindow'};
   const originalClose=panel=>doc.getElementById?.(closeIds[panel.id])||[...(panel.querySelectorAll?.('button')||[])].find(b=>!b.classList?.contains('android-sheet-dismiss')&&(/^(Close|Cancel)$/i.test(b.textContent?.trim()||'')||/^(Close|Collapse)\b/i.test(b.getAttribute?.('aria-label')||'')));
   const dismiss=panel=>{const original=originalClose(panel);if(original){original.click();return;}if(panel.tagName==='DIALOG')panel.close();else panel.hidden=true;};
   function attach(panel){
-   if(panel.classList.contains('section-page'))return;
+   if(panel.classList.contains('section-page')||panel.classList.contains('touch-net-picker'))return;
    if(registered.has(panel)){if(!panel.classList.contains?.('android-resizable-sheet'))panel.classList.add('android-resizable-sheet');const state=registered.get(panel);if(![...panel.children].includes(state.handle))panel.prepend(state.handle);if(state.close&&!panel.contains?.(state.close)&&![...panel.children].includes(state.close))panel.append(state.close);return;}
    panel.classList.add('android-resizable-sheet');
    const handle=doc.createElement('button');handle.type='button';handle.className='android-sheet-handle';handle.setAttribute('aria-label','Expand panel');handle.setAttribute('aria-expanded','false');handle.title='Drag up to enlarge; drag down to close; tap to expand or reduce';
