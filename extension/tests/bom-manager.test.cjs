@@ -1,6 +1,31 @@
 const test=require('node:test'), assert=require('node:assert/strict');
 const api=require('../bom-manager.js');
 const part=(reference,extra={})=>({id:reference,kind:'symbol',path:'main.kicad_sch',reference,properties:{Value:'10k',Footprint:'0603'},...extra});
+
+test('drawing field grid toggles custom columns, groups safely, and exports the displayed field values',()=>{
+ class Element{
+  constructor(tag){this.tag=tag;this.children=[];this.events={};this.dataset={};this.value='';this.textContent='';}
+  append(...nodes){for(const n of nodes){if(n instanceof Element){n.remove();n.parent=this;n.parentElement=this;}this.children.push(n);}}
+  prepend(n){this.children.unshift(n);n.parent=this;}addEventListener(name,fn){this.events[name]=fn;}
+  setAttribute(){}focus(){}showModal(){}replaceChildren(){this.children=[];}
+  remove(){if(this.parent)this.parent.children=this.parent.children.filter(n=>n!==this);}close(){this.events.close?.();}
+ }
+ const original=global.document;global.document={createElement:t=>new Element(t),body:new Element('body')};
+ const find=(n,p)=>{if(n instanceof Element&&p(n))return n;for(const c of n.children||[]){const found=find(c,p);if(found)return found;}};
+ try{
+  const objects=[part('R1',{properties:{Value:'10k',Footprint:'0603',MPN:'AAA'}}),part('R2',{properties:{Value:'10k',Footprint:'0603',MPN:'BBB'}})],saved=new Map(),exports=[];
+  const dialog=api.open({objects,scope:'field-grid',storage:{getItem:k=>saved.get(k),setItem:(k,v)=>saved.set(k,v)},onExport:(...args)=>exports.push(args)});
+  let grid=find(dialog,n=>n.className==='bom-manager-field-grid');assert.equal(grid.children[1].children.length,2);
+  assert.deepEqual(grid.children[0].children[0].children.map(n=>n.textContent),['Reference','Value','Footprint','Qty','DNP','Exclude from BoM','Assembly','Actions']);
+  const mpnRow=find(dialog,n=>n.tag==='tr'&&n.children[0]?.textContent==='MPN'),show=mpnRow.children[1].children[0];show.checked=true;show.events.change();
+  const grouping=find(dialog,n=>n.tag==='label'&&n.textContent==='Group by').children[0];grouping.value='footprint';grouping.events.change();
+  const check=find(dialog,n=>n.className==='bom-manager-group').children[0];assert.equal(check.checked,true);
+  grid=find(dialog,n=>n.className==='bom-manager-field-grid');assert.equal(grid.children[1].children.length,1);assert.equal(find(grid,n=>n.dataset.field==='MPN').textContent,'<mixed>');
+  find(dialog,n=>n.textContent==='Manage group').events.click();const form=find(dialog,n=>n.tag==='form');find(form,n=>n.tag==='label'&&n.textContent==='Notes').children[0].value='Reviewed';form.events.submit({preventDefault(){}});
+  const records=JSON.parse([...saved.values()][0]).parts;assert.equal(records[api.identity(objects[0])].MPN,'AAA');assert.equal(records[api.identity(objects[1])].MPN,'BBB');assert.equal(records[api.identity(objects[1])].Notes,'Reviewed');
+  find(dialog,n=>n.textContent==='Export visible CSV').events.click();assert.match(exports[0][1],/"MPN"/);assert.match(exports[0][1],/"R1, R2"/);assert.match(exports[0][1],/"<mixed>"/);assert.equal(objects[0].properties.Notes,undefined);dialog.close();
+ }finally{global.document=original;}
+});
 test('unfinished assembly queue skips non-work items, follows order, wraps and preserves file identities',()=>{
  const objects=[part('R1',{populated:false}),part('R2',{excludeFromBom:true}),part('R3'),part('R3',{path:'sub.kicad_sch'}),part('R10')];
  const metadata={[api.identity(objects[4])]:{Assembly:'verified'}},parts=api.model(objects,'symbol',metadata),pending=api.query(parts,{assembly:'unfinished'});

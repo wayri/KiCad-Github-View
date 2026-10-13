@@ -2,6 +2,8 @@
 ((root) => {
 'use strict';
 const MAX_PARTS = 100000;
+const PRESETS=[{id:'value-footprint',label:'Value + footprint',keys:['Value','Footprint']},{id:'value',label:'Value',keys:['Value']},{id:'footprint',label:'Footprint',keys:['Footprint']},{id:'rate',label:'Rate (unit price)',keys:['Unit price','Currency']},{id:'custom',label:'Custom fields',keys:null}];
+function preset(descriptors,id){const selected=PRESETS.find(p=>p.id===id);if(!selected)throw Error('Unknown BoM grouping preset.');return descriptors.map(f=>selected.keys?{...f,groupBy:selected.keys.includes(f.key),show:f.show||selected.keys.includes(f.key)}:{...f});}
 const DEFAULTS = ['Reference','Value','Footprint','Qty','DNP','Exclude from BoM','Assembly'];
 const MANAGEMENT = ['Manufacturer','MPN','Supplier','SKU','Notes','status','Unit price','Currency','Assembly'];
 const text = v => String(v ?? '');
@@ -59,10 +61,12 @@ function rows(parts, descriptors, groupEnabled=false) {
  const grouping = descriptors.filter(f=>f.groupBy && !['Reference','Qty'].includes(aliases.get(normalize(f.key))||f.key)).map(f=>f.key);
  // Reference can be explicitly selected as a grouping field; quantity is computed.
  if (descriptors.some(f=>f.groupBy&&(aliases.get(normalize(f.key))||f.key)==='Reference')) grouping.push('Reference');
+ if(grouping.includes('Unit price')&&!grouping.includes('Currency'))grouping.push('Currency');
+ const groupValue=(part,key)=>{const saved=value(part,key);if(key==='Unit price'&&saved.trim()!==''&&Number.isFinite(Number(saved))&&Number(saved)>=0)return ['price',Number(saved)];return ['saved',saved];};
  const buckets = new Map();
  for (let index=0;index<parts.length;index++) {
   const part = parts[index];
-  const key = groupEnabled ? JSON.stringify([text(part.path),text(part.object?.kind??part.kind),part.populated!==false,!!part.excluded,...grouping.map(k=>value(part,k))]) : index;
+  const key = groupEnabled ? JSON.stringify([text(part.path),text(part.object?.kind??part.kind),part.populated!==false,!!part.excluded,...grouping.map(k=>groupValue(part,k))]) : index;
   let bucket = buckets.get(key); if (!bucket) {bucket=[];buckets.set(key,bucket);} bucket.push(part);
  }
  return [...buckets.values()].map(members=> {
@@ -72,12 +76,12 @@ function rows(parts, descriptors, groupEnabled=false) {
    const canonical=aliases.get(normalize(key))||key;
    if (canonical==='Qty') values[key]=text(members.length);
    else if (canonical==='Reference') values[key]=reference;
-   else { const first=value(members[0],key); values[key]=members.every(p=>value(p,key)===first)?first:'<mixed>'; }
+   else { const first=value(members[0],key); values[key]=members.every(p=>value(p,key)===first||(key==='Unit price'&&JSON.stringify(groupValue(p,key))===JSON.stringify(groupValue(members[0],key))))?first:'<mixed>'; }
   }
   return {parts:members,quantity:members.length,reference,values};
  });
 }
-const api={fields,value,rows,MAX_PARTS};
+const api={fields,value,rows,preset,PRESETS,MAX_PARTS};
 root.KiCadBomFieldTable=api;
 if (typeof module==='object'&&module.exports) module.exports=api;
 })(typeof globalThis!=='undefined'?globalThis:this);

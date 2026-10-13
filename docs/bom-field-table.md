@@ -1,8 +1,13 @@
 # BoM field table
 
-The BoM and assembly viewer follows KiCad's Symbol Fields Table structure:
+The drawing BoM manager and imported BoM and assembly viewer follow KiCad's Symbol Fields Table structure:
 field columns, Show and Group by checkboxes, Group symbols, a filter and CSV
 export. The source interface is described in the [KiCad manual](https://docs.kicad.org/9.0/en/eeschema/eeschema.html).
+
+The Group by selector offers Value, Footprint, Value + footprint, Rate (unit
+price), and Custom fields. Choosing a preset enables grouping. Custom field
+checkboxes allow multiple grouping keys. Rate grouping compares numeric saved
+prices, keeps currencies distinct and does not treat a missing price as zero.
 
 Reference, Value, Footprint, Qty, DNP, Exclude from BoM and Assembly are shown
 initially. Imported custom fields and procurement draft fields are available
@@ -11,7 +16,9 @@ source identities, and separates DNP and excluded parts. Differing fields
 display `<mixed>`. Ungroup to set individual assembly states, or select a
 reference and use its existing progress control.
 
-The phone table scrolls horizontally with a fixed first column and fixed
+The drawing manager shares the same field/grouping model and exports the displayed
+columns and groups. Group management edits only changed fields, preserving mixed
+procurement values. The phone table scrolls horizontally with a fixed first column and fixed
 headers. Field settings collapse above the grid on phones and sit alongside
 it on desktop. A reference selects its original imported object and locates
 it on assembly geometry when that geometry exists. Saved design fields are

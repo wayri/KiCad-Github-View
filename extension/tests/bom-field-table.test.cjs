@@ -39,3 +39,11 @@ test('part bound rejects excessive inputs and empty tables are valid',()=>{
  assert.throws(()=>api.fields(new Array(100001)),/limit/);
  assert.throws(()=>api.rows(new Array(100001),[],false),/limit/);
 });
+
+test('grouping presets support value, footprint and numeric rate while keeping currencies and unknown prices distinct',()=>{
+ const parts=[part('R1',{value:'10k',footprint:'0603',management:{'Unit price':'1.00',Currency:'USD'}}),part('R2',{value:'1k',footprint:'0805',management:{'Unit price':'1',Currency:'USD'}}),part('R3',{value:'10k',footprint:'0805',management:{'Unit price':'1',Currency:'EUR'}}),part('R4',{value:'10k',footprint:'0603',management:{'Unit price':'',Currency:'USD'}}),part('R5',{value:'10k',footprint:'0603',management:{'Unit price':'0',Currency:'USD'}})];
+ const fields=api.fields(parts),rate=api.preset(fields,'rate');assert.equal(fields.find(f=>f.key==='Unit price').groupBy,false);assert.equal(rate.find(f=>f.key==='Unit price').show,true);
+ const rows=api.rows(parts,rate,true);assert.equal(rows.length,4);assert.equal(rows[0].quantity,2);assert.equal(rows[0].values['Unit price'],'1.00');assert.equal(rows[0].values.Value,'<mixed>');assert.equal(rows[0].parts[1],parts[1]);
+ rate.find(f=>f.key==='Currency').groupBy=false;assert.equal(api.rows(parts,rate,true).length,4);
+ assert.equal(api.rows(parts,api.preset(fields,'value'),true).length,2);assert.equal(api.rows(parts,api.preset(fields,'footprint'),true).length,2);assert.equal(api.rows(parts,api.preset(fields,'value-footprint'),true).length,3);assert.deepEqual(api.preset(fields,'custom'),fields);assert.throws(()=>api.preset(fields,'unknown'),/preset/);
+});
