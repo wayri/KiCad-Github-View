@@ -1,6 +1,6 @@
 # KiCad Visual Review browser extension
 
-Version **0.12.45** includes the shared engineering viewers used by Pocket KiView Android **1.58**. It renders KiCad schematics and PCB layouts inside supported GitHub and GitLab repository pages, and opens local projects offline through its bundled local viewer. No KiCad installation is required. The drawing BoM manager and imported BoM viewer use the same field table, including selectable columns and grouping by value, footprint, value + footprint, unit price/currency or custom fields. Engineering tools provide interactive calculators with circuit diagrams, Gerber analysis and PDF viewing. Board analytics, searchable testpoints, saved simulation plots/overlays, assembly variants, DNP/DNI highlights, photo inspection and portable review transfer share modules with Android. See [platform parity and host limits](docs/platform-parity.md).
+Version **0.12.46** includes the shared engineering viewers used by Pocket KiView Android **1.58**. It renders KiCad schematics and PCB layouts inside supported GitHub and GitLab repository pages, and opens local projects offline through its bundled local viewer. No KiCad installation is required. The drawing BoM manager and imported BoM viewer use the same field table, including selectable columns and grouping by value, footprint, value + footprint, unit price/currency or custom fields. Engineering tools provide interactive calculators with circuit diagrams, Gerber analysis and PDF viewing. Board analytics, searchable testpoints, saved simulation plots/overlays, assembly variants, DNP/DNI highlights, photo inspection and portable review transfer share modules with Android. See [platform parity and host limits](docs/platform-parity.md).
 
 File previews replace the source pane; **Show source** restores it. Pull-request **Files changed** cards retain GitHub’s header and conversation while displaying base/head drawings. Dynamic GitHub navigation and late/replaced file cards are supported. Public forks use the base repository’s PR context while retrieving the fork’s design revision.
 
@@ -33,7 +33,7 @@ The default drawing sheet now uses native template coordinates for borders, page
 
 1. Open `chrome://extensions` or `edge://extensions`.
 2. Enable **Developer mode**, choose **Load unpacked**, and select this repository’s `extension` directory.
-3. Open a public GitHub KiCad file or a PR containing one. The drawing appears inline. The toolbar icon / `Alt+Shift+K` focuses it.
+3. Open a public GitHub KiCad file or a PR containing one. The drawing appears inline. The toolbar icon / `Alt+Shift+K` focuses an available drawing or review. On other tabs, or when an inline viewer is unavailable, it opens Pocket KiView's local workspace for file/folder imports.
 
 `python scripts/package_extension.py` builds the browser-store ZIP. It is not published in Chrome Web Store or Edge Add-ons. The separate GitHub App supplies PR checks and hosted viewer links; GitHub App installation alone cannot register a replacement file renderer on github.com. Inline previews require this extension installed in each viewer’s browser. Public GitLab.com file previews are supported; see the host compatibility guide below.
 

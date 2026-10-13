@@ -503,7 +503,7 @@ test('public issue reader surfaces rate limits and bounded scan warnings', async
   assert.ok(selected.result.warnings.some(warning=>/500 comments/.test(warning)));
 });
 
-test('toolbar action focuses the inline blob, navigates a PR, and ignores other hosts', async () => {
+test('toolbar action focuses the inline blob, navigates a PR, and opens its workspace elsewhere', async () => {
   calls.created.length = calls.updated.length = calls.messages.length = 0;
   calls.response = { focused: true };
   await background.openFromAction({ id: 3, url: 'https://github.com/owner/repo/blob/main/design/root.kicad_sch' });
@@ -515,9 +515,27 @@ test('toolbar action focuses the inline blob, navigates a PR, and ignores other 
   assert.deepEqual(calls.messages[1], { id: 3, message: { type: 'focusReview' } });
   await background.openFromAction({ id: 3, url: 'https://github.com/owner/repo' });
   await background.openFromAction({ id: 3, url: 'https://example.com/' });
-  assert.equal(calls.created.length, 0);
+  assert.deepEqual(calls.created,[{url:extensionOrigin+'local-viewer.html'},{url:extensionOrigin+'local-viewer.html'}]);
   assert.equal(calls.messages.length, 2);
   assert.equal(typeof actionListener, 'function');
+});
+test('toolbar action opens a visible workspace for missing URLs and unavailable inline viewers', async t=>{
+ const before=chrome.tabs.sendMessage;t.after(()=>{chrome.tabs.sendMessage=before;});calls.created.length=0;
+ for(const tab of [undefined,{id:3},{id:3,url:'not a URL'},{id:3,url:'chrome://newtab/'}])await background.openFromAction(tab);
+ calls.response={focused:false};await background.openFromAction({id:3,url:'https://github.com/owner/repo/blob/main/readme.md'});
+ chrome.tabs.sendMessage=async()=>{throw Error('No receiving content script');};
+ await background.openFromAction({id:3,url:'https://github.com/owner/repo/blob/main/board.kicad_pcb'});
+ await background.openFromAction({id:3,url:'https://github.com/owner/repo/pull/12/files'});
+ assert.equal(calls.created.length,7);assert.ok(calls.created.every(c=>c.url===extensionOrigin+'local-viewer.html'));
+});
+test('GitLab toolbar action focuses drawings and merge requests with a visible fallback',async t=>{
+ const previous=global.KiCadGitLabHosts;t.after(()=>{global.KiCadGitLabHosts=previous;});global.KiCadGitLabHosts={allowed:async host=>host==='https://gitlab.com'};
+ calls.created.length=0;calls.messages.length=0;calls.response={focused:true};
+ await background.openFromAction({id:3,url:'https://gitlab.com/group/project/-/blob/main/board.kicad_pcb'});
+ await background.openFromAction({id:3,url:'https://gitlab.com/group/project/-/merge_requests/12'});
+ assert.deepEqual(calls.messages.map(c=>c.message.type),['focusInline','focusReview']);assert.equal(calls.created.length,0);
+ calls.response={focused:false};await background.openFromAction({id:3,url:'https://gitlab.com/group/project/-/blob/main/readme.md'});
+ await background.openFromAction({id:3,url:'https://gitlab.com/group/project'});assert.equal(calls.created.length,2);
 });
 
 test('private annotation readback uses the connected account and loads comments beyond the first page',async t=>{

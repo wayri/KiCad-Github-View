@@ -780,28 +780,42 @@ async function githubAnnotations(request) {
 }
 
 async function openFromAction(tab) {
-  if (!Number.isInteger(tab?.id) || typeof tab.url !== "string") return;
+  const home = () => chrome.tabs.create({ url: chrome.runtime.getURL('local-viewer.html') });
+  const focus = async type => {
+    try { if ((await chrome.tabs.sendMessage(tab.id, { type }))?.focused) return; } catch {}
+    return home();
+  };
+  if (!Number.isInteger(tab?.id) || typeof tab.url !== "string") return home();
   let page;
-  try { page = new URL(tab.url); } catch { return; }
-  if (page.origin !== "https://github.com" && await globalThis.KiCadGitLabHosts?.allowed(page.origin)) {
-    if (page.pathname.includes('/-/blob/')) await chrome.tabs.sendMessage(tab.id, { type: 'focusInline' }).catch(() => {});
-    return;
+  try { page = new URL(tab.url); } catch { return home(); }
+  let gitlab = false;
+  if (page.protocol === 'https:' && page.origin !== 'https://github.com') {
+    try { gitlab = Boolean(await globalThis.KiCadGitLabHosts?.allowed(page.origin)); } catch {}
   }
-  if (page.origin !== "https://github.com") return;
+  if (gitlab) {
+    if (page.pathname.includes('/-/blob/')) return focus('focusInline');
+    if (/\/-\/merge_requests\/[1-9][0-9]*(?:\/|$)/.test(page.pathname)) return focus('focusReview');
+    return home();
+  }
+  if (page.origin !== "https://github.com") return home();
   const path = page.pathname.split("/").filter(Boolean);
   if (path.length >= 4 && /^[A-Za-z0-9_.-]+$/.test(path[0]) && /^[A-Za-z0-9_.-]+$/.test(path[1]) &&
       path[2] === "pull" && /^[1-9][0-9]*$/.test(path[3])) {
     const filesUrl = `https://github.com/${path[0]}/${path[1]}/pull/${path[3]}/files`;
     if (page.pathname !== new URL(filesUrl).pathname) await chrome.tabs.update(tab.id, { url: filesUrl });
-    else await chrome.tabs.sendMessage(tab.id, { type: "focusReview" }).catch(() => {});
+    else await focus('focusReview');
     return;
   }
   if (path[2] === "blob") {
-    await chrome.tabs.sendMessage(tab.id, { type: "focusInline" }).catch(() => {});
+    return focus('focusInline');
   }
+  return home();
 }
 
-chrome.action.onClicked.addListener((tab) => { openFromAction(tab).catch(() => {}); });
+chrome.action.onClicked.addListener((tab) => openFromAction(tab).catch(async error => {
+  console.error('Pocket KiView could not open its workspace.', error);
+  await chrome.runtime.openOptionsPage();
+}));
 
 const gitlabAssetBudgets = new Map();
 async function gitlabAnnotations(api,scope){
