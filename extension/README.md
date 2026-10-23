@@ -76,3 +76,7 @@ Version 0.11.2 opens PCB drawings from the project tree, provides saved layer de
 ## GitLab.com
 
 GitLab.com and approved self-hosted HTTPS GitLab servers support repository previews, revision and merge-request comparisons, authenticated reads and explicit issue/discussion publication. GitLab discussions belong to issues rather than standalone GitHub-style categories. Already signed-in repository tabs can supply supported source reads without a pasted token; API operations still require a connected account. See [Git host compatibility](../docs/GIT-HOSTS.md) for exact limits and pending installed-browser acceptance.
+
+## License
+
+Copyright (c) 2026 Yawar B (wayri). Pocket KiView Source-Available License 1.0 applies to owner-authored code and the included owner-authored SPIKE subset. Personal and internal professional use are permitted; paid distribution, paid bundles and monetized hosted access require separate written permission. Your own designs and outputs remain yours. Third-party components retain their own licenses. This is not an open-source license. See the packaged `LICENSE.txt`; commercial licensing: support.kiview@sigharmonic.com.

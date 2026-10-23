@@ -27,9 +27,10 @@ ASSETS += ('variant-manager.js', 'bom-import.js', 'bom-viewer.html', 'bom-viewer
 ASSETS += ('calculator-catalog.js','calculator-visuals.js')
 ASSETS += ('tool-header.css','tool-header.js')
 ASSETS += ('section-pages.js','section-pages.css','board-setup-ui.js','board-setup-ui.css','mobile-sidebar.js','mobile-sidebar.css','testpoint-tools.css','sheet-hierarchy-links.js','responsive-controls.js','phone-polish.css')
-HOST_FILES = ('conflict-host.js', 'package.json', 'extension.js', 'webview-bridge.js', 'README.md', 'icon.png')
+HOST_FILES = ('conflict-host.js', 'package.json', 'extension.js', 'webview-bridge.js', 'README.md', 'GUIDE.md', 'icon.png', 'LICENSE.txt')
 README_IMAGES = ('images/schematic-review.jpg', 'images/pcb-inspection.jpg',
-                 'images/assembly-bom.jpg', 'images/visual-merge-conflict.jpg')
+                 'images/assembly-bom.jpg', 'images/visual-merge-conflict.jpg',
+                 'images/open-viewer-command.jpg', 'images/copper-net-names.jpg')
 HOST_FILES += README_IMAGES
 
 
@@ -91,6 +92,7 @@ def vsix_manifest(manifest: dict) -> bytes:
   <Assets>
     <Asset Type="Microsoft.VisualStudio.Code.Manifest" Path="extension/package.json" Addressable="true" />
     <Asset Type="Microsoft.VisualStudio.Services.Content.Details" Path="extension/README.md" Addressable="true" />
+    <Asset Type="Microsoft.VisualStudio.Services.Content.License" Path="extension/LICENSE.txt" Addressable="true" />
     <Asset Type="Microsoft.VisualStudio.Services.Icons.Default" Path="extension/icon.png" Addressable="true" />
   </Assets>
 </PackageManifest>
@@ -104,6 +106,7 @@ CONTENT_TYPES = b'''<?xml version="1.0" encoding="utf-8"?>
   <Default Extension="css" ContentType="text/css" />
   <Default Extension="html" ContentType="text/html" />
   <Default Extension="md" ContentType="text/markdown" />
+  <Default Extension="txt" ContentType="text/plain" />
   <Default Extension="png" ContentType="image/png" />
   <Default Extension="jpg" ContentType="image/jpeg" />
   <Default Extension="xml" ContentType="application/xml" />

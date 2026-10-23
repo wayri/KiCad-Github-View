@@ -6,7 +6,7 @@ Embedded KiCad model decompression uses fzstd 0.1.1 under MIT. The complete noti
 
 The browser and VS Code release packages include Three.js 0.171.0 under MIT. Its complete notice is preserved as `vendor/THREE-LICENSE` (under `extension/media/vendor/` in the VSIX).
 
-The SPIKE browser geometry bundle is provided by the project owner. Provenance and source hashes are preserved in `extension/vendor/SPIKE-ENGINE-NOTICE.md`. This repository does not grant that engine an open-source license. Publishing downloadable artifacts does not establish a license for selling, copying or modifying owner code.
+The SPIKE browser geometry bundle is provided by the project owner. Provenance and source hashes are preserved in `extension/vendor/SPIKE-ENGINE-NOTICE.md`. The owner-authored subset included in KiView is covered by Pocket KiView Source-Available License 1.0, subject to the owner's rights. This does not relicense the rest of SPIKE, revoke earlier grants or change third-party licenses. See LICENSE and LICENSING.md.
 
 The active schematic/PCB/Gerber viewers and SVG icons are owned project implementations. Retired KiCanvas and Material Symbols assets are not included in release packages. Their historical notices remain in the source tree for provenance; they are not runtime dependencies.
 

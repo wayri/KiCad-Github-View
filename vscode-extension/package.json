@@ -1,10 +1,10 @@
 {
   "name": "kicad-visual-review",
   "displayName": "KiCad Visual Review",
-  "description": "Review KiCad schematics, PCBs, assembly fields and saved findings; compare and resolve Git conflicts visually.",
-  "version": "0.12.48",
+  "description": "View KiCad schematics and PCBs, inspect nets and assembly fields, and resolve Git conflicts visually.",
+  "version": "0.12.50",
   "publisher": "wayri",
-  "license": "UNLICENSED",
+  "license": "SEE LICENSE IN LICENSE.txt",
   "engines": {
     "vscode": "^1.95.0"
   },

@@ -1,6 +1,6 @@
 # SPIKE browser geometry bundle
 
-Built from the owner's SPIKE-Main source tree. The bundled code remains under the SPIKE owner's rights; this file does not assign an open-source license. A separate license is needed before public source release.
+Built from the owner's SPIKE-Main source tree. The owner-authored subset supplied in this KiView bundle is covered by Pocket KiView Source-Available License 1.0 (see the LICENSE.txt supplied with KiView). Copyright owner/licensor: Yawar B (wayri), to the extent of the owner's rights. This is not an open-source grant and does not relicense the rest of SPIKE. Third-party code and any valid earlier grants retain their own terms. Corresponding source/build-subset publication is a separate release-preparation task.
 
 Source: SPIKE-Main/app/src
 
