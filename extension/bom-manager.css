@@ -111,6 +111,14 @@
  .bom-management-dialog .bom-manager-field-settings td:first-child{width:70%}
 }
 /* Keep the field grid as the primary content, including in full-page viewers. */
+.bom-reset-confirmation{box-sizing:border-box;width:min(560px,calc(100vw - 24px));max-height:calc(100dvh - 24px);overflow:auto;padding:18px;border:2px solid #c97922;border-radius:8px;background:var(--panel,#fff);color:var(--text,#172033);font:13px/1.5 system-ui,sans-serif}
+.bom-reset-confirmation::backdrop{background:#070d18b3}
+.bom-reset-confirmation h2{font-size:18px;margin:0 0 12px}.bom-reset-confirmation p{margin:10px 0}
+.bom-reset-confirmation .bom-reset-warning{padding:10px;border-left:4px solid #c97922;background:color-mix(in srgb,#c97922 12%,transparent)}
+.bom-reset-targets{max-height:18dvh;overflow:auto;margin:10px 0;padding-left:22px;overflow-wrap:anywhere}
+.bom-reset-confirmation label:not(.bom-reset-ack){display:grid;gap:4px}.bom-reset-confirmation select{width:100%;min-height:36px}
+.bom-reset-confirmation .bom-reset-ack{display:flex;align-items:flex-start;gap:8px;margin:16px 0}.bom-reset-ack input{width:20px!important;min-width:20px;height:20px!important;min-height:20px!important;margin:0;flex:none}
+.bom-reset-confirmation .bom-reset-danger{background:#a92f2f;color:#fff;border:1px solid #a92f2f}.bom-reset-danger:disabled{opacity:.5;cursor:not-allowed}.bom-reset-confirmation button{min-height:36px}
 body .bom-management-dialog[open]{width:98vw;max-width:none;height:94dvh;max-height:94dvh}
 body .bom-management-dialog .bom-manager-content{width:100%;max-width:none;margin:0;box-sizing:border-box;flex:1;min-height:0;padding:8px;overflow:hidden;gap:6px}
 body .bom-management-dialog.section-page>.bom-manager-content.android-sheet-content{max-width:none;width:100%;margin:0;padding:8px;flex:1;min-height:0}
