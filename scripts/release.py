@@ -137,6 +137,7 @@ def package_guides(output: Path, root: Path = ROOT):
              *sorted((root / 'vscode-extension/images').glob('*.jpg')),
              *([root / 'LICENSE'] if (root / 'LICENSE').is_file() else []),
              *([root / 'LICENSING.md'] if (root / 'LICENSING.md').is_file() else []),
+             *[root / name for name in ('COMMERCIAL-LICENSING.md', 'THIRD-PARTY-NOTICES.md', 'SECURITY.md') if (root / name).is_file()],
              *sorted((root / 'docs/images').rglob('*.jpg')),
                *sorted((root / 'docs/images').rglob('*.png'))]
     paths.extend(sorted((root / 'docs/play-store/assets').glob('*.png')))
