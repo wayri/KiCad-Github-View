@@ -1,7 +1,7 @@
 Pocket KiView Source-Available License 1.0
 Effective date: 23 October 2026
 Copyright (c) 2026 Yawar B (wayri). All rights reserved except as granted below.
-Licensing contact: support.kiview@sigharmonic.com
+Licensing contact: support@sigharmonic.com
 
 1. Scope and ownership
 This license applies to the original Pocket KiView / KiCad Visual Review code,

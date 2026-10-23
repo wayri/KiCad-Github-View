@@ -32,7 +32,7 @@ Repository tree/quick actions; comment destination selection; dedicated settings
 | --- | --- |
 | Owner/account | Legal publisher identity, account type/creation date and Console eligibility; final audience, countries, pricing, category, rating and ads declarations. Existing Play account is confirmed; its type is unknown. |
 | Signing | Secure independent key/password backup, enrollment/Console validation and Play-delivered installation of this exact candidate. |
-| Contact/policy | Verify receipt and monitoring of `support.kiview@sigharmonic.com`, public policy availability/current copy and Console entries. The renamed mailbox has not been verified here. |
+| Contact/policy | Verify receipt and monitoring of `support@sigharmonic.com`, public policy availability/current copy and Console entries. The renamed mailbox has not been verified here. |
 | Privacy/access | Owner-approved Data Safety answers against actual requests/dependencies; safe reusable reviewer access for authenticated features; deletion/sign-out/offline-copy behavior evidence. |
 | Moderation | Actual report receipt, ongoing moderation ownership/escalation and suitability of the email-draft reporting route. Local blocking is not a provider-account block. |
 | Acceptance/assets | Exact-build internal-track phone/tablet/minimum/current Android and 16 KB environment checks, authentication and export flows, pre-launch review and current genuine screenshots. |

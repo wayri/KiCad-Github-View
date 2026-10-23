@@ -54,7 +54,7 @@ Use **Review** to add findings. Notes live in `.kicad-review.json`; commit that 
 
 **Companion browser edition:** [KiCad Visual Review for Chrome](https://github.com/wayri/kiview-marketplace-assets/blob/main/CHROME-HOME.md) reviews local projects and supported GitHub/GitLab pages. Chrome Web Store publication is pending. Each edition works independently; portable review exports transfer supported review state.
 
-[Full user guide: all workflows, shortcuts, supported files and troubleshooting](https://github.com/wayri/kiview-marketplace-assets/blob/7542d75ae3afbfd9444255ddcf330455742672bf/VSCODE-GUIDE.md)
+[Full user guide: all workflows, shortcuts, supported files and troubleshooting](https://github.com/wayri/kiview-marketplace-assets/blob/main/VSCODE-GUIDE.md)
 
 Drawings are read-only during ordinary inspection. Conflict replacement is an explicit write. Saved ERC/DRC findings are displayed; native checks are not run. The standalone PDF, calculator, simulation-results and imported iBOM tools belong to the companion apps. Close/reopen a drawing after external edits. Verify engineering decisions in the appropriate native tools.
 
@@ -62,4 +62,4 @@ Screenshots use the public KiCad PIC Programmer demo. The conflict fixture inten
 
 Copyright © 2026 Yawar B (wayri). Source-available license; paid software distribution and monetized hosting require written permission. See the packaged `LICENSE.txt`. Third-party licenses remain applicable.
 
-[Support](mailto:support.kiview@sigharmonic.com)
+[Support](mailto:support@sigharmonic.com)

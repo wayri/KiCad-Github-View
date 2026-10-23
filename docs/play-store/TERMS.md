@@ -1,6 +1,6 @@
 # Pocket KiView Terms of Service
 
-Version: 2026-10-10. Applies to Pocket KiView (Portable KiCAD Viewer) and its companion review interfaces. Support and reports: support.kiview@sigharmonic.com, answered as Pocket KiView team.
+Version: 2026-10-10. Applies to Pocket KiView (Portable KiCAD Viewer) and its companion review interfaces. Support and reports: support@sigharmonic.com, answered as Pocket KiView team.
 
 ## Agreement and scope
 
@@ -30,7 +30,7 @@ Keep reviews relevant and respectful. Do not post or facilitate harassment, hate
 
 ## Reports and moderation
 
-Report abusive content or users through the app or support.kiview@sigharmonic.com. The app's report action opens an email draft; a report is sent only when you send it. Local blocking hides content in your app profile and does not block a provider account. The Pocket KiView team may restrict supported interactions in response to abuse, subject to applicable law. Provider moderators and repository owners control content removal and remote account actions. Reports may require follow-up; there is no guarantee of immediate review, removal or continuous monitoring. For imminent danger, contact appropriate local emergency services rather than relying on an app report.
+Report abusive content or users through the app or support@sigharmonic.com. The app's report action opens an email draft; a report is sent only when you send it. Local blocking hides content in your app profile and does not block a provider account. The Pocket KiView team may restrict supported interactions in response to abuse, subject to applicable law. Provider moderators and repository owners control content removal and remote account actions. Reports may require follow-up; there is no guarantee of immediate review, removal or continuous monitoring. For imminent danger, contact appropriate local emergency services rather than relying on an app report.
 
 ## Software rights and independence
 
@@ -44,6 +44,6 @@ To the extent permitted by applicable law, the operator and contributors are not
 
 ## Changes, ending use and contact
 
-The app may be updated or discontinued. Material changes to terms will use a new version and require renewed acceptance before publication through the app. You may stop using the app at any time. Removal does not erase exported files or content already posted to providers. Questions, privacy requests, abuse reports and rights concerns can be sent to support.kiview@sigharmonic.com; do not include passwords, tokens or confidential project files.
+The app may be updated or discontinued. Material changes to terms will use a new version and require renewed acceptance before publication through the app. You may stop using the app at any time. Removal does not erase exported files or content already posted to providers. Questions, privacy requests, abuse reports and rights concerns can be sent to support@sigharmonic.com; do not include passwords, tokens or confidential project files.
 
 Mandatory local rights and remedies remain available. No arbitration clause, chosen court or governing jurisdiction is specified in this version.

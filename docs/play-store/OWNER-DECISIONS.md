@@ -5,7 +5,7 @@ No passwords, private keys or tokens belong here. Provide contact information an
 | Required decision | Exact information needed | Why it cannot be inferred |
 | --- | --- | --- |
 | Publisher identity | Legal developer name that will appear in Console/listing; immutable package `dev.kicadvizdiff.android` confirmed | GitHub handle and app name do not establish legal identity. |
-| Contact | Owner supplied `support.kiview@sigharmonic.com`; confirm mailbox operation and monitoring | Address is settled, but receipt/monitoring have not been verified. Public GitHub issues are unsuitable for confidential reports. |
+| Contact | Owner supplied `support@sigharmonic.com`; confirm mailbox operation and monitoring | Address is settled, but receipt/monitoring have not been verified. Public GitHub issues are unsuitable for confidential reports. |
 | Policy hosting | Deployed URL: `https://wayri.github.io/pocket-kivi-policies/privacy.html`; verify response/copy parity and Console entry | HTTPS Pages build is ready; test actual response without login/geographic restrictions. |
 | Account eligibility | Personal or organization; developer-account creation date; Console testing requirement | A new app listing does not establish the account type or whether the 12-testers/14-days rule applies. |
 | Signing | Upload key and verified signed Android1.49 AAB prepared; approve secure independent backup and Play App Signing enrollment | Windows DPAPI password ciphertext is tied to the local user/machine and is not a portable backup. Never send the private key/password through chat. |
@@ -25,4 +25,4 @@ Brand: **Pocket KiView**. Category: **Tools**. No ads SDK is present in the revi
 4. If required by Console, run closed testing with at least 12 continuously opted-in testers for 14 days and apply for production access. This calendar requirement cannot be shortened by a source change. [Official testing requirements](https://support.google.com/googleplay/android-developer/answer/14151465?hl=en).
 5. Submit after the evidence is complete; Google makes the publication decision. Keep owner approvals and moderation response records privately rather than publishing sensitive details.
 
-Confirmed by owner: existing Play account (type unknown). On 2026-10-11 the owner requested the Pocket KiView name and support.kiview@sigharmonic.com address. Delivery and monitoring of the renamed mailbox have not been verified in this task. Automated triage is proposed in MODERATION.md and has not been configured in the mailbox.
+Confirmed by owner: existing Play account (type unknown). On 2026-10-11 the owner requested the Pocket KiView name and support@sigharmonic.com address. Delivery and monitoring of the renamed mailbox have not been verified in this task. Automated triage is proposed in MODERATION.md and has not been configured in the mailbox.

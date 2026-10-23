@@ -1,6 +1,6 @@
 # Commercial licensing
 
-Licensor: **Yawar B (wayri)**. Contact **support.kiview@sigharmonic.com**.
+Licensor: **Yawar B (wayri)**. Contact **support@sigharmonic.com**.
 
 Pocket KiView Source-Available License 1.0 permits personal and internal professional use, modification of lawfully supplied source, and uncompensated sharing under its terms. Written permission is required to sell or rent the software or derived versions, include it in paid products/bundles, or provide monetized hosted access. Selling your own designs, reports and other outputs without supplying the software is permitted. The complete [LICENSE](LICENSE) controls.
 

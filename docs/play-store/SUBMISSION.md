@@ -41,7 +41,7 @@ Stage the viewer with `python scripts/package_android.py`, then run `android-app
 ## Owner-dependent gates
 
 - [ ] Create/verify the Play developer account and listing; confirm developer legal identity, required contact information and countries.
-- [ ] Verify the owner-supplied support/privacy/report mailbox `support.kiview@sigharmonic.com` works and is monitored; enter it in Console and the public policy.
+- [ ] Verify the owner-supplied support/privacy/report mailbox `support@sigharmonic.com` works and is monitored; enter it in Console and the public policy.
 - [ ] Add the verified [public privacy policy](https://wayri.github.io/pocket-kivi-policies/privacy.html) to Console. HTTP 200, exact bundled-copy parity and HTTPS enforcement were verified.
 - [ ] Review [LISTING.md](LISTING.md), localization, category, target audience and content-rating responses. Do not assert child-targeted status or permissions without review.
 - [ ] Complete the [Data Safety worksheet](DATA-SAFETY.md) as owner-approved Console answers consistent with actual behavior.

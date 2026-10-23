@@ -6,7 +6,7 @@ The applicable project license is [Pocket KiView Source-Available License 1.0](L
 
 You may use official copies personally or professionally, inspect and modify lawfully supplied source, and redistribute without compensation under the license. Paid distribution, paid bundles and monetized hosted access to the software require separate written permission from Yawar B (wayri). Users may sell their own designs and outputs without that permission when they do not distribute the software itself. The complete license controls; this summary does not replace it.
 
-Contact **support.kiview@sigharmonic.com** for commercial licensing. No commercial agreement, pricing or exclusivity is granted by an inquiry. Broader commercial rights can be granted only for material the licensor owns or is authorized to relicense; third-party obligations continue to apply.
+Contact **support@sigharmonic.com** for commercial licensing. No commercial agreement, pricing or exclusivity is granted by an inquiry. Broader commercial rights can be granted only for material the licensor owns or is authorized to relicense; third-party obligations continue to apply.
 
 ## Scope and source availability
 

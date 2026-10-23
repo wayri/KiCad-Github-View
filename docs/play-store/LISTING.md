@@ -42,7 +42,7 @@ Pocket KiView is an independent project and is not an official KiCad, GitHub, Gi
 - Suggested category: Tools. The owner selects final category, audience, countries, pricing and content rating.
 - Support website: https://github.com/wayri/KiCad-Github-View
 - Issue support: https://github.com/wayri/KiCad-Github-View/issues
-- Support and private privacy/report contact: **support.kiview@sigharmonic.com** (supplied by the owner; verify mailbox operation and monitoring before submission).
+- Support and private privacy/report contact: **support@sigharmonic.com** (supplied by the owner; verify mailbox operation and monitoring before submission).
 - Privacy URL: https://wayri.github.io/pocket-kivi-policies/privacy.html (deployed; verify response/copy parity and enter in Console).
 
 ## Preview assets

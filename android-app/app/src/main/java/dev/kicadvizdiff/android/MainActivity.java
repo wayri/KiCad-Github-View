@@ -472,13 +472,13 @@ public final class MainActivity extends Activity {
             if (body == null || body.length() > 8192) return;
             runOnUiThread(() -> {
                 if (!trustedPage()) return;
-                Intent draft = new Intent(Intent.ACTION_SENDTO, Uri.parse("mailto:support.kiview@sigharmonic.com?subject="
+                Intent draft = new Intent(Intent.ACTION_SENDTO, Uri.parse("mailto:support@sigharmonic.com?subject="
                         + Uri.encode("Pocket KiView content/user report") + "&body=" + Uri.encode(body)));
                 draft.putExtra(Intent.EXTRA_SUBJECT, "Pocket KiView content/user report");
                 draft.putExtra(Intent.EXTRA_TEXT, body);
                 try { startActivity(draft); }
                 catch (android.content.ActivityNotFoundException error) {
-                    android.widget.Toast.makeText(MainActivity.this, "Email support.kiview@sigharmonic.com to report this concern.", android.widget.Toast.LENGTH_LONG).show();
+                    android.widget.Toast.makeText(MainActivity.this, "Email support@sigharmonic.com to report this concern.", android.widget.Toast.LENGTH_LONG).show();
                 }
             });
         }
