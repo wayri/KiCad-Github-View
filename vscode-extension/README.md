@@ -6,6 +6,8 @@ Open KiCad schematics and PCBs beside your code—without installing KiCad. Insp
 
 ## Open your first project
 
+**KiCad versions:** recognized KiCad **8, 9 and 10** `.kicad_sch` and `.kicad_pcb` constructs use the shared viewer. Native reference fixtures use KiCad 10; 8/9 coverage is narrower and does not certify every feature. Newer generator versions open as warned previews. No KiCad installation is required. Embedded assets, component-class rules, schematic net-class rule areas and native schematic tables are not implemented. [Compatibility details](https://github.com/wayri/kiview-marketplace-assets/blob/main/COMPATIBILITY.md).
+
 1. Install the extension and open your KiCad project folder in VS Code.
 2. Select a `.kicad_sch` or `.kicad_pcb`. If it opens as text, choose **Open With → KiCad Visual Review**.
 3. Use **Explorer** for parts, nets and layers; use the search box to find a component or signal.
@@ -49,6 +51,8 @@ This accepts a whole side across the file; it is not a per-object merger. Saving
 Use **Review** to add findings. Notes live in `.kicad-review.json`; commit that sidecar with your normal Git tools. Portable review exports carry supported notes, BoM metadata, variants and 2D view state between compatible viewers.
 
 ## Guide and limits
+
+**Companion browser edition:** [KiCad Visual Review for Chrome](https://github.com/wayri/kiview-marketplace-assets/blob/main/CHROME-HOME.md) reviews local projects and supported GitHub/GitLab pages. Chrome Web Store publication is pending. Each edition works independently; portable review exports transfer supported review state.
 
 [Full user guide: all workflows, shortcuts, supported files and troubleshooting](https://github.com/wayri/kiview-marketplace-assets/blob/7542d75ae3afbfd9444255ddcf330455742672bf/VSCODE-GUIDE.md)
 

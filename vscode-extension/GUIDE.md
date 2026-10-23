@@ -166,3 +166,9 @@ Copyright (c) 2026 Yawar B (wayri). Pocket KiView Source-Available License 1.0 a
 | A companion tool cannot open | Check the VS Code/companion capability section: standalone PDF, calculator, simulation and imported iBOM pages are not available in this host. |
 
 For support, include your VS Code version, extension version, exact error and a non-confidential minimal fixture. Do not send tokens or private project files.
+
+## KiCad versions and browser companion
+
+Recognized KiCad 8, 9 and 10 constructs use the shared viewer; native reference fixtures use KiCad 10 and 8/9 coverage is narrower. Newer versions open as warned previews. [Full compatibility matrix](https://github.com/wayri/kiview-marketplace-assets/blob/main/COMPATIBILITY.md).
+
+[Chrome companion guide](https://github.com/wayri/kiview-marketplace-assets/blob/main/CHROME-HOME.md): local projects and supported GitHub/GitLab pages. Chrome Web Store publication is pending. Each edition works independently; portable exports transfer supported review state.
