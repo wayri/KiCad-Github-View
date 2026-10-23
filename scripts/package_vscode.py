@@ -80,12 +80,16 @@ def vsix_manifest(manifest: dict) -> bytes:
   <Metadata>
     <Identity Language="en-US" Id="{name}" Version="{version}" Publisher="{publisher}" />
     <DisplayName>{title}</DisplayName><Description xml:space="preserve">{description}</Description>
+    <GalleryFlags>Public</GalleryFlags>
     <Categories>Visualization</Categories><Tags>KiCad,schematic,PCB,github.dev</Tags>
     <Properties>
+      <Property Id="Microsoft.VisualStudio.Services.GitHubFlavoredMarkdown" Value="true" />
+      <Property Id="Microsoft.VisualStudio.Services.Content.Pricing" Value="Free" />
       <Property Id="Microsoft.VisualStudio.Code.Engine" Value="{engine}" />
       <Property Id="Microsoft.VisualStudio.Code.ExtensionKind" Value="workspace" />
       <Property Id="Microsoft.VisualStudio.Code.ExecutesCode" Value="true" />
     </Properties>
+    <License>extension/LICENSE.txt</License><Icon>extension/icon.png</Icon>
   </Metadata>
   <Installation><InstallationTarget Id="Microsoft.VisualStudio.Code" /></Installation>
   <Dependencies />
