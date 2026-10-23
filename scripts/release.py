@@ -133,6 +133,10 @@ def package_guides(output: Path, root: Path = ROOT):
     paths = [root / 'README.md', *sorted((root / 'docs').rglob('*.md')),
              *sorted((root / 'extension/docs').rglob('*.md')),
              *([root / 'vscode-extension/README.md'] if (root / 'vscode-extension/README.md').is_file() else []),
+             *([root / 'vscode-extension/GUIDE.md'] if (root / 'vscode-extension/GUIDE.md').is_file() else []),
+             *sorted((root / 'vscode-extension/images').glob('*.jpg')),
+             *([root / 'LICENSE'] if (root / 'LICENSE').is_file() else []),
+             *([root / 'LICENSING.md'] if (root / 'LICENSING.md').is_file() else []),
              *sorted((root / 'docs/images').rglob('*.jpg')),
                *sorted((root / 'docs/images').rglob('*.png'))]
     paths.extend(sorted((root / 'docs/play-store/assets').glob('*.png')))

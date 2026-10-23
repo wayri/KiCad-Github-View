@@ -206,3 +206,16 @@ test('touch picking radius expands in screen pixels and respects hidden and isol
  assert.equal(canvas.query({x:10,y:1.3}).length,1);assert.equal(canvas.query({x:10,y:1.3},14).length,2);
  canvas.visibleLayers.delete('B.Cu');assert.deepEqual(canvas.query({x:10,y:1.3},14).map(p=>p.uuid),['front']);canvas.visibleLayers.add('B.Cu');canvas.focusedLayer='B.Cu';canvas.layerFocusMode='isolate';assert.deepEqual(canvas.query({x:10,y:1.3},14).map(p=>p.uuid),['back']);canvas.dispose();
 });
+
+test('net label overlay follows hidden layers, zone visibility and isolated net selection',()=>{
+ const {canvas,operations}=runtime();
+ const front={kind:'track',type:'line',layer:'F.Cu',width:1,points:[{x:-10,y:0},{x:10,y:0}]};
+ const back={...front,layer:'B.Cu',points:[{x:-10,y:4},{x:10,y:4}]};
+ canvas.setDocument({primitives:[front,back],layers:['F.Cu','B.Cu']},'board');canvas.viewport.camera.center.set(0,0);canvas.viewport.camera.zoom=30;
+ canvas.setNetNames([{name:'FRONT',primitives:[front]},{name:'BACK',primitives:[back]}]);canvas.showNetNames=true;
+ const drawn=()=>operations.filter(o=>o[0]==='fillText').map(o=>o[1]);
+ operations.length=0;canvas.drawNetNames();assert.deepEqual(drawn(),['FRONT','BACK']);
+ operations.length=0;canvas.visibleLayers.delete('B.Cu');canvas.drawNetNames();assert.deepEqual(drawn(),['FRONT']);
+ operations.length=0;canvas.visibleLayers.add('B.Cu');canvas.setNetHighlights([{primitives:[back]}],{mode:'isolate'});canvas.drawNetNames();assert.deepEqual(drawn(),['BACK']);
+ operations.length=0;canvas.showNetNames=false;canvas.drawNetNames();assert.deepEqual(drawn(),[]);canvas.dispose();
+});

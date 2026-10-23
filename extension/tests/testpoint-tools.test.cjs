@@ -126,12 +126,14 @@ test('dialog filters export the full matching set, clear to all rows and navigat
   const exports=[],located=[],view=tools.open({model:model([board('board.kicad_pcb',footprint('TP1','tp')+extra)]),onExport:(content,rows)=>exports.push({content,rows}),onLocate:row=>located.push(row)});
   const all=()=>{const nodes=[];const walk=n=>{nodes.push(n);n.children.forEach(walk);};walk(body);return nodes;},byLabel=label=>all().find(n=>n.attributes['aria-label']===label),button=label=>all().find(n=>n.tag==='button'&&n.textContent===label);
   assert.equal(all().find(n=>n.tag==='table').className,'testpoint-table');
-  const firstRow=all().find(n=>n.tag==='tbody').children[0];assert.deepEqual(firstRow.children.map(n=>n.attributes['data-label']),['Testpoint','Pad / pin','Net','Connectivity','Source file','Location (mm)','Detection','Actions']);
+  const firstRow=all().find(n=>n.tag==='tbody').children[0];assert.deepEqual(firstRow.children.map(n=>n.attributes['data-label']),['Testpoint','Pad / pin','Net','Details']);
+  assert.match(firstRow.textContent,/File: board.kicad_pcb/);assert.match(firstRow.textContent,/Detection: inferred/);assert.doesNotMatch(all().find(n=>n.tag==='tbody').textContent,/Resistor:R/);
+  firstRow.dispatchEvent(new Event('click'));assert.equal(located[0].reference,'TP1');const enter=new Event('keydown',{cancelable:true});Object.defineProperty(enter,'key',{value:'Enter'});firstRow.dispatchEvent(enter);assert.equal(located.length,2);located.length=0;
   const connectivity=byLabel('Connectivity filter');connectivity.value='unresolved';connectivity.dispatchEvent(new Event('change'));button('Export CSV').click();
   assert.equal(exports[0].rows.length,1);assert.equal(exports[0].rows[0].padNumber,'3');assert.match(exports[0].content,/"no net"/);assert.doesNotMatch(exports[0].content,/"VCC"/);
   button('Clear filters').click();button('Export CSV').click();assert.equal(exports[1].rows.length,3);
   const search=all().find(n=>n.tag==='input');search.value='net:VCC';search.dispatchEvent(new Event('input'));
-  const details=all().find(n=>n.tag==='details');details.open=true;details.dispatchEvent(new Event('toggle'));button('R1 · 1').click();assert.equal(located[0].reference,'R1');assert.equal(located[0].path,'board.kicad_pcb');
+  const details=all().find(n=>n.tag==='details'&&n.children[0]?.textContent==='Connected pads / pins');details.open=true;details.dispatchEvent(new Event('toggle'));button('R1 · 1').click();assert.equal(located[0].reference,'R1');assert.equal(located[0].path,'board.kicad_pcb');
   search.value='missing-net';search.dispatchEvent(new Event('input'));assert.match(body.textContent,/No testpoints match these filters/);
   view.close();assert.equal(view.dialog.removed,true);
  }finally{if(old===undefined)delete global.document;else global.document=old;}

@@ -65,3 +65,91 @@
  .bom-management-dialog .bom-manager-actions{align-items:stretch}
  .bom-management-dialog .bom-manager-actions>button{flex:1 1 160px}
 }
+/* Shared KiCad field-grid presentation; never convert the drawing BoM to cards. */
+.bom-management-dialog .bom-manager-heading{padding:8px 12px;min-height:52px}
+.bom-management-dialog .bom-manager-heading h2{font-size:16px;margin:0}
+.bom-management-dialog .bom-manager-content{display:flex;flex-direction:column;flex:1;min-height:0;overflow:hidden;padding:8px;gap:6px}
+.bom-management-dialog .bom-manager-controls{margin:0;gap:8px}
+.bom-management-dialog .bom-manager-controls label{flex:1 1 140px}
+.bom-management-dialog .bom-manager-controls .bom-manager-group{flex:0 0 auto;flex-direction:row;align-items:center;min-height:40px}
+.bom-management-dialog .bom-manager-summary{display:flex;flex-wrap:wrap;gap:8px;margin:0;font-size:11px}
+.bom-management-dialog .bom-manager-metric{padding:3px 6px;flex:1 1 150px;border:0;border-radius:0;gap:2px}
+.bom-management-dialog .bom-manager-metric strong{font-size:14px}.bom-management-dialog .bom-manager-metric :is(small,span){font-size:10px}
+.bom-management-dialog .bom-manager-feedback{margin:0;font-size:11px}
+.bom-management-dialog .bom-manager-field-layout{display:grid;grid-template-columns:220px minmax(0,1fr);gap:8px;flex:1;min-height:140px}
+.bom-management-dialog .bom-manager-field-options{overflow:auto;min-width:0;border:1px solid var(--line,#bcc2ca);border-radius:0}
+.bom-management-dialog .bom-manager-field-options summary{padding:8px;font-size:12px}
+.bom-management-dialog .bom-manager-results{display:flex;flex-direction:column;min-width:0;min-height:0;gap:6px}
+.bom-management-dialog .bom-manager-grid-scroll{overflow:auto;flex:1;min-height:100px;overscroll-behavior:contain;border:1px solid var(--line,#bcc2ca)}
+.bom-management-dialog .bom-manager-field-grid{display:table;border-collapse:separate;border-spacing:0;width:max-content;min-width:100%;table-layout:auto;font-size:12px}
+.bom-management-dialog .bom-manager-field-grid thead{display:table-header-group}
+.bom-management-dialog .bom-manager-field-grid tbody{display:table-row-group}
+.bom-management-dialog .bom-manager-field-grid tr{display:table-row;border:0;margin:0;padding:0}
+.bom-management-dialog .bom-manager-field-grid :is(th,td){display:table-cell;width:auto;max-width:320px;padding:5px 8px;height:38px;border-right:1px solid var(--line,#bcc2ca);border-bottom:1px solid var(--line,#bcc2ca);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;overflow-wrap:normal;background:var(--panel,#f7f8f9);vertical-align:middle}
+.bom-management-dialog .bom-manager-field-grid td{background:var(--surface,#fff)}
+.bom-management-dialog .bom-manager-field-grid td:before{display:none}
+.bom-management-dialog .bom-manager-field-grid th{position:sticky;top:0;z-index:2;font-size:12px}
+.bom-management-dialog .bom-manager-field-grid :is(th,td):first-child{position:sticky;left:0;z-index:1;min-width:90px}
+.bom-management-dialog .bom-manager-field-grid th:first-child{z-index:3}
+.bom-management-dialog .bom-manager-field-grid tr[data-dnp=true] td{color:var(--muted,#52606c)}
+.bom-management-dialog .bom-manager-field-grid button{margin:0 4px 0 0;padding:4px 6px;min-height:32px;font-size:12px}
+.bom-management-dialog .bom-manager-field-settings table{display:table;table-layout:auto;font-size:11px}
+.bom-management-dialog .bom-manager-field-settings tr{display:table-row;padding:0;margin:0;border:0}
+.bom-management-dialog .bom-manager-field-settings :is(th,td){display:table-cell;width:auto;padding:4px;white-space:normal}
+.bom-management-dialog .bom-manager-field-settings td:before{display:none}
+.bom-management-dialog .bom-manager-field-settings th{white-space:nowrap}
+.bom-management-dialog .bom-manager-field-settings th:first-child{width:50%}
+.bom-management-dialog :is(.bom-manager-field-settings,.bom-manager-group) input[type=checkbox]{width:20px;height:20px;min-height:20px;accent-color:var(--accent,#006cc4)}
+.bom-management-dialog .bom-manager-editor{flex:none;max-height:55dvh;overflow:auto;margin:0;padding:8px}
+@media(max-width:760px){
+ .bom-management-dialog .bom-manager-field-layout{display:flex;flex-direction:column;gap:6px}
+ .bom-management-dialog .bom-manager-field-options{flex:none;max-height:28dvh}.bom-management-dialog .bom-manager-results{flex:1}
+ .bom-management-dialog .bom-manager-field-grid :is(th,td){height:44px;padding:4px 6px}
+ .bom-management-dialog .bom-manager-field-grid button{min-height:44px}
+ .bom-management-dialog .bom-manager-controls label{flex-basis:calc(50% - 8px)}
+ .bom-management-dialog .bom-manager-summary .bom-manager-metric{flex-basis:140px}
+ .bom-management-dialog .bom-manager-field-settings td:first-child{width:70%}
+}
+/* Keep the field grid as the primary content, including in full-page viewers. */
+.bom-reset-confirmation{box-sizing:border-box;width:min(560px,calc(100vw - 24px));max-height:calc(100dvh - 24px);overflow:auto;padding:18px;border:2px solid #c97922;border-radius:8px;background:var(--panel,#fff);color:var(--text,#172033);font:13px/1.5 system-ui,sans-serif}
+.bom-reset-confirmation::backdrop{background:#070d18b3}
+.bom-reset-confirmation h2{font-size:18px;margin:0 0 12px}.bom-reset-confirmation p{margin:10px 0}
+.bom-reset-confirmation .bom-reset-warning{padding:10px;border-left:4px solid #c97922;background:color-mix(in srgb,#c97922 12%,transparent)}
+.bom-reset-targets{max-height:18dvh;overflow:auto;margin:10px 0;padding-left:22px;overflow-wrap:anywhere}
+.bom-reset-confirmation label:not(.bom-reset-ack){display:grid;gap:4px}.bom-reset-confirmation select{width:100%;min-height:36px}
+.bom-reset-confirmation .bom-reset-ack{display:flex;align-items:flex-start;gap:8px;margin:16px 0}.bom-reset-ack input{width:20px!important;min-width:20px;height:20px!important;min-height:20px!important;margin:0;flex:none}
+.bom-reset-confirmation .bom-reset-danger{background:#a92f2f;color:#fff;border:1px solid #a92f2f}.bom-reset-danger:disabled{opacity:.5;cursor:not-allowed}.bom-reset-confirmation button{min-height:36px}
+body .bom-management-dialog[open]{width:98vw;max-width:none;height:94dvh;max-height:94dvh}
+body .bom-management-dialog .bom-manager-content{width:100%;max-width:none;margin:0;box-sizing:border-box;flex:1;min-height:0;padding:8px;overflow:hidden;gap:6px}
+body .bom-management-dialog.section-page>.bom-manager-content.android-sheet-content{max-width:none;width:100%;margin:0;padding:8px;flex:1;min-height:0}
+body .bom-management-dialog .bom-manager-controls{gap:8px;align-items:center;flex-wrap:wrap;flex:none}
+body .bom-management-dialog .bom-manager-controls label{flex:0 1 180px;min-width:0;font-size:11px;gap:2px}
+body .bom-management-dialog .bom-manager-controls .bom-manager-search{flex:1 1 260px}
+body .bom-management-dialog .bom-manager-controls .bom-manager-group{flex:0 0 auto;min-height:32px}
+body .bom-management-dialog .bom-manager-controls :is(input,select){min-height:32px;padding:4px 7px}
+body .bom-management-dialog .bom-manager-tools{display:flex;flex-wrap:wrap;gap:4px 16px;align-items:start;flex:none}
+body .bom-management-dialog .bom-manager-tools details{border:0;min-width:0}
+body .bom-management-dialog .bom-manager-tools summary{padding:3px 0;min-height:24px;font-size:12px;line-height:24px}
+body .bom-management-dialog .bom-manager-tools details[open]{flex:1 0 100%;order:1;max-height:30dvh;overflow:auto;border-bottom:1px solid var(--line,#bcc2ca);padding-bottom:6px}
+body .bom-management-dialog .bom-manager-tools .bom-manager-field-options{max-height:30dvh;overflow:auto}
+body .bom-management-dialog .bom-manager-tools .bom-manager-field-settings{max-width:640px}
+body .bom-management-dialog .bom-manager-summary{display:flex;align-items:center;flex-wrap:wrap;gap:4px 16px;flex:none;margin:0;color:var(--muted,#52606c);font-size:12px;line-height:20px}
+body .bom-management-dialog .bom-manager-summary .bom-manager-metric{display:inline;flex:0 0 auto;background:transparent;border:0;padding:0;font-size:12px;line-height:20px;font-weight:400}
+body .bom-management-dialog .bom-manager-field-layout{display:flex;flex:1;min-height:100px;gap:0;overflow:hidden}
+body .bom-management-dialog .bom-manager-results{flex:1;min-height:0;min-width:0}
+body .bom-management-dialog .bom-manager-grid-scroll{flex:1;min-height:0}
+body .bom-management-dialog .bom-manager-field-grid :is(th,td){height:32px;padding:3px 8px}
+body .bom-management-dialog .bom-manager-field-grid tbody tr:hover td{background:var(--hover,#e3e9ef)}
+body .bom-management-dialog .bom-manager-field-grid button{min-height:28px;padding:2px 6px}
+body .bom-management-dialog .bom-manager-field-grid td:last-child{max-width:none}
+@media(max-width:700px){
+ body .bom-management-dialog[open]{width:100vw;height:100dvh;max-height:100dvh}
+ body .bom-management-dialog .bom-manager-content{padding:6px}
+ body .bom-management-dialog .bom-manager-controls .bom-manager-search{flex:1 0 100%}
+ body .bom-management-dialog .bom-manager-controls label{flex:1 1 120px}
+ body .bom-management-dialog .bom-manager-controls :is(input,select){min-height:36px}
+ body .bom-management-dialog .bom-manager-summary{font-size:11px;gap:2px 10px}
+ body .bom-management-dialog .bom-manager-summary .bom-manager-metric{font-size:11px}
+ body .bom-management-dialog .bom-manager-field-grid :is(th,td){height:40px}
+ body .bom-management-dialog .bom-manager-field-grid button{min-height:36px}
+}

@@ -342,6 +342,16 @@
   addEventListener("page:change", check);
   chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     if (sender.id !== chrome.runtime.id || !message || typeof message !== "object") return false;
+    if (message.type === 'github-session-read') {
+      if(sender.tab || location.origin!=='https://github.com' || !globalThis.KiCadGitHubSessionReader)return false;
+      globalThis.KiCadGitHubSessionReader.create().read(message).then(result=>sendResponse({ok:true,result}),error=>sendResponse({ok:false,error:error.message}));
+      return true;
+    }
+    if (message.type === 'gitlab-session-read') {
+      if(sender.tab || location.origin==='https://github.com' || !globalThis.KiCadGitLabSessionReader)return false;
+      globalThis.KiCadGitLabSessionReader.create().read(message).then(result=>sendResponse({ok:true,result}),error=>sendResponse({ok:false,error:error.message}));
+      return true;
+    }
     if (message.type === "viewerContext") {
       const route = parse.route(location.href,{gitlabHosts:location.origin!=="https://github.com"?[location.origin]:[]});
       const info = route?.kind === "blob" ? parse.blobRequest(route, embedded()) : null;

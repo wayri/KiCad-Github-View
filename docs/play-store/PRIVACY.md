@@ -34,7 +34,7 @@ Pocket KiView does not create a separate Pocket KiView service account. Connecti
 
 ## Privacy inquiries and changes
 
-Project maintainers can be contacted through the [Pocket KiView project support page](https://github.com/wayri/KiCad-Github-View/issues). GitHub issues are public: do not post credentials, private designs or other sensitive data there. For private support, privacy inquiries and content/user reports, email support.kiview@sigharmonic.com. The mailbox is monitored by the publisher, responding as Pocket KiView team; report drafts are only sent when you send them in your email app. Do not include credentials or private project files. Blocking hides a user’s comments in the current app profile; it does not block the provider account.
+Project maintainers can be contacted through the [Pocket KiView project support page](https://github.com/wayri/KiCad-Github-View/issues). GitHub issues are public: do not post credentials, private designs or other sensitive data there. For private support, privacy inquiries and content/user reports, email support@sigharmonic.com. The mailbox is monitored by the publisher, responding as Pocket KiView team; report drafts are only sent when you send them in your email app. Do not include credentials or private project files. Blocking hides a user’s comments in the current app profile; it does not block the provider account.
 
 This policy should be updated when the app's data handling changes. The policy date above identifies this source version.
 

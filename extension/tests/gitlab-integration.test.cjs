@@ -34,6 +34,83 @@ test('self-hosted previews require exact permission and host configuration befor
  assert.equal(h.calls.length,before);
  assert.equal((await h.send(request,{id:'test',url:HOST+'/group/private/-/blob/main/board.kicad_pcb'})).ok,true);
 });
+
+test('approved self-hosted private projects read a pinned hierarchy through the existing website session',async()=>{
+ const h=harness(()=>new Response(null,{status:404}));await h.add();
+ assert.ok([...h.scripts.values()][0].js.includes('gitlab-session-reader.js'));
+ const requests=[],repo='group/sub/private',sources={'design/main.kicad_sch':'(kicad_sch (sheet (property "Sheetfile" "../shared/leaf.kicad_sch")))','shared/leaf.kicad_sch':'(kicad_sch)'};
+ const reader=require('../gitlab-session-reader.js').create({location:{href:HOST+'/'+repo+'/-/blob/main/design/main.kicad_sch'},fetch:async(url,init)=>{
+  requests.push({url,init});const parsed=new URL(url);assert.equal(init.credentials,'same-origin');assert.equal(init.headers,undefined);
+  if(parsed.pathname.includes('/commits/'))return new Response(JSON.stringify({id:SHA}));
+  assert.equal(parsed.searchParams.get('ref'),SHA);
+  if(parsed.pathname.endsWith('/tree'))return new Response(JSON.stringify(Object.keys(sources).map(path=>({path,type:'blob',mode:'100644'}))));
+  const path=decodeURIComponent(parsed.pathname.split('/files/')[1].replace(/\/raw$/,''));return new Response(sources[path]);
+ }});
+ h.ctx.chrome.tabs={query:async()=>[{id:19,url:HOST+'/'+repo+'/-/blob/main/design/main.kicad_sch'}],sendMessage:async(id,message,options)=>{assert.equal(options.frameId,0);return {ok:true,result:await reader.read(message)};}};
+ const result=await h.send({type:'project',provider:'gitlab',host:HOST,repository:repo,ref:'feature/board',file:'shared/leaf.kicad_sch'});
+ assert.equal(result.ok,true,result.error);assert.deepEqual(Array.from(result.result,row=>row.path),['design/main.kicad_sch','shared/leaf.kicad_sch']);
+ assert.ok(requests.length>=4);assert.ok(h.calls.every(call=>!call.init.headers?.Authorization&&!call.init.headers?.['PRIVATE-TOKEN']));
+});
+
+test('GitLab session fallback cannot use another project or a removed host permission',async()=>{
+ const h=harness(()=>new Response(null,{status:404}));await h.add();let bridgeCalls=0;
+ h.ctx.chrome.tabs={query:async()=>[{id:1,url:HOST+'/group/private-evil/-/blob/main/board.kicad_pcb'}],sendMessage:async()=>{bridgeCalls++;return null;}};
+ const input={type:'project',provider:'gitlab',host:HOST,repository:'group/private',ref:'main',file:'board.kicad_pcb'};
+ assert.equal((await h.send(input)).ok,false);assert.equal(bridgeCalls,0);
+ h.ctx.chrome.tabs.query=async()=>[{id:1,url:HOST+'/group/private/-/blob/main/board.kicad_pcb'}];
+ h.ctx.chrome.tabs.sendMessage=async()=>{h.granted.delete(HOST+'/*');return {ok:true,result:{base64:btoa(JSON.stringify({id:SHA})),next:'',link:''}};};
+ const result=await h.send(input);assert.equal(result.ok,false);assert.match(result.error,/permission.*removed/);
+});
+
+test('GitLab session fallback retains binary model bytes and denies malformed bridge payloads',async()=>{
+ const h=harness(()=>new Response(null,{status:404}));await h.add();
+ const bytes=Uint8Array.from([103,108,84,70,0,255,128]);
+ h.ctx.chrome.tabs={query:async()=>[{id:1,url:HOST+'/group/private/-/blob/main/board.kicad_pcb'}],sendMessage:async()=>({ok:true,result:{base64:Buffer.from(bytes).toString('base64'),next:'',link:''}})};
+ const input={type:'repo-asset',provider:'gitlab',host:HOST,repository:'group/private',ref:SHA,file:'models/part.glb'};
+ const result=await h.send(input);assert.equal(result.ok,true,result.error);assert.equal(result.result.base64,Buffer.from(bytes).toString('base64'));
+ h.ctx.chrome.tabs.sendMessage=async()=>({ok:true,result:{base64:'not base64!',next:'',link:''}});
+ assert.match((await h.send(input)).error,/Invalid GitLab session response/);
+});
+
+test('private GitLab MR comparisons use matching target and fork session tabs at immutable revisions',async()=>{
+ const h=harness(()=>new Response(null,{status:404}));await h.add();
+ const base='b'.repeat(40),head='a'.repeat(40),start='c'.repeat(40),seen=[];
+ h.ctx.chrome.tabs={query:async()=>[{id:1,url:HOST+'/group/private/-/merge_requests/7/diffs'},{id:2,url:HOST+'/group/fork/-/blob/main/board.kicad_pcb'}],sendMessage:async(id,message)=>{
+  seen.push({id,message});
+  const reader=require('../gitlab-session-reader.js').create({location:{href:HOST+'/'+message.repository+'/-/blob/main/board.kicad_pcb'},fetch:async(url)=>{
+   const parsed=new URL(url);
+   if(parsed.pathname.endsWith('/merge_requests/7'))return new Response(JSON.stringify({iid:7,source_project_id:2,target_project_id:1,diff_refs:{base_sha:base,head_sha:head,start_sha:start}}));
+   if(parsed.pathname.endsWith('/projects/2'))return new Response(JSON.stringify({id:2,path_with_namespace:'group/fork'}));
+   assert.ok(parsed.pathname.endsWith('/tree'));const ref=parsed.searchParams.get('ref');assert.ok([base,head].includes(ref));
+   return new Response(JSON.stringify([{path:'board.kicad_pcb',type:'blob',mode:'100644',id:ref}]));
+  }});return {ok:true,result:await reader.read(message)};
+ }};
+ const result=await h.send({type:'gitlab-merge-request',provider:'gitlab',host:HOST,repository:'group/private',number:7});
+ assert.equal(result.ok,true,result.error);assert.equal(result.result.base,base);assert.equal(result.result.head,head);assert.equal(result.result.headRepository,'group/fork');assert.equal(result.result.files[0].status,'modified');
+ assert.ok(seen.some(row=>row.id===2&&row.message.repository==='group/fork'));assert.ok(seen.filter(row=>row.message.url.includes('/projects/2')).every(row=>row.id===1));
+});
+
+test('GitLab session API retains pagination and pinned history for the shared revision controls',async()=>{
+ const h=harness(()=>new Response(null,{status:404}));await h.add();const pages=[];
+ const reader=require('../gitlab-session-reader.js').create({location:{href:HOST+'/group/private/-/blob/main/board.kicad_pcb'},fetch:async(url)=>{
+  const parsed=new URL(url);
+  if(parsed.pathname.includes('/commits/'))return new Response(JSON.stringify({id:SHA}));
+  if(parsed.pathname.endsWith('/commits')){assert.equal(parsed.searchParams.get('ref_name'),SHA);return new Response(JSON.stringify([{id:SHA,title:'Board update',author_name:'reviewer',authored_date:'2026-10-12T00:00:00Z'}]));}
+  assert.equal(parsed.searchParams.get('ref'),SHA);const page=parsed.searchParams.get('page');pages.push(page);
+  const rows=page==='1'?Array.from({length:100},(_,i)=>({path:'board'+i+'.kicad_pcb',type:'blob',mode:'100644'})):[{path:'final.kicad_pcb',type:'blob',mode:'100644'}];
+  return new Response(JSON.stringify(rows),{headers:page==='1'?{'x-next-page':'2'}:{}});
+ }});
+ h.ctx.chrome.tabs={query:async()=>[{id:1,url:HOST+'/group/private/-/blob/main/board.kicad_pcb'}],sendMessage:async(id,message)=>({ok:true,result:await reader.read(message)})};
+ const input={provider:'gitlab',host:HOST,repository:'group/private',ref:'main',file:'board.kicad_pcb'};
+ const inventory=await h.send({...input,type:'project-inventory'});assert.equal(inventory.ok,true,inventory.error);assert.equal(inventory.result.snapshotRef,SHA);assert.equal(inventory.result.files.length,101);assert.deepEqual(pages,['1','2']);
+ const history=await h.send({...input,type:'revision-commits'});assert.equal(history.ok,true,history.error);assert.equal(history.result.snapshotRef,SHA);assert.equal(history.result.commits[0].sha,SHA);
+});
+
+test('previously registered self-hosted preview scripts upgrade to include the session reader',async()=>{
+ const h=harness();await h.add();const [id,row]=[...h.scripts.entries()][0];h.scripts.set(id,{...row,js:['parsing.js','content.js']});
+ const result=await h.send({type:'gitlab-host-add',provider:'gitlab',host:HOST},h.options);
+ assert.equal(result.ok,true,result.error);assert.deepEqual(Array.from(h.scripts.get(id).js),['parsing.js','gitlab-session-reader.js','content.js']);
+});
 test('private reads use only their host credential and pages cannot set credentials',async()=>{
  const h=harness();await h.add();
  const settings={provider:'gitlab',host:HOST,type:'gitlab-auth-set',token:TOKEN};

@@ -472,13 +472,13 @@ public final class MainActivity extends Activity {
             if (body == null || body.length() > 8192) return;
             runOnUiThread(() -> {
                 if (!trustedPage()) return;
-                Intent draft = new Intent(Intent.ACTION_SENDTO, Uri.parse("mailto:support.kiview@sigharmonic.com?subject="
+                Intent draft = new Intent(Intent.ACTION_SENDTO, Uri.parse("mailto:support@sigharmonic.com?subject="
                         + Uri.encode("Pocket KiView content/user report") + "&body=" + Uri.encode(body)));
                 draft.putExtra(Intent.EXTRA_SUBJECT, "Pocket KiView content/user report");
                 draft.putExtra(Intent.EXTRA_TEXT, body);
                 try { startActivity(draft); }
                 catch (android.content.ActivityNotFoundException error) {
-                    android.widget.Toast.makeText(MainActivity.this, "Email support.kiview@sigharmonic.com to report this concern.", android.widget.Toast.LENGTH_LONG).show();
+                    android.widget.Toast.makeText(MainActivity.this, "Email support@sigharmonic.com to report this concern.", android.widget.Toast.LENGTH_LONG).show();
                 }
             });
         }
@@ -1123,9 +1123,9 @@ public final class MainActivity extends Activity {
                     if(temporary == null && (message.contains("32 MiB") || message.contains("96 MiB") || message.equals("File or project size limit exceeded"))) {
                         sendLoading("Large project: choose how to open it.");
                         new android.app.AlertDialog.Builder(this).setTitle("Open large project?")
-                            .setMessage("This project needs a disk copy. Keep it offline, or use a temporary copy that expires after "+new TemporaryProjectSettings(this).durationMinutes()+" minutes. Original files are unchanged. Copies are unencrypted in private app storage; large drawings still need available memory.")
+                            .setMessage("This project needs a disk copy. Keep it offline, or use a temporary copy that remains available in Downloads for "+new TemporaryProjectSettings(this).durationLabel()+", after which the app automatically removes it. Android may delay physical cleanup while inactive. Original files are unchanged. Copies are unencrypted in private app storage; large drawings still need available memory.")
                             .setPositiveButton("Download and keep",(dialog,which)->{if(generation==importGeneration.get())importSource(uri,folder,false);})
-                            .setNeutralButton("Temporary ("+new TemporaryProjectSettings(this).durationMinutes()+" min)",(dialog,which)->{if(generation==importGeneration.get())importSource(uri,folder,true);})
+                            .setNeutralButton("Temporary ("+new TemporaryProjectSettings(this).durationLabel()+")",(dialog,which)->{if(generation==importGeneration.get())importSource(uri,folder,true);})
                             .setNegativeButton("Cancel",(dialog,which)->sendError("Opening cancelled."))
                             .setOnCancelListener(dialog->sendError("Opening cancelled.")).show();
                         return;

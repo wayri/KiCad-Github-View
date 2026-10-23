@@ -31,7 +31,7 @@ code --install-extension wayri.kicad-visual-review
 For a downloaded VSIX, replace the filename with the actual package:
 
 ```sh
-code --install-extension ./kicad-visual-review-vscode-0.12.46.vsix
+code --install-extension ./kicad-visual-review-vscode-0.12.57.vsix
 ```
 
 On macOS, VS Code's **Shell Command: Install 'code' command in PATH** enables this optional terminal route. The Extensions UI does not need it.
@@ -68,7 +68,7 @@ Safari cannot load the Chromium ZIP as a normal extension. The Safari developmen
 3. Open **Pocket KiView**. Import a project folder/ZIP through the app's file picker, or browse a supported repository.
 4. Updates are manual: download and install the newer APK over the existing app when its package and signing identity match.
 
-The current GitHub 1.58 APK is a **development-signed preview**. It is not the locally prepared 1.59 build or a Play Store release. Development and future distribution/Play signing identities may differ. If Android reports a signature conflict, preserve/export projects and review state before deciding how to migrate; do not immediately uninstall or clear app data. Installing an older version over a newer version may also be rejected.
+The current GitHub 1.59 APK is a **development-signed preview**. It is not a Play Store release. Development and future distribution/Play signing identities may differ. If Android reports a signature conflict, preserve/export projects and review state before deciding how to migrate; do not immediately uninstall or clear app data. Installing an older version over a newer version may also be rejected.
 
 Android Chrome does not provide the desktop **Load unpacked** workflow. Use the Android app rather than trying to install the desktop extension in mobile Chrome.
 

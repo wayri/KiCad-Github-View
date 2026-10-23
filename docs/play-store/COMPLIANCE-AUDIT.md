@@ -2,7 +2,7 @@
 
 Reviewed 2026-10-10 against Android **1.49 / code 52**, package `dev.kicadvizdiff.android`. This is a bounded source/artifact audit and deployment plan, not legal certification or Google Play approval. **Not ready for production submission until the blocking gates below are closed.** GitHub APK/source publication can proceed separately.
 
-Follow-up source changes add comment safety controls and the owner-supplied contact `support.kiview@sigharmonic.com`. Android 1.49 was built and installed on the authorized phone. An independently upload-signed AAB is prepared; Play enrollment, Play-delivered testing and actual report-delivery checks remain separate gates.
+Follow-up source changes add comment safety controls and the owner-supplied contact `support@sigharmonic.com`. Android 1.49 was built and installed on the authorized phone. An independently upload-signed AAB is prepared; Play enrollment, Play-delivered testing and actual report-delivery checks remain separate gates.
 
 ## Evidence observed
 
@@ -39,4 +39,4 @@ Final candidate: Android 1.49/code52, AAB SHA-256 `540cf7bda0b4d893ebfb0ea0ad4e5
 
 The authorized phone received the earlier 1.49 safety build with data preserved. It disconnected before the final categorized-report build could be installed; reconnect and install/update verification remain pending. The public policy's final update returned HTTP 200 with exact source bytes.
 
-The owner confirmed an existing Play developer account (Personal/Organization unknown) and requested support.kiview@sigharmonic.com for Pocket KiView on 2026-10-11. Delivery and monitoring of the renamed mailbox have not been verified in this task. Mailbox provider and installed automatic triage rules are still unknown. Actual report delivery and ongoing moderation evidence are pending; email drafts are not in-app submission receipts. Play Console inspection was rejected by automatic browser approval review after an unexpected origin redirect; obtain account type from the owner's Console rather than guessing or bypassing the rejection.
+The owner confirmed an existing Play developer account (Personal/Organization unknown) and requested support@sigharmonic.com for Pocket KiView on 2026-10-11. Delivery and monitoring of the renamed mailbox have not been verified in this task. Mailbox provider and installed automatic triage rules are still unknown. Actual report delivery and ongoing moderation evidence are pending; email drafts are not in-app submission receipts. Play Console inspection was rejected by automatic browser approval review after an unexpected origin redirect; obtain account type from the owner's Console rather than guessing or bypassing the rejection.

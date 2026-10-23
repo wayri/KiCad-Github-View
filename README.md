@@ -10,30 +10,30 @@ Explore schematics and PCB layouts, follow nets, measure geometry, work through 
 [![Desktop](https://img.shields.io/badge/desktop-Windows%20%7C%20Linux%20%7C%20macOS-555)](docs/INSTALL.md)
 [![KiCad formats](https://img.shields.io/badge/KiCad-8%20%7C%209%20%7C%2010-314CB0)](docs/KICAD-COMPATIBILITY.md)
 
-[User guide](docs/USER-GUIDE.md) Â· [Installation](docs/INSTALL.md) Â· [Release notes](https://github.com/wayri/KiCad-Github-View/releases) Â· [Report an issue](https://github.com/wayri/KiCad-Github-View/issues) Â· [Contact support](mailto:support@sigharmonic.com)
+[User guide](docs/USER-GUIDE.md) | [Installation](docs/INSTALL.md) | [Release notes](https://github.com/wayri/KiCad-Github-View/releases) | [Report an issue](https://github.com/wayri/KiCad-Github-View/issues) | [Contact support](mailto:support@sigharmonic.com)
 
 ## Downloads
 
-[![Download Android APK](https://img.shields.io/badge/Android-Download%20APK%201.58-3DDC84?logo=android&logoColor=white)](https://github.com/wayri/KiCad-Github-View/releases/download/v0.12.46/pocket-kivi-android-phone-tablet-1.58-development.apk)
-[![Download Chromium extension](https://img.shields.io/badge/Chrome%20%2F%20Chromium-Download%20ZIP-4285F4?logo=googlechrome&logoColor=white)](https://github.com/wayri/KiCad-Github-View/releases/download/v0.12.46/kicad-visual-review-chrome-edge-brave-opera-vivaldi-chromium-0.12.46.zip)
+[![Download Android APK](https://img.shields.io/badge/Android-Download%20APK%201.59-3DDC84?logo=android&logoColor=white)](https://github.com/wayri/KiCad-Github-View/releases/download/v0.12.57/pocket-kivi-android-phone-tablet-1.59-development.apk)
+[![Download Chromium extension](https://img.shields.io/badge/Chrome%20%2F%20Chromium-Download%20ZIP-4285F4?logo=googlechrome&logoColor=white)](https://github.com/wayri/KiCad-Github-View/releases/download/v0.12.57/kicad-visual-review-chrome-edge-brave-opera-vivaldi-chromium-0.12.57.zip)
 [![Install VS Code extension](https://img.shields.io/badge/VS%20Code-Install%20extension-007ACC)](https://marketplace.visualstudio.com/items?itemName=wayri.kicad-visual-review)
 
 | Edition | Download / install | Availability |
 | --- | --- | --- |
-| Android | APK button above | Android 8+; published 1.58 preview, development-signed; manual installation and updates |
-| Chrome, Edge, Brave, Opera, Vivaldi, Chromium | Chromium ZIP button above | Published 0.12.46 preview; extract and load unpacked; candidate browsers have differing validation coverage |
-| VS Code | Marketplace button above Â· [offline VSIX 0.12.46](https://github.com/wayri/KiCad-Github-View/releases/download/v0.12.46/kicad-visual-review-vscode-0.12.46.vsix) | Windows, Linux and macOS; VS Code 1.95+; Marketplace can be newer than the GitHub VSIX |
-| Firefox | [Development ZIP 0.12.46](https://github.com/wayri/KiCad-Github-View/releases/download/v0.12.46/kicad-visual-review-firefox-0.12.46.zip) | Desktop 128+; unsigned temporary add-on; [instructions](docs/FIREFOX.md) |
-| Safari | [Development ZIP 0.12.46](https://github.com/wayri/KiCad-Github-View/releases/download/v0.12.46/kicad-visual-review-safari-0.12.46.zip) | macOS Safari 16.4+; requires Xcode conversion/signing; native verification pending; [instructions](docs/SAFARI.md) |
+| Android | APK button above | Android 8+; published 1.59 preview, development-signed; manual installation and updates |
+| Chrome, Edge, Brave, Opera, Vivaldi, Chromium | Chromium ZIP button above | Published 0.12.57 preview; extract and load unpacked; candidate browsers have differing validation coverage |
+| VS Code | Marketplace button above | [offline VSIX 0.12.57](https://github.com/wayri/KiCad-Github-View/releases/download/v0.12.57/kicad-visual-review-vscode-0.12.57.vsix) | Windows, Linux and macOS; VS Code 1.95+; Marketplace can be newer than the GitHub VSIX |
+| Firefox | [Development ZIP 0.12.57](https://github.com/wayri/KiCad-Github-View/releases/download/v0.12.57/kicad-visual-review-firefox-0.12.57.zip) | Desktop 128+; unsigned temporary add-on; [instructions](docs/FIREFOX.md) |
+| Safari | [Development ZIP 0.12.57](https://github.com/wayri/KiCad-Github-View/releases/download/v0.12.57/kicad-visual-review-safari-0.12.57.zip) | macOS Safari 16.4+; requires Xcode conversion/signing; native verification pending; [instructions](docs/SAFARI.md) |
 
-Downloads above are the verified [v0.12.46 GitHub preview](https://github.com/wayri/KiCad-Github-View/releases/tag/v0.12.46); Marketplace and local builds can be newer. The repository is currently private, so GitHub downloads require access until it is made public.
+Downloads above are the [v0.12.57 GitHub preview](https://github.com/wayri/KiCad-Github-View/releases/tag/v0.12.57); The VS Code Marketplace channel is updated separately. The repository is currently private, so GitHub downloads require access until it is made public.
 
 <details>
 <summary>Release versions, checksums and Android signing</summary>
 
-Direct links were checked on 24 October 2026. Preview downloads predate some features and screenshots below; newer local builds are not downloadable until uploaded. No Google Play or public Chrome Web Store installation URL is advertised here.
+Release packages are built from the tagged source; screenshots show several retained development versions and may differ from the packaged UI. No Google Play or public Chrome Web Store installation URL is advertised here.
 
-Compare preview downloads with [SHA256SUMS.txt](https://github.com/wayri/KiCad-Github-View/releases/download/v0.12.46/SHA256SUMS.txt). An AAB is a Play upload bundle, not a directly installable Android app. Preserve/export projects and review state before changing signing channels; do not uninstall merely to bypass a signature mismatch. [Installation and updates](docs/INSTALL.md).
+Compare preview downloads with [SHA256SUMS.txt](https://github.com/wayri/KiCad-Github-View/releases/download/v0.12.57/SHA256SUMS.txt). An AAB is a Play upload bundle, not a directly installable Android app. Preserve/export projects and review state before changing signing channels; do not uninstall merely to bypass a signature mismatch. [Installation and updates](docs/INSTALL.md).
 
 </details>
 
@@ -59,7 +59,7 @@ Local browser file/folder viewing works offline once the extension is installed.
 | Resolve a Git conflict | VS Code visual comparison of marker-based conflicts, with validated candidate export and explicit source replacement |
 | Calculate at the bench | Interactive engineering calculators with units, assumptions and circuit illustrations; host availability varies |
 
-[Platform parity and limits](extension/docs/platform-parity.md) Â· [BoM field table](docs/bom-field-table.md) Â· [GitHub/GitLab access](docs/GIT-HOSTS.md) Â· [VS Code walkthrough](vscode-extension/GUIDE.md)
+[Platform parity and limits](extension/docs/platform-parity.md) | [BoM field table](docs/bom-field-table.md) | [GitHub/GitLab access](docs/GIT-HOSTS.md) | [VS Code walkthrough](vscode-extension/GUIDE.md)
 
 ## Works with WayriCAD simulation results
 
@@ -74,13 +74,13 @@ Run simulations in **WayriCAD / kiWay**, then open their supported saved results
 
 Inspect plots and probe saved values. Supported spatial exports provide **2D/3D overlays**; placing an overlay on a PCB requires a matching saved board hash and spatial/layer metadata. Results remain read-only, and KiView does not rerun the simulation. Compatibility applies to documented export formats, rather than every WayriCAD version or arbitrary result file. The standalone results viewer is not currently available in VS Code.
 
-[Supported formats, probing and overlay requirements](docs/ANALYSIS_VIEWER.md) · [Open a saved result](docs/USER-GUIDE.md#wayricad-simulation-results).
+[Supported formats, probing and overlay requirements](docs/ANALYSIS_VIEWER.md) | [Open a saved result](docs/USER-GUIDE.md#wayricad-simulation-results).
 
 ## Screenshots
 
 Click any image to open it at full size. Captures show several development versions; older release downloads may look different. [Capture sources and attribution](docs/images/README.md).
 
-### Chrome · open a project and get straight to the drawing
+### Chrome | open a project and get straight to the drawing
 
 Read local projects offline or inspect supported GitHub/GitLab file pages. Open the whole project folder to retain sheet and model paths.
 
@@ -105,7 +105,7 @@ The expanded BoM capture uses the loopback local workspace and PIC Programmer de
 
 </details>
 
-### VS Code · inspect hardware beside its source
+### VS Code | inspect hardware beside its source
 
 Open a saved drawing as a custom editor, inspect component fields and keep review sidecars alongside your project files.
 
@@ -130,12 +130,12 @@ These installed VS Code captures use the KiCad PIC Programmer demo. The conflict
 
 </details>
 
-### Android · take the board to the bench
+### Android | take the board to the bench
 
 Keep saved projects available offline, inspect a board on your phone and use the wider workspace on a tablet.
 
 <table>
-<tr><th>Marble PCB · physical phone</th><th>Schematic · physical phone</th></tr>
+<tr><th>Marble PCB | physical phone</th><th>Schematic | physical phone</th></tr>
 <tr>
 <td align="center" valign="top"><a href="docs/images/android/marble-phone-layout.png"><img src="docs/images/android/marble-phone-layout.png" width="240" alt="Marble board layout running on a Samsung Android phone"></a></td>
 <td align="center" valign="top"><a href="docs/images/android/phone-schematic.png"><img src="docs/images/android/phone-schematic.png" width="240" alt="Synthetic schematic in the Android app on a physical Samsung phone"></a></td>
@@ -159,7 +159,7 @@ The BoM and testpoint views above are browser captures of the shared tools at ph
 
 </details>
 
-### Engineering tools · inspect more than the drawing
+### Engineering tools | inspect more than the drawing
 
 The shared Android/browser tools cover assembly, saved results, documents and engineering calculations. Availability differs in VS Code; see [platform parity](extension/docs/platform-parity.md).
 
@@ -174,14 +174,14 @@ The shared Android/browser tools cover assembly, saved results, documents and en
 | :---: | :---: |
 | <a href="docs/images/tools/gerber.jpg"><img src="docs/images/tools/gerber.jpg" width="270" alt="Gerber fabrication viewer with a synthetic trace and drill fixture"></a> | <a href="docs/images/tools/pdf.jpg"><img src="docs/images/tools/pdf.jpg" width="270" alt="PDF viewer displaying a synthetic inspection report"></a> |
 
-Local browser fixture captures. The calculator shows analytical estimates, not a live circuit simulation; the Gerber example is geometry screening, not full DFM. [Calculator guide](docs/CALCULATORS.md) · [Gerber guide](docs/GERBER-VIEWER.md) · [PDF guide](docs/PDF-VIEWER.md).
+Local browser fixture captures. The calculator shows analytical estimates, not a live circuit simulation; the Gerber example is geometry screening, not full DFM. [Calculator guide](docs/CALCULATORS.md) | [Gerber guide](docs/GERBER-VIEWER.md) | [PDF guide](docs/PDF-VIEWER.md).
 
 </details>
 
 <details>
 <summary><strong>3D models, saved analysis and board settings</strong></summary>
 
-| Supported linked model · fixture | Marble · approximate component proxies |
+| Supported linked model | fixture | Marble | approximate component proxies |
 | :---: | :---: |
 | [![A repository-linked WRL model rendered on a fixture board](docs/images/repository-model-3d.jpg)](docs/images/repository-model-3d.jpg) | [![Marble 3D preview with approximate procedural component bodies](docs/images/marble-3d-proxies.jpg)](docs/images/marble-3d-proxies.jpg) |
 
@@ -195,7 +195,7 @@ The linked-model fixture loads one actual WRL asset. Marble's pictured bodies ar
 
 [![Saved board net classes and rule fields in a table](docs/images/tools/board-setup.jpg)](docs/images/tools/board-setup.jpg)
 
-[Saved-analysis formats](docs/ANALYSIS_VIEWER.md) · [Compatibility and limits](docs/KICAD-COMPATIBILITY.md).
+[Saved-analysis formats](docs/ANALYSIS_VIEWER.md) | [Compatibility and limits](docs/KICAD-COMPATIBILITY.md).
 
 </details>
 
@@ -216,7 +216,7 @@ These local fixture captures demonstrate controls and saved data. The collaborat
 
 [![BoM reset warning with affected parts and explicit acknowledgement](docs/images/tools/bom-reset-warning.jpg)](docs/images/tools/bom-reset-warning.jpg)
 
-[BoM reset behavior](docs/bom-field-table.md#reset-saved-management-fields) · [Review and transfer guide](docs/USER-GUIDE.md#6-record-share-and-transfer-a-review).
+[BoM reset behavior](docs/bom-field-table.md#reset-saved-management-fields) | [Review and transfer guide](docs/USER-GUIDE.md#6-record-share-and-transfer-a-review).
 
 </details>
 
@@ -237,6 +237,6 @@ Source designs are ordinarily read-only. Explicit conflict-resolution actions in
 
 ## License and support
 
-Copyright Â© 2026 **Yawar B (wayri)**. Licensed under the [Pocket KiView Source-Available License 1.0](LICENSE), **not an OSI-approved open-source license**. Personal and internal professional use are permitted. Paid distribution, paid bundles and monetized hosted access require written permission. Your designs and outputs remain yours under the license. [Licensing details](LICENSING.md) Â· [Third-party notices](THIRD-PARTY-NOTICES.md).
+Copyright (c) 2026 **Yawar B (wayri)**. Licensed under the [Pocket KiView Source-Available License 1.0](LICENSE), **not an OSI-approved open-source license**. Personal and internal professional use are permitted. Paid distribution, paid bundles and monetized hosted access require written permission. Your designs and outputs remain yours under the license. [Licensing details](LICENSING.md) | [Third-party notices](THIRD-PARTY-NOTICES.md).
 
 Support and commercial licensing: **[support@sigharmonic.com](mailto:support@sigharmonic.com)**. Optional sponsorship does not unlock app features. This independent project is not affiliated with or endorsed by KiCad, GitHub, GitLab, Google, Apple or Microsoft.

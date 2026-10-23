@@ -55,7 +55,7 @@ def payload(root=ROOT):
         result[name] = content
     for source in (root / 'android-app/web').iterdir():
         if source.is_file():
-            content=source.read_bytes()
+            content=(root/'extension/local-project.js').read_bytes() if source.name=='local-project.js' else source.read_bytes()
             if source.name=='about.html':
                 version=re.search(r"versionName '([^']+)'",(root/'android-app/app/build.gradle').read_text()).group(1)
                 content=content.replace(b'__APP_VERSION__',version.encode('utf-8'))

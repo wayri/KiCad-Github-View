@@ -21,4 +21,22 @@ Bounds are 8 MiB of UTF-8 input, 64 copied tree levels, 100,000 saved tree value
 
 Reference contracts: [KiCad board file format and stackup](https://dev-docs.kicad.org/en/file-formats/sexpr-pcb/) and [KiCad settings framework](https://dev-docs.kicad.org/en/components/settings/index.html). Saved field coverage is independent of a particular GUI version; schema migrations/default evaluation are intentionally outside this inspector.
 
-Run `node --test extension/tests/project-settings.test.cjs`. The retained fixtures are synthetic saved-data contracts, not evidence of native KiCad execution or complete GUI parity.
+The Board Setup page follows the KiCad 9 design-rule section layout: Constraints,
+Pre-defined Sizes, Net Classes and assignments, Custom Rules, Violation Severity,
+Teardrops and Length-tuning Patterns. Desktop uses section navigation beside the
+content; phones use a section selector. Numeric values use typed, read-only fields
+with explicit units. Booleans and severity selections show their saved states.
+Size and net-class tables preserve saved order; absent class values are labelled
+“Not saved”, rather than filled with guessed defaults. The All settings view
+continues to expose fields outside the specialised layout.
+
+Custom-rule files open as read-only source plus a rule summary. The viewer does
+not check custom-rule syntax, evaluate effective constraints or save edits.
+Opening Board Setup preserves the loaded project and offers Back to its prior
+section. This is a browser layout based on native KiCad sections, not a claim of
+pixel-identical native controls.
+
+Reference: [KiCad 9 Board Setup](https://docs.kicad.org/9.0/en/pcbnew/pcbnew.html).
+Run `node --test extension/tests/project-settings.test.cjs extension/tests/board-setup-ui.test.cjs`.
+The retained fixtures are synthetic saved-data contracts, not evidence of native
+KiCad execution or complete GUI parity.

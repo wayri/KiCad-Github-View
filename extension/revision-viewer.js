@@ -136,9 +136,10 @@
         add('Overview','Restore layer view before focusing',()=>canvas.restoreLayers());
         add('Filled copper','Toggle saved filled copper zones',()=>canvas.setZoneVisibility({filled:canvas.showFilledCopper===false}));
         add('Zone outlines','Toggle saved zone boundary outlines',()=>canvas.setZoneVisibility({outlines:canvas.showZoneOutlines===false}));
+        add('Net names','Show saved copper net names in 2D',()=>{preferences.showNetNames=!canvas.showNetNames;applyTheme();savePreferences();});
       }
       for(const [name,button] of floatingButtons){
-        const selected=name==='Filled copper'?canvas.showFilledCopper!==false:name==='Zone outlines'?canvas.showZoneOutlines!==false:name==='All'?!canvas.focusedLayer&&(canvas.design.layers||[]).every(layer=>canvas.visibleLayers.has(layer)):name==='Overview'?!canvas.focusedLayer&&!canvas.layerSnapshot:canvas.focusedLayer===name;
+        const selected=name==='Net names'?canvas.showNetNames===true:name==='Filled copper'?canvas.showFilledCopper!==false:name==='Zone outlines'?canvas.showZoneOutlines!==false:name==='All'?!canvas.focusedLayer&&(canvas.design.layers||[]).every(layer=>canvas.visibleLayers.has(layer)):name==='Overview'?!canvas.focusedLayer&&!canvas.layerSnapshot:canvas.focusedLayer===name;
         button.setAttribute('aria-pressed',String(selected));
       }
       if(floatingToggle)floatingToggle.textContent=canvas.focusedLayer||'Layers';
@@ -225,16 +226,17 @@
     workspace.attachCanvas(canvas);openSheet(initialFile);loading?.hide();
     if(!pcb){
       const gallery=document.createElement('section');gallery.id='sheetOverview';gallery.hidden=true;gallery.setAttribute('aria-label','All schematic sheets');host.append(gallery);
-      const heading=document.createElement('header'),title=document.createElement('strong'),back=document.createElement('button'),unselect=document.createElement('button'),clear=document.createElement('button'),fitAll=document.createElement('button'),help=document.createElement('small');
-      title.textContent='All sheets';back.type=unselect.type=clear.type=fitAll.type='button';back.textContent='Single sheet';unselect.textContent='Unselect';unselect.setAttribute('aria-label','Unselect');clear.textContent='Clear highlights';clear.setAttribute('aria-label','Clear highlights');fitAll.textContent='Fit';unselect.onclick=()=>$('unselect').click();clear.onclick=()=>$('clearHighlights').click();heading.append(title,back,unselect,clear,fitAll,help);gallery.append(heading);
+      const heading=document.createElement('header'),title=document.createElement('strong'),back=document.createElement('button'),unselect=document.createElement('button'),clear=document.createElement('button'),fitAll=document.createElement('button'),hierarchyToggle=document.createElement('button'),help=document.createElement('small');
+      title.textContent='All sheets';back.type=unselect.type=clear.type=fitAll.type=hierarchyToggle.type='button';back.textContent='Single sheet';unselect.textContent='Unselect';unselect.setAttribute('aria-label','Unselect');clear.textContent='Clear highlights';clear.setAttribute('aria-label','Clear highlights');fitAll.textContent='Fit';hierarchyToggle.textContent='Hierarchy links';hierarchyToggle.title='Show saved parent → child sheet placements';hierarchyToggle.setAttribute('aria-pressed','true');unselect.onclick=()=>$('unselect').click();clear.onclick=()=>$('clearHighlights').click();heading.append(title,back,unselect,clear,fitAll,hierarchyToggle,help);gallery.append(heading);
       const stacks=document.createElement('details'),stackTitle=document.createElement('summary'),stackList=document.createElement('div');stacks.className='sheet-instance-stacks';stackTitle.textContent='Repeated sheets';stacks.append(stackTitle,stackList);heading.insertBefore(stacks,help);
       const surface=document.createElement('div');surface.className='sheet-shared-canvas';gallery.append(surface);
-      let overviewView=null,opened=false,ticket=0,composition=null;const frontInstances=new Map();
+      let overviewView=null,opened=false,ticket=0,composition=null,hierarchyGraph=null;const frontInstances=new Map();
+      hierarchyToggle.onclick=()=>{hierarchyToggle.setAttribute('aria-pressed',String(hierarchyToggle.getAttribute('aria-pressed')!=='true'));overviewView?.draw();};
       const clearOverviewSelection=()=>{if(overviewView){overviewView.selected=null;overviewView.draw();}};
       $('unselect').addEventListener('click',clearOverviewSelection);$('clearHighlights').addEventListener('click',clearOverviewSelection);
       const fitOverview=()=>{if(!overviewView||!composition)return;overviewView.resize();overviewView.viewport.camera.bbox={x:-12,y:-4,w:composition.design.page.width+12,h:composition.design.page.height+4};overviewView.draw();};
       const rebuild=async()=>{
-        const generation=++ticket,entries=workspace.overviewSheets().filter(entry=>entry.sheet);
+        const generation=++ticket,allEntries=workspace.overviewSheets(),entries=allEntries.filter(entry=>entry.sheet);
         const active=entries.some(entry=>workspace.overviewSelection(entry.sheet.path).netActive);
         const limits=entries.flatMap(e=>workspace.overviewSelection(e.sheet.path).limits||[]);
         help.textContent=(active?'Connected sheets only · ':'')+'Pan and zoom · select a net · double-click/tap a sheet to enter'+(entries.some(e=>e.instanceCount>1)?' · Choose a placement in Repeated sheets.':'')+(entries.some(e=>e.instanceTruncated)?' · Instance counts capped at 4,096 placements.':'')+(limits.length?' · '+[...new Set(limits)].join(' '):'');
@@ -250,11 +252,19 @@
         }
         if(!opened||generation!==ticket)return;
         composition=KiCadReviewWorkspace.composeSheetOverview(rendered,workspace.overviewNetLinks?.()||[],dark);
+        hierarchyGraph=globalThis.KiCadSheetHierarchyLinks?.build(composition.pages)||null;
+        const missingTargets=allEntries.filter(entry=>entry.unavailable).length;
+        help.textContent+=(hierarchyGraph?' · Teal arrows: saved parent → child sheets.':' · Hierarchy links unavailable.')+' Gold dashed lines: highlighted nets.'+
+          (hierarchyGraph&&!hierarchyGraph.links.length&&shown.length>1?' No resolved parent → child link among shown sheets.':'')+
+          (missingTargets?` · ${missingTargets} unloaded child target${missingTargets===1?'':'s'} omitted.`:'')+
+          (hierarchyGraph?.unresolved?` · ${hierarchyGraph.unresolved} unresolved placement${hierarchyGraph.unresolved===1?'':'s'} omitted.`:'')+
+          (hierarchyGraph?.omitted?` · ${hierarchyGraph.omitted} hierarchy link${hierarchyGraph.omitted===1?'':'s'} beyond display limit.`:'');
         if(!overviewView){
           overviewView=KiCadOwnedCanvas.mount(surface,{dark,pcb:false,acceleration:'off'});
           const baseDraw=overviewView.draw.bind(overviewView);overviewView.draw=()=>{
             baseDraw();if(!composition)return;const ctx=overviewView.ctx;if(!ctx)return;
             ctx.save();ctx.setLineDash([6,4]);for(const wire of composition.airwires)overviewView.paint(wire);ctx.restore();
+            if(hierarchyToggle.getAttribute('aria-pressed')==='true')globalThis.KiCadSheetHierarchyLinks?.draw(overviewView,hierarchyGraph,dark);
           };
           overviewView.addEventListener('kicad:select',()=>{const hit=overviewView.selected;if(hit?.sourcePath&&hit.uuid)workspace.selectOverviewNet?.(hit.sourcePath,hit.uuid,hit.sourceInstanceId);});
           overviewView.canvas.addEventListener('dblclick',event=>{
@@ -265,7 +275,7 @@
         overviewView.dark=dark;overviewView.setDocument(composition.design,'all-sheets');overviewView.paperVisible=false;
         overviewView.setNetHighlights(composition.highlighted.length?[{primitives:composition.highlighted}]:[],{mode:'bright'});fitOverview();
       };
-      const close=()=>{if(!opened)return;opened=false;ticket++;gallery.hidden=true;canvas.canvas.hidden=false;overviewView?.dispose();overviewView=null;composition=null;toggle.setAttribute('aria-pressed','false');canvas.resize();canvas.draw();};
+      const close=()=>{if(!opened)return;opened=false;ticket++;gallery.hidden=true;canvas.canvas.hidden=false;overviewView?.dispose();overviewView=null;composition=null;hierarchyGraph=null;toggle.setAttribute('aria-pressed','false');canvas.resize();canvas.draw();};
       const open=()=>{if(opened)return;opened=true;gallery.hidden=false;canvas.canvas.hidden=true;toggle.setAttribute('aria-pressed','true');return rebuild();};
       const toggle=document.createElement('button');toggle.id='allSheetPagesButton';toggle.type='button';toggle.textContent='All sheets';toggle.title='See every loaded schematic page on one canvas';toggle.setAttribute('aria-pressed','false');toggle.onclick=()=>opened?close():open();
       ($('sheetHome')?.parentElement||$('frameControls')).append(toggle);back.onclick=close;fitAll.onclick=fitOverview;
@@ -285,7 +295,8 @@
 
     const savePreferences=()=>chrome.storage?.local?.set({[preferenceKey]:preferences}).catch(error=>{$('pageSetupStatus').textContent=error.message;});
 
-    const applyTheme=()=>{dark=preferences.drawingTheme==='dark';canvas.dark=dark;canvas.acceleration=preferences.acceleration==='off'?'off':'auto';scene?.setTheme(dark);document.body.dataset.uiTheme=preferences.uiTheme;$('uiTheme').value=preferences.uiTheme;$('drawingTheme').value=preferences.drawingTheme;$('rulerUnits').value=preferences.rulerUnits;if($('acceleration'))$('acceleration').value=canvas.acceleration;$('themeButton').setAttribute('aria-pressed',String(dark));if($('displayPreset'))$('displayPreset').value=preferences.uiTheme==='light'&&preferences.drawingTheme===(pcb?'dark':'light')?'kicad':preferences.uiTheme===preferences.drawingTheme?preferences.uiTheme:'custom';if(!scene)canvas.draw();};
+    $('netNamesSetting').hidden=!pcb;$('showNetNames').onchange=()=>{preferences.showNetNames=$('showNetNames').checked;applyTheme();savePreferences();};
+    const applyTheme=()=>{canvas.showNetNames=preferences.showNetNames===true;$('showNetNames').checked=canvas.showNetNames;dark=preferences.drawingTheme==='dark';canvas.dark=dark;canvas.acceleration=preferences.acceleration==='off'?'off':'auto';scene?.setTheme(dark);document.body.dataset.uiTheme=preferences.uiTheme;$('uiTheme').value=preferences.uiTheme;$('drawingTheme').value=preferences.drawingTheme;$('rulerUnits').value=preferences.rulerUnits;if($('acceleration'))$('acceleration').value=canvas.acceleration;$('themeButton').setAttribute('aria-pressed',String(dark));if($('displayPreset'))$('displayPreset').value=preferences.uiTheme==='light'&&preferences.drawingTheme===(pcb?'dark':'light')?'kicad':preferences.uiTheme===preferences.drawingTheme?preferences.uiTheme:'custom';if(!scene)canvas.draw();};
 
     $('themeButton').onclick=()=>{preferences.drawingTheme=dark?'light':'dark';applyTheme();savePreferences();};
 

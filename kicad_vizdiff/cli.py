@@ -48,6 +48,11 @@ def write_report(output, data):
 def parser():
     p = argparse.ArgumentParser(description="View and visually compare KiCad designs using KiCad's native renderer.")
     subs = p.add_subparsers(dest="command", required=True)
+    browser = subs.add_parser("browser", help="Open saved local sources in a read-only parallel browser workspace")
+    browser.add_argument("project", help="Local .kicad_sch/.kicad_pcb file or project folder")
+    browser.add_argument("--assets", help="Packaged local viewer web directory")
+    browser.add_argument("--port", type=int, default=0)
+    browser.add_argument("--no-open", action="store_true")
     for command in ("view", "diff"):
         sub = subs.add_parser(command)
         sub.add_argument("file", help="Repository-relative root .kicad_sch or .kicad_pcb")
@@ -81,6 +86,14 @@ def main(argv=None, *, prepared=None):
     try:
         if prepared and args.command != 'diff':
             raise VizError('Prepared snapshots are only available for diff reports.')
+        if args.command == "browser":
+            from .local_viewer import main as local_main
+            arguments = ["--project", args.project, "--port", str(args.port)]
+            if args.assets:
+                arguments += ["--assets", args.assets]
+            if args.no_open:
+                arguments += ["--no-open"]
+            return local_main(arguments)
         if args.command == "review":
             from .actions import review
             return review(args.base, args.head, args.output, args.repo, args.merge_base,

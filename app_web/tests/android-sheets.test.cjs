@@ -3,6 +3,10 @@ const {limits,clamp,peek,viewportGeometry,install}=require('../../android-app/we
 test('sheet sizes are bounded by phone viewport, including keyboard-sized space',()=>{
  assert.deepEqual(limits(800),{min:320,max:752});assert.equal(clamp(9999,800),752);assert.equal(clamp(1,800),320);assert.equal(clamp(400,200),188);
 });
+test('selection disambiguation remains a popup without sheet handle or forced offset',()=>{
+ const f=fixture();f.panel.classes.clear();f.panel.classes.add('touch-net-picker');f.panel.children=[];const before={...f.panel.values};
+ const installed=install(f.doc,f.host);installed.scan();assert.equal(f.panel.children.length,0);assert.equal(f.panel.classList.contains('android-resizable-sheet'),false);assert.deepEqual(f.panel.values,before);
+});
 function fixture(raf=false){
  class Node extends EventTarget{constructor(){super();this.children=[];this.attrs={};this.values={};this.style={setProperty:(k,v)=>this.values[k]=v,removeProperty:k=>delete this.values[k]};this.classes=new Set();this.classList={add:k=>this.classes.add(k),remove:k=>this.classes.delete(k),contains:k=>this.classes.has(k)};this.isConnected=true;}setAttribute(k,v){this.attrs[k]=v;}getAttribute(k){return this.attrs[k];}append(n){this.children.push(n);}prepend(n){this.children.unshift(n);}getBoundingClientRect(){return{height:Number.parseFloat(this.values.height)||400};}setPointerCapture(){}releasePointerCapture(){}}
  const panel=new Node(),doc={body:{},createElement:()=>new Node(),querySelectorAll:()=>[panel]},listeners={};

@@ -1,10 +1,10 @@
 {
   "name": "kicad-visual-review",
   "displayName": "KiCad Visual Review",
-  "description": "Read-only KiCad schematic and PCB review with properties, nets, measurements and local annotations.",
-  "version": "0.12.41",
+  "description": "View KiCad schematics and PCBs, inspect nets and assembly fields, and resolve Git conflicts visually.",
+  "version": "0.12.57",
   "publisher": "wayri",
-  "license": "UNLICENSED",
+  "license": "SEE LICENSE IN LICENSE.txt",
   "engines": {
     "vscode": "^1.95.0"
   },

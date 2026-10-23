@@ -45,8 +45,20 @@ class PackageVSCodeTests(unittest.TestCase):
                 document = ET.fromstring(archive.read('extension.vsixmanifest'))
                 ns = {'v': 'http://schemas.microsoft.com/developer/vsx-schema/2011'}
                 self.assertEqual(document.find('v:Metadata/v:Identity', ns).attrib['Version'], manifest['version'])
+                self.assertEqual(document.find('v:Metadata/v:GalleryFlags', ns).text, 'Public')
+                self.assertEqual(document.find('v:Metadata/v:License', ns).text, 'extension/LICENSE.txt')
                 for asset in document.findall('v:Assets/v:Asset', ns):
                     self.assertIn(asset.attrib['Path'], archive.namelist())
+                self.assertEqual(manifest['license'], 'SEE LICENSE IN LICENSE.txt')
+                self.assertEqual(archive.read('extension/LICENSE.txt'), (ROOT / 'LICENSE').read_bytes())
+                license_asset = next(a for a in document.findall('v:Assets/v:Asset', ns) if a.attrib['Type'] == 'Microsoft.VisualStudio.Services.Content.License')
+                self.assertEqual(license_asset.attrib['Path'], 'extension/LICENSE.txt')
+                readme = archive.read('extension/README.md').decode('utf-8')
+                for name in builder.README_IMAGES:
+                    image = archive.read(f'extension/{name}')
+                    self.assertTrue(image.startswith(b'\xff\xd8\xff'))
+                    self.assertIn('/' + Path(name).name + ')', readme)
+                self.assertNotRegex(readme, r'!\[[^\]]*\]\((?!https://)')
                 ET.fromstring(archive.read('[Content_Types].xml'))
                 inventory = json.loads(archive.read('extension/media/shared-assets.json'))
                 for name in builder.ASSETS:

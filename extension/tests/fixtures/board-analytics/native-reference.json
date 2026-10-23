@@ -1,0 +1,20 @@
+{
+  "source": "tracks.kicad_pcb",
+  "kicadVersion": "10.0.6",
+  "method": "Native PCB_TRACK/PCB_ARC GetLength, divided by 1,000,000 IU per mm; saved and reloaded board.",
+  "tracks": [
+    {
+      "uuid": "6a64b666-cfa5-4e69-abe5-cfbf2477f8da",
+      "lengthMm": 5.0
+    },
+    {
+      "uuid": "32d71535-e7dc-4dbb-bb4c-cd8c6cbc275e",
+      "lengthMm": 3.141592653589793
+    },
+    {
+      "uuid": "6cc5b66b-771e-4ef9-93f4-106ede20ec70",
+      "lengthMm": 4.712351983610311
+    }
+  ],
+  "totalLengthMm": 12.853944637200104
+}

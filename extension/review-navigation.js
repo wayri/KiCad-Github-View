@@ -101,8 +101,9 @@
         const marker=button(active?'➤':'!',()=>{options.showRules();locateFinding(finding,i);});marker.className='pin rule-marker'+(active?' active':'');marker.style.left=x+'px';marker.style.top=y+'px';marker.style.background=color;marker.setAttribute('aria-label',`${finding.kind.toUpperCase()} ${finding.severity}: ${finding.description}; ${item.description}`);marker.title=`${finding.description}${x!==point.x||y!==point.y?' · offscreen: click to locate':''}`;pins.append(marker);
       }
     }
+    function routingReports(path){return reports.filter(r=>r.kind==='drc'&&r.metadata.associatedFile===path).map(r=>({metadata:{...r.metadata},unconnectedFindings:r.findings.filter(f=>f.category==='unconnected_items'&&!f.excluded).length,excludedUnconnectedFindings:r.findings.filter(f=>f.category==='unconnected_items'&&f.excluded).length,warnings:[...r.warnings]}));}
     updateAssociations();renderRules();
-    return {setClasses(classes){classSettings=classes;index=buildIndex(searchObjects.length?searchObjects:currentObjects(),searchNets.length?searchNets:options.getNets(),classes);options.setNetClasses?.(classes);},query(value){$('projectSearch').value=value;return renderSearch();},loadProject,renderSearch,renderRules,updateAssociations,draw,dispose(){disposed=true;epoch++;reportEpoch++;}};
+    return {routingReports,setClasses(classes){classSettings=classes;index=buildIndex(searchObjects.length?searchObjects:currentObjects(),searchNets.length?searchNets:options.getNets(),classes);options.setNetClasses?.(classes);},query(value){$('projectSearch').value=value;return renderSearch();},loadProject,renderSearch,renderRules,updateAssociations,draw,dispose(){disposed=true;epoch++;reportEpoch++;}};
   }
   root.KiCadReviewNavigation={mount};
   if(typeof module==='object'&&module.exports)module.exports=root.KiCadReviewNavigation;

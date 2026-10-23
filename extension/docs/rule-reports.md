@@ -9,6 +9,13 @@ kicad-cli pcb drc --format json --units mm --output project-drc.json project.kic
 
 Only results included in the report are visible. A report without a finding does not establish that the design passes every check: check settings, ignored checks, severity filters and generation revision still matter.
 
+The DRC (PCB) or ERC (schematic) toolbar action shows and hides the findings
+window. The adjacent eye action independently shows or hides location markers;
+it stays synchronized with the report window's marker checkbox. Hiding either
+view retains imported reports, filters and findings. These shared controls are
+also available in Android's drawing tools sheet. They display saved results and
+do not execute native checks.
+
 The parser follows the [official ERC v1 schema](https://gitlab.com/kicad/code/kicad/-/raw/master/resources/schemas/erc.v1.json) and [official DRC v1 schema](https://gitlab.com/kicad/code/kicad/-/raw/master/resources/schemas/drc.v1.json). The [KiCad CLI documentation](https://docs.kicad.org/9.0/en/cli/cli.html) documents JSON export and `mm`, `mils` and `in` coordinate units. Import converts positions to millimetres and retains the source, generation date, KiCad version, original units, included severities and ignored checks.
 
 `KiCadRuleReports.parse(text, options)` returns `kind`, `metadata`, `sheets`, `findings` and `warnings`. Options may supply `kind`, a repository-relative drawing `file`, provenance `reportPath` and `revision`, and explicit `sheetFiles` keyed by the report's `uuid_path`. Each finding includes its category, severity, exclusion state, description and affected items. Each item retains its UUID and position when present. Missing positions remain `null`; no marker location is inferred. Unassociated positions remain available for exact identity matching by the viewer.

@@ -105,6 +105,51 @@
     }
   }
 
+  // SPIKE-style copper labels: screen-sized, bounded, and derived only from saved nets.
+  function netLabels(entries,camera,limit=300){
+    const output=[],boxes=[],zoom=camera.zoom,view=camera.bbox;
+    if(!(zoom>0)||!Number.isFinite(zoom))return output;
+    const add=(p,name,x,y,angle,size)=>{
+      if(output.length>=limit||!Number.isFinite(x+y+angle+size))return;
+      const at=camera.world_to_screen({x,y}),r=angle*Math.PI/180,w=size*(name.length*.65+1),h=size*1.4;
+      const bw=Math.abs(Math.cos(r))*w+Math.abs(Math.sin(r))*h,bh=Math.abs(Math.sin(r))*w+Math.abs(Math.cos(r))*h;
+      const box={x:at.x-bw/2-3,y:at.y-bh/2-3,w:bw+6,h:bh+6};
+      if(box.x<0||box.y<0||box.x+box.w>camera.width||box.y+box.h>camera.height||boxes.some(b=>box.x<b.x+b.w&&box.x+box.w>b.x&&box.y<b.y+b.h&&box.y+box.h>b.y))return;
+      boxes.push(box);output.push({text:name,x:at.x,y:at.y,angle,size,primitive:p});
+    };
+    for(const [p,name] of entries){
+      if(output.length>=limit)break;
+      if(typeof name!=='string'||!name.trim()||name.length>160||p.hole||!p.layer?.endsWith('.Cu'))continue;
+      if(p.kind==='track'&&p.type==='line'&&p.points?.length===2){
+        const [a,b]=p.points,dx=b.x-a.x,dy=b.y-a.y,size=Math.min(11,p.width*zoom*.8);
+        if(!(size>=7))continue;
+        let lo=0,hi=1;
+        for(const [d,q] of [[-dx,a.x-view.x],[dx,view.x+view.w-a.x],[-dy,a.y-view.y],[dy,view.y+view.h-a.y]]){
+          if(d===0){if(q<0)hi=-1;}else if(d<0)lo=Math.max(lo,q/d);else hi=Math.min(hi,q/d);
+        }
+        if(hi<=lo||Math.hypot(dx,dy)*(hi-lo)*zoom<size*(name.length*.65+1))continue;
+        let angle=Math.atan2(dy,dx*(camera.flipped?-1:1))*180/Math.PI;
+        if(angle>90)angle-=180;if(angle< -90)angle+=180;
+        const t=(lo+hi)/2;add(p,name,a.x+dx*t,a.y+dy*t,angle,size);
+      }else if(p.kind==='zone'&&p.fill&&p.points?.length>=3){
+        // Even/odd scanlines also avoid cut-outs represented by bridged polygon rings.
+        const poly=p.points,size=11,needed=size*(name.length*.65+1)/zoom;
+        let low=Infinity,high=-Infinity;for(const q of poly){low=Math.min(low,q.y);high=Math.max(high,q.y);}
+        low=Math.max(low,view.y);high=Math.min(high,view.y+view.h);
+        const intervals=y=>{const hits=[];for(let i=0,j=poly.length-1;i<poly.length;j=i++){const a=poly[j],b=poly[i];if((a.y>y)!==(b.y>y))hits.push(a.x+(y-a.y)*(b.x-a.x)/(b.y-a.y));}hits.sort((a,b)=>a-b);const spans=[];for(let i=0;i+1<hits.length;i+=2)spans.push([Math.max(hits[i],view.x),Math.min(hits[i+1],view.x+view.w)]);return spans;};
+        let best=null;
+        for(const t of [.5,.25,.75]){const y=low+(high-low)*t;
+          for(const [a,b] of intervals(y)){const x=(a+b)/2;
+            if(b-a<needed||best&&b-a<=best.width)continue;
+            if([-.8,0,.8].every(d=>intervals(y+d*size/zoom).some(([l,r])=>x-needed/2>=l&&x+needed/2<=r)))best={x,y,width:b-a};
+          }
+        }
+        if(best)add(p,name,best.x,best.y,0,size);
+      }
+    }
+    return output;
+  }
+
   class Camera {
 
     constructor(width=800,height=600){this.width=width;this.height=height;this.zoom=4;this.center={x:0,y:0,set(x,y){this.x=x;this.y=y;}};this.flipped=false;}
@@ -161,6 +206,15 @@
     }
     geometryVisible(p){return !p.hidden&&(p.kind!=='zone'||this.showFilledCopper!==false)&&(p.kind!=='zone-outline'||this.showZoneOutlines!==false);}
     setZoneVisibility({filled=this.showFilledCopper!==false,outlines=this.showZoneOutlines!==false}={}){this.showFilledCopper=Boolean(filled);this.showZoneOutlines=Boolean(outlines);this.finishMotion();}
+    setNetNames(nets){this.netNames=new Map();for(const net of nets||[])for(const p of net.primitives||[])this.netNames.set(p,net.name);}
+    drawNetNames(){
+      if(!this.pcb||!this.showNetNames||!this.netNames)return;
+      const visible=this.candidates(this.viewport.camera.bbox).filter(p=>this.netNames.has(p)&&this.geometryVisible(p)&&this.visibleLayers.has(p.layer)&&(!this.focusedLayer||p.layer===this.focusedLayer)&&(!this.isolateNet||this.netPrimitives.has(p)));
+      const labels=netLabels(visible.map(p=>[p,this.netNames.get(p)]),this.viewport.camera),ctx=this.ctx;
+      ctx.save();ctx.font='11px monospace';ctx.textAlign='center';ctx.textBaseline='middle';ctx.lineJoin='round';ctx.lineWidth=3;
+      ctx.fillStyle=this.dark?'#f3f8fa':'#17212b';ctx.strokeStyle=this.dark?'#101820':'#ffffff';
+      for(const label of labels){ctx.save();ctx.translate(label.x,label.y);ctx.rotate(label.angle*Math.PI/180);ctx.font=label.size+'px monospace';ctx.strokeText(label.text,0,0);ctx.fillText(label.text,0,0);ctx.restore();}ctx.restore();
+    }
     query(at,pixels=5){const tolerance=pixels/this.viewport.camera.zoom;return this.candidates({x:at.x-tolerance,y:at.y-tolerance,w:2*tolerance,h:2*tolerance}).filter(p=>this.geometryVisible(p)&&p.pick!==false&&(p.uuid||p.reference)&&(!p.layer||this.visibleLayers.has(p.layer))&&(!this.focusedLayer||this.layerFocusMode!=='isolate'||p.layer===this.focusedLayer)&&hitPrimitive(p,at,tolerance)).sort((a,b)=>{const priority=p=>p.kind==='pad'?0:p.kind==='footprint'||p.kind==='symbol'?1:p.kind==='zone'?4:2;const focus=p=>this.focusedLayer&&p.layer===this.focusedLayer?0:1;return focus(a)-focus(b)||priority(a)-priority(b);}).slice(0,40);}
 
     select(hit,options={}){this.selected=hit?.primitive||null;this.draw();this.dispatchEvent(new CustomEvent('kicad:select',{detail:{item:hit?.context||null,multi:Boolean(options.multi)}}));}
@@ -287,6 +341,7 @@
 
       }
 
+      this.drawNetNames();
       if(this.selected&&this.geometryVisible(this.selected)){const b=bounds([this.selected],true);if(b){const a=c.world_to_screen(b);ctx.strokeStyle='#80f0b7';ctx.lineWidth=2;ctx.setLineDash([4,3]);ctx.strokeRect(a.x-4,a.y-4,(c.flipped?-1:1)*b.w*c.zoom+8,b.h*c.zoom+8);ctx.setLineDash([]);}}
 
     }
@@ -315,7 +370,7 @@
 
   }
 
-  root.KiCadOwnedCanvas={Camera,arcThrough,bounds,hitPrimitive,mount:(host,options)=>new Viewport(host,options)};
+  root.KiCadOwnedCanvas={netLabels,Camera,arcThrough,bounds,hitPrimitive,mount:(host,options)=>new Viewport(host,options)};
 
   if(typeof module==='object'&&module.exports)module.exports=root.KiCadOwnedCanvas;
 

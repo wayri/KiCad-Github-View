@@ -3,6 +3,7 @@ from pathlib import Path
 import hashlib
 import importlib.util
 import json
+import re
 import zipfile
 from xml.sax.saxutils import escape
 
@@ -20,9 +21,17 @@ ASSETS = ('analysis-data.js', 'analysis-viewer.html', 'analysis-viewer.css', 'an
 ASSETS += ('population-inspection.js','population-photo.js','population-review.js','testpoint-tools.js','photo-alignment.js','component-links.js','photo-review.js','photo-review.css')
 ASSETS += ('ui-foundation.css','gerber-camera.js')
 ASSETS += ('pdf-tools.js','pdf-viewer.html','pdf-viewer.css','pdf-viewer.js','vendor/pdfjs/FILES.json') + tuple('vendor/pdfjs/'+name for name in json.loads((ROOT/'extension/vendor/pdfjs/FILES.json').read_text())['files'])
+ASSETS += ('engineering-launcher.js', 'review-handoff.js', 'local-runtime.js')
 BUILD_INPUTS = ('step-decoder.js', 'step-worker.js', 'vendor/occt/occt-import-js.js')
-ASSETS += ('variant-manager.js', 'bom-import.js', 'bom-viewer.html', 'bom-viewer.js','bom-workspace.js', 'bom-viewer.css', 'calculator-tools.js', 'calculator-viewer.html', 'calculator-viewer.js', 'calculator-viewer.css', 'analysis-spatial.js', 'analysis-overlay.js', 'analysis-bom-link.js')
-HOST_FILES = ('conflict-host.js', 'package.json', 'extension.js', 'webview-bridge.js', 'README.md', 'icon.png')
+ASSETS += ('variant-manager.js', 'bom-import.js', 'bom-viewer.html', 'bom-viewer.js','bom-workspace.js', 'bom-field-table.js', 'bom-viewer.css', 'calculator-tools.js', 'calculator-viewer.html', 'calculator-viewer.js', 'calculator-viewer.css', 'analysis-spatial.js', 'analysis-overlay.js', 'analysis-bom-link.js')
+ASSETS += ('calculator-catalog.js','calculator-visuals.js')
+ASSETS += ('tool-header.css','tool-header.js')
+ASSETS += ('section-pages.js','section-pages.css','board-setup-ui.js','board-setup-ui.css','mobile-sidebar.js','mobile-sidebar.css','testpoint-tools.css','sheet-hierarchy-links.js','responsive-controls.js','phone-polish.css')
+HOST_FILES = ('conflict-host.js', 'package.json', 'extension.js', 'webview-bridge.js', 'README.md', 'GUIDE.md', 'icon.png', 'LICENSE.txt')
+README_IMAGES = ('images/schematic-review.jpg', 'images/pcb-inspection.jpg',
+                 'images/assembly-bom.jpg', 'images/visual-merge-conflict.jpg',
+                 'images/open-viewer-command.jpg', 'images/copper-net-names.jpg')
+HOST_FILES += README_IMAGES
 
 
 def adapt_entry(source: bytes) -> bytes:
@@ -71,18 +80,23 @@ def vsix_manifest(manifest: dict) -> bytes:
   <Metadata>
     <Identity Language="en-US" Id="{name}" Version="{version}" Publisher="{publisher}" />
     <DisplayName>{title}</DisplayName><Description xml:space="preserve">{description}</Description>
+    <GalleryFlags>Public</GalleryFlags>
     <Categories>Visualization</Categories><Tags>KiCad,schematic,PCB,github.dev</Tags>
     <Properties>
+      <Property Id="Microsoft.VisualStudio.Services.GitHubFlavoredMarkdown" Value="true" />
+      <Property Id="Microsoft.VisualStudio.Services.Content.Pricing" Value="Free" />
       <Property Id="Microsoft.VisualStudio.Code.Engine" Value="{engine}" />
       <Property Id="Microsoft.VisualStudio.Code.ExtensionKind" Value="workspace" />
       <Property Id="Microsoft.VisualStudio.Code.ExecutesCode" Value="true" />
     </Properties>
+    <License>extension/LICENSE.txt</License><Icon>extension/icon.png</Icon>
   </Metadata>
   <Installation><InstallationTarget Id="Microsoft.VisualStudio.Code" /></Installation>
   <Dependencies />
   <Assets>
     <Asset Type="Microsoft.VisualStudio.Code.Manifest" Path="extension/package.json" Addressable="true" />
     <Asset Type="Microsoft.VisualStudio.Services.Content.Details" Path="extension/README.md" Addressable="true" />
+    <Asset Type="Microsoft.VisualStudio.Services.Content.License" Path="extension/LICENSE.txt" Addressable="true" />
     <Asset Type="Microsoft.VisualStudio.Services.Icons.Default" Path="extension/icon.png" Addressable="true" />
   </Assets>
 </PackageManifest>
@@ -96,7 +110,9 @@ CONTENT_TYPES = b'''<?xml version="1.0" encoding="utf-8"?>
   <Default Extension="css" ContentType="text/css" />
   <Default Extension="html" ContentType="text/html" />
   <Default Extension="md" ContentType="text/markdown" />
+  <Default Extension="txt" ContentType="text/plain" />
   <Default Extension="png" ContentType="image/png" />
+  <Default Extension="jpg" ContentType="image/jpeg" />
   <Default Extension="xml" ContentType="application/xml" />
   <Default Extension="vsixmanifest" ContentType="text/xml" />
   <Override PartName="/extension/media/vendor/THREE-LICENSE" ContentType="text/plain" />
@@ -115,6 +131,11 @@ def package(root: Path = ROOT, output: Path | None = None) -> Path:
         if not path.is_file():
             raise ValueError(f'Missing VS Code host file: {name}')
         payload[f'extension/{name}'] = path.read_bytes()
+    for image in re.findall(r'!\[[^\]]*\]\(([^)]+)\)', (folder / 'README.md').read_text(encoding='utf-8')):
+        if image.startswith(('https://', 'http://')):
+            continue
+        if f'extension/{image}' not in payload:
+            raise ValueError(f'Unpackaged README image: {image}')
     payload['extension.vsixmanifest'] = vsix_manifest(manifest)
     payload['[Content_Types].xml'] = CONTENT_TYPES
     output = output or root / 'build' / f"kicad-visual-review-vscode-{manifest['version']}.vsix"

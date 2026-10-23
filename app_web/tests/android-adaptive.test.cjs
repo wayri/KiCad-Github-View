@@ -1,5 +1,27 @@
 const test=require('node:test'),assert=require('node:assert/strict'),vm=require('node:vm'),fs=require('node:fs');
 
+test('drawing tools keep primary actions visible and preserve secondary controls in collapsed sections',()=>{
+ const nodes=new Map();
+ class Node{
+  constructor(tag='div'){this.tagName=tag;this.children=[];this.dataset={};this.className='';this.classList={contains:c=>this.className.split(' ').includes(c),add:c=>{this.className+=' '+c;}};}
+  set id(id){this._id=id;nodes.set(id,this);}get id(){return this._id;}
+  append(...items){for(const n of items){n.remove();n.parentElement=this;this.children.push(n);}}
+  prepend(n){n.remove();n.parentElement=this;this.children.unshift(n);}
+  remove(){if(this.parentElement)this.parentElement.children=this.parentElement.children.filter(n=>n!==this);}
+  querySelector(s){return this.children.find(n=>n.classList.contains(s.slice(1)))||null;}
+ }
+ const content=new Node();content.className='android-sheet-content';const sheet=new Node();sheet.id='androidToolsSheet';sheet.append(content);const drawing=new Node();drawing.id='drawingTools';content.append(drawing);
+ let calls=0;const control=(id,parent=drawing)=>{const n=new Node('button');n.id=id;n.onclick=()=>calls++;parent.append(n);return n;};
+ const assembly=control('openBomManager'),checks=control('viewRuleChecks'),markers=control('toggleRuleMarkers'),grid=control('gridButton'),highlights=control('highlightControls',content);highlights.checked=true;
+ const presentation=new Node();presentation.className='presentation-launch';content.prepend(presentation);
+ const document={readyState:'loading',getElementById:id=>nodes.get(id),createElement:tag=>new Node(tag),addEventListener(){}};
+ const context={document};vm.runInNewContext(fs.readFileSync('android-app/web/adaptive-ui.js','utf8'),context);
+ context.KiCadAndroidUI.organizeDrawingTools();context.KiCadAndroidUI.organizeDrawingTools();
+ assert.deepEqual(drawing.children,[assembly,checks]);assert.equal(markers.parentElement.parentElement.id,'androidToolGroup-display');assert.equal(grid.parentElement,markers.parentElement);assert.equal(highlights.parentElement.parentElement.id,'androidToolGroup-highlight');assert.equal(highlights.checked,true);assert.equal(presentation.parentElement.parentElement.id,'androidToolGroup-more');
+ for(const id of ['display','highlight','navigation','more'])assert.equal(nodes.get('androidToolGroup-'+id).open,undefined);
+ assembly.onclick();markers.onclick();assert.equal(calls,2);const calculator=control('openCalculators');context.KiCadAndroidUI.organizeDrawingTools();assert.equal(calculator.parentElement,drawing);assert.equal(content.children.length,5);
+});
+
 test('short landscape windows use phone drawers while tablets retain expanded panes',()=>{
  const {sizeClass}=require('../../android-app/web/adaptive-ui.js');
  assert.equal(sizeClass(412,800),'compact');
@@ -50,7 +72,7 @@ test('Android Back dismisses the current overlay and child pane before allowing 
 });
 
 test('Android uses a background parser when available and falls back safely if WebView refuses workers',async()=>{
- const source=fs.readFileSync('android-app/app/src/main/assets/viewer/loading-ui.js','utf8');let worker;class Worker{constructor(){worker=this;}postMessage(){}terminate(){this.terminated=true;}}
+ const source=require('node:child_process').execFileSync(process.env.PYTHON||'python',['-c',"from scripts.package_android import payload; print(payload()['loading-ui.js'].decode('utf-8'))"],{encoding:'utf8'});let worker;class Worker{constructor(){worker=this;}postMessage(){}terminate(){this.terminated=true;}}
  const context={document:{currentScript:{src:'https://appassets.androidplatform.net/assets/viewer/loading-ui.js'}},location:{href:'https://appassets.androidplatform.net/assets/viewer/index.html'},URL,Worker,KiCadVSCodeContext:{},KiCadAndroidRuntime:true,setTimeout,clearTimeout,console};vm.createContext(context);vm.runInContext(source,context);let fallback=0;const job=context.KiCadLoading.run('drawing',{},()=>{fallback++;return {ready:true};});assert.ok(worker);worker.onmessage({data:{ok:true,result:{prepared:true}}});assert.equal((await job).prepared,true);assert.equal(fallback,0);
  const blocked=context.KiCadLoading.run('drawing',{},()=>{fallback++;return {ready:true};});worker.onerror();assert.equal((await blocked).ready,true);assert.equal(fallback,1);assert.equal(worker.terminated,true);
 });

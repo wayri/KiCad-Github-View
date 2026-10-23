@@ -1,0 +1,3 @@
+Synthetic track-only fixture generated and saved with installed KiCad 10.0.6 on 2026-10-11. It is not a production design. It contains a 3–4–5 straight segment, a radius-1 mm semicircle, and a radius-1 mm major arc. No board edge or routing-completion claim is intended.
+
+`native-reference.json` records `PCB_TRACK/PCB_ARC.GetLength()` after reloading the saved board, with actual saved UUIDs and KiCad version. The analytic saved-coordinate sums are compared within 0.0001 mm; the native major-arc length differs slightly from the ideal circular result. The fixture also exercises KiCad 10's saved named-net form `(net "GND")`, scoped independently per file.

@@ -27,7 +27,7 @@ function model(objects, kind = 'symbol', metadata = {}) {
   const management = Object.fromEntries(FIELDS.map(f => [f, text(saved[f] ?? (f === 'status' ? 'not ordered' : f==='Assembly'?'not started':p[f]))]));
   if (!STATUSES.includes(management.status)) management.status = 'not ordered';
   if(!ASSEMBLY.includes(management.Assembly))management.Assembly='not started';
-  unique.set(id, {id, object:o, reference:text(o.reference), value:text(p.Value), footprint:text(p.Footprint || p['Library ID']), path:text(o.path), side:text(o.side||p.Side), properties:{...p}, populated:o.populated !== false, excluded:!!o.excludeFromBom, management});
+  unique.set(id, {id, object:o, reference:text(o.reference), value:text(p.Value), footprint:text(p.Footprint || p['Library ID']), path:text(o.path), side:text(o.side||p.Side), properties:{...p}, populated:o.populated !== false, excluded:!!o.excludeFromBom||(kind==='symbol'&&text(o.reference).startsWith('#')), management});
  }
  return [...unique.values()].sort((a,b) => compare(a.reference,b.reference) || compare(a.path,b.path));
 }
@@ -96,8 +96,20 @@ function metadataJSON(scope, parts) {
  validateMetadata(envelope,scope); const json = JSON.stringify(envelope,null,2);
  if (json.length > MAX_DRAFT) throw new Error('Metadata exceeds 4 MiB.'); return json;
 }
+function resetMetadata(metadata, ids, mode='assembly') {
+ if(!['assembly','procurement','all'].includes(mode))throw Error('Choose the management fields to reset.');
+ const next=Object.assign(Object.create(null),metadata);
+ for(const id of new Set(ids)){
+  if(typeof id!=='string'||id.length>8192)throw Error('Invalid reset part identity.');
+  if(mode==='all')next[id]={Assembly:'not started',status:'not ordered'};
+  else next[id]={...(metadata[id]||{}),[mode==='assembly'?'Assembly':'status']:mode==='assembly'?'not started':'not ordered'};
+ }
+ return next;
+}
 function open(options) {
  const {objects,scope,onLocate,onExport,onEdit} = options, document = root.document;
+ const fieldTable=root.KiCadBomFieldTable||(typeof require==='function'?require('./bom-field-table.js'):null);
+ if(!fieldTable)throw Error('BoM field table is unavailable. Reload the viewer.');
  const revision = scopeKey(scope), storageKey = 'kicad-bom-manager:v1:' + revision;
  const storage = options.storage === undefined ? (()=>{try{return root.localStorage;}catch{return null;}})() : options.storage;
  const allIds = new Set([...model(objects,'symbol'),...model(objects,'footprint')].map(p=>p.id));
@@ -129,54 +141,84 @@ function open(options) {
  let assemblyCursor=selectedParts.length===1?selectedParts[0].id:null;
  const nextPart=button('Next unfinished part',()=>{const part=nextAssembly(filtered(),assemblyCursor);if(!part)return;assemblyCursor=part.id;onLocate?.(part.object);feedback.textContent=`${part.reference} · ${part.management.Assembly} · local checklist; status unchanged.`;});nextPart.title='Locate the next fitted, non-excluded, unverified part matching the current filters';controls.append(nextPart);
  const exportFile = (name, content, mime) => {if(onExport){try{return onExport(name,content,mime);}catch(error){feedback.textContent='Export failed: '+error.message;return;}}const url=URL.createObjectURL(new Blob([content],{type:mime}));const a=el('a');a.href=url;a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);};
- actions.append(button('Export visible CSV',()=>{try{exportFile('bom.csv',csv(filtered(),{boards:build.value,grouped:view.value==='groups'}),'text/csv;charset=utf-8');}catch(e){feedback.textContent=e.message;}}),button('Export metadata JSON',()=>{try{exportFile('bom-management.json',metadataJSON(scope,metadata),'application/json');}catch(e){feedback.textContent=e.message;}}));
+ actions.append(button('Export visible CSV',()=>{try{exportFile('bom.csv',visibleCSV(),'text/csv;charset=utf-8');}catch(e){feedback.textContent=e.message;}}),button('Export metadata JSON',()=>{try{exportFile('bom-management.json',metadataJSON(scope,metadata),'application/json');}catch(e){feedback.textContent=e.message;}}));
  const importLabel=el('label','Import metadata JSON', 'bom-manager-import'), importer=el('input');importer.type='file';importer.accept='.json,application/json';importLabel.append(importer);actions.append(importLabel);
  importer.addEventListener('change',async()=>{const file=importer.files[0];if(!file)return;try{if(file.size>MAX_DRAFT)throw new Error('Metadata exceeds 4 MiB.');const incoming=validateMetadata(await file.text(),scope,allIds);if(!persist(incoming))return;metadata=incoming;render();feedback.textContent='Metadata imported for this saved revision.';}catch(e){feedback.textContent='Import failed: '+e.message;}finally{importer.value='';}});
+ let fieldDescriptors=[],fieldSignature='';
+ const fieldOptions=el('details',undefined,'bom-manager-field-options');fieldOptions.open=false;fieldOptions.append(el('summary','Columns'));const fieldSettings=el('div',undefined,'bom-manager-field-settings');fieldOptions.append(fieldSettings);
+ const groupLabel=el('label',undefined,'bom-manager-group'),groupCheck=el('input');groupCheck.type='checkbox';groupCheck.checked=false;groupCheck.setAttribute('aria-label','Group symbols');groupLabel.append(groupCheck,el('span','Group symbols'));controls.append(groupLabel);view.parentElement.remove();groupCheck.addEventListener('change',()=>{view.value=groupCheck.checked?'groups':'parts';render();});
+ const groupingLabel=el('label','Group by'),grouping=el('select');grouping.setAttribute('aria-label','Group BoM by');for(const p of fieldTable.PRESETS){const opt=el('option',p.label);opt.value=p.id;grouping.append(opt);}grouping.value='value-footprint';groupingLabel.append(grouping);controls.append(groupingLabel);grouping.addEventListener('change',()=>{fieldDescriptors=fieldTable.preset(fieldDescriptors,grouping.value);fieldSignature='';groupCheck.checked=true;view.value='groups';render();});
+ const gridLayout=el('div',undefined,'bom-manager-field-layout');gridLayout.append(result);
+ function prepareFields(all){const discovered=fieldTable.fields(all),signature=JSON.stringify(discovered.map(f=>f.key));if(signature===fieldSignature)return;fieldSignature=signature;const previous=new Map(fieldDescriptors.map(f=>[f.key,f]));fieldDescriptors=discovered.map(f=>({...f,...(previous.has(f.key)?{show:previous.get(f.key).show,groupBy:previous.get(f.key).groupBy}:{})}));fieldSettings.replaceChildren();const table=el('table'),head=el('tr');for(const name of ['Field','Show','Group by'])head.append(el('th',name));table.append(head);for(const field of fieldDescriptors){const row=el('tr');row.append(el('td',field.label));for(const key of ['show','groupBy']){const cell=el('td'),check=el('input');check.type='checkbox';check.checked=field[key];check.setAttribute('aria-label',(key==='show'?'Show ':'Group by ')+field.label);check.addEventListener('change',()=>{field[key]=check.checked;if(key==='groupBy'){grouping.value='custom';groupCheck.checked=true;view.value='groups';}render();});cell.append(check);row.append(cell);}table.append(row);}fieldSettings.append(table);}
  const content=el('div',undefined,'bom-manager-content android-sheet-content');
- const filters=el('details'),filterHeading=el('summary','Filters and sorting'),filterControls=el('div',undefined,'bom-manager-controls');filters.append(filterHeading,filterControls);filterControls.append(button('Reset filters',()=>{population.value='all';excluded.value='hide';status.value='all';assembly.value='all';side.value='all';sort.value='reference';search.value='';render();}));
+ const filters=el('details',undefined,'bom-manager-filters'),filterHeading=el('summary','Filters and sorting'),filterControls=el('div',undefined,'bom-manager-controls');filters.append(filterHeading,filterControls);filterControls.append(button('Reset filters',()=>{population.value='all';excluded.value='hide';status.value='all';assembly.value='all';side.value='all';sort.value='reference';search.value='';render();}));
  for(const selector of [population,excluded,status,assembly,side,sort])filterControls.append(selector.parentElement);
- const info=el('details'),infoHeading=el('summary','About this BoM');info.append(infoHeading,note);
- const transfers=el('details'),transferHeading=el('summary','Import and export');transfers.append(transferHeading,actions);
- content.append(controls,filters,summary,feedback,result,transfers,info);dialog.append(header,content);document.body.append(dialog);
+ filterControls.append(buildLabel,nextPart);
+ const info=el('details',undefined,'bom-manager-info'),infoHeading=el('summary','About');info.append(infoHeading,note);
+ const transfers=el('details',undefined,'bom-manager-transfers'),transferHeading=el('summary','Import / export');transfers.append(transferHeading,actions);
+ const resets=el('details',undefined,'bom-manager-resets');resets.append(el('summary','Reset progress / fields'));
+ const resetActions=el('div',undefined,'bom-manager-actions');
+ const resetMatching=button('Reset matching parts…',()=>requestReset(filtered(),'matching the current source and filters'));
+ const resetAll=button('Reset entire source…',()=>requestReset(model(objects,source.value,metadata),'in the entire '+(source.value==='symbol'?'schematic symbol':'PCB footprint')+' source, including hidden, excluded and DNP parts'));
+ resetActions.append(resetMatching,resetAll);resets.append(resetActions);
+ const tools=el('div',undefined,'bom-manager-tools');tools.append(filters,fieldOptions,transfers,resets,info);
+ controls.prepend(searchLabel);content.append(controls,tools,summary,feedback,gridLayout);dialog.append(header,content);document.body.append(dialog);
  function persist(next) {
   let json;try {json=metadataJSON(scope,next);if(!storage)throw new Error('Browser draft storage is unavailable.');storage.setItem(storageKey,json);}
   catch(e){feedback.textContent='Draft was not saved: '+e.message;return false;}
   try{options.onMetadataChanged?.(JSON.parse(json).parts);}catch(e){feedback.textContent='Draft saved; progress refresh failed: '+e.message;}return true;
  }
  function locate(p) {const b=button(p.reference||'(unannotated)',()=>onLocate?.(p.object));b.className='bom-manager-reference';if(!onLocate)b.disabled=true;return b;}
+ let resetDialog=null;
+ function requestReset(parts,scopeDescription){
+  if(resetDialog||!parts.length)return;
+  const targets=[...new Map(parts.map(p=>[p.id,p])).values()];
+  const warning=el('dialog',undefined,'bom-reset-confirmation');resetDialog=warning;warning.setAttribute('role','alertdialog');warning.setAttribute('aria-label','Warning: reset saved BoM management fields');
+  warning.append(el('h2','Warning: reset saved BoM fields'),el('p',`${targets.length} part${targets.length===1?'':'s'} ${scopeDescription}. This replaces saved local management data. It cannot be undone here; export metadata first if you need a backup.`,'bom-reset-warning'));
+  const list=el('ul',undefined,'bom-reset-targets');for(const part of targets.slice(0,30))list.append(el('li',(part.reference||'(unannotated)')+' · '+part.path));if(targets.length>30)list.append(el('li',`… and ${targets.length-30} more parts`));warning.append(list);
+  const label=el('label','Fields to reset'),mode=el('select');mode.setAttribute('aria-label','Fields to reset');for(const[value,name]of [['assembly','Assembly progress only'],['procurement','Procurement status only'],['all','All local management fields']]){const option=el('option',name);option.value=value;mode.append(option);}mode.value='assembly';label.append(mode);
+  const effect=el('p',undefined,'bom-reset-effect'),ack=el('label',undefined,'bom-reset-ack'),check=el('input');check.type='checkbox';ack.append(check,el('span','I understand that the selected local data will be replaced.'));
+  const message=el('p');message.setAttribute('role','status');
+  const confirm=button(`Reset ${targets.length} part${targets.length===1?'':'s'}`,()=>{if(!check.checked)return;confirm.disabled=true;const next=resetMetadata(metadata,targets.map(p=>p.id),mode.value);if(!persist(next)){message.textContent=feedback.textContent;confirm.disabled=false;return;}metadata=next;warning.close();render();feedback.textContent=`Reset ${mode.value==='assembly'?'assembly progress':mode.value==='procurement'?'procurement status':'local management fields'} for ${targets.length} parts. KiCad sources were not changed.`;});confirm.className='bom-reset-danger';confirm.disabled=true;
+  const update=()=>{check.checked=false;confirm.disabled=true;effect.textContent=mode.value==='assembly'?'Assembly will become “not started”. Procurement, prices, notes and other fields are preserved.':mode.value==='procurement'?'Procurement status will become “not ordered”. Assembly progress, prices, notes and other fields are preserved.':'Assembly becomes “not started” and procurement becomes “not ordered”. Local manufacturer, MPN, supplier, SKU, price, currency and notes overrides are removed; original saved KiCad field values remain.';};
+  mode.addEventListener('change',update);check.addEventListener('change',()=>{confirm.disabled=!check.checked;});const cancel=button('Cancel',()=>warning.close()),buttons=el('div',undefined,'bom-manager-actions');buttons.append(cancel,confirm);warning.append(label,effect,el('p','This does not change KiCad source files, DNP/variant definitions or published provider content.'),ack,message,buttons);
+  warning.addEventListener('close',()=>{resetDialog=null;warning.remove();},{once:true});document.body.append(warning);update();warning.showModal();cancel.focus();
+ }
  function edit(part, targets=[part]) {
   for(const child of [...result.children])if(child.className==='bom-manager-editor')child.remove();
   const panel=el('section',undefined,'bom-manager-editor');panel.append(el('h3','Management fields: '+part.reference+(targets.length>1?' · applies to '+targets.length+' parts':'')));
-  const form=el('form'), inputs={};
-  for(const field of FIELDS){const states=field==='status'?STATUSES:field==='Assembly'?ASSEMBLY:null,label=el('label',field), input=el(states?'select':field==='Notes'?'textarea':'input');if(states){for(const s of states){const opt=el('option',s);opt.value=s;input.append(opt);}}else input.maxLength=MAX_FIELD;input.value=part.management[field];label.append(input);form.append(label);inputs[field]=input;}
-  const save=el('button','Save management draft');save.type='submit';save.className='primary';form.append(save,button('Cancel',()=>panel.remove()));
-  form.addEventListener('submit',e=>{e.preventDefault();const record=Object.fromEntries(FIELDS.map(f=>[f,inputs[f].value])), next={...metadata,...Object.fromEntries(targets.map(p=>[p.id,record]))};if(persist(next)){metadata=next;render();feedback.textContent='Management draft saved locally.';}});
+  const form=el('form'), inputs={}, initial={};
+  if(targets.length>1)panel.append(el('p','Only changed fields apply to the group. Mixed values are preserved unless replaced.'));
+  for(const field of FIELDS){const states=field==='status'?STATUSES:field==='Assembly'?ASSEMBLY:null,label=el('label',field), input=el(states?'select':field==='Notes'?'textarea':'input'),mixed=targets.some(p=>p.management[field]!==part.management[field]);if(states){if(mixed){const opt=el('option','<mixed>');opt.value='';input.append(opt);}for(const s of states){const opt=el('option',s);opt.value=s;input.append(opt);}}else input.maxLength=MAX_FIELD;input.value=mixed?'':part.management[field];if(mixed)input.placeholder='<mixed>';initial[field]=input.value;label.append(input);form.append(label);inputs[field]=input;}
+  const save=el('button','Save management draft');save.type='submit';save.className='primary';form.append(save,button('Reset saved fields…',()=>requestReset(targets,targets.length===1?'for this part':'for this group')),button('Cancel',()=>panel.remove()));
+  form.addEventListener('submit',e=>{e.preventDefault();const changed=FIELDS.filter(f=>targets.length===1||inputs[f].value!==initial[f]);if(!changed.length){feedback.textContent='No management fields changed.';return;}const record=Object.fromEntries(changed.map(f=>[f,inputs[f].value])),next={...metadata,...Object.fromEntries(targets.map(p=>[p.id,{...p.management,...record}]))};if(persist(next)){metadata=next;render();feedback.textContent='Management draft saved locally.';}});
   panel.append(form);result.prepend(panel);inputs.Manufacturer.focus();
  }
  function editNative(part) {
   Promise.resolve().then(()=>onEdit(part.object)).catch(error=>{feedback.textContent='Source editor failed: '+error.message;});
  }
+ function visibleCSV(){const columns=fieldDescriptors.filter(f=>f.show),rows=fieldTable.rows(filtered(),fieldDescriptors,view.value==='groups'),quote=value=>{let v=text(value);if(/^\s*[=+@-]/.test(v))v="'"+v;return '"'+v.replaceAll('"','""')+'"';};return [columns.map(f=>f.label),...rows.map(row=>columns.map(f=>row.values[f.key]))].map(row=>row.map(quote).join(',')).join('\r\n');}
  function render(limit = 200) {
   if (typeof limit !== 'number') limit = 200;
-  result.replaceChildren();const parts=filtered(), all=model(objects,source.value,metadata);
+  result.replaceChildren();const parts=filtered(), all=model(objects,source.value,metadata);prepareFields(all);
   let total;try{total=totals(parts,build.value);}catch(e){feedback.textContent=e.message;}
   summary.replaceChildren();
-  const metric=(label,value,detail)=>{const item=el('div',undefined,'bom-manager-metric');item.append(el('small',label),el('strong',value),el('span',detail));summary.append(item);};
+  const metric=(label,value,detail)=>{const item=el('span',`${label}: ${value}`,'bom-manager-metric');item.title=detail;summary.append(item);};
   metric('Visible parts',`${parts.length} / ${all.length}`,`${all.filter(p=>p.populated).length} fitted · ${all.filter(p=>!p.populated).length} DNP · ${all.filter(p=>p.excluded).length} excluded in saved source`);
   if(total){metric('Build requirement',`${total.buildParts} parts`,`${total.boards} boards · ${total.unpriced} unpriced per board`);const overall=totals(all);metric('Assembly verification',`${overall.verified} / ${overall.fitted}`, `${overall.fitted-overall.verified} unfinished in this source · ${total.verified}/${total.fitted} visible verified`);if(Object.keys(total.currencies).length)metric('Visible build cost',Object.entries(total.currencies).map(([c,n])=>`${c} ${n.toFixed(2)}`).join(' · '),'Priced parts only · currencies kept separate');}
   nextPart.disabled=!onLocate||!nextAssembly(parts,assemblyCursor);
+  resetMatching.disabled=!parts.length;resetAll.disabled=!all.length;
   filterHeading.textContent='Filters and sorting'+([population.value!=='all',excluded.value!=='hide',status.value!=='all',assembly.value!=='all',side.value!=='all',sort.value!=='reference'].filter(Boolean).length?' · active':'');
   if(!parts.length){const empty=el('div',undefined,'bom-manager-empty');empty.append(el('strong',all.length?'No parts match your filters':'No saved parts in this source'),el('p',all.length?'Clear search or reset filters to show the full list.':'Choose another source or open a saved schematic or PCB.'));result.append(empty);return;}
-  const table=el('table'), head=el('thead'), hr=el('tr');
-  const columns=['Reference / quantity','Value / footprint','Population','Manufacturer / MPN','Supplier / SKU','Procurement / assembly / cost','Actions'];for(const c of columns){const th=el('th',c);th.setAttribute('scope','col');hr.append(th);};head.append(hr);table.append(head);const body=el('tbody');table.append(body);
-  const rows=view.value==='groups'?group(parts):parts;
-  for(const row of rows.slice(0,limit)){const grouped=!!row.parts,tr=el('tr'),refs=el('td');refs.dataset.label=columns[0];if(grouped){refs.append(el('strong',`${row.quantity} × `));let shown=0;const more=button('More references',()=>appendReferences());function appendReferences(){more.remove();for(const p of row.parts.slice(shown,shown+100))refs.append(locate(p),' ');shown+=100;if(shown<row.parts.length)refs.append(more);}appendReferences();}else{refs.append(locate(row),el('small',row.path));}tr.append(refs);
-   const values=[row.value+'\n'+row.footprint,(row.populated?'Fitted':'DNP')+(row.excluded?' · Excluded':''),row.management.Manufacturer+'\n'+row.management.MPN,row.management.Supplier+'\n'+row.management.SKU,row.management.status+'\n'+row.management.Assembly+'\n'+row.management.Currency+' '+row.management['Unit price']];values.forEach((v,i)=>{const td=el('td',v);td.dataset.label=columns[i+1];if(i===1){td.className='bom-manager-population';td.dataset.population=row.populated?'fitted':'dnp';}tr.append(td);});
-   const td=el('td');td.dataset.label='Actions';if(grouped)td.append(button('Manage group',()=>edit(row.parts[0],row.parts)));else{const advance=button(row.management.Assembly==='verified'?'Verified':'Advance assembly',()=>{if(!assemblyWorkItem(row)||row.management.Assembly==='verified')return;const next={...metadata,[row.id]:{...(metadata[row.id]||{}),Assembly:ASSEMBLY[Math.min(ASSEMBLY.length-1,ASSEMBLY.indexOf(row.management.Assembly)+1)]}};if(persist(next)){metadata=next;render();}});advance.disabled=!assemblyWorkItem(row)||row.management.Assembly==='verified';advance.title=assemblyWorkItem(row)?'Advance this local checklist by one step':'DNP and excluded parts are not assembly work items';td.append(button('Manage',()=>edit(row)),advance);if(onEdit)td.append(button('Edit KiCad fields',()=>editNative(row)));if(row.management.Notes)td.append(el('small',row.management.Notes));const fields=el('details');fields.className='bom-manager-saved-fields';fields.append(el('summary','Saved fields'));for(const [name,value]of Object.entries(row.properties))fields.append(el('p',name+': '+text(value)));td.append(fields);}tr.append(td);body.append(tr);
-  }result.append(table);if(rows.length>limit)result.append(button(`Show next ${Math.min(200,rows.length-limit)} rows (${Math.min(limit,rows.length)} of ${rows.length} displayed)`,()=>render(limit+200)));
+  const scroll=el('div',undefined,'bom-manager-grid-scroll'),table=el('table',undefined,'bom-manager-field-grid'),head=el('thead'),hr=el('tr'),columns=fieldDescriptors.filter(f=>f.show);table.setAttribute('aria-label','BoM symbol fields');
+  for(const field of columns){const th=el('th',field.label);th.setAttribute('scope','col');hr.append(th);}hr.append(el('th','Actions'));head.append(hr);table.append(head);const body=el('tbody');table.append(body);
+  const rows=fieldTable.rows(parts,fieldDescriptors,view.value==='groups');
+  for(const row of rows.slice(0,limit)){const grouped=row.parts.length>1,part=row.parts[0],tr=el('tr');tr.dataset.dnp=String(!part.populated);for(const field of columns){const td=el('td');td.dataset.field=field.key;td.title=row.values[field.key]||'';if(field.key==='Reference'){for(const p of row.parts.slice(0,50))td.append(locate(p),' ');if(row.parts.length>50)td.append(button('Ungroup references',()=>{groupCheck.checked=false;view.value='parts';render();}));}else td.textContent=row.values[field.key]||'—';tr.append(td);}
+   const td=el('td');if(grouped)td.append(button('Manage group',()=>edit(part,row.parts)));else{const advance=button(part.management.Assembly==='verified'?'Verified':'Advance assembly',()=>{if(!assemblyWorkItem(part)||part.management.Assembly==='verified')return;const next={...metadata,[part.id]:{...(metadata[part.id]||{}),Assembly:ASSEMBLY[Math.min(ASSEMBLY.length-1,ASSEMBLY.indexOf(part.management.Assembly)+1)]}};if(persist(next)){metadata=next;render();}});advance.disabled=!assemblyWorkItem(part)||part.management.Assembly==='verified';advance.title=assemblyWorkItem(part)?'Advance this local checklist by one step':'DNP and excluded parts are not assembly work items';td.append(button('Manage',()=>edit(part)),advance);if(onEdit)td.append(button('Edit KiCad fields',()=>editNative(part)));}tr.append(td);body.append(tr);
+  }scroll.append(table);result.append(scroll);if(rows.length>limit)result.append(button(`Show next ${Math.min(200,rows.length-limit)} rows (${Math.min(limit,rows.length)} of ${rows.length} displayed)`,()=>render(limit+200)));
  }
- dialog.addEventListener('close',()=>dialog.remove(),{once:true});render();dialog.showModal();return dialog;
+ dialog.addEventListener('close',()=>{resetDialog?.close();dialog.remove();},{once:true});render();root.KiCadSectionPages?.scan?.();dialog.showModal();return dialog;
 }
-const api={open,identity,model,query,group,csv,validateMetadata,metadataJSON,scopeKey,boardCount,totals,assemblyWorkItem,nextAssembly,FIELDS,STATUSES,ASSEMBLY};
+const api={open,identity,model,query,group,csv,validateMetadata,metadataJSON,scopeKey,boardCount,totals,assemblyWorkItem,nextAssembly,resetMetadata,FIELDS,STATUSES,ASSEMBLY};
 root.KiCadBomManager=api;if(typeof module==='object'&&module.exports)module.exports=api;
 })(typeof globalThis!=='undefined'?globalThis:this);

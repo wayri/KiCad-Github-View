@@ -27,7 +27,7 @@ Measured on the development Windows host on 2026-10-10:
 | Workload | Previous path | Optimized path |
 | --- | ---: | ---: |
 | Synthetic 12,000-track PCB, 1.1 MB; median of five preparations | 270.81 ms | 139.43 ms |
-| Synthetic 40,000 labels, zoomed 40 Ã— 30 mm; median of 20 warm pans | 47.45 ms | 4.63 ms |
+| Synthetic 40,000 labels, zoomed 40 x 30 mm; median of 20 warm pans | 47.45 ms | 4.63 ms |
 | Text paint calls per warm pan in the second workload | 40,000 | 75.95 |
 
 Both preparation paths produce 12,000 objects, 12,054 primitives and one net.

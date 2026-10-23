@@ -1,14 +1,72 @@
 /* Trusted packaged tools, available without an account or open drawing. */
 ((root)=>{'use strict';if(!root.document)return;
  const pages=new Set(['bom-viewer.html','calculator-viewer.html','gerber-viewer.html','pdf-viewer.html']);
- function init(){const d=root.document,el=(t,s)=>{const n=d.createElement(t);if(s)n.textContent=s;return n;},button=(s,f)=>{const n=el('button',s);n.type='button';n.onclick=f;return n;};
+ function init(){
+  const d=root.document;
+  const el=(tag,text)=>{const node=d.createElement(tag);if(text)node.textContent=text;return node;};
+  const button=(text,action)=>{const node=el('button',text);node.type='button';node.onclick=action;return node;};
   if(root.KiCadAndroid&&d.getElementById('viewer')){
-   let previous=null;root.KiCadAndroid.openTools=(page,file='',ref)=>{if(!pages.has(page))return;const frame=d.getElementById('viewer');previous={src:frame.getAttribute('src'),hidden:frame.hidden,welcome:d.getElementById('welcome').hidden,picker:d.getElementById('projectPicker').hidden};d.getElementById('welcome').hidden=true;d.getElementById('projectPicker').hidden=true;const p=root.KiCadAndroidProject,remote=p?.remote||p?.github;const query=p?new URLSearchParams({repository:remote?.repository||'android/'+p.id,ref:ref||remote?.sha||'a'.repeat(40),...(p?.remote?{provider:remote.provider,host:remote.host}:{}),...(file?{file}:{})}):new URLSearchParams();for(const dialog of d.querySelectorAll('dialog[open]'))dialog.close();frame.src=page+'?'+query;frame.hidden=false;};
-   root.KiCadAndroid.closeTools=()=>{const frame=d.getElementById('viewer');if(previous){if(previous.src)frame.src=previous.src;else frame.removeAttribute('src');frame.hidden=previous.hidden;d.getElementById('welcome').hidden=previous.welcome;d.getElementById('projectPicker').hidden=previous.picker;previous=null;}else root.KiCadAndroid.showHome();};
-   const back=root.KiCadAndroidUI?.handleBack;if(back)root.KiCadAndroidUI.handleBack=()=>{const frame=d.getElementById('viewer');if(!frame.hidden&&/\/(bom-viewer|calculator-viewer|gerber-viewer|pdf-viewer)\.html(?:\?|$)/.test(frame.src)){try{if(frame.contentDocument?.querySelector('dialog[open]'))return back();}catch{}root.KiCadAndroid.closeTools();return true;}return back();};
-   const original=root.KiCadAndroid.openAnalysis;root.KiCadAndroid.openAnalysis=(path,ref)=>root.KiCadBomImport?.candidate(path)?root.KiCadAndroid.openTools('bom-viewer.html',path,ref):original(path,ref);
-   const welcome=d.getElementById('welcome'),menu=d.querySelector('#appMenuDialog .android-sheet-content');for(const host of [welcome,menu])if(host){const actions=el('div');actions.className='android-welcome-actions';actions.append(button('PDF viewer',()=>root.KiCadAndroid.openTools('pdf-viewer.html')),button('Gerber viewer & analyzer',()=>root.KiCadAndroid.openTools('gerber-viewer.html')),button('BoM & assembly',()=>root.KiCadAndroid.openTools('bom-viewer.html')),button('Engineering calculators',()=>root.KiCadAndroid.openTools('calculator-viewer.html')));host.append(actions);}
-  }else{const host=d.querySelector('#androidToolsSheet .android-sheet-content')||d.getElementById('drawingTools');if(host){host.append(button('PDF viewer',()=>root.top.KiCadAndroid?.openTools('pdf-viewer.html')),button('Gerber viewer & analyzer',()=>root.top.KiCadAndroid?.openTools('gerber-viewer.html')),button('Engineering calculators',()=>root.top.KiCadAndroid?.openTools('calculator-viewer.html',new URLSearchParams(location.search).get('file')||'')),button('Import BoM / iBOM',()=>root.top.KiCadAndroid?.openTools('bom-viewer.html')));}}
+   const drawing=d.getElementById('viewer'),welcome=d.getElementById('welcome'),picker=d.getElementById('projectPicker');
+   const tools=d.createElement('iframe');tools.id='engineeringToolViewer';tools.title='Engineering tools';tools.hidden=true;
+   // A sibling keeps the drawing document, camera and selection alive across tool visits.
+   drawing.after(tools);
+   let previous=null;
+   function hideTools(){tools.hidden=true;tools.removeAttribute('src');}
+   root.KiCadAndroid.openTools=(page,file='',ref)=>{
+    if(!pages.has(page))return;
+    if(!previous)previous={drawingHidden:drawing.hidden,welcomeHidden:welcome.hidden,pickerHidden:picker.hidden,pickerOpen:picker.open};
+    welcome.hidden=true;picker.hidden=true;drawing.hidden=true;
+    const project=root.KiCadAndroidProject,remote=project?.remote||project?.github;
+    const query=project?new URLSearchParams({repository:remote?.repository||'android/'+project.id,
+     ref:ref||remote?.sha||'a'.repeat(40),...(project.remote?{provider:remote.provider,host:remote.host}:{}),...(file?{file}:{})}):new URLSearchParams();
+    for(const dialog of d.querySelectorAll('dialog[open]'))dialog.close();
+    tools.src=page+'?'+query;tools.hidden=false;
+   };
+   root.KiCadAndroid.closeTools=()=>{
+    if(!previous)return;
+    hideTools();drawing.hidden=previous.drawingHidden;welcome.hidden=previous.welcomeHidden;
+    picker.hidden=previous.pickerHidden;picker.open=previous.pickerOpen;previous=null;
+   };
+   const showHome=root.KiCadAndroid.showHome;
+   root.KiCadAndroid.showHome=(...args)=>{if(previous){hideTools();previous=null;}return showHome.apply(root.KiCadAndroid,args);};
+   root.addEventListener?.('kicad-project-opened',()=>{if(previous){hideTools();previous=null;}});
+   for(const name of ['openDrawing','openProject']){
+    const navigate=root.KiCadAndroid[name];
+    if(navigate)root.KiCadAndroid[name]=(...args)=>{if(previous)root.KiCadAndroid.closeTools();return navigate(...args);};
+   }
+   const back=root.KiCadAndroidUI?.handleBack;
+   if(back)root.KiCadAndroidUI.handleBack=()=>{
+    if(tools.hidden)return back();
+    try{
+     if(tools.contentWindow?.KiCadSectionPages?.back?.())return true;
+     if(tools.contentWindow?.KiCadAndroidUI?.handleBack?.())return true;
+     const dialog=[...(tools.contentDocument?.querySelectorAll('dialog[open]')||[])].at(-1);
+     if(dialog){dialog.close();return true;}
+    }catch{}
+    root.KiCadAndroid.closeTools();return true;
+   };
+   const original=root.KiCadAndroid.openAnalysis;
+   root.KiCadAndroid.openAnalysis=(path,ref)=>{
+    if(root.KiCadBomImport?.candidate(path))return root.KiCadAndroid.openTools('bom-viewer.html',path,ref);
+    if(previous)root.KiCadAndroid.closeTools();
+    return original(path,ref);
+   };
+   const menu=d.querySelector('#appMenuDialog .android-sheet-content');
+   for(const host of [welcome,menu])if(host){
+    const actions=el('div');actions.className='android-welcome-actions';
+    actions.append(button('PDF viewer',()=>root.KiCadAndroid.openTools('pdf-viewer.html')),
+     button('Gerber viewer & analyzer',()=>root.KiCadAndroid.openTools('gerber-viewer.html')),
+     button('BoM & assembly',()=>root.KiCadAndroid.openTools('bom-viewer.html')),
+     button('Engineering calculators',()=>root.KiCadAndroid.openTools('calculator-viewer.html')));
+    host.append(actions);
+   }
+  }else if(!root.KiCadEngineeringLauncher){
+   const host=d.querySelector('#androidToolsSheet .android-sheet-content')||d.getElementById('drawingTools');
+   if(host)host.append(button('PDF viewer',()=>root.top.KiCadAndroid?.openTools('pdf-viewer.html')),
+    button('Gerber viewer & analyzer',()=>root.top.KiCadAndroid?.openTools('gerber-viewer.html')),
+    button('Engineering calculators',()=>root.top.KiCadAndroid?.openTools('calculator-viewer.html',new URLSearchParams(location.search).get('file')||'')),
+    button('Import BoM / iBOM',()=>root.top.KiCadAndroid?.openTools('bom-viewer.html')));
+  }
  }
  if(root.document.readyState==='loading')root.document.addEventListener('DOMContentLoaded',init,{once:true});else init();
 })(globalThis);

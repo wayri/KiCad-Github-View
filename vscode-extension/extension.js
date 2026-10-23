@@ -435,7 +435,8 @@ async function dispatch(request,session) {
     const storageKey=Object.keys(request.values)[0],value=request.values[storageKey];
     if(![session.variantKey,session.preferencesKey].includes(storageKey))throw new Error("Storage key is outside this drawing.");
     if(storageKey===session.preferencesKey && (!value || typeof value!=="object" || Array.isArray(value) ||
-      Object.keys(value).length!==3 || Object.keys(value).some((name)=>!["uiTheme","drawingTheme","rulerUnits"].includes(name)) ||
+      Object.keys(value).some((name)=>!["uiTheme","drawingTheme","rulerUnits","acceleration","showNetNames"].includes(name)) ||
+      ("showNetNames" in value && typeof value.showNetNames!=="boolean") || ("acceleration" in value && !["auto","off"].includes(value.acceleration)) ||
       !["dark","light"].includes(value.uiTheme) || !["dark","light"].includes(value.drawingTheme) || !["mm","mil"].includes(value.rulerUnits)))throw new Error("Invalid drawing preferences.");
     await state.update(`${key}:${storageKey===session.variantKey ? "variant" : "preferences"}`,clone(value));return null;
   }

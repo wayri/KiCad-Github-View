@@ -35,7 +35,7 @@ These are application access controls, not a claim of CPU/cache/timing side-chan
 
 Client-side limits protect this app's workflow. A modified client, cleared installation or separate provider API client can bypass them. Use GitHub/GitLab repository permissions, protected credentials and provider moderation controls as the authority. For restricted reviews, configure `.kicad-review-policy.json` with `collaborators` or an explicit `allowlist`; see [comment policy](COMMENTS.md). This policy cannot restrict comments posted directly on the provider website.
 
-The review UI provides local blocking and content/user reporting. Reporting opens a draft to **support.kiview@sigharmonic.com**; it does not claim delivery or implement automatic moderation. The Pocket KiView team must monitor reports and use provider controls when removal or account action is needed.
+The review UI provides local blocking and content/user reporting. Reporting opens a draft to **support@sigharmonic.com**; it does not claim delivery or implement automatic moderation. The Pocket KiView team must monitor reports and use provider controls when removal or account action is needed.
 
 Public service deployments still need a TLS reverse proxy with request/header/body deadlines and edge rate limits or WAF protection. In-process limits do not stop distributed traffic from saturating the network. These deployment controls have not been configured by this code change.
 

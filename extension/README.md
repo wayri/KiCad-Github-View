@@ -1,10 +1,15 @@
 # KiCad Visual Review browser extension
 
-The current preview renders public GitHub `.kicad_sch` and `.kicad_pcb` files directly **inside github.com**. It uses our own S-expression parser, schematic geometry builder, PCB geometry builder, Canvas2D renderer, camera and picking code. KiCanvas is not loaded or included in the upload package. SPIKE supplies the owner-authorized, browser-side 3D adapter. No rendering service, companion process or installed KiCad is required at runtime.
+Version **0.12.57** includes the shared engineering viewers used by Pocket KiView Android **1.59**. It renders KiCad schematics and PCB layouts inside supported GitHub and GitLab repository pages, and opens local projects offline through its bundled local viewer. No KiCad installation is required. The drawing BoM manager and imported BoM viewer use the same field table, including selectable columns and grouping by value, footprint, value + footprint, unit price/currency or custom fields. Engineering tools provide interactive calculators with circuit diagrams, Gerber analysis and PDF viewing. Board analytics, searchable testpoints, saved simulation plots/overlays, assembly variants, DNP/DNI highlights, photo inspection and portable review transfer share modules with Android. See [platform parity and host limits](docs/platform-parity.md).
 
 File previews replace the source pane; **Show source** restores it. Pull-request **Files changed** cards retain GitHub’s header and conversation while displaying base/head drawings. Dynamic GitHub navigation and late/replaced file cards are supported. Public forks use the base repository’s PR context while retrieving the fork’s design revision.
 
 ## Viewer interaction
+
+Private source previews can reuse an already signed-in GitHub repository tab;
+keep that tab open while viewing. No pasted token is required for session-based
+drawing and text project reads. API history, binary assets and remote reviews
+still use **Sign in with GitHub**. See [access and limits](../docs/GITHUB-SIGNIN.md).
 
 Dedicated schematic and PCB entry points share a review workspace. Click a symbol, footprint, pad, track or drawing feature to inspect saved properties; search the parts list or use the context menu to focus it and add an annotation. Schematics navigate loaded subsheets through the sheet selector or sheet context menu. PCB controls include layer visibility, front/back flip, grid and dark mode. The initial board view shows front/back copper and silkscreen plus Edge.Cuts; other layers can be enabled explicitly.
 
@@ -14,7 +19,7 @@ Import JSON assembly metadata or CSV BOM variants to inspect effective values, c
 
 Annotations support Info, Minor, Major and Critical severities; tags; Open, Resolved and Won't fix states; and object/position/revision/variant anchors. In extension settings, connect or create `.kicad-review.json` in your local Git checkout. Connected files become the annotation store; stage and commit the file normally. Without a connected file, notes remain in device storage. Existing device notes can be exported and imported explicitly.
 
-Enter your GitHub token in extension settings, then choose a destination and click **Publish to GitHub** on a saved note. Issues use REST; Discussions use GraphQL and a chosen category. Successful posts save the remote thread link in the annotation. Tokens remain in browser session storage, never in the Git file. Composer-based sharing remains available. Public issue/PR annotation readback is supported; Discussion readback is not implemented. See [comment behavior](docs/comments.md).
+Enter your GitHub token in extension settings, then choose a destination and click **Publish to GitHub** on a saved note. Issues use REST; Discussions use GraphQL and a chosen category. Successful posts save the remote thread link in the annotation. Tokens remain in browser session storage, never in the Git file. Composer-based sharing remains available. Issue and Discussion thread readback is supported; saved annotation markers are validated against the drawing context. See [comment behavior](docs/comments.md).
 
 ## Nets and properties
 
@@ -28,7 +33,7 @@ The default drawing sheet now uses native template coordinates for borders, page
 
 1. Open `chrome://extensions` or `edge://extensions`.
 2. Enable **Developer mode**, choose **Load unpacked**, and select this repository’s `extension` directory.
-3. Open a public GitHub KiCad file or a PR containing one. The drawing appears inline. The toolbar icon / `Alt+Shift+K` focuses it.
+3. Open a public GitHub KiCad file or a PR containing one. The drawing appears inline. The toolbar icon / `Alt+Shift+K` focuses an available drawing or review. On other tabs, or when an inline viewer is unavailable, it opens Pocket KiView's local workspace for file/folder imports.
 
 `python scripts/package_extension.py` builds the browser-store ZIP. It is not published in Chrome Web Store or Edge Add-ons. The separate GitHub App supplies PR checks and hosted viewer links; GitHub App installation alone cannot register a replacement file renderer on github.com. Inline previews require this extension installed in each viewer’s browser. Public GitLab.com file previews are supported; see the host compatibility guide below.
 
@@ -36,7 +41,7 @@ The default drawing sheet now uses native template coordinates for borders, page
 
 The new owned renderer is a baseline, not demonstrated superiority or pixel equivalence with KiCad. It uses browser text rather than KiCad’s stroke font; custom `.kicad_wks` layouts, some advanced label typography, bitmap images, rule areas and dimensions remain incomplete and are reported by the builders. Source variants with native per-instance overrides are detected but need explicit assembly/BOM overlays. Repeated hierarchy instances are navigated by file and do not yet provide full instance-specific annotation.
 
-SPIKE 3D loads repository-relative WRL/VRML and self-contained GLB geometry, with source footprint placement and model transforms. Unavailable models retain visible procedural proxies. STEP requires a future browser CAD loader and is explicitly unsupported; global installed KiCad libraries are not repository assets. GLB coordinates currently use millimetres. Retrieval currently supports public repositories only, with GitHub API limits, at most 32 sheets, 8 MiB/file and 24 MiB/project. This is a read-only review tool, not a KiCad circuit/board editor.
+SPIKE 3D loads supported repository-relative and embedded models using the bundled model pipeline, with saved footprint placement and model transforms. STEP decoding uses a bundled worker; supported WRL/VRML and GLB geometry also remain available. Unavailable or unsupported models retain disclosed procedural proxies. Installed KiCad model libraries are not automatically repository assets. Retrieval uses bounded input sizes and the selected provider account where required. This is a review and inspection interface; it does not route copper or run native KiCad ERC/DRC on the phone or in the browser.
 
 Run `node --test extension/tests/*.test.cjs` and `node --test tests/spike_component_state.test.mjs`. Native KiCad SVG fixture exports check symbol/pin/wire and front/back pad coordinates. Local browser fixtures exercise actual renderers with mocked GitHub transport and Chrome runtime; a real installed-extension smoke test on github.com and store review remain outstanding.
 
@@ -70,4 +75,8 @@ Version 0.11.2 opens PCB drawings from the project tree, provides saved layer de
 
 ## GitLab.com
 
-Public GitLab.com repository file previews and manual branch/commit comparisons are supported, including subgroup namespaces. GitLab annotations are local and exportable; remote publication, account login, merge-request cards and self-hosted instances are not included. See [Git host compatibility](../docs/GIT-HOSTS.md). Reload the extension after updating to enable its GitLab.com permission.
+GitLab.com and approved self-hosted HTTPS GitLab servers support repository previews, revision and merge-request comparisons, authenticated reads and explicit issue/discussion publication. GitLab discussions belong to issues rather than standalone GitHub-style categories. Already signed-in repository tabs can supply supported source reads without a pasted token; API operations still require a connected account. See [Git host compatibility](../docs/GIT-HOSTS.md) for exact limits and pending installed-browser acceptance.
+
+## License
+
+Copyright (c) 2026 Yawar B (wayri). Pocket KiView Source-Available License 1.0 applies to owner-authored code and the included owner-authored SPIKE subset. Personal and internal professional use are permitted; paid distribution, paid bundles and monetized hosted access require separate written permission. Your own designs and outputs remain yours. Third-party components retain their own licenses. This is not an open-source license. See the packaged `LICENSE.txt`; commercial licensing: support@sigharmonic.com.

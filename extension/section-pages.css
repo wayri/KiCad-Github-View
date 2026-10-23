@@ -1,0 +1,12 @@
+/* A section occupies the complete view, with no backdrop, handle or slide animation. */
+body .section-page:not([hidden]):is([open],section){position:fixed!important;inset:0!important;top:0!important;bottom:0!important;margin:0!important;width:100%!important;max-width:none!important;height:100dvh!important;max-height:100dvh!important;min-height:0!important;box-sizing:border-box;border:0!important;border-radius:0!important;box-shadow:none!important;transform:none!important;animation:none!important;z-index:100000;background:var(--panel,var(--android-surface,#f5f7fa));color:var(--text,var(--android-on-surface,#26313b));padding:0!important;overflow:auto;overscroll-behavior:contain}
+body .section-page .android-sheet-handle,body .section-page .android-sheet-dismiss{display:none!important}
+body .section-page .section-page-header{position:sticky;top:0;z-index:2;display:flex!important;align-items:center;justify-content:flex-start!important;gap:8px;min-height:52px;padding:4px 12px!important;background:inherit;border-bottom:1px solid var(--line,#ccd3db)}
+body .section-page .section-page-header :is(h2,strong){font-size:14px;margin:0;line-height:1.3}
+body .section-page .section-page-back{width:44px!important;height:44px!important;min-height:44px!important;min-width:44px!important;display:flex;align-items:center;justify-content:center;border:0;background:transparent;color:inherit;padding:10px!important;flex:none}
+body .section-page-back .ui-icon{width:22px;height:22px;flex:none}
+body .section-page>.android-sheet-content,body .section-page>.github-content{padding:16px;max-width:960px;margin:0 auto;width:100%;box-sizing:border-box;max-height:none!important}
+body section.section-page>:not(.section-page-header){margin-left:16px;margin-right:16px}
+body .section-page .tool-overflow-content{max-width:640px;margin:0 auto}
+body .section-page.android-reader-dialog[open]{display:flex;flex-direction:column}body .section-page.android-reader-dialog .android-sheet-content{flex:1;min-height:0;display:flex;max-width:none;padding:0}body .section-page.android-reader-dialog iframe{width:100%;height:100%;border:0;flex:1}
+body dialog.section-page:not([open]){display:none!important}
