@@ -51,7 +51,7 @@ class PackageVSCodeTests(unittest.TestCase):
                 for name in builder.README_IMAGES:
                     image = archive.read(f'extension/{name}')
                     self.assertTrue(image.startswith(b'\xff\xd8\xff'))
-                    self.assertIn('/vscode-extension/' + name + ')', readme)
+                    self.assertIn('/' + Path(name).name + ')', readme)
                 self.assertNotRegex(readme, r'!\[[^\]]*\]\((?!https://)')
                 ET.fromstring(archive.read('[Content_Types].xml'))
                 inventory = json.loads(archive.read('extension/media/shared-assets.json'))
