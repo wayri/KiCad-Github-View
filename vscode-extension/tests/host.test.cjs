@@ -330,7 +330,7 @@ test("cumulative PNG captures cannot exceed the sidecar limit during a valid ind
 });
 
 test("drawing preferences persist across reopening while keys and values stay drawing-scoped",async()=> {
-  const h=harness(),s=await session(h),value={uiTheme:"light",drawingTheme:"dark",rulerUnits:"mil"};
+  const h=harness(),s=await session(h),value={uiTheme:"light",drawingTheme:"dark",rulerUnits:"mil",showNetNames:true,acceleration:"auto"};
   assert.equal(s.preferencesKey,JSON.stringify(["kicad-review-preferences",s.scope.repository,s.scope.rootFile]));
   assert.equal((await send(h,s,1,{type:"storage-set",values:{[s.preferencesKey]:value}})).ok,true);
   const reopened=await session(h);assert.deepEqual(plain((await send(h,reopened,1,{type:"storage-get",key:reopened.preferencesKey})).result),{[s.preferencesKey]:value});
@@ -339,6 +339,8 @@ test("drawing preferences persist across reopening while keys and values stay dr
   assert.equal((await send(h,s,2,{type:"storage-set",values:{[s.preferencesKey]:{...value,page:"A4"}}})).ok,false);
   assert.equal((await send(h,s,3,{type:"storage-set",values:{[s.preferencesKey]:{...value,rulerUnits:"inch"}}})).ok,false);
   assert.equal((await send(h,s,4,{type:"storage-set",values:{[s.preferencesKey]:{...value,drawingTheme:"custom"}}})).ok,false);
+  assert.equal((await send(h,s,5,{type:"storage-set",values:{[s.preferencesKey]:{...value,showNetNames:"yes"}}})).ok,false);
+  assert.equal((await send(h,s,6,{type:"storage-set",values:{[s.preferencesKey]:{...value,acceleration:"fast"}}})).ok,false);
   assert.deepEqual(plain(h.state.get(`${s.storageKey}:preferences`)),value);assert.ok(!h.entries.has(sidecarUri(h)));
 });
 

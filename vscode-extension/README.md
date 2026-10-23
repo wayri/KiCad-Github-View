@@ -23,7 +23,7 @@ The viewer reads a saved snapshot. Close and reopen it after editing a drawing o
 | Understand an unfamiliar design | Read hierarchical schematics, navigate child and parent sheets, inspect saved symbol fields, and follow nets and connections. |
 | Review firmware and hardware together | Keep code, schematic and layout in adjacent VS Code editor groups; cross-probe matching component and net selections in paired schematic/PCB viewers. |
 | Find components and signals across a project | Search references, values, fields, nets and net classes, including bounded wildcard/regular-expression searches; highlight multiple matches and step through connections. |
-| Inspect a crowded PCB | Toggle layers, use Front/Back/Copper presets, dim or isolate a layer, flip the view, inspect pads and footprints, and restore the previous visibility state. |
+| Inspect a crowded PCB | Toggle layers, use Front/Back/Copper presets, dim or isolate a layer, flip the view, show saved net names along traces and inside copper fills, inspect pads and footprints, and restore the previous visibility state. |
 | Check saved mechanical clearances and dimensions | Measure distance, angle and X/Y offsets in 2D with geometry/grid snapping; inspect saved board-outline bounding dimensions in mm or mil. |
 | Review assembly and procurement fields | Use a KiCad-style BoM field table, select visible columns, filter fitted/DNP/excluded parts, group by value, footprint or unit price/currency, and export the visible CSV. |
 | Track a bench assembly | Record local procurement and assembly checklist fields; locate a BoM reference in the drawing and export/import its management metadata. |
@@ -69,6 +69,12 @@ Use this when Git has left conflict markers in a saved `.kicad_sch` or `.kicad_p
 ![Visual merge-conflict comparison in the installed VS Code extension](https://raw.githubusercontent.com/wayri/kiview-marketplace-assets/ac9b48f4bcc7ec3bfd050191d83d68109c14eaa5/visual-merge-conflict.jpg)
 
 The conflict viewer reconstructs the two sides from markers in the selected file. It is not a general Git history/revision browser, three-way semantic merger, or automatic resolution engine. Syntax/root validation checks the saved file structure; it does not establish electrical correctness. Concurrent external writers can still race a filesystem-provider write after the final source check.
+
+## Copper net names
+
+Enable **Net names** in the PCB's floating Layers controls, or **Net names on copper (2D)** in View and page setup. Saved net names follow straight traces and appear inside saved filled copper polygons when there is enough room. Labels stay upright when flipped, avoid overlapping other net names, and follow visible layers, focused copper layers and isolated nets. The setting is saved per drawing and defaults off.
+
+Labels are presentation overlays: they do not change connectivity or source files. Up to 300 names are shown per frame. Thin or short traces, unfilled zones, arcs, pads and 3D objects do not receive these labels.
 
 ## Measurements, analytics and validation boundaries
 

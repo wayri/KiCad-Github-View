@@ -2,7 +2,7 @@
   "name": "kicad-visual-review",
   "displayName": "KiCad Visual Review",
   "description": "Review KiCad schematics, PCBs, assembly fields and saved findings; compare and resolve Git conflicts visually.",
-  "version": "0.12.47",
+  "version": "0.12.48",
   "publisher": "wayri",
   "license": "UNLICENSED",
   "engines": {
