@@ -2,7 +2,7 @@
 
 Inspect KiCad schematics and PCB layouts beside your code, review assembly data, and resolve marker-based Git conflicts with a visual comparison. Open saved project files directly in VS Code without installing KiCad. Ordinary inspection leaves the design files unchanged; resolving a conflict is an explicit, confirmed write action.
 
-![Schematic review in the installed VS Code extension](https://raw.githubusercontent.com/wayri/KiCad-Github-View/64d4fb63345855373a9d0de0d7779e2c6899d3eb/vscode-extension/images/schematic-review.png)
+![Schematic review in the installed VS Code extension](https://raw.githubusercontent.com/wayri/KiCad-Github-View/3e6c3e64022dc6a56fd555c8ad7f95ae85d93820/vscode-extension/images/schematic-review.jpg)
 
 Screenshots show the installed extension with the public KiCad 10 PIC Programmer demo. The conflict example intentionally changes one footprint Value field; it is a demonstration, not a customer merge.
 
@@ -41,7 +41,7 @@ The viewer reads a saved snapshot. Close and reopen it after editing a drawing o
 | Resolve a conflicted drawing visually | Compare current/incoming reconstructions with linked cameras and saved-object difference highlights, accept one complete conflict side, save a copy or replace the original, and optionally stage it. |
 | Review without a local KiCad installation | Use desktop VS Code for local files, or a compatible web extension host such as github.dev when its workspace filesystem supplies the files. Local desktop file review can work offline. |
 
-![PCB layout inspection in VS Code](https://raw.githubusercontent.com/wayri/KiCad-Github-View/64d4fb63345855373a9d0de0d7779e2c6899d3eb/vscode-extension/images/pcb-inspection.png)
+![PCB layout inspection in VS Code](https://raw.githubusercontent.com/wayri/KiCad-Github-View/3e6c3e64022dc6a56fd555c8ad7f95ae85d93820/vscode-extension/images/pcb-inspection.jpg)
 
 ## Assembly, variants and testpoints
 
@@ -53,7 +53,7 @@ Variant overrides affect the review and its BoM/DNP overlays, not the original K
 
 For bring-up, **Testpoints & nets** provides a searchable table of candidate testpoints and saved net relationships, with navigation back to the drawing and CSV export. Classification and connectivity depend on the saved design data; verify critical probing decisions against the physical board.
 
-![BoM field table and assembly review in VS Code](https://raw.githubusercontent.com/wayri/KiCad-Github-View/64d4fb63345855373a9d0de0d7779e2c6899d3eb/vscode-extension/images/assembly-bom.png)
+![BoM field table and assembly review in VS Code](https://raw.githubusercontent.com/wayri/KiCad-Github-View/3e6c3e64022dc6a56fd555c8ad7f95ae85d93820/vscode-extension/images/assembly-bom.jpg)
 
 ## Resolve Git conflicts visually
 
@@ -66,7 +66,7 @@ Use this when Git has left conflict markers in a saved `.kicad_sch` or `.kicad_p
 5. After replacing the original, optionally choose **Stage resolved file**. This is a separate confirmed operation through VS Code's built-in Git extension, when a Git repository is available. No commit or push happens automatically.
 6. Open the result in KiCad and run the appropriate native checks before accepting the design.
 
-![Visual merge-conflict comparison in the installed VS Code extension](https://raw.githubusercontent.com/wayri/KiCad-Github-View/64d4fb63345855373a9d0de0d7779e2c6899d3eb/vscode-extension/images/visual-merge-conflict.png)
+![Visual merge-conflict comparison in the installed VS Code extension](https://raw.githubusercontent.com/wayri/KiCad-Github-View/3e6c3e64022dc6a56fd555c8ad7f95ae85d93820/vscode-extension/images/visual-merge-conflict.jpg)
 
 The conflict viewer reconstructs the two sides from markers in the selected file. It is not a general Git history/revision browser, three-way semantic merger, or automatic resolution engine. Syntax/root validation checks the saved file structure; it does not establish electrical correctness. Concurrent external writers can still race a filesystem-provider write after the final source check.
 

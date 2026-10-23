@@ -28,8 +28,8 @@ ASSETS += ('calculator-catalog.js','calculator-visuals.js')
 ASSETS += ('tool-header.css','tool-header.js')
 ASSETS += ('section-pages.js','section-pages.css','board-setup-ui.js','board-setup-ui.css','mobile-sidebar.js','mobile-sidebar.css','testpoint-tools.css','sheet-hierarchy-links.js','responsive-controls.js','phone-polish.css')
 HOST_FILES = ('conflict-host.js', 'package.json', 'extension.js', 'webview-bridge.js', 'README.md', 'icon.png')
-README_IMAGES = ('images/schematic-review.png', 'images/pcb-inspection.png',
-                 'images/assembly-bom.png', 'images/visual-merge-conflict.png')
+README_IMAGES = ('images/schematic-review.jpg', 'images/pcb-inspection.jpg',
+                 'images/assembly-bom.jpg', 'images/visual-merge-conflict.jpg')
 HOST_FILES += README_IMAGES
 
 
@@ -105,6 +105,7 @@ CONTENT_TYPES = b'''<?xml version="1.0" encoding="utf-8"?>
   <Default Extension="html" ContentType="text/html" />
   <Default Extension="md" ContentType="text/markdown" />
   <Default Extension="png" ContentType="image/png" />
+  <Default Extension="jpg" ContentType="image/jpeg" />
   <Default Extension="xml" ContentType="application/xml" />
   <Default Extension="vsixmanifest" ContentType="text/xml" />
   <Override PartName="/extension/media/vendor/THREE-LICENSE" ContentType="text/plain" />

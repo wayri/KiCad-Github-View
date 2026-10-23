@@ -50,7 +50,7 @@ class PackageVSCodeTests(unittest.TestCase):
                 readme = archive.read('extension/README.md').decode('utf-8')
                 for name in builder.README_IMAGES:
                     image = archive.read(f'extension/{name}')
-                    self.assertTrue(image.startswith(b'\x89PNG\r\n\x1a\n'))
+                    self.assertTrue(image.startswith(b'\xff\xd8\xff'))
                     self.assertIn('/vscode-extension/' + name + ')', readme)
                 self.assertNotRegex(readme, r'!\[[^\]]*\]\((?!https://)')
                 ET.fromstring(archive.read('[Content_Types].xml'))
