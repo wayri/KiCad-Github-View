@@ -27,7 +27,7 @@ function model(objects, kind = 'symbol', metadata = {}) {
   const management = Object.fromEntries(FIELDS.map(f => [f, text(saved[f] ?? (f === 'status' ? 'not ordered' : f==='Assembly'?'not started':p[f]))]));
   if (!STATUSES.includes(management.status)) management.status = 'not ordered';
   if(!ASSEMBLY.includes(management.Assembly))management.Assembly='not started';
-  unique.set(id, {id, object:o, reference:text(o.reference), value:text(p.Value), footprint:text(p.Footprint || p['Library ID']), path:text(o.path), side:text(o.side||p.Side), properties:{...p}, populated:o.populated !== false, excluded:!!o.excludeFromBom, management});
+  unique.set(id, {id, object:o, reference:text(o.reference), value:text(p.Value), footprint:text(p.Footprint || p['Library ID']), path:text(o.path), side:text(o.side||p.Side), properties:{...p}, populated:o.populated !== false, excluded:!!o.excludeFromBom||(kind==='symbol'&&text(o.reference).startsWith('#')), management});
  }
  return [...unique.values()].sort((a,b) => compare(a.reference,b.reference) || compare(a.path,b.path));
 }
@@ -135,17 +135,19 @@ function open(options) {
  const importLabel=el('label','Import metadata JSON', 'bom-manager-import'), importer=el('input');importer.type='file';importer.accept='.json,application/json';importLabel.append(importer);actions.append(importLabel);
  importer.addEventListener('change',async()=>{const file=importer.files[0];if(!file)return;try{if(file.size>MAX_DRAFT)throw new Error('Metadata exceeds 4 MiB.');const incoming=validateMetadata(await file.text(),scope,allIds);if(!persist(incoming))return;metadata=incoming;render();feedback.textContent='Metadata imported for this saved revision.';}catch(e){feedback.textContent='Import failed: '+e.message;}finally{importer.value='';}});
  let fieldDescriptors=[],fieldSignature='';
- const fieldOptions=el('details',undefined,'bom-manager-field-options');fieldOptions.open=!(root.innerWidth<760);fieldOptions.append(el('summary','Fields and grouping'));const fieldSettings=el('div',undefined,'bom-manager-field-settings');fieldOptions.append(fieldSettings);
- const groupLabel=el('label',undefined,'bom-manager-group'),groupCheck=el('input');groupCheck.type='checkbox';groupCheck.checked=false;groupCheck.setAttribute('aria-label','Group symbols');groupLabel.append(groupCheck,el('span','Group symbols'));controls.append(groupLabel);view.parentElement.hidden=true;groupCheck.addEventListener('change',()=>{view.value=groupCheck.checked?'groups':'parts';render();});
+ const fieldOptions=el('details',undefined,'bom-manager-field-options');fieldOptions.open=false;fieldOptions.append(el('summary','Columns'));const fieldSettings=el('div',undefined,'bom-manager-field-settings');fieldOptions.append(fieldSettings);
+ const groupLabel=el('label',undefined,'bom-manager-group'),groupCheck=el('input');groupCheck.type='checkbox';groupCheck.checked=false;groupCheck.setAttribute('aria-label','Group symbols');groupLabel.append(groupCheck,el('span','Group symbols'));controls.append(groupLabel);view.parentElement.remove();groupCheck.addEventListener('change',()=>{view.value=groupCheck.checked?'groups':'parts';render();});
  const groupingLabel=el('label','Group by'),grouping=el('select');grouping.setAttribute('aria-label','Group BoM by');for(const p of fieldTable.PRESETS){const opt=el('option',p.label);opt.value=p.id;grouping.append(opt);}grouping.value='value-footprint';groupingLabel.append(grouping);controls.append(groupingLabel);grouping.addEventListener('change',()=>{fieldDescriptors=fieldTable.preset(fieldDescriptors,grouping.value);fieldSignature='';groupCheck.checked=true;view.value='groups';render();});
- const gridLayout=el('div',undefined,'bom-manager-field-layout');gridLayout.append(fieldOptions,result);
+ const gridLayout=el('div',undefined,'bom-manager-field-layout');gridLayout.append(result);
  function prepareFields(all){const discovered=fieldTable.fields(all),signature=JSON.stringify(discovered.map(f=>f.key));if(signature===fieldSignature)return;fieldSignature=signature;const previous=new Map(fieldDescriptors.map(f=>[f.key,f]));fieldDescriptors=discovered.map(f=>({...f,...(previous.has(f.key)?{show:previous.get(f.key).show,groupBy:previous.get(f.key).groupBy}:{})}));fieldSettings.replaceChildren();const table=el('table'),head=el('tr');for(const name of ['Field','Show','Group by'])head.append(el('th',name));table.append(head);for(const field of fieldDescriptors){const row=el('tr');row.append(el('td',field.label));for(const key of ['show','groupBy']){const cell=el('td'),check=el('input');check.type='checkbox';check.checked=field[key];check.setAttribute('aria-label',(key==='show'?'Show ':'Group by ')+field.label);check.addEventListener('change',()=>{field[key]=check.checked;if(key==='groupBy'){grouping.value='custom';groupCheck.checked=true;view.value='groups';}render();});cell.append(check);row.append(cell);}table.append(row);}fieldSettings.append(table);}
  const content=el('div',undefined,'bom-manager-content android-sheet-content');
- const filters=el('details'),filterHeading=el('summary','Filters and sorting'),filterControls=el('div',undefined,'bom-manager-controls');filters.append(filterHeading,filterControls);filterControls.append(button('Reset filters',()=>{population.value='all';excluded.value='hide';status.value='all';assembly.value='all';side.value='all';sort.value='reference';search.value='';render();}));
+ const filters=el('details',undefined,'bom-manager-filters'),filterHeading=el('summary','Filters and sorting'),filterControls=el('div',undefined,'bom-manager-controls');filters.append(filterHeading,filterControls);filterControls.append(button('Reset filters',()=>{population.value='all';excluded.value='hide';status.value='all';assembly.value='all';side.value='all';sort.value='reference';search.value='';render();}));
  for(const selector of [population,excluded,status,assembly,side,sort])filterControls.append(selector.parentElement);
- const info=el('details'),infoHeading=el('summary','About this BoM');info.append(infoHeading,note);
- const transfers=el('details'),transferHeading=el('summary','Import and export');transfers.append(transferHeading,actions);
- content.append(controls,filters,summary,feedback,gridLayout,transfers,info);dialog.append(header,content);document.body.append(dialog);
+ filterControls.append(buildLabel,nextPart);
+ const info=el('details',undefined,'bom-manager-info'),infoHeading=el('summary','About');info.append(infoHeading,note);
+ const transfers=el('details',undefined,'bom-manager-transfers'),transferHeading=el('summary','Import / export');transfers.append(transferHeading,actions);
+ const tools=el('div',undefined,'bom-manager-tools');tools.append(filters,fieldOptions,transfers,info);
+ controls.prepend(searchLabel);content.append(controls,tools,summary,feedback,gridLayout);dialog.append(header,content);document.body.append(dialog);
  function persist(next) {
   let json;try {json=metadataJSON(scope,next);if(!storage)throw new Error('Browser draft storage is unavailable.');storage.setItem(storageKey,json);}
   catch(e){feedback.textContent='Draft was not saved: '+e.message;return false;}
@@ -171,7 +173,7 @@ function open(options) {
   result.replaceChildren();const parts=filtered(), all=model(objects,source.value,metadata);prepareFields(all);
   let total;try{total=totals(parts,build.value);}catch(e){feedback.textContent=e.message;}
   summary.replaceChildren();
-  const metric=(label,value,detail)=>{const item=el('div',undefined,'bom-manager-metric');item.append(el('small',label),el('strong',value),el('span',detail));summary.append(item);};
+  const metric=(label,value,detail)=>{const item=el('span',`${label}: ${value}`,'bom-manager-metric');item.title=detail;summary.append(item);};
   metric('Visible parts',`${parts.length} / ${all.length}`,`${all.filter(p=>p.populated).length} fitted · ${all.filter(p=>!p.populated).length} DNP · ${all.filter(p=>p.excluded).length} excluded in saved source`);
   if(total){metric('Build requirement',`${total.buildParts} parts`,`${total.boards} boards · ${total.unpriced} unpriced per board`);const overall=totals(all);metric('Assembly verification',`${overall.verified} / ${overall.fitted}`, `${overall.fitted-overall.verified} unfinished in this source · ${total.verified}/${total.fitted} visible verified`);if(Object.keys(total.currencies).length)metric('Visible build cost',Object.entries(total.currencies).map(([c,n])=>`${c} ${n.toFixed(2)}`).join(' · '),'Priced parts only · currencies kept separate');}
   nextPart.disabled=!onLocate||!nextAssembly(parts,assemblyCursor);

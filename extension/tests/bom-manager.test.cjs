@@ -2,6 +2,14 @@ const test=require('node:test'), assert=require('node:assert/strict');
 const api=require('../bom-manager.js');
 const part=(reference,extra={})=>({id:reference,kind:'symbol',path:'main.kicad_sch',reference,properties:{Value:'10k',Footprint:'0603'},...extra});
 
+test('virtual schematic power references stay out of procurement and assembly totals',()=>{
+ const parts=api.model([part('#PWR01'),part('#FLG01'),part('R1')]);
+ assert.deepEqual(api.query(parts,{excluded:'hide'}).map(p=>p.reference),['R1']);
+ assert.equal(api.totals(parts).fitted,1);
+ assert.equal(api.nextAssembly(parts).reference,'R1');
+ assert.equal(api.query(parts,{excluded:'only'}).length,2,'virtual symbols remain inspectable through excluded filter');
+});
+
 test('drawing field grid toggles custom columns, groups safely, and exports the displayed field values',()=>{
  class Element{
   constructor(tag){this.tag=tag;this.children=[];this.events={};this.dataset={};this.value='';this.textContent='';}
@@ -15,6 +23,10 @@ test('drawing field grid toggles custom columns, groups safely, and exports the 
  try{
   const objects=[part('R1',{properties:{Value:'10k',Footprint:'0603',MPN:'AAA'}}),part('R2',{properties:{Value:'10k',Footprint:'0603',MPN:'BBB'}})],saved=new Map(),exports=[];
   const dialog=api.open({objects,scope:'field-grid',storage:{getItem:k=>saved.get(k),setItem:(k,v)=>saved.set(k,v)},onExport:(...args)=>exports.push(args)});
+  const fieldOptions=find(dialog,n=>n.className==='bom-manager-field-options');assert.equal(fieldOptions.open,false,'column settings start collapsed on desktop and phone');
+  const layout=find(dialog,n=>n.className==='bom-manager-field-layout');assert.equal(layout.children.length,1);assert.equal(layout.children[0].className,'bom-manager-results','the table occupies the full layout without a permanent settings sidebar');
+  assert.equal(fieldOptions.parent.className,'bom-manager-tools');assert.equal(find(dialog,n=>n.className==='bom-manager-filters').open,undefined);
+  assert.ok(find(dialog,n=>n.className==='bom-manager-filters'&&find(n,c=>c.textContent==='Boards to build')),'build setup is in the expandable filters');
   let grid=find(dialog,n=>n.className==='bom-manager-field-grid');assert.equal(grid.children[1].children.length,2);
   assert.deepEqual(grid.children[0].children[0].children.map(n=>n.textContent),['Reference','Value','Footprint','Qty','DNP','Exclude from BoM','Assembly','Actions']);
   const mpnRow=find(dialog,n=>n.tag==='tr'&&n.children[0]?.textContent==='MPN'),show=mpnRow.children[1].children[0];show.checked=true;show.events.change();
@@ -126,7 +138,7 @@ test('manager locates unfinished parts without saving progress and keeps whole-s
   const dialog=api.open({objects,scope:'scope',storage:{getItem:()=>saved,setItem:()=>writes++},onLocate:o=>located.push(o)});
   const next=find(dialog,n=>n.textContent==='Next unfinished part');assert.equal(next.disabled,false);next.events.click();assert.equal(located[0],objects[1]);assert.equal(writes,0);
   const search=find(dialog,n=>n.tag==='input'&&n.type==='search');search.value='R2';search.events.input();
-  const metric=find(dialog,n=>n.className==='bom-manager-metric'&&n.children[0].textContent==='Assembly verification');assert.equal(metric.children[1].textContent,'1 / 2');assert.match(metric.children[2].textContent,/0\/1 visible verified/);
+  const metric=find(dialog,n=>n.className==='bom-manager-metric'&&n.textContent.startsWith('Assembly verification:'));assert.equal(metric.textContent,'Assembly verification: 1 / 2');assert.match(metric.title,/0\/1 visible verified/);
   search.value='R3';search.events.input();assert.equal(next.disabled,true);assert.equal(find(dialog,n=>n.textContent==='Advance assembly').disabled,true);dialog.close();
   const resumed=api.open({objects:[part('R1'),part('R2')],scope:'scope',selectedId:'R1',storage:{getItem:()=>null,setItem:()=>writes++},onLocate:o=>located.push(o)});
   find(resumed,n=>n.textContent==='Next unfinished part').events.click();assert.equal(located.at(-1).reference,'R2');assert.equal(writes,0);resumed.close();

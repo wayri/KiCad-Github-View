@@ -26,11 +26,11 @@ Turn on **Layers → Net names** to label traces and filled copper where there i
 
 ![Copper net names in the installed VS Code extension](https://raw.githubusercontent.com/wayri/kiview-marketplace-assets/7542d75ae3afbfd9444255ddcf330455742672bf/copper-net-names.jpg)
 
-For linked schematic/PCB inspection, run **KiCad: Open Paired Schematic and PCB Review**. Matching saved identities support cross-probing.
+For linked schematic/PCB inspection, run **KiCad: Open Paired Schematic and PCB Review**. Matching saved identities support cross-probing. Drag the native VS Code editor-group divider to resize the two views.
 
 ## Review assembly
 
-Open the drawing's **BoM manager**. Choose columns and grouping, filter fitted/DNP parts, locate references and export the visible CSV. Review variants and highlight DNP/DNI footprints without changing the source design.
+Open the drawing's **BoM manager**: a full-width table with sticky headers and a fixed reference column. Search and grouping stay visible; columns, filters and import/export collapse to keep the rows in focus. Choose columns and grouping, filter fitted/DNP parts, locate references and export the visible CSV. Review variants and highlight DNP/DNI footprints without changing the source design.
 
 ![KiCad-style BoM field table](https://raw.githubusercontent.com/wayri/kiview-marketplace-assets/7542d75ae3afbfd9444255ddcf330455742672bf/assembly-bom.jpg)
 
