@@ -1,309 +1,242 @@
-# KiCad GitHub View
+# Pocket KiView
+
+**Your KiCad project, ready for review—at your desk or at the bench.**
+
+Explore schematics and PCB layouts, follow nets, measure geometry, work through a BoM and carry review notes between devices. Use the Chromium extension, VS Code, or an Android phone/tablet. Ordinary viewing needs no KiCad installation or rendering server.
 
 [![CI](https://github.com/wayri/KiCad-Github-View/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/wayri/KiCad-Github-View/actions/workflows/ci.yml)
-[![Latest release, including previews](https://img.shields.io/github/v/release/wayri/KiCad-Github-View?include_prereleases&label=release&color=0078d4)](https://github.com/wayri/KiCad-Github-View/releases)
-[![Release downloads](https://img.shields.io/github/downloads/wayri/KiCad-Github-View/total?color=2ea44f)](https://github.com/wayri/KiCad-Github-View/releases)
-[![Status: preview](https://img.shields.io/badge/status-preview-orange)](#what-you-can-do)
-[![Chromium: Manifest V3](https://img.shields.io/badge/Chromium-Manifest%20V3-4285f4?logo=googlechrome&logoColor=white)](docs/INSTALL.md)
-[![VS Code: VSIX](https://img.shields.io/badge/VS%20Code-VSIX-007acc)](docs/INSTALL.md)
-[![Download Android APK](https://img.shields.io/badge/Download%20Android%20APK-1.53-3DDC84?logo=android&logoColor=white)](https://github.com/wayri/KiCad-Github-View/releases/download/v0.12.41/pocket-kivi-android-phone-tablet-1.53-development.apk)
-[![GitHub and GitLab: public and private repositories](https://img.shields.io/badge/GitHub%20%2B%20GitLab-public%20%2B%20private-6f42c1)](docs/GIT-HOSTS.md)
-[![Design access: read only](https://img.shields.io/badge/design%20access-read--only-2ea44f)](#what-you-can-do)
+[![Status](https://img.shields.io/badge/status-preview-orange)](#downloads)
+[![License](https://img.shields.io/badge/license-source--available-blue)](LICENSE)
+[![Desktop](https://img.shields.io/badge/desktop-Windows%20%7C%20Linux%20%7C%20macOS-555)](docs/INSTALL.md)
+[![KiCad formats](https://img.shields.io/badge/KiCad-8%20%7C%209%20%7C%2010-314CB0)](docs/KICAD-COMPATIBILITY.md)
 
-**Interactive KiCad review inside GitHub and GitLab file pages.** Open schematics and PCB layouts as drawings, inspect saved parts and nets, compare revisions, and anchor review notes to the design. The viewer runs in the browser with our own schematic/PCB engine and the owner-authorized SPIKE 3D adapter. No KiCad installation, local companion process or rendering server is needed for the browser extension.
+[User guide](docs/USER-GUIDE.md) Â· [Installation](docs/INSTALL.md) Â· [Release notes](https://github.com/wayri/KiCad-Github-View/releases) Â· [Report an issue](https://github.com/wayri/KiCad-Github-View/issues) Â· [Contact support](mailto:support@sigharmonic.com)
 
-[Download v0.12.41](https://github.com/wayri/KiCad-Github-View/releases/tag/v0.12.41) · [Android APK](https://github.com/wayri/KiCad-Github-View/releases/download/v0.12.41/pocket-kivi-android-phone-tablet-1.53-development.apk) · [Install](docs/INSTALL.md) · [Comment integration](docs/COMMENTS.md) · [Git services](docs/GIT-HOSTS.md) · [Release notes](docs/releases/v0.12.41.md)
+## Downloads
 
-The workspace has **Project · Schematic · Layout** tabs, with **Split view** and **Compare commits** on the same row. Schematics automatically open their saved root; navigate with the hierarchy tree, double-click sheet symbols, or use the top Back / Forward / Up / Root icons. Parent discovery follows saved links across repository folders, with diagnostics for incomplete or ambiguous hierarchies.
+[![Download Android APK](https://img.shields.io/badge/Android-Download%20APK%201.58-3DDC84?logo=android&logoColor=white)](https://github.com/wayri/KiCad-Github-View/releases/download/v0.12.46/pocket-kivi-android-phone-tablet-1.58-development.apk)
+[![Download Chromium extension](https://img.shields.io/badge/Chrome%20%2F%20Chromium-Download%20ZIP-4285F4?logo=googlechrome&logoColor=white)](https://github.com/wayri/KiCad-Github-View/releases/download/v0.12.46/kicad-visual-review-chrome-edge-brave-opera-vivaldi-chromium-0.12.46.zip)
+[![Install VS Code extension](https://img.shields.io/badge/VS%20Code-Install%20extension-007ACC)](https://marketplace.visualstudio.com/items?itemName=wayri.kicad-visual-review)
 
-Android development version **1.37** adds a direct **All sheets** control: pages share one pan/zoom canvas with sheet names above them. Repeated placements of one source sheet form a stack; use **Repeated sheets** to choose its front placement. Highlighting a net keeps only connected sheets and placements, with intersheet airwires. Connectivity follows exact global labels and saved parent sheet-pin/child hierarchical-label links; implicit power connections and bus expansion are not inferred. Cyclic or incomplete hierarchies retain diagnostics. The same overview and connectivity implementation is shared with the browser viewer. Android 1.37 also provides a full-height privacy reader, consistent trailing close controls, and Menu → GitHub notifications for saved KiCad repositories. The foreground inbox supports unread, mentions/requests and all-activity filters; reconnect an existing account if GitHub notifications permission is missing. It checks at most the latest 500 account notifications, does not mark them read and does not provide background push notifications.
+| Edition | Download / install | Availability |
+| --- | --- | --- |
+| Android | APK button above | Android 8+; published 1.58 preview, development-signed; manual installation and updates |
+| Chrome, Edge, Brave, Opera, Vivaldi, Chromium | Chromium ZIP button above | Published 0.12.46 preview; extract and load unpacked; candidate browsers have differing validation coverage |
+| VS Code | Marketplace button above Â· [offline VSIX 0.12.46](https://github.com/wayri/KiCad-Github-View/releases/download/v0.12.46/kicad-visual-review-vscode-0.12.46.vsix) | Windows, Linux and macOS; VS Code 1.95+; Marketplace can be newer than the GitHub VSIX |
+| Firefox | [Development ZIP 0.12.46](https://github.com/wayri/KiCad-Github-View/releases/download/v0.12.46/kicad-visual-review-firefox-0.12.46.zip) | Desktop 128+; unsigned temporary add-on; [instructions](docs/FIREFOX.md) |
+| Safari | [Development ZIP 0.12.46](https://github.com/wayri/KiCad-Github-View/releases/download/v0.12.46/kicad-visual-review-safari-0.12.46.zip) | macOS Safari 16.4+; requires Xcode conversion/signing; native verification pending; [instructions](docs/SAFARI.md) |
 
-![Pinned explorer and auto-hide side tabs](docs/images/integration/pinned-auto-hide-panes.png)
+Downloads above are the verified [v0.12.46 GitHub preview](https://github.com/wayri/KiCad-Github-View/releases/tag/v0.12.46); Marketplace and local builds can be newer. The repository is currently private, so GitHub downloads require access until it is made public.
 
-This screenshot uses a synthetic drawing and local mock transport.
+<details>
+<summary>Release versions, checksums and Android signing</summary>
 
+Direct links were checked on 24 October 2026. Preview downloads predate some features and screenshots below; newer local builds are not downloadable until uploaded. No Google Play or public Chrome Web Store installation URL is advertised here.
 
-Illustrated walkthroughs: [Using GitHub integration](docs/using-github-integration/README.md) · [Using GitLab integration](docs/using-gitlab-integration/README.md). Browser packages: [Firefox](docs/FIREFOX.md) · [Safari](docs/SAFARI.md).
+Compare preview downloads with [SHA256SUMS.txt](https://github.com/wayri/KiCad-Github-View/releases/download/v0.12.46/SHA256SUMS.txt). An AAB is a Play upload bundle, not a directly installable Android app. Preserve/export projects and review state before changing signing channels; do not uninstall merely to bypass a signature mismatch. [Installation and updates](docs/INSTALL.md).
 
-**Status: preview release.** Source designs are read-only: no routing, schematic editing or automatic design changes. This project is not affiliated with KiCad, GitHub or GitLab. Browser-store and VS Code Marketplace listings are not published. Public previews work without login. Private GitHub and GitLab projects require an authorized extension account; GitLab credentials and previews are isolated by server. See the limitations below before relying on a view for engineering review.
+</details>
 
-Large-project loading now uses background preparation, avoids duplicate parsing, and shows a prominent staged loading indicator. See [measured performance and limits](docs/PERFORMANCE.md).
+## Get started
 
-Store deployment: [Chrome Web Store and VS Code Marketplace guide](docs/STORE-PUBLISHING.md).
+1. Install an edition using the [platform instructions](docs/INSTALL.md).
+2. Open a local project folder with its sheets and model files, or open a supported GitHub/GitLab file page. Public projects need no account connection; private access requires authorization.
+3. Select a part or net, open **Explorer**, **Inspect**, or **Review**, and follow the [user guide](docs/USER-GUIDE.md).
 
-## Screenshots
-
-Actual browser captures of the shared viewer, including light and dark interfaces. These were captured in a local preview harness with mocked Git transport, not on an installed extension inside GitHub. The small sensor, hierarchy, settings and model examples are synthetic fixtures; Marble uses the public board source. Click an image to inspect it at full size. [Capture details and attribution](docs/images/README.md).
-
-| PCB layout · real Marble board | Schematic page and sheet navigator · fixture |
-| --- | --- |
-| [![Marble PCB in the dark layout viewer](docs/images/marble-layout.jpg)](docs/images/marble-layout.jpg) | [![Light schematic viewer with page border, title block and sheet hierarchy](docs/images/schematic-sheets.jpg)](docs/images/schematic-sheets.jpg) |
-
-| Net highlighting and connection properties | BOM and saved board analytics |
-| --- | --- |
-| [![Highlighted SIGNAL_IN net with pad connections and routed length](docs/images/net-highlighting.jpg)](docs/images/net-highlighting.jpg) | [![BOM and board statistics alongside the drawing](docs/images/bom-analytics.jpg)](docs/images/bom-analytics.jpg) |
-
-| Linked repository WRL model · fixture | Marble 3D · procedural component proxies |
-| --- | --- |
-| [![SPIKE 3D fixture with one successfully loaded repository model](docs/images/repository-model-3d.jpg)](docs/images/repository-model-3d.jpg) | [![Marble board preview identifying all 1006 components as procedural proxies](docs/images/marble-3d-proxies.jpg)](docs/images/marble-3d-proxies.jpg) |
-
-The WRL example verifies one real linked model. Marble's STEP/CERN-library references do not resolve to supported repository assets: its pictured component bodies are **proxies**, not real component models.
-
-| Project settings with labeled fields | Saved physical stackup |
-| --- | --- |
-| [![Read-only project settings with units and source inspection](docs/images/project-settings.jpg)](docs/images/project-settings.jpg) | [![Physical stackup diagram and layer material table](docs/images/project-stackup.jpg)](docs/images/project-stackup.jpg) |
-
-| GitHub Issues and Discussions integration | Comment editor with severity and tags |
-| --- | --- |
-| [![Dedicated GitHub collaboration tab with comment type and destination controls](docs/images/github-collaboration.jpg)](docs/images/github-collaboration.jpg) | [![Local annotation draft with severity, state, tags and mentions fields](docs/images/comment-editor.jpg)](docs/images/comment-editor.jpg) |
-
-These collaboration captures show the local UI and a mocked policy response. No GitHub issue, discussion or comment was posted for the screenshots.
-
-**Revision comparison:** linked base/head drawings and the saved-object Changes panel, using synthetic revisions.
-
-[![Side-by-side PCB revision comparison with the Changes panel](docs/images/revision-comparison.jpg)](docs/images/revision-comparison.jpg)
+Local browser file/folder viewing works offline once the extension is installed. Repository access, sign-in and publishing need a network connection. Folder import preserves relative paths better than selecting a single drawing.
 
 ## What you can do
 
-| Workspace | Review capabilities |
+| Task | Tools |
 | --- | --- |
-| Schematics | Dedicated drawing viewer, paper/border/title block, parts and saved properties, loaded sheet hierarchy, Back/Forward/Up/Root navigation, sheet selection and double-click navigation |
-| PCB layouts | Copper, pads, tracks, vias and saved filled zones; layer visibility and focus; board flip; independent light/dark UI and drawing themes; part and net inspection |
-| Search and highlighting | Project search with field filters, wildcard and bounded regex queries; single or multiple component/net/net-class highlights; connection navigation and fit highlights |
-| Measurement | Live distance, X/Y and angle display; mm/mil units; geometry/grid snapping; pinned measurements; saved Edge.Cuts bounding dimensions |
-| Comparison | Select branches or commits; inspect added, removed and modified saved objects and before/after properties; linked base/head camera views; GitHub pull-request file previews including public fork heads |
-| Review notes | Part, point and rectangular area anchors; severity, tags, mentions, timestamps, read/unread state, Open/Skipped/Resolved/Won't fix triage; optional visible 2D area captures |
-| Project inspection | Compact project tree; saved project settings, constraints, net classes, layer details and physical stackup where present; read-only forms and tables |
-| Fabrication | Browser Gerber/drill viewer with disclosed unsupported constructs; file selection and layer review |
-| Assembly and analytics | BOM/Stats, JSON/CSV assembly variants, fitted/DNP counts and highlights, component navigation, saved board/zone/copper statistics |
-| 3D | SPIKE board preview, source footprint/model transforms and repository-linked WRL/VRML or self-contained GLB assets; missing models have procedural proxies |
-| HTML/iBOM | Isolated preview for self-contained HTML; interactive browser preview has no network or extension bridge; VS Code uses a static preview |
+| Understand a design | Schematic hierarchy and all-sheets overview; PCB layers, net highlighting, saved properties and parallel views |
+| Inspect layout | Snapped 2D measurements, saved copper/zone statistics, trace-length summaries, testpoint/net tables and imported ERC/DRC markers |
+| Assemble a board | BoM field tables, grouping, fitted/DNP filters, variants, progress and procurement fields; confirmed per-part and bulk resets in current source |
+| Inspect fabrication and documents | Gerber/drill screening, PDF viewing and supported saved analysis plots/overlays |
+| Continue a WayriCAD workflow | Open supported quickTherm, quickPI and quickSI saved results; inspect exported plots, fields and reports in Android/browser |
+| Review in 3D | Supported accessible model assets; unresolved models are identified and may use approximate proxies |
+| Review with a team | Local annotations and portable review exports; optional GitHub/GitLab publication where supported by the host |
+| Resolve a Git conflict | VS Code visual comparison of marker-based conflicts, with validated candidate export and explicit source replacement |
+| Calculate at the bench | Interactive engineering calculators with units, assumptions and circuit illustrations; host availability varies |
 
-Properties and analytics come from the saved source revision. Missing settings are not fabricated. Imported ERC/DRC JSON reports provide visual markers and navigation; the browser does not run KiCad's ERC or DRC engine.
+[Platform parity and limits](extension/docs/platform-parity.md) Â· [BoM field table](docs/bom-field-table.md) Â· [GitHub/GitLab access](docs/GIT-HOSTS.md) Â· [VS Code walkthrough](vscode-extension/GUIDE.md)
 
-## Install in Chrome or Edge
+## Works with WayriCAD simulation results
 
-1. Download **`kicad-visual-review-chrome-edge-brave-opera-vivaldi-chromium-0.12.41.zip`** from [Releases](https://github.com/wayri/KiCad-Github-View/releases/tag/v0.12.41). The GitHub **Source code** archives are not the prepared extension package.
-2. Extract the ZIP into a permanent folder. Select the folder containing `manifest.json`, not the ZIP itself.
-3. Open `chrome://extensions` in Chrome/Chromium or `edge://extensions` in Edge.
-4. Enable **Developer mode**, select **Load unpacked**, and choose that folder.
-5. Allow the extension on `github.com` and `gitlab.com`. Open a KiCad file page and refresh it. Connect an authorized account in Options for private projects. The drawing appears in the repository's file preview.
+Run simulations in **WayriCAD / kiWay**, then open their supported saved results in **Pocket KiView on Android or in the browser**. Bring the result files with the project to inspect them offline, or share those exports with another reviewer.
 
-Keep the extracted folder in place. To update, extract the new package there, click **Reload** on the extension card, and refresh repository tabs. Pin the toolbar icon for quick access; the toolbar button or `Alt+Shift+K` focuses the inline viewer. **Show source** returns to the text view; **Open full viewer** and **Pop out** provide larger views.
-
-### Extension previews
-
-| Compact PCB workspace | Schematic hierarchy and net highlighting |
-| :---: | :---: |
-| <img src="docs/images/integration/extension-compact-view.png" alt="Browser PCB viewer with compact controls and collapsed side panels" width="480"> | <img src="docs/images/integration/sheet-net-hierarchy.png" alt="Browser schematic viewer with matching sheet trees and highlighted net badges" width="480"> |
-
-These are actual viewer captures from local preview harnesses using synthetic projects and mocked repository transport. They contain the app controls without browser or Android status bars; they do not demonstrate an installed extension or live account authorization. [Capture details](docs/images/README.md).
-
-The drawing toolbar contains the active sheet selector, Back/Forward/Up/Root navigation and **View layout / View schematic**. **Review tools** holds assembly variants, highlight controls, shortcuts and rendering notes. Properties, Comments and Explorer are independent flyouts: collapse them from their headers, drag their edges to resize, or focus an edge and use the arrow keys. Comments has **Add comment** and **View comments** tabs; switching tabs preserves an unsaved draft.
-
-Project drawing previews now open in focused mode by default, hiding the outer project tree and setup headers. **Show project controls** brings them back without reloading the drawing or losing a draft; **Close preview** returns to the project. A local 1707 × 960 check measured 80.3% unobscured drawing across the complete project viewer with a Comments panel open; at that height, the toolbar switches between Properties and Comments to keep the active panel usable. This used the actual renderer with mocked transport.
-
-Explorer, Properties and Comments use side tabs with **Pin / Unpin** and collapse arrows. Hover or click a side tab to reveal its full-height pane. Unpinned panes auto-hide after leaving or when interacting with the drawing; focused inputs and resizing remain accessible. Pin one or several panes to keep them beside the drawing. Properties and Comments share the right dock vertically when both are pinned. Width resizing and unsaved drafts are retained; pin choices last for the mounted viewer session.
-
-
-Auto-hidden panes leave the drawing area available apart from narrow side tabs and tools. Pinning reserves readable side space, with at least 35% of available dock width retained for the drawing when several panes are pinned. **Focus view** hides the docks. This replaces the former small-panel area budget and Expand/Tall modes.
-
-![Compact toolbar and independent review sidebars, using an original synthetic schematic fixture](docs/images/viewport-sidebars.jpg)
-
-Chrome's unpacked workflow is documented in [Chrome's developer guide](https://developer.chrome.com/docs/extensions/get-started/tutorial/hello-world#load-unpacked); Edge provides [its sideloading guide](https://learn.microsoft.com/en-us/microsoft-edge/extensions/getting-started/extension-sideloading). Managed browsers may prohibit developer installations. There is no signed CRX or automatic browser-store update channel in this release.
-
-See [the full installation guide](docs/INSTALL.md) for Brave, other Chromium browsers, updates, troubleshooting, checksums and VS Code.
-
-## Browser compatibility
-
-| Browser/platform | Current status |
+| WayriCAD tool | Review in KiView |
 | --- | --- |
-| Desktop Chrome / Chromium | Primary Manifest V3 target; unpacked release package |
-| Desktop Microsoft Edge | Same Chromium package and Load unpacked workflow; separate installed-browser acceptance remains necessary |
-| Desktop Brave | Chromium candidate using the same package; not independently verified |
-| Other desktop Chromium browsers, including Opera/Vivaldi | May load the same package if their extension manager supports Manifest V3 and required APIs; browser-specific smoke testing is pending |
-| Firefox 128+ | Unsigned development ZIP with event-page runtime; temporary installation, installed-browser acceptance pending |
-| Safari 16.4+ on macOS | Development payload and Apple conversion helper; Mac build, signing and installed-browser acceptance pending |
-| Mobile browsers | Not supported by this release |
-| VS Code Desktop | Separate VSIX using the shared read-only viewer |
-| github.dev / VS Code web hosts | Web entry point exists; actual hosted installation and filesystem behavior need separate validation |
+| **quickTherm** | Saved temperature fields, component tables and supported transient frames/history |
+| **quickPI** | Saved voltage/current waveforms, copper-layer potential, power and current-density fields |
+| **quickSI** | Saved eye traces, step responses, impedance/screening curves and report metadata |
+| **Other WayriCAD exports** | Supported JSON/CSV/TSV fields and tables; specialized plots depend on a recognized schema and saved numerical data |
 
-Use each browser's dedicated package: [Firefox installation](docs/FIREFOX.md) and [Safari conversion and installation](docs/SAFARI.md). Firefox offers static repository HTML; Safari disables that preview. Interactive iBOM remains a Chromium feature. Firefox and Safari use review JSON import/export instead of automatic selected-file writes. These development packages are not signed store releases; packaging tests do not establish installed-browser acceptance.
+Inspect plots and probe saved values. Supported spatial exports provide **2D/3D overlays**; placing an overlay on a PCB requires a matching saved board hash and spatial/layer metadata. Results remain read-only, and KiView does not rerun the simulation. Compatibility applies to documented export formats, rather than every WayriCAD version or arbitrary result file. The standalone results viewer is not currently available in VS Code.
 
-## Git service compatibility
+[Supported formats, probing and overlay requirements](docs/ANALYSIS_VIEWER.md) · [Open a saved result](docs/USER-GUIDE.md#wayricad-simulation-results).
 
-| Service | Inline file drawings | Revision comparison | Remote review integration |
-| --- | --- | --- | --- |
-| GitHub.com, public and authorized private repositories | Schematic/PCB and project file previews; pull-request file cards | Branch/commit picker and PR merge-base comparisons | Explicit issue/discussion/PR publication with configured authentication; Issue/PR and selected Discussion marker readback |
-| GitLab.com, public and private projects | File pages, including subgroup namespaces; private access needs account connection | Branch/commit picker | Explicit new issues, issue notes and issue discussions; marker readback on a selected issue |
-| Self-hosted GitLab, explicitly granted HTTPS origins | Same GitLab adapter; server must be hosted at its origin root | Branch/commit picker | Per-server credentials and Issue/issue-discussion publication |
-| GitHub Enterprise | Not implemented | Not implemented in browser | Not implemented |
-| Bitbucket / Azure DevOps / Gitea / Forgejo | Not implemented | Not implemented in browser | Not implemented |
-| Any service checked out locally in VS Code | Saved workspace files are host-independent | No native VS Code revision comparison yet | Local Git-trackable review sidecar; no direct publication |
+## Screenshots
 
-GitLab account connection, private project reads and issue publication are supported. Self-hosted GitLab requires an explicit browser permission grant in Options. v0.12.10 adds an inline changed-drawing selector on current merge-request Changes pages, including fork comparisons. Historical merge-request diff versions and GitLab served beneath a URL subpath remain unsupported. The extension grants permissions only to its supported hosts; it does not send GitHub credentials to GitLab. See [host compatibility and adapter boundaries](docs/GIT-HOSTS.md).
+Click any image to open it at full size. Captures show several development versions; older release downloads may look different. [Capture sources and attribution](docs/images/README.md).
 
-## Using the viewer
+### Chrome · open a project and get straight to the drawing
 
-Open a `.kicad_sch` or `.kicad_pcb` **file page**, rather than its raw download URL. Use **Explorer** to choose Parts, Sheets, Nets, Search, BOM/Stats, ERC/DRC or Layers. Click a part to inspect saved properties; inspect connected nets or choose several highlights using **Multihighlight**. **Project** opens the file structure and setup views. **Split schematic + PCB** displays a paired view with shared part/net selection where saved identities resolve uniquely.
+Read local projects offline or inspect supported GitHub/GitLab file pages. Open the whole project folder to retain sheet and model paths.
 
-The project manager and **Explorer → Sheets** show the same loaded schematic hierarchy, sheet names, nesting and active sheet. Other repository files stay under **Other project files**. Select a net to mark matching sheets with a gold dot; click a marked sheet or the **Matching sheets** buttons in Properties to follow that net. Opening a child sheet discovers its root and siblings within the bounded 128-candidate search. [Sheet navigation guide](docs/SHEET-NAVIGATION.md).
-
-Useful shortcuts with the drawing focused:
-
-| Action | Shortcut/control |
-| --- | --- |
-| Zoom / pan | Pointer-anchored mouse wheel / right or middle drag |
-| Fit drawing / fit sheet | `F` / `Home` |
-| Properties / net highlight | `E` / `H`, backtick or tilde |
-| Maximize drawing area | **Focus view** / `Ctrl+Shift+F`; `Escape` restores controls |
-| Search / comments | `/` / `C` |
-| Measure / drawing theme | `M` / `D` |
-| Enter a subsheet | Double-click the sheet symbol or select it and press `Enter` |
-| Sheet history / parent / root | `Alt+Left`, `Alt+Right` / `Alt+Up` / `Alt+Home` |
-| Layer focus | `[` and `]`; `Shift+F` fits focused layer; `Escape` restores visibility |
-
-Project drawing previews fill the available space. **Hide project files**, **Focus drawing** and **Close preview** control the outer workspace; Explorer and Inspect have close buttons. The larger Sheets tree supports older `Sheet file`/`Sheet name` fields and up to 128 bounded drawing files; source links open the matching revision on its Git host. Marble's 25 unique schematics were checked using its public source and a local browser fixture.
-
-The PCB **Ratsnest** button shows candidate connections from saved copper islands; zones and unsupported geometry can cause extra lines, so this is not native KiCad unrouted or DRC evidence. SPIKE uses WebGL for 3D; 2D uses Canvas2D with frame-coalesced pan/zoom and offscreen culling. v0.12.10 adds a bounded spatial index for large-board redraws and picking. The index preserves source draw order; text and large geometry retain conservative fallbacks. The browser build also uses WebGL to reproject an overscanned raster snapshot during pan/zoom on drawings with at least 4,096 primitives. It redraws source geometry on pointer release or after 120 ms of wheel idle; screenshots force a source redraw. This is GPU gesture compositing, not a GPU vector renderer. Snapshots are limited to 16 million pixels and the device texture size; missing/lost WebGL falls back to Canvas2D. **View and page setup → 2D acceleration** can disable it. Gerber custom rendering uses Canvas2D. Installed-browser and native-webview GPU acceptance remain pending. Linked WRL/VRML/GLB models support up to 2,048 instances within a 24 MiB asset budget, sharing downloads for repeated paths. The browser build also tessellates repository-linked STEP/STP in an interruptible WebAssembly worker (8 MiB input, 30 seconds per conversion, 500,000 vertices/triangles). Output uses millimetres. Local/global KiCad libraries still need explicit repository mappings. The pinned-source importer was rebuilt with dynamic JavaScript generation disabled and passes conversion under inherited worker CSP. The native VS Code host smoke verifies editor opening, hierarchy, review persistence and STEP asset reading; native webview 3D visual inspection and installed-browser STEP acceptance remain pending.
-
-Text fields retain normal typing behavior. Reused hierarchy instances currently share file views; complete instance-specific connectivity is not resolved. Page setup overrides are for viewing and do not modify the source or implement arbitrary custom worksheet templates.
-
-For detailed workflows see [search/highlights](extension/docs/search-and-highlights.md), [project/Gerbers](extension/docs/project-workspace.md), [BOM/analytics](extension/docs/bom-analytics.md), [variants](docs/variants.md), [HTML preview](extension/docs/html-preview.md) and [revision comparison](extension/docs/git-revisions.md).
-
-## How comments integrate with Git and GitHub
-
-Write a review in the drawing and post it directly to a **GitHub Issue or Discussion**, selected in the comment editor. A successful post creates the selected thread or adds a reply to its thread number, then saves the GitHub link with the annotation.
-
-1. Open **Review → Comments** and create a part, point or area note. Enter your comment, severity, tags, mentions and state.
-2. Choose **Issue/Discussion**, **Severity** and **State** in the three colored dropdowns. The first line of the comment is its title. Type `@` for account suggestions, and paste a screenshot directly into the text box.
-3. Use **Preview GitHub Markdown** to inspect the formatted review section: comment text followed by a design-context table, exact revision/file link, object or area, severity, state, tags, mentions and timestamps.
-4. The destination beside **Comment** defaults to **New issue**. Choose **Existing issue/discussion** and enter its number to reply; load a category for a new Discussion. Click **Comment**. This sends the review through GitHub's API using your connected account. Confirmed posts show a linked conversation; denied or ambiguous requests report an error and retain your draft. **Save draft** is available when you want to keep a note without posting.
-
-![Simple composer with inline mention suggestions and a pasted screenshot](docs/images/integration/simple-comment-composer.png)
-
-This is the actual editor with mocked transport; no remote post was made for the screenshot. In **View comments**, load an Issue or Discussion by number, or choose **View thread** on a linked note, to read ordinary messages and replies. The gear button exposes creation-date filters in UTC. Connect your account through **GitHub account**. The primary sign-in button uses the registered publisher OAuth App; [sign-in setup](docs/GITHUB-SIGNIN.md) also explains the advanced token fallback. Public and authorized private repository publication are supported, with GitHub permissions and repository policy checked. Authorized private annotation readback is supported; authorized private PR comparison is supported.
-
-The Git-tracked `.kicad-review.json` file is an optional review record, not a prerequisite for posting. Without a connected file, confirmed links and drafts stay in browser storage. Connect/create a sidecar in a checkout to track them with Git; commit/push it with normal Git tools. Opening a drawing or choosing a destination does not post, commit or edit the design. Existing saved notes also retain **Publish to GitHub** and **Open GitHub composer** actions.
-
-Review notes retain repository/ref/file, saved object identity or millimetre position/area, variant, creation/update times and lifecycle metadata. Changing a note to Resolved or Skipped changes review metadata; it does not close a GitHub issue or edit an earlier post. **Post to GitHub** uploads captured PNGs as repository attachments and embeds them in the selected Issue or Discussion. Upload requires repository write access with OAuth or a personal token; a failed upload keeps the draft without posting. Confirmed image URLs are retained for readback, while PNG bytes remain in the local/exported review record. GitLab publication also uploads captured PNGs and embeds the confirmed image URL. Private/internal GitLab projects must enable **Require authentication to view media files** before image publication; otherwise remove the image to post text only. Remote private image previews may additionally require signing into the GitLab website. The manual GitHub composer still requires attaching downloaded captures yourself. Mentions saved locally do not notify anyone until text is posted remotely, subject to GitHub behavior. Live image publication remains unverified.
-
-Repository owners can provide `.kicad-review-policy.json` to restrict the extension's authenticated publication workflow. The policy is a viewer-side publishing check, not a replacement for GitHub repository permissions and not a way to prevent people posting directly on GitHub. GitLab notes remain provider- and server-isolated local/exportable records and can be explicitly published to issues or discussions within existing issues. VS Code writes a local sidecar without token publication. GitLab contributor policy fails closed when account authorship cannot be verified; use collaborators or an allowlist.
-
-Read [the complete comment guide](docs/COMMENTS.md) for authentication, permissions, the exact policy schema, file access, conflicts, retry handling and limitations.
-
-## VS Code installation
-
-Download **`kicad-visual-review-vscode-0.12.41.vsix`** from Releases. In VS Code run **Extensions: Install from VSIX**, select the file and run **Developer: Reload Window**. Open a KiCad project folder and use **KiCad: Open Visual Viewer** or **Reopen Editor With → KiCad Visual Review**. The **KiCad Review** explorer lists saved drawings and review sidecars.
-
-```sh
-code --install-extension kicad-visual-review-vscode-0.12.41.vsix --force
-```
-
-Local notes use `.kicad-review.json` in the workspace root (or drawing directory outside a workspace). Filesystem-provider permissions still apply. The VSIX is not currently published in Visual Studio Marketplace. See [the VS Code guide](vscode-extension/README.md).
-
-## Browser extension, GitHub App and local reports
-
-| Delivery | Purpose | Requirements |
-| --- | --- | --- |
-| Browser extension ZIP | Embeds interactive previews directly in supported Git websites | Installed separately in each user's desktop browser |
-| VS Code VSIX | Opens saved workspace files in visual custom editors | VS Code and a workspace filesystem provider |
-| Optional GitHub App / hosted viewer ZIPs | Adds PR checks linking to a standalone browser viewer | App registration, HTTPS hosting and service configuration |
-| Optional Python tool / GitHub Action | Produces KiCad-authored SVG and pixel-comparison HTML reports | Python 3.10+, Git and installed KiCad CLI 9+ |
-
-A GitHub App cannot replace the built-in file preview or install the browser extension. The optional service processes signed webhook metadata; browser rendering stays client-side. No production App deployment or Marketplace billing integration is supplied. Browser GitHub sign-in has a registered public client ID; GitLab OAuth requires separate per-server/browser registration. See [the App guide](docs/github-app.md).
-
-For local native reports:
-
-```sh
-python -m pip install -e .
-kicad-vizdiff doctor
-kicad-vizdiff view hardware/controller.kicad_sch --open
-kicad-vizdiff diff hardware/controller.kicad_pcb --base main --head HEAD --open
-kicad-vizdiff review --base main --head feature --merge-base --output kicad-review
-```
-
-Pass the root schematic to include child sheets. The native report supports side-by-side, overlay, swipe and changed-pixel views; these should not be confused with the browser extension's saved-object comparison. [`action.yml`](action.yml) and [the example PR workflow](.github/workflows/visual-review.yml) provide optional runner-based reports.
-
-See [the Actions review guide](docs/actions-review.md) for merge-base comparisons, renamed/deleted drawings, revision evidence and downloading reports. [Original sample designs](examples/sensor/README.md) provide a schematic hierarchy and PCB for trying the viewers.
-
-## Rendering and engineering limits
-
-Recognized KiCad 8/9/10 saved constructs use the shared parser; native reference fixtures were exported with KiCad 10. Future generator versions, including KiCad 11 headers, are accepted as **forward previews** with warnings; this is not full KiCad 11 certification. See [version handling](extension/docs/version-compatibility.md).
-
-The browser viewer is not pixel-identical to KiCad. Browser font metrics, custom worksheets, bitmap images and specialized constructs remain incomplete or approximate and should be checked against native KiCad. Nets are inferred from saved geometry; buses, implicit pins and complete cross-sheet/instance connectivity are not fully resolved. Saved-object comparison is not an electrical equivalence check.
-
-3D loads repository-linked supported assets, not installed KiCad model libraries. Browser STEP support is a development preview; native VS Code STEP remains unverified. Missing models have proxies; GLB coordinates currently use millimetres. Gerber macros, curved regions, step-repeat and drill slots have documented limits. Copper/zone analytics are saved polygon sums, not a validated physical union or manufacturing sign-off. Retrieval, search, reports and annotation storage are bounded; API rate limits and omitted data are disclosed.
-
-## Build, verify and release
-
-Python 3.10+, Node 22+ and Git are required for packaging/tests. KiCad is optional except for native-reference checks.
-
-```sh
-python -m pip install '.[github]'
-python scripts/release.py --output dist/release
-```
-
-The release gate prepares shared VS Code assets, runs Python and JavaScript tests, audits ZIP/VSIX inventories and writes `release-manifest.json` plus `SHA256SUMS.txt`. Each release identifies its source commit. Automated tests and local browser fixtures do not substitute for live browser-store acceptance or testing every browser/service combination.
-
-To publish a new version, update both manifests and release documentation, commit, create the matching version tag and push it. The tag workflow builds verified assets and publishes a prerelease. See [release instructions](docs/RELEASING.md) and [CI details](docs/release-ci.md). Ordinary code pushes run CI without publishing.
-
-## Licensing and support
-
-Owner: Yawar ([wayri](https://github.com/wayri)). **No blanket open-source license is granted.** The owner plans a commercial integration and a separately licensed open-source GUI engine later. Public source availability does not assign that future license. See [LICENSING.md](LICENSING.md) and [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md).
-
-Report reproducible problems through [repository Issues](https://github.com/wayri/KiCad-Github-View/issues), including browser/version, public file URL or a shareable minimal fixture, expected behavior and the visible diagnostic. Exclude tokens, private files and credentials. Design/rendering limitations, Git host ports and browser ports can also be discussed there.
-
-## Engineering limits
-
-This is an experimental, read-only engineering review tool supplied without a claim of complete KiCad fidelity, electrical correctness, manufacturability or fitness for a particular purpose. Check the saved design in native KiCad and perform appropriate engineering verification before fabrication or safety-critical use. Visual differences, inferred nets, measurements, imported rule reports and 3D proxies are review aids, not design sign-off. Unsupported constructs and missing assets can affect what is visible.
-
-
-Authentication, repository permissions and service availability remain subject to GitHub/GitLab and the user's configuration. Local review state does not automatically synchronize with remote threads. Public source availability does not grant a blanket open-source license. No affiliation, endorsement, certification or warranty from KiCad, CERN, Berkeley Lab, GitHub, GitLab or OpenAI is implied.
-
-## Acknowledgements
-
-- The KiCad project and contributors provide the file-format documentation and native tools used for reference checks; this extension implements its own browser renderer.
-- Yawar's SPIKE engine supplies owner-authorized browser PCB geometry/3D integration; its provenance is recorded in [the engine notice](extension/vendor/SPIKE-ENGINE-NOTICE.md).
-- Three.js and its contributors provide WebGL rendering and model loaders under the MIT license, preserved in [THREE-LICENSE](extension/vendor/THREE-LICENSE).
-- GitHub and GitLab provide the repository and collaboration APIs used by the extension's host adapters.
-- Berkeley Lab's Marble and the White Rabbit collaboration's Switch V4 repositories provide public real-design inspection cases. Their authors retain their respective design rights; these designs are not bundled with the extension and test results do not imply endorsement.
-
-See [third-party notices](THIRD-PARTY-NOTICES.md) for distributed dependencies and [licensing status](LICENSING.md) for owner code.
-
-Authentication protection, encryption limits and verification status are documented in [SECURITY.md](SECURITY.md). Supported Chrome sessions retain encrypted credentials through background idle; browser restart or extension reload requires sign-in again. Other browsers also lose sessions on background restart. Uninstall does not revoke GitHub authorization.
-
-Comment actions reveal a usable composer even in a short split pane or Focus view. The full-height pane can auto-hide or remain pinned; collapse it to return to the drawing. Type `@` directly in the comment box to suggest repository accounts, or type at least two characters to search users; select a suggestion with the mouse or arrow keys and Enter. Suggestions do not grant repository access. Paired views cross-highlight saved parts and nets, including unambiguous sheet-qualified net names; reused or ambiguous sheet instances require explicit selection.
-
-3D stand-ins use saved fabrication outlines, then courtyard or pad bounds. They are centred on that geometry and follow front/back rotation without model offsets or guessed size padding. Closed body outlines constrain boxes internally; missing or ambiguous bounds omit the stand-in. These boxes remain approximate visual aids, not mechanical models.
-
-Measurement labels have opaque theme-aware backplates. For a three-point angle, press **M**, choose **Angle (3 points)**, then click the first arm endpoint, vertex and second arm endpoint. The third click pins the smaller angle (0–180°); **New measurement** restarts it and **Esc** exits. Available in schematic and PCB 2D views.
-
-## Android phone and tablet app
-
-[![Download the latest published Android APK](https://img.shields.io/badge/Download%20Android%20APK-1.53-3DDC84?logo=android&logoColor=white)](https://github.com/wayri/KiCad-Github-View/releases/download/v0.12.41/pocket-kivi-android-phone-tablet-1.53-development.apk)
-
-The button downloads the latest published development APK, **1.50**, directly from release **v0.12.41**. Enable installation from your download source when Android prompts. This is a sideloaded preview; it is not a Play Store release.
-
-The [Android hybrid app](android-app/README.md) packages the same viewer
-with native file and folder pickers, touch pan/pinch zoom, shared project tabs,
-and local review notes. One APK adapts to phones and tablets. Build its assets
-with `python scripts/package_android.py`, then build the Android project with
-Gradle. Development APKs require device testing and release signing before store
-publication. Android supports native GitHub and GitLab accounts, public/private project imports, self-hosted GitLab, commit comparison and explicit review publication with screenshots. Drafts stay local until published.
-
-### Phone previews
-
-| Schematic | Layout |
+| Schematic workspace | PCB workspace |
 | :---: | :---: |
-| <img src="docs/images/android/phone-schematic.png" alt="Phone schematic view" width="240"> | <img src="docs/images/android/phone-layout.png" alt="Phone PCB layout view" width="240"> |
+| [![KiCad schematic open in the installed Chrome extension](docs/images/chrome/schematic.png)](docs/images/chrome/schematic.png) | [![PCB layout open in the installed Chrome extension](docs/images/chrome/pcb.png)](docs/images/chrome/pcb.png) |
 
-![Phone landscape drawing workspace](docs/images/android/phone-landscape.png)
+These are installed Chrome extension captures using the public KiCad PIC Programmer demo, opened locally. They do not demonstrate live repository authentication.
 
-### Tablet previews
+<details>
+<summary><strong>More browser views: BoM, parallel drawings and net inspection</strong></summary>
 
-| Portrait | Landscape |
+**A table-first BoM.** Search parts, choose grouping keys, show the fields you need and track assembly without changing the saved CAD source.
+
+[![Expanded BoM field table with compact controls](docs/images/chrome/bom-field-table.jpg)](docs/images/chrome/bom-field-table.jpg)
+
+| Schematic beside PCB | Selected net and saved properties |
 | :---: | :---: |
-| <img src="docs/images/android/tablet-portrait.png" alt="Tablet portrait schematic workspace" width="360"> | <img src="docs/images/android/tablet-landscape.png" alt="Tablet landscape drawing workspace" width="560"> |
+| [![Local parallel schematic and PCB views](docs/images/integration/local-parallel-view.png)](docs/images/integration/local-parallel-view.png) | [![Net highlight with connection properties](docs/images/net-highlighting.jpg)](docs/images/net-highlighting.jpg) |
 
-These previews show development build **1.49** with a synthetic sensor project. Phone drawing views were captured on a connected Android phone; tablet views use a clean tablet emulator. Captures include only the app surface, excluding Android status and navigation bars. The 1.50 release contains newer tools than these 1.49 previews. See [capture details](docs/images/README.md).
+The expanded BoM capture uses the loopback local workspace and PIC Programmer demo. Parallel views and net inspection use synthetic local fixtures.
+
+</details>
+
+### VS Code · inspect hardware beside its source
+
+Open a saved drawing as a custom editor, inspect component fields and keep review sidecars alongside your project files.
+
+| PCB inspection inside VS Code | BoM fields and grouping |
+| :---: | :---: |
+| [![PCB viewer in an installed VS Code extension](vscode-extension/images/pcb-inspection.jpg)](vscode-extension/images/pcb-inspection.jpg) | [![BoM table and grouping controls in VS Code](vscode-extension/images/assembly-bom.jpg)](vscode-extension/images/assembly-bom.jpg) |
+
+**See a Git conflict before choosing a side.** Compare Current and Incoming with linked cameras and highlighted saved-field differences. Export a resolved copy or explicitly confirm source replacement. The choice applies across the file's conflict blocks; this is not an automatic component-by-component merge.
+
+[![VS Code visual merge conflict comparison highlighting a changed capacitor value](vscode-extension/images/visual-merge-conflict.jpg)](vscode-extension/images/visual-merge-conflict.jpg)
+
+These installed VS Code captures use the KiCad PIC Programmer demo. The conflict is deliberately generated by changing one capacitor's Value field. [Visual conflict walkthrough](vscode-extension/GUIDE.md#resolve-git-conflicts-visually).
+
+<details>
+<summary><strong>More VS Code views: launch command and copper net names</strong></summary>
+
+| Open a visual editor | Net labels on copper |
+| :---: | :---: |
+| [![VS Code command palette with the KiCad viewer command](vscode-extension/images/open-viewer-command.jpg)](vscode-extension/images/open-viewer-command.jpg) | [![Saved net names overlaid on PCB copper in VS Code](vscode-extension/images/copper-net-names.jpg)](vscode-extension/images/copper-net-names.jpg) |
+
+[Read the illustrated VS Code guide](vscode-extension/GUIDE.md).
+
+</details>
+
+### Android · take the board to the bench
+
+Keep saved projects available offline, inspect a board on your phone and use the wider workspace on a tablet.
+
+<table>
+<tr><th>Marble PCB · physical phone</th><th>Schematic · physical phone</th></tr>
+<tr>
+<td align="center" valign="top"><a href="docs/images/android/marble-phone-layout.png"><img src="docs/images/android/marble-phone-layout.png" width="240" alt="Marble board layout running on a Samsung Android phone"></a></td>
+<td align="center" valign="top"><a href="docs/images/android/phone-schematic.png"><img src="docs/images/android/phone-schematic.png" width="240" alt="Synthetic schematic in the Android app on a physical Samsung phone"></a></td>
+</tr>
+</table>
+
+Marble was captured on a Samsung SM-A366E running development version 1.55. The schematic capture uses version 1.49 and a synthetic project. These are retained device captures, not screenshots of the newest APK.
+
+<details>
+<summary><strong>Tablet workspace and phone-sized assembly controls</strong></summary>
+
+**A wider canvas on tablets.** This retained Android 1.49 emulator capture uses the synthetic sensor fixture.
+
+[![Android tablet landscape workspace](docs/images/android/tablet-landscape.png)](docs/images/android/tablet-landscape.png)
+
+| BoM field grid | Testpoints and their nets |
+| :---: | :---: |
+| <a href="docs/images/tools/bom-phone-grid.jpg"><img src="docs/images/tools/bom-phone-grid.jpg" width="270" alt="Phone-sized BoM table with reference, value, footprint and DNP fields"></a> | <a href="docs/images/tools/testpoints.jpg"><img src="docs/images/tools/testpoints.jpg" width="270" alt="Phone-sized searchable testpoint and connected-net table"></a> |
+
+The BoM and testpoint views above are browser captures of the shared tools at phone size, using local fixtures; they are not physical-phone acceptance evidence.
+
+</details>
+
+### Engineering tools · inspect more than the drawing
+
+The shared Android/browser tools cover assembly, saved results, documents and engineering calculations. Availability differs in VS Code; see [platform parity](extension/docs/platform-parity.md).
+
+<details>
+<summary><strong>Calculators, Gerbers and PDFs</strong></summary>
+
+**Explore a circuit interactively.** Change resistance, capacitance and probe conditions to inspect the analytical response, with units and assumptions beside the circuit.
+
+[![Interactive RC filter calculator with circuit drawing and live controls](docs/images/tools/calculator.jpg)](docs/images/tools/calculator.jpg)
+
+| Gerber and drill inspection | Integrated PDF reading |
+| :---: | :---: |
+| <a href="docs/images/tools/gerber.jpg"><img src="docs/images/tools/gerber.jpg" width="270" alt="Gerber fabrication viewer with a synthetic trace and drill fixture"></a> | <a href="docs/images/tools/pdf.jpg"><img src="docs/images/tools/pdf.jpg" width="270" alt="PDF viewer displaying a synthetic inspection report"></a> |
+
+Local browser fixture captures. The calculator shows analytical estimates, not a live circuit simulation; the Gerber example is geometry screening, not full DFM. [Calculator guide](docs/CALCULATORS.md) · [Gerber guide](docs/GERBER-VIEWER.md) · [PDF guide](docs/PDF-VIEWER.md).
+
+</details>
+
+<details>
+<summary><strong>3D models, saved analysis and board settings</strong></summary>
+
+| Supported linked model · fixture | Marble · approximate component proxies |
+| :---: | :---: |
+| [![A repository-linked WRL model rendered on a fixture board](docs/images/repository-model-3d.jpg)](docs/images/repository-model-3d.jpg) | [![Marble 3D preview with approximate procedural component bodies](docs/images/marble-3d-proxies.jpg)](docs/images/marble-3d-proxies.jpg) |
+
+The linked-model fixture loads one actual WRL asset. Marble's pictured bodies are proxies, not resolved mechanical models. These are retained local renderer captures.
+
+**Read WayriCAD-compatible saved results.** Open supported quickTherm, quickPI and quickSI exports for plots, probing and available spatial overlays. The thermal-field image below illustrates the saved-analysis viewer. Its retained capture does not establish a solver run, native-device testing or independent numerical validation.
+
+[![Saved thermal analysis field displayed as a color plot](docs/images/tools/saved-analysis.png)](docs/images/tools/saved-analysis.png)
+
+**Inspect saved constraints.** Net classes and their units are shown in KiCad-style tables. Missing fields stay missing; viewing a rule does not evaluate it.
+
+[![Saved board net classes and rule fields in a table](docs/images/tools/board-setup.jpg)](docs/images/tools/board-setup.jpg)
+
+[Saved-analysis formats](docs/ANALYSIS_VIEWER.md) · [Compatibility and limits](docs/KICAD-COMPATIBILITY.md).
+
+</details>
+
+<details>
+<summary><strong>Measurements, analytics, collaboration and safe resets</strong></summary>
+
+| Snapped measurement | GitHub review destination |
+| :---: | :---: |
+| [![Pinned distance measurement with X and Y components](docs/images/integration/readable-distance-measurement.png)](docs/images/integration/readable-distance-measurement.png) | [![GitHub review type and destination controls](docs/images/github-collaboration.jpg)](docs/images/github-collaboration.jpg) |
+
+| Saved board analytics | Portable review transfer |
+| :---: | :---: |
+| <a href="docs/images/integration/board-analytics-phone.png"><img src="docs/images/integration/board-analytics-phone.png" width="250" alt="Saved straight and curved trace length totals in board analytics"></a> | <a href="docs/images/integration/review-handoff-phone.png"><img src="docs/images/integration/review-handoff-phone.png" width="250" alt="Portable review export and import controls"></a> |
+
+These local fixture captures demonstrate controls and saved data. The collaboration view uses mocked provider responses; no remote post was made for it.
+
+**Reset deliberately.** Per-part and bulk BoM resets list their scope and require an acknowledgement before local metadata is changed.
+
+[![BoM reset warning with affected parts and explicit acknowledgement](docs/images/tools/bom-reset-warning.jpg)](docs/images/tools/bom-reset-warning.jpg)
+
+[BoM reset behavior](docs/bom-field-table.md#reset-saved-management-fields) · [Review and transfer guide](docs/USER-GUIDE.md#6-record-share-and-transfer-a-review).
+
+</details>
+
+## Compatibility and limits
+
+Recognized KiCad 8, 9 and 10 saved-file constructs have differing test coverage; this is not complete version certification. See the [compatibility matrix](docs/KICAD-COMPATIBILITY.md). Legacy `.sch`/`.brd` formats are not advertised as supported.
+
+Source designs are ordinarily read-only. Explicit conflict-resolution actions in VS Code and supported export workflows are described separately. Saved ERC/DRC and simulation results are displayed; KiView does not run native KiCad checks or simulation solvers. Connectivity inference, model resolution and fabrication screening have limits. Verify engineering decisions and resolved designs in the appropriate native tools.
+
+## Documentation and development
+
+- [Installation for Windows, Linux, macOS and Android](docs/INSTALL.md)
+- [User guide](docs/USER-GUIDE.md) and [VS Code illustrated guide](vscode-extension/GUIDE.md)
+- [Offline local workspace and optional KiCad launcher](docs/LOCAL-VIEWER.md)
+- [Build and repository map](docs/DEVELOPMENT.md)
+- [Security and private reports](SECURITY.md)
+- [Historical technical reference](docs/PROJECT-REFERENCE.md) and [release history](docs/releases/)
+
+## License and support
+
+Copyright Â© 2026 **Yawar B (wayri)**. Licensed under the [Pocket KiView Source-Available License 1.0](LICENSE), **not an OSI-approved open-source license**. Personal and internal professional use are permitted. Paid distribution, paid bundles and monetized hosted access require written permission. Your designs and outputs remain yours under the license. [Licensing details](LICENSING.md) Â· [Third-party notices](THIRD-PARTY-NOTICES.md).
+
+Support and commercial licensing: **[support@sigharmonic.com](mailto:support@sigharmonic.com)**. Optional sponsorship does not unlock app features. This independent project is not affiliated with or endorsed by KiCad, GitHub, GitLab, Google, Apple or Microsoft.

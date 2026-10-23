@@ -1,116 +1,129 @@
-# Install KiCad GitHub View v0.12.41
+# Install Pocket KiView
 
-This guide covers the prepared v0.12.41 packages. Use the local release artifacts until [the v0.12.41 release](https://github.com/wayri/KiCad-Github-View/releases/tag/v0.12.41) is published. The browser viewer needs no Python, KiCad installation or rendering server. Use a desktop browser with the required extension APIs. Public files work without account setup. Private GitHub file, project and supported model reads require an extension token with access to that repository; website sign-in alone does not authorize the extension. Private GitLab project, file and model reads require an account connected to the selected GitLab server. Authorized private GitHub annotation readback is supported; authorized private PR comparison is supported.
+Choose a prepared package from the [README download buttons](../README.md#downloads) or [GitHub Releases](https://github.com/wayri/KiCad-Github-View/releases). GitHub's automatic **Source code** archives are source checkouts, not installable extensions. The repository is currently private, so release access requires permission until it becomes public.
 
-## Choose a package
+The browser and VS Code editions run on Windows, Linux and macOS. There is no standalone Windows `.exe`, Linux `.deb`/AppImage or macOS `.dmg` installer in the published release. Ordinary viewing does not require KiCad, Python or a rendering server. The optional local Python launcher has separate requirements.
 
-| Download | Use |
-| --- | --- |
-| `kicad-visual-review-chrome-edge-brave-opera-vivaldi-chromium-0.12.41.zip` | Chrome, Edge, Brave, Opera, Vivaldi and other desktop Chromium browsers |
-| `kicad-visual-review-firefox-0.12.41.zip` | Unsigned Firefox 128+ development extension |
-| `kicad-visual-review-safari-0.12.41.zip` | Safari 16.4+ macOS development payload and conversion helper |
-| `kicad-visual-review-guides-0.12.41.zip` | Illustrated GitHub and GitLab guides and documentation |
-| `kicad-visual-review-step-source-0.12.41.zip` | Pinned STEP dependency sources, licenses and rebuild recipe |
-| `kicad-visual-review-vscode-0.12.41.vsix` | Read-only KiCad editors inside VS Code |
-| `kicad-visual-review-app-web-0.12.41.zip` | Optional standalone hosted viewer payload |
-| `kicad-visual-review-github-app-0.12.41.zip` | Optional GitHub App service/deployment sources |
-| `pocket-kivi-android-phone-tablet-1.41-development.apk` | Android phone/tablet preview, development signed |
-| `pocket-kivi-android-1.41-unsigned.aab` | Unsigned Android bundle for release signing |
-| `pocket-kivi-android-source-1.41.zip` | Native Android source with staged shared viewer |
-| `SHA256SUMS.txt` and `release-manifest.json` | Package integrity checks and source/version evidence |
-| `COMMENTS.md` and `GIT-HOSTS.md` | Comment workflow and service compatibility |
+## Choose your platform
 
-GitHub's automatically generated **Source code** ZIP/tarball contains the project sources. It is not the prepared browser package or VSIX. A GitHub release does not install an extension automatically, and no browser-store listing is supplied in this preview.
+| Platform | Recommended route | Other options |
+| --- | --- | --- |
+| Windows | VS Code Marketplace or unpacked Chromium extension | Firefox temporary add-on; source-based local browser launcher |
+| Linux | VS Code Marketplace or unpacked Chromium extension | Firefox temporary add-on; source-based local browser launcher |
+| macOS | VS Code Marketplace or unpacked Chromium extension | Firefox temporary add-on; Safari development conversion with Xcode |
+| Android 8+ | Download the APK from Releases | No Google Play installation is available yet |
 
-## Chrome and Chromium
+## VS Code — Windows, Linux and macOS
 
-1. Download the **extension ZIP** and extract all files into a permanent folder, such as `KiCad-GitHub-View/extension`.
-2. Open that folder and confirm `manifest.json` is directly inside it. Do not select the ZIP, its parent folder, or a nested source repository root.
-3. Enter `chrome://extensions` in the browser address bar.
-4. Enable **Developer mode**, then select **Load unpacked**.
-5. Choose the folder containing `manifest.json`. The extension card should show **KiCad Visual Review for GitHub and GitLab** and version **0.12.41**.
-6. Open the card's **Details** if needed and allow site access for `github.com` and `gitlab.com`. The background worker also reads GitHub's API through the declared permission.
-7. Open or refresh a public `.kicad_sch` or `.kicad_pcb` file page on a supported website. Use the normal repository file page, not the raw download endpoint.
-8. Pin the extension in the toolbar if desired. Its button or `Alt+Shift+K` focuses the inline preview.
+1. Install [Visual Studio Code](https://code.visualstudio.com/) 1.95 or newer.
+2. In **Extensions**, search for **KiCad Visual Review** by publisher **wayri**, or open the [Marketplace listing](https://marketplace.visualstudio.com/items?itemName=wayri.kicad-visual-review), and select **Install**.
+3. Open a project folder. Open a `.kicad_sch` or `.kicad_pcb`, then use **Reopen Editor With → KiCad Visual Review**, or run **KiCad: Open Visual Viewer** from the Command Palette.
+4. Follow the [VS Code illustrated guide](../vscode-extension/GUIDE.md) for inspection, annotations and visual Git conflict resolution.
 
-The official [Chrome unpacked-extension guide](https://developer.chrome.com/docs/extensions/get-started/tutorial/hello-world#load-unpacked) explains Developer mode. Keep the extracted folder in place: the browser loads files from it. This is an unpacked developer installation, not a signed CRX or Chrome Web Store installation.
+For offline/manual installation, download the `.vsix` release asset and use **Extensions: Install from VSIX…**. Select the downloaded file; reload VS Code if prompted. Marketplace and GitHub package versions can differ.
 
-No GitHub account or token is required for public viewing. Authentication enables authorized private file reads and explicit review publication. Website login alone does not authenticate the extension.
-
-## Microsoft Edge
-
-Use the same extension ZIP. Open `edge://extensions`, enable **Developer mode**, select **Load unpacked**, and choose the extracted folder containing `manifest.json`. Allow the declared websites and refresh the repository page. Follow [Microsoft's sideloading instructions](https://learn.microsoft.com/en-us/microsoft-edge/extensions/getting-started/extension-sideloading) if the controls differ in your version.
-
-Edge uses the Chromium package; there is no separate Edge Add-ons listing yet. Its installed-browser behavior and local review-file picker still require browser-specific validation.
-
-## Brave and other Chromium browsers
-
-Brave is a Chromium candidate for the same package. Open its Extensions manager (usually `brave://extensions` or `chrome://extensions`), enable Developer mode and select **Load unpacked** if available. Permit the supported websites and refresh them. Brave has not been independently verified for this release.
-
-Opera, Vivaldi and other desktop Chromium browsers may support the same workflow through their Extensions manager. The package requires Manifest V3, a service worker, extension frames/storage and the relevant website permissions. The optional connected review sidecar also requires File System Access pickers in the extension Options page. If those pickers are unavailable, keep browser-local notes and export JSON manually. These browsers are compatibility candidates, not verified release targets.
-
-Corporate policies can block developer installations or site access. Use an administrator-approved installation route when Developer mode or Load unpacked is disabled; this project does not provide enterprise deployment policy files.
-
-## Firefox, Safari and mobile
-
-Firefox: extract the dedicated Firefox ZIP, open `about:debugging#/runtime/this-firefox`, choose **Load Temporary Add-on** and select `manifest.json`. It requires Firefox desktop 128+. This unsigned installation ends when Firefox restarts. See [Firefox instructions](FIREFOX.md).
-
-Safari: extract the dedicated Safari ZIP on a Mac, run its `convert.sh` helper with a new project directory and your bundle identifier, then build/sign the generated app in Xcode and enable its extension in Safari Settings. The target is Safari 16.4+ on macOS. See [Safari instructions](SAFARI.md). Native conversion and installed-browser verification have not been performed on this Windows workstation.
-
-Neither package is a signed store release. Firefox repository HTML is static; Safari repository HTML preview is disabled. Use review JSON import/export for local Git tracking in these browsers. Mobile browser installation is not verified.
-
-The shared rendering engine is browser-side, but this alone does not establish extension compatibility. Future browser ports need their own packaged and installed-browser tests.
-
-## Update or remove the unpacked extension
-
-For an update, extract the new release into the same installation folder, replacing the package files; click **Reload** on the extension card and refresh open repository pages. Confirm the new version. Review any newly declared site permissions. There is no automatic update channel for the unpacked package.
-
-Export browser-local notes before removing the extension or clearing its storage. A connected `.kicad-review.json` in your checkout is a separate file; removing the extension does not stage, commit or push it. File permissions may need renewal after a restart. See [comment storage](COMMENTS.md).
-
-## First review
-
-Use **Explorer** for parts, nets, sheets, layers and search; **Inspect** for saved properties; **Review** for notes; **Project** for the repository file tree and saved setup. **Git revisions** loads bounded branch/file-commit lists: choose base and head, then **Compare revisions**. Source refs resolve to commit SHAs. GitHub PR file cards use PR context; GitLab.com has manual comparison but no merge-request card integration.
-
-Schematics offer Back/Forward/Up/Root controls. **Split schematic + PCB** and **Pop out** support parallel review. Use `F` to fit drawings, `Home` for the sheet, `E` for properties and `M` for a live snapped ruler. The visible keyboard guide lists contextual controls. Routing and source editing are unavailable.
-
-GitLab supports subgroup namespaces and authorized private projects. In Options → **GitLab accounts and servers**, connect a token or configure OAuth for the selected server. For self-hosted GitLab, enter an exact HTTPS origin and choose **Grant server access**. Publish notes to new issues or discussions within existing issues. Merge-request cards and server URL subpaths remain unsupported. See [Git host compatibility](GIT-HOSTS.md) and the [illustrated GitLab guide](using-gitlab-integration/README.md). GitLab OAuth requires a non-confidential public Application ID registered on the selected server, its exact browser redirect URI and `api` scope. No publisher GitLab ID is bundled; use token connection if the browser identity API is unavailable.
-
-## VS Code
-
-Download the VSIX. Run **Extensions: Install from VSIX**, choose `kicad-visual-review-vscode-0.12.41.vsix`, then run **Developer: Reload Window**. Open a saved project folder and choose **KiCad: Open Visual Viewer** or **Reopen Editor With → KiCad Visual Review**. The KiCad Review explorer lists saved drawings and sidecars.
+If the `code` command is available, installation works from PowerShell on Windows or Terminal on Linux/macOS:
 
 ```sh
-code --install-extension kicad-visual-review-vscode-0.12.41.vsix --force
+code --install-extension wayri.kicad-visual-review
 ```
 
-The custom editor uses the workspace filesystem provider. Native notes use the Git-trackable `.kicad-review.json` sidecar, without token publication or native revision comparison. HTML previews are static in VS Code. The web entry point exists, but actual github.dev installation and filesystem behavior need separate hosted validation. See [the VS Code guide](../vscode-extension/README.md).
+For a downloaded VSIX, replace the filename with the actual package:
 
-## Optional GitHub App
+```sh
+code --install-extension ./kicad-visual-review-vscode-0.12.46.vsix
+```
 
-The app-web ZIP is a hosted viewer payload; the github-app ZIP contains the service and deployment sources. Neither changes GitHub's built-in renderer or installs a browser extension. Follow [the App guide](github-app.md) to register an App, configure HTTPS hosting and install Python extras. No production host, private key or Marketplace listing is supplied. The browser package includes its registered GitHub public OAuth client ID; GitLab OAuth needs separate per-server/browser registration.
+On macOS, VS Code's **Shell Command: Install 'code' command in PATH** enables this optional terminal route. The Extensions UI does not need it.
+
+## Chrome / Chromium — Windows, Linux and macOS
+
+1. Download the Chromium extension ZIP and extract it into a permanent folder. On Windows use **Extract All**; on macOS double-click the ZIP; on Linux use the archive manager or `unzip <downloaded-file.zip>`.
+2. Check that `manifest.json` is directly inside the selected folder.
+3. Open `chrome://extensions` in Chrome/Chromium or `edge://extensions` in Microsoft Edge.
+4. Enable **Developer mode**, select **Load unpacked**, and choose the extracted folder containing `manifest.json`.
+5. Keep the folder in place. Pin the extension's toolbar icon if desired.
+6. Refresh an existing GitHub/GitLab file page, or open extension Options → **Open local KiCad workspace** for files on your computer.
+
+Brave, Opera and Vivaldi can use the same ZIP where their extension manager supports Manifest V3 and **Load unpacked**. Use the browser's Extensions page; browser-specific APIs and validation coverage differ. These are compatibility candidates, not a guarantee that every feature works in every browser. Managed computers may require administrator-approved extension installation.
+
+For local projects, choose **Open folder**, **Open files**, or drag and drop supported files/folders. Folder selection preserves sheet/model paths. Files selected locally stay local unless you explicitly export/share them. The installed local workspace works without internet. See [local workspace details](LOCAL-VIEWER.md).
+
+For online projects, open a normal repository file page for `.kicad_sch` or `.kicad_pcb`, rather than a raw download URL. Allow the declared host access. Public viewing needs no connected account. Supported private session reads require an explicitly approved matching signed-in tab; API history, binary assets and publication may still require a connected account. Android has its own authorization flow. See [Git host support](GIT-HOSTS.md) and [GitHub sign-in](GITHUB-SIGNIN.md).
+
+**Update:** extract the replacement package, select **Reload** on the extension card, then refresh viewer tabs. Unpacked packages do not update automatically. **Remove:** export local reviews first, then remove the extension through its manager; clearing extension storage can remove local drafts.
+
+## Firefox — Windows, Linux and macOS
+
+Download the dedicated Firefox ZIP, extract it, open `about:debugging#/runtime/this-firefox`, choose **Load Temporary Add-on**, and select `manifest.json`. This requires desktop Firefox 128+. The unsigned temporary installation ends when Firefox restarts; no permanent signed XPI/AMO listing is supplied. Use the Firefox package rather than the Chromium ZIP. Installed-browser acceptance remains limited. [Firefox guide](FIREFOX.md).
+
+## Safari — macOS development option
+
+Safari cannot load the Chromium ZIP as a normal extension. The Safari development ZIP needs full Xcode, conversion with its included `convert.sh`, building/signing the generated application, and enabling it in Safari Settings. The target is Safari 16.4+; native conversion and installed-browser verification remain pending. Follow the [Safari guide](SAFARI.md). This is not an iPhone app or a signed App Store release.
+
+## Android — APK installation
+
+1. Download the `.apk` release asset on your Android 8+ phone/tablet, or copy it from your computer. Do not download the `.aab` for direct installation.
+2. Open the APK. If Android blocks installation, allow **Install unknown apps** for the specific browser/file manager you used, install it, then turn that permission off if no longer needed. Menu labels vary by device.
+3. Open **Pocket KiView**. Import a project folder/ZIP through the app's file picker, or browse a supported repository.
+4. Updates are manual: download and install the newer APK over the existing app when its package and signing identity match.
+
+The current GitHub 1.58 APK is a **development-signed preview**. It is not the locally prepared 1.59 build or a Play Store release. Development and future distribution/Play signing identities may differ. If Android reports a signature conflict, preserve/export projects and review state before deciding how to migrate; do not immediately uninstall or clear app data. Installing an older version over a newer version may also be rejected.
+
+Android Chrome does not provide the desktop **Load unpacked** workflow. Use the Android app rather than trying to install the desktop extension in mobile Chrome.
+
+## Optional local browser launcher from source
+
+For a browser interface beside KiCad, the extension file picker is the simplest route and needs no Python. Alternatively, from a source checkout with Python 3.10+ and the bundled viewer dependencies present, launch the loopback server:
+
+Windows (PowerShell, repository root):
+
+```powershell
+py -m kicad_vizdiff.local_viewer --project "C:/designs/my-board"
+```
+
+Linux / macOS (Terminal, repository root):
+
+```sh
+python3 -m kicad_vizdiff.local_viewer --project "/path/to/my-board"
+```
+
+Keep the process running while viewing; stop it with **Ctrl+C**. Closing the browser tab alone does not stop it. Save edits in KiCad, then use **Reload saved project**; unsaved KiCad editor state is not synchronized. The optional legacy PCB ActionPlugin and its installation path depend on your KiCad build. See [the complete local launcher guide](LOCAL-VIEWER.md). No KiCad installation is required to view already saved sources.
+
+## Verify downloads
+
+Use the release's `SHA256SUMS.txt` and compare the digest for the file you downloaded.
+
+Windows PowerShell:
+
+```powershell
+Get-FileHash -Algorithm SHA256 "C:/Downloads/downloaded-file.zip"
+```
+
+Linux:
+
+```sh
+sha256sum downloaded-file.zip
+```
+
+macOS:
+
+```sh
+shasum -a 256 downloaded-file.zip
+```
+
+A matching hash verifies bytes against the published checksum; it is not a publisher signature. See `release-manifest.json` for the release's source/version evidence.
 
 ## Troubleshooting
 
 | Symptom | Check |
 | --- | --- |
-| Load unpacked rejects the folder | Extract the ZIP fully; select the folder directly containing `manifest.json` |
-| No visual preview | Confirm the extension is enabled and allowed on that host; refresh a public supported file page; raw URLs and unsupported hosts are not mounted |
-| Chrome says an embedded page is blocked | Reload the extension after a manifest update, refresh the file page, and record the blocked frame URL/console diagnostic if it persists |
-| HTTP error, missing source or incomplete tree | Public access, API rate limits, file/repository limits and the requested revision; private projects require authorized credentials for the correct server; 404 may conceal denied access |
-| GitLab source view remains visible | Page repository/ref/file metadata or the preview container may be unavailable; the extension leaves the source intact |
-| Child sheet or 3D model missing | Check the saved relative path and repository asset at that revision; installed KiCad libraries and STEP are not loaded |
-| GitHub HTTP 403 / rate limit | Connect your account in extension Options, then retry after the displayed reset time. API reads use the configured session account. Public file reads can fall back to raw content; project structure and history still require API access. Reload the updated extension and allow its raw.githubusercontent.com site permission. |
-| GitHub publishing unavailable | Configure token/device sign-in in Options, check destination permissions and repository policy; GitLab needs its own server account; VS Code remote publication is not implemented |
-| Review file cannot save | Renew file permission, inspect visible conflict/validation errors, or export notes before changing stores |
+| Extension folder rejected | Extract the archive; select the folder directly containing `manifest.json` |
+| Toolbar button appears to do nothing | Confirm the extension is enabled, check host permission, reload it and refresh the repository tab; use Options to open the local workspace |
+| VS Code shows source text | Use **Reopen Editor With → KiCad Visual Review** and confirm the extension is enabled |
+| Private project returns 404/403 | Verify the matching host, repository access and account connection; a 404 may hide denied access |
+| Missing sheet/model | Import the whole project folder; inspect relative paths, format/size warnings and library references |
+| APK will not install | Check Android version, free storage, version downgrade and signing identity; preserve data before migration |
+| Download requires sign-in | This GitHub repository/release is still private; request access or wait for public availability |
 
-For a report, include browser/version, a public URL or shareable fixture, and the visible error. Do not include credentials or private design files.
-
-## Checksums and limits
-
-Compare downloads with `SHA256SUMS.txt`. On Linux/macOS run `sha256sum --check SHA256SUMS.txt` in the download folder. In PowerShell use `Get-FileHash -Algorithm SHA256 <file>` and compare the digest. SHA-256 detects changed bytes; it is not a publisher signature. `release-manifest.json` binds versions and package hashes to the source commit.
-
-The renderer has documented fidelity limits. KiCad 11 is a forward preview, STEP is unsupported, zone statistics are polygon sums, and several Gerber/drill constructs are incomplete. Read [the project README](../README.md) and release notes. Installed Chrome/GitLab acceptance, browser-store review and every candidate browser/service combination are not established by local automated tests.
-
-## Google Play preparation
-
-The GitHub Android APK is development-signed and its AAB is unsigned. For an upload-key build and the owner submission steps, see [the Play submission guide](play-store/SUBMISSION.md). Google Play availability is not implied by a GitHub release.
+Continue with the [user guide](USER-GUIDE.md). Report reproducible problems to [support@sigharmonic.com](mailto:support@sigharmonic.com), including version, operating system, steps and a non-confidential sample. Do not send credentials or private designs without authorization.

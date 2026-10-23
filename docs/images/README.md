@@ -65,7 +65,7 @@ The PNG `integration/loading-marble.png` was captured on 2026-10-05 from the act
 
 `integration/extension-compact-view.png` is an unchanged copy of the retained `.vizdiff/extension-compact-view.png` local browser preview. It shows a synthetic PCB in the actual viewer with collapsed side panels. Its original capture date was not recorded. It contains the viewer surface without system/browser chrome. It is illustrative evidence, not verification of the currently published extension package or live GitHub/GitLab integration. The adjacent hierarchy preview retains its version/date and mock-transport provenance above.
 
-The README Android download button targets the verified published v0.12.37 asset `pocket-kivi-android-phone-tablet-1.48-development.apk`. Releases currently use prerelease status, so the button uses the concrete asset URL rather than GitHub's stable-only `/releases/latest/download/` redirect.
+The README Android download button targets the verified published v0.12.46 asset `pocket-kivi-android-phone-tablet-1.58-development.apk` (checked 24 October 2026). Releases currently use prerelease status, so the button uses the concrete asset URL rather than GitHub's stable-only `/releases/latest/download/` redirect.
 
 ### Android app-surface captures (2026-10-11)
 
@@ -78,3 +78,33 @@ The Android capture build passed `assembleDebug`, `assembleDebugAndroidTest` and
 `integration/testpoints-phone-0.12.40.png` is a local browser screenshot at 389 CSS pixels using `extension/tests/fixtures/bench-workflow/board.kicad_pcb` and mocked repository transport. It shows filtered saved testpoint data; it is not a physical-phone or live GitHub extension capture.
 
 `integration/assembly-phone-0.12.40.png` uses the same synthetic fixture at 389 CSS pixels. It shows manually recorded assembly progress and the unfinished-parts action; no physical assembly or inspection result is represented.
+
+`integration/board-analytics-phone.png` is a local browser capture at 389 CSS pixels using the retained synthetic `extension/tests/fixtures/board-analytics/tracks.kicad_pcb`, saved by native KiCad 10.0.6, with mocked repository transport. It shows saved straight/curved lengths and per-layer totals. It is not a physical-phone, complete-board or live GitHub acceptance capture. Both drawing themes and the desktop layout were checked.
+
+`integration/review-handoff-phone.png`: shared transfer dialog after browser export/import, at 389 CSS pixels. Synthetic board fixture and mocked repository transport; controls are 44 CSS pixels high, with no horizontal dialog overflow. This is browser evidence, not a physical-phone capture.
+
+`integration/local-parallel-view.png`: offline local workspace reading the retained sensor schematic hierarchy and PCB over the session-bound loopback transport. Browser file import, saved-source reload and R1 cross-probing were exercised. No KiCad renderer or Git host transport is used; native KiCad menu launch is not demonstrated by this capture.
+
+
+## README platform galleries — 24 October 2026
+
+The expanded root README reuses retained screenshots; no UI mockups or generated images were added. New documentation copies are byte-for-byte copies of the original capture files. The documentation update is not a new app capture or a test of the newest APK/VSIX. Click-through images keep original resolution.
+
+| Documentation image | Retained source | Context |
+| --- | --- | --- |
+| `chrome/schematic.png` | `dist/chrome-store-0.12.49/screenshots/01-schematic-1280x800.png` | Installed Chrome extension, local PIC Programmer schematic from the public KiCad demo. Browser chrome is visible. |
+| `chrome/pcb.png` | `dist/chrome-store-0.12.49/screenshots/02-pcb-1280x800.png` | Same installed Chrome extension and local PCB demo. No live repository authentication is demonstrated. |
+| `chrome/bom-field-table.jpg` | `dist/chrome-store-0.12.50/evidence/bom-layout-improved.jpg` | Loopback local workspace, PIC Programmer demo, expanded BoM table and compact header. No Chrome browser frame is in this capture. |
+| `android/marble-phone-layout.png` | `dist/ui-polish/marble-phone-layout.png` | Physical Samsung SM-A366E, Android development 1.55/code58, 14 October 2026; public Marble drawing. Retained device-test notes record a complete 2D render. It is not a capture of 1.59. |
+| `tools/calculator.jpg` | `dist/ui-polish/calculator-desktop.jpg` | Local desktop browser capture of the shared RC calculator and its circuit illustration; analytical estimates, not a solver run. |
+| `tools/gerber.jpg` | `dist/ui-polish/gerber-phone.jpg` | Phone-sized local browser view with synthetic trace/drill geometry. No physical-phone capture or complete DFM validation. |
+| `tools/pdf.jpg` | `dist/ui-polish/pdf-phone.jpg` | Phone-sized local browser view of a synthetic inspection PDF, not private project data. |
+| `tools/bom-phone-grid.jpg` | `dist/ui-polish/drawing-bom-grid-phone.jpg` | Shared drawing BoM field grid at phone size, local fixture. Physical-device acceptance is not established by this image. |
+| `tools/board-setup.jpg` | `dist/ui-polish/board-setup-netclasses.jpg` | Local synthetic saved net classes and read-only board settings. Not a native rule evaluation. |
+| `tools/testpoints.jpg` | `dist/ui-polish/testpoints-phone.jpg` | Phone-sized local browser testpoint page from the UI verification set; fixture data and mocked transport. |
+| `tools/bom-reset-warning.jpg` | `dist/chrome-store-0.12.52/bom-reset-warning.jpg` | Local workspace reset warning. The demonstration was cancelled; no real project metadata was reset for the capture. |
+| `tools/saved-analysis.png` | `.vizdiff/pocket-kivi-analysis-tablet.png` | Retained shared saved thermal-report color-field view. Original capture date/device and solver provenance are not recorded here; it illustrates the reader only, not physical-tablet or numerical acceptance. |
+
+The VS Code images are linked directly from `vscode-extension/images/`: installed demo-window captures of KiCad's public PIC Programmer example. `visual-merge-conflict.jpg` uses a deliberately generated conflict changing one capacitor Value field. It is not a real customer merge, automatic semantic resolution or electrical redesign. See the [demo source note](../../vscode-extension/images/SCREENSHOT-SOURCES.md).
+
+Android `phone-schematic.png` and `tablet-landscape.png`, and shared model, measurement, analytics, review and collaboration captures retain their individual provenance above. In particular, tablet screenshots are emulator evidence; browser phone-sized tools are not relabeled as physical Android captures; Marble 3D bodies in `marble-3d-proxies.jpg` remain approximate proxies. Public fixture/design authors retain their rights; no endorsement is implied.

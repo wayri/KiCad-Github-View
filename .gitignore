@@ -38,3 +38,11 @@ kicad-review/
 !/extension/vendor/pdfjs/build/
 !/extension/vendor/pdfjs/build/pdf.min.mjs
 !/extension/vendor/pdfjs/build/pdf.worker.min.mjs
+
+# Local upload-key material and operating-system metadata
+*.p12
+*.pfx
+*.dpapi
+.DS_Store
+Thumbs.db
+Desktop.ini
