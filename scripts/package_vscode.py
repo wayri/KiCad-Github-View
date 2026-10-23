@@ -3,6 +3,7 @@ from pathlib import Path
 import hashlib
 import importlib.util
 import json
+import re
 import zipfile
 from xml.sax.saxutils import escape
 
@@ -27,6 +28,9 @@ ASSETS += ('calculator-catalog.js','calculator-visuals.js')
 ASSETS += ('tool-header.css','tool-header.js')
 ASSETS += ('section-pages.js','section-pages.css','board-setup-ui.js','board-setup-ui.css','mobile-sidebar.js','mobile-sidebar.css','testpoint-tools.css','sheet-hierarchy-links.js','responsive-controls.js','phone-polish.css')
 HOST_FILES = ('conflict-host.js', 'package.json', 'extension.js', 'webview-bridge.js', 'README.md', 'icon.png')
+README_IMAGES = ('images/schematic-review.png', 'images/pcb-inspection.png',
+                 'images/assembly-bom.png', 'images/visual-merge-conflict.png')
+HOST_FILES += README_IMAGES
 
 
 def adapt_entry(source: bytes) -> bytes:
@@ -119,6 +123,11 @@ def package(root: Path = ROOT, output: Path | None = None) -> Path:
         if not path.is_file():
             raise ValueError(f'Missing VS Code host file: {name}')
         payload[f'extension/{name}'] = path.read_bytes()
+    for image in re.findall(r'!\[[^\]]*\]\(([^)]+)\)', (folder / 'README.md').read_text(encoding='utf-8')):
+        if image.startswith(('https://', 'http://')):
+            continue
+        if f'extension/{image}' not in payload:
+            raise ValueError(f'Unpackaged README image: {image}')
     payload['extension.vsixmanifest'] = vsix_manifest(manifest)
     payload['[Content_Types].xml'] = CONTENT_TYPES
     output = output or root / 'build' / f"kicad-visual-review-vscode-{manifest['version']}.vsix"
