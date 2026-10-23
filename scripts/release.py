@@ -58,6 +58,13 @@ def run_tests(root: Path = ROOT):
 
 
 def source_commit(root: Path = ROOT, tag: str | None = None) -> str | None:
+    # Git searches parent folders; a nested export is not itself a source checkout.
+    top = subprocess.run(['git', 'rev-parse', '--show-toplevel'], cwd=root,
+                         text=True, capture_output=True)
+    if top.returncode or Path(top.stdout.strip()).resolve() != root.resolve():
+        if tag:
+            raise ValueError('A tagged release requires a committed Git checkout.')
+        return None
     result = subprocess.run(['git', 'rev-parse', '--verify', 'HEAD'], cwd=root,
                             text=True, capture_output=True)
     if result.returncode:

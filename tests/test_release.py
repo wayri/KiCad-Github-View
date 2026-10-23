@@ -100,6 +100,24 @@ class ReleaseTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, 'clean source checkout'):
                 release.source_commit(root, 'v0.11.0')
 
+    def test_nested_export_cannot_inherit_parent_release_identity(self):
+        with tempfile.TemporaryDirectory() as folder:
+            parent = Path(folder)
+            def git(*args):
+                return subprocess.check_output(['git', *args], cwd=parent,
+                                               stderr=subprocess.DEVNULL)
+            git('init', '-q')
+            (parent / 'source.txt').write_text('saved', encoding='utf-8')
+            git('add', 'source.txt')
+            git('-c', 'user.name=Test', '-c', 'user.email=test@example.invalid',
+                '-c', 'commit.gpgsign=false', 'commit', '-qm', 'fixture')
+            git('tag', 'v0.11.0')
+            nested = parent / 'export'
+            nested.mkdir()
+            self.assertIsNone(release.source_commit(nested))
+            with self.assertRaisesRegex(ValueError, 'committed Git checkout'):
+                release.source_commit(nested, 'v0.11.0')
+
     def test_versions_reject_mismatch_bad_tags_and_missing_notes(self):
         with tempfile.TemporaryDirectory() as folder:
             root = Path(folder)

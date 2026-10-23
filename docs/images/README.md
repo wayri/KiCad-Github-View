@@ -65,7 +65,7 @@ The PNG `integration/loading-marble.png` was captured on 2026-10-05 from the act
 
 `integration/extension-compact-view.png` is an unchanged copy of the retained `.vizdiff/extension-compact-view.png` local browser preview. It shows a synthetic PCB in the actual viewer with collapsed side panels. Its original capture date was not recorded. It contains the viewer surface without system/browser chrome. It is illustrative evidence, not verification of the currently published extension package or live GitHub/GitLab integration. The adjacent hierarchy preview retains its version/date and mock-transport provenance above.
 
-The README Android download button targets the verified published v0.12.46 asset `pocket-kivi-android-phone-tablet-1.58-development.apk` (checked 24 October 2026). Releases currently use prerelease status, so the button uses the concrete asset URL rather than GitHub's stable-only `/releases/latest/download/` redirect.
+The README Android download button targets the v0.12.57 asset `pocket-kivi-android-phone-tablet-1.59-development.apk`. Releases currently use prerelease status, so the button uses the concrete asset URL rather than GitHub's stable-only `/releases/latest/download/` redirect.
 
 ### Android app-surface captures (2026-10-11)
 

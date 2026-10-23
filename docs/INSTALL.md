@@ -4,6 +4,8 @@ Choose a prepared package from the [README download buttons](../README.md#downlo
 
 The browser and VS Code editions run on Windows, Linux and macOS. There is no standalone Windows `.exe`, Linux `.deb`/AppImage or macOS `.dmg` installer in the published release. Ordinary viewing does not require KiCad, Python or a rendering server. The optional local Python launcher has separate requirements.
 
+Current release assets: `kicad-visual-review-chrome-edge-brave-opera-vivaldi-chromium-0.12.57.zip`, `kicad-visual-review-vscode-0.12.57.vsix`, and `pocket-kivi-android-phone-tablet-1.59-development.apk`.
+
 ## Choose your platform
 
 | Platform | Recommended route | Other options |

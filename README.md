@@ -16,17 +16,17 @@ Explore schematics and PCB layouts, follow nets, measure geometry, work through 
 
 [![Download Android APK](https://img.shields.io/badge/Android-Download%20APK%201.59-3DDC84?logo=android&logoColor=white)](https://github.com/wayri/KiCad-Github-View/releases/download/v0.12.57/pocket-kivi-android-phone-tablet-1.59-development.apk)
 [![Download Chromium extension](https://img.shields.io/badge/Chrome%20%2F%20Chromium-Download%20ZIP-4285F4?logo=googlechrome&logoColor=white)](https://github.com/wayri/KiCad-Github-View/releases/download/v0.12.57/kicad-visual-review-chrome-edge-brave-opera-vivaldi-chromium-0.12.57.zip)
-[![Install VS Code extension](https://img.shields.io/badge/VS%20Code-Install%20extension-007ACC)](https://marketplace.visualstudio.com/items?itemName=wayri.kicad-visual-review)
+[![Download VS Code VSIX](https://img.shields.io/badge/VS%20Code-Download%20VSIX%200.12.57-007ACC)](https://github.com/wayri/KiCad-Github-View/releases/download/v0.12.57/kicad-visual-review-vscode-0.12.57.vsix)
 
 | Edition | Download / install | Availability |
 | --- | --- | --- |
 | Android | APK button above | Android 8+; published 1.59 preview, development-signed; manual installation and updates |
 | Chrome, Edge, Brave, Opera, Vivaldi, Chromium | Chromium ZIP button above | Published 0.12.57 preview; extract and load unpacked; candidate browsers have differing validation coverage |
-| VS Code | Marketplace button above | [offline VSIX 0.12.57](https://github.com/wayri/KiCad-Github-View/releases/download/v0.12.57/kicad-visual-review-vscode-0.12.57.vsix) | Windows, Linux and macOS; VS Code 1.95+; Marketplace can be newer than the GitHub VSIX |
+| VS Code | [Marketplace](https://marketplace.visualstudio.com/items?itemName=wayri.kicad-visual-review) / [offline VSIX 0.12.57](https://github.com/wayri/KiCad-Github-View/releases/download/v0.12.57/kicad-visual-review-vscode-0.12.57.vsix) | Windows, Linux and macOS; VS Code 1.95+; Marketplace and GitHub versions may differ |
 | Firefox | [Development ZIP 0.12.57](https://github.com/wayri/KiCad-Github-View/releases/download/v0.12.57/kicad-visual-review-firefox-0.12.57.zip) | Desktop 128+; unsigned temporary add-on; [instructions](docs/FIREFOX.md) |
 | Safari | [Development ZIP 0.12.57](https://github.com/wayri/KiCad-Github-View/releases/download/v0.12.57/kicad-visual-review-safari-0.12.57.zip) | macOS Safari 16.4+; requires Xcode conversion/signing; native verification pending; [instructions](docs/SAFARI.md) |
 
-Downloads above are the [v0.12.57 GitHub preview](https://github.com/wayri/KiCad-Github-View/releases/tag/v0.12.57); The VS Code Marketplace channel is updated separately. The repository is currently private, so GitHub downloads require access until it is made public.
+Downloads above are the [v0.12.57 GitHub preview](https://github.com/wayri/KiCad-Github-View/releases/tag/v0.12.57). The VS Code Marketplace channel is updated separately. The repository is currently private, so GitHub downloads require access until it is made public.
 
 <details>
 <summary>Release versions, checksums and Android signing</summary>
@@ -181,7 +181,7 @@ Local browser fixture captures. The calculator shows analytical estimates, not a
 <details>
 <summary><strong>3D models, saved analysis and board settings</strong></summary>
 
-| Supported linked model | fixture | Marble | approximate component proxies |
+| Supported linked model (fixture) | Marble (approximate component proxies) |
 | :---: | :---: |
 | [![A repository-linked WRL model rendered on a fixture board](docs/images/repository-model-3d.jpg)](docs/images/repository-model-3d.jpg) | [![Marble 3D preview with approximate procedural component bodies](docs/images/marble-3d-proxies.jpg)](docs/images/marble-3d-proxies.jpg) |
 
