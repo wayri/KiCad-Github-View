@@ -1,4 +1,4 @@
-# Chrome Web Store — copy/paste fields (0.12.49)
+# Chrome Web Store — copy/paste fields (0.12.58)
 
 Upload only the extension ZIP as the package, not this folder or a VSIX. The uploaded title/summary come from the manifest. Use description.txt for the Description field.
 

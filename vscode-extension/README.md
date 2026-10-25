@@ -6,7 +6,7 @@ Open KiCad schematics and PCBs beside your code—without installing KiCad. Insp
 
 ## Open your first project
 
-**KiCad versions:** recognized KiCad **8, 9 and 10** `.kicad_sch` and `.kicad_pcb` constructs use the shared viewer. Native reference fixtures use KiCad 10; 8/9 coverage is narrower and does not certify every feature. Newer generator versions open as warned previews. No KiCad installation is required. Embedded assets, component-class rules, schematic net-class rule areas and native schematic tables are not implemented. [Compatibility details](https://github.com/wayri/kiview-marketplace-assets/blob/main/COMPATIBILITY.md).
+**KiCad versions:** recognized KiCad **8, 9 and 10** `.kicad_sch` and `.kicad_pcb` constructs use the shared viewer. Native reference fixtures use KiCad 10; 8/9 coverage is narrower and does not certify every feature. Newer generator versions open as warned previews. No KiCad installation is required. Linked and supported embedded 3D models can load when their assets resolve. Component-class rules, schematic net-class rule areas and native schematic tables are not implemented. [Compatibility details](https://github.com/wayri/kiview-marketplace-assets/blob/main/COMPATIBILITY.md).
 
 1. Install the extension and open your KiCad project folder in VS Code.
 2. Select a `.kicad_sch` or `.kicad_pcb`. If it opens as text, choose **Open With → KiCad Visual Review**.
@@ -36,6 +36,10 @@ Open the drawing's **BoM manager**: a full-width table with sticky headers and a
 
 **Testpoints & nets** helps plan probing. Board analytics and saved ERC/DRC reports help review existing design data. Available workspace models can load in the 3D board view.
 
+## Browse files and Git history
+
+Open **Repository** from the drawing tools to browse working files, status colours, branches and the commit graph. Expand a commit for its message, author, date and parents. Refresh follows current HEAD; older pages stay pinned. The built-in Git provider supplies history when available; historical committed file trees are not exposed by its public API.
+
 ## Compare a Git conflict
 
 1. Select a marker-conflicted drawing and run **KiCad: Resolve Git Conflict Visually**.
@@ -52,7 +56,7 @@ Use **Review** to add findings. Notes live in `.kicad-review.json`; commit that 
 
 ## Guide and limits
 
-**Companion browser edition:** [KiCad Visual Review for Chrome](https://github.com/wayri/kiview-marketplace-assets/blob/main/CHROME-HOME.md) reviews local projects and supported GitHub/GitLab pages. Chrome Web Store publication is pending. Each edition works independently; portable review exports transfer supported review state.
+**Companion browser edition:** [KiCad Visual Review for Chrome](https://github.com/wayri/kiview-marketplace-assets/blob/main/CHROME-HOME.md) reviews local projects and supported GitHub/GitLab pages. The latest companion ZIP is available from the project releases; store and GitHub versions may differ. Each edition works independently; portable review exports transfer supported review state.
 
 [Full user guide: all workflows, shortcuts, supported files and troubleshooting](https://github.com/wayri/kiview-marketplace-assets/blob/main/VSCODE-GUIDE.md)
 
