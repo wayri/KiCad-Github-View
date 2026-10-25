@@ -527,3 +527,108 @@ test('unresolved Git conflict is identified without writing source',async()=>{
  await assert.rejects(h.api._test.loadProject(uri),/conflict.kicad_sch: Unresolved Git merge conflict at line 2/);
  assert.equal(new TextDecoder().decode(h.entries.get(uri.toString()).bytes),content);
 });
+
+
+test('workspace model inventory is session-scoped, excludes linked ancestors and never reads asset bytes',async()=>{
+ const h=harness(),s=await session(h);const model=h.write('models/Package.3dshapes/body.step','model');
+ const linked=h.write('linked/body.wrl','model'),direct=h.write('direct.wrl','model',{type:65});
+ h.write('linked','',{type:66});const nonmodel=h.write('notes.txt','notes');
+ h.vscode.workspace.findFiles=async()=>[model,linked,direct,nonmodel,Uri.parse('vscode-vfs://evil/owner/repo/body.wrl?ref=main')];
+ const reads=h.reads.length,input={type:'repo-model-index',repository:s.scope.repository,ref:s.scope.ref};
+ const result=await send(h,s,1,input);assert.equal(result.ok,true,result.error);
+ assert.deepEqual(plain(result.result.paths),['models/Package.3dshapes/body.step']);assert.equal(result.result.snapshotRef,s.scope.ref);
+ assert.match(result.result.warnings.join(' '),/linked model excluded/);assert.equal(h.reads.length,reads);
+ const count=h.stats.length;assert.equal((await send(h,s,2,{...input,ref:'other'})).ok,false);assert.equal(h.stats.length,count);
+ h.vscode.workspace.findFiles=async()=>Array(5001).fill(nonmodel);
+ const bounded=await send(h,s,3,input);assert.match(bounded.result.warnings.join(' '),/5000 files/);
+});
+
+
+function browsing(h,{trusted=true,repo=null}={}){
+ h.vscode.workspace.isTrusted=trusted;const directoryReads=[];
+ h.entries.set(h.folder.toString(),{type:2,size:0});
+ h.vscode.workspace.fs.readDirectory=async uri=>{
+  directoryReads.push(uri.toString());const prefix=uri.path.replace(/\/$/,'')+'/';
+  return [...h.entries].map(([key,item])=>[Uri.parse(key),item]).filter(([entry])=>entry.scheme===uri.scheme&&entry.authority===uri.authority&&entry.query===uri.query&&entry.path.startsWith(prefix)&&!entry.path.slice(prefix.length).includes('/')).map(([entry,item])=>[entry.path.slice(prefix.length),item.type||1]);
+ };
+ h.vscode.extensions={getExtension:()=>repo?{isActive:true,exports:{getAPI:()=>({repositories:[repo]})}}:undefined};
+ return directoryReads;
+}
+const hash=n=>n.toString(16).padStart(40,'0');
+test('repository inventory lists provider files without reading bytes, excludes symlinks and warns that virtual history is unavailable',async()=>{
+ const h=harness(),s=await session(h);h.write('docs/readme.txt','text');h.write('linked/secret.txt','secret');h.entries.set(Uri.joinPath(h.folder,'linked').toString(),{type:66});h.write('.git/config','private');browsing(h);
+ const before=h.reads.length,result=await send(h,s,1,{type:'repository-tree',repository:s.scope.repository,ref:s.scope.ref});assert.equal(result.ok,true);const tree=plain(result.result);
+ assert.deepEqual(tree.entries.map(e=>e.path),['docs','docs/readme.txt','root.kicad_sch']);assert.equal(h.reads.length,before);assert.equal(tree.workingTree,true);assert.equal(tree.sha,null);assert.ok(tree.entries.every(e=>e.sha===null&&e.mode===null));assert.match(tree.warnings.join(' '),/virtual workspace/);assert.match(tree.warnings.join(' '),/Symbolic-link/);
+ const history=await send(h,s,2,{type:'repository-history',repository:s.scope.repository,ref:s.scope.ref});assert.equal(history.ok,true);assert.deepEqual(plain(history.result.commits),[]);assert.equal(history.result.hasMore,false);assert.match(history.result.warnings.join(' '),/virtual workspace/);
+});
+test('local working tree uses real HEAD and Git state badges, never fabricates blob hashes or claims a historical tree',async()=>{
+ const h=harness(Uri.parse('file:///repo')),s=await session(h);h.write('board.kicad_pcb','(kicad_pcb)');h.write('docs/notes.txt','text');let commits=0;
+ const repo={rootUri:h.folder,state:{HEAD:{commit:hash(8)},indexChanges:[{uri:Uri.joinPath(h.folder,'docs/notes.txt'),status:1}],workingTreeChanges:[{uri:Uri.joinPath(h.folder,'board.kicad_pcb'),status:5},{uri:Uri.joinPath(h.folder,'deleted.txt'),status:6}],mergeChanges:[]},getCommit:async sha=>{commits++;return{hash:sha};}};browsing(h,{repo});
+ const reads=h.reads.length,result=await send(h,s,1,{type:'repository-tree',repository:s.scope.repository,ref:s.scope.ref,sha:hash(4)});assert.equal(result.ok,true);const tree=plain(result.result),entries=new Map(tree.entries.map(e=>[e.path,e]));
+ assert.equal(tree.sha,hash(8));assert.equal(tree.treeRef,'HEAD');assert.equal(tree.requestedRef,hash(4));assert.equal(tree.workingTree,true);assert.match(tree.warnings.join(' '),/historical/);assert.equal(entries.get('docs').status,'modified');assert.equal(entries.get('docs/notes.txt').status,'added');assert.equal(entries.get('docs/notes.txt').staged,true);assert.equal(entries.get('board.kicad_pcb').status,'modified');assert.equal(entries.get('deleted.txt').status,'deleted');assert.equal(h.reads.length,reads);assert.equal(commits,1);
+});
+test('lazy repository directories paginate full paths and reject unsafe names and linked ancestors before listing',async()=>{
+ const h=harness(Uri.parse('file:///repo')),s=await session(h);for(let i=0;i<250;i++)h.write('parts/'+String(i).padStart(3,'0')+'.txt','x');h.write('linked/nested/secret.txt','x');h.entries.set(Uri.joinPath(h.folder,'linked').toString(),{type:66});const reads=browsing(h);
+ const request={type:'repository-tree',repository:s.scope.repository,ref:s.scope.ref,directory:'parts'};
+ const first=await send(h,s,1,request);assert.equal(first.ok,true);assert.equal(first.result.entries.length,200);assert.equal(first.result.entries[0].path,'parts/000.txt');assert.equal(first.result.hasMore,true);assert.equal(first.result.nextPage,2);
+ const second=await send(h,s,2,{...request,page:2});assert.equal(second.result.entries.length,50);assert.equal(second.result.hasMore,false);assert.equal(second.result.entries[0].path,'parts/200.txt');const before=reads.length;
+ for(const [id,directory]of [[3,'../outside'],[4,'.git'],[5,'linked/nested'],[6,'parts/../../outside']])assert.equal((await send(h,s,id,{...request,directory})).ok,false);
+ assert.equal(reads.length,before);
+});
+test('repository history is repo-wide, keeps real merge parents and pins pages while HEAD changes',async()=>{
+ const h=harness(Uri.parse('file:///repo')),s=await session(h),calls=[];
+ const records=Array.from({length:31},(_,i)=>({hash:hash(i+1),parents:i===0?[hash(101),hash(102)]:[hash(i+2)],message:'Commit '+i,authorName:'Author',authorEmail:'not-returned@example.test',commitDate:new Date('2026-10-25T12:00:00Z')}));
+ const repo={rootUri:h.folder,state:{HEAD:{commit:hash(1)}},log:async options=>{calls.push(options);return options.skip?records.slice(30):records;}};browsing(h,{repo});const request={type:'repository-history',repository:s.scope.repository,ref:s.scope.ref};
+ const first=await send(h,s,1,request);assert.equal(first.ok,true);assert.equal(first.result.commits.length,30);assert.deepEqual(plain(first.result.commits[0].parents),[hash(101),hash(102)]);assert.equal(first.result.commits[0].date,'2026-10-25T12:00:00.000Z');assert.equal(first.result.commits[0].author,'Author');assert.equal(first.result.commits[0].authorEmail,undefined);assert.equal(first.result.hasMore,true);assert.equal(first.result.nextPage,2);
+ repo.state.HEAD.commit=hash(99);const second=await send(h,s,2,{...request,page:2});assert.equal(second.result.sha,hash(1));assert.equal(second.result.commits.length,1);assert.equal(second.result.hasMore,false);assert.deepEqual(plain(calls),[{maxEntries:31,skip:0,refNames:[hash(1)]},{maxEntries:31,skip:30,refNames:[hash(1)]}]);
+ await send(h,s,3,request);assert.deepEqual(plain(calls.at(-1).refNames),[hash(99)],'first-page Refresh must not reuse an old HEAD pin');
+});
+test('Restricted Mode and missing Git return honest empty history and do not activate Git or run programs',async()=>{
+ const h=harness(Uri.parse('file:///repo')),s=await session(h);browsing(h,{trusted:false});let calls=0;h.vscode.extensions.getExtension=()=>{calls++;throw Error('must not activate');};
+ const request={type:'repository-history',repository:s.scope.repository,ref:s.scope.ref};const restricted=await send(h,s,1,request);assert.equal(restricted.ok,true);assert.equal(restricted.result.commits.length,0);assert.match(restricted.result.warnings.join(' '),/Restricted Mode/);assert.equal(calls,0);
+ h.vscode.workspace.isTrusted=true;h.vscode.extensions.getExtension=()=>undefined;const absent=await send(h,s,2,request);assert.equal(absent.ok,true);assert.equal(absent.result.commits.length,0);assert.match(absent.result.warnings.join(' '),/No local Git/);
+ const denied=await send(h,s,3,{...request,repository:'other/repo'});assert.equal(denied.ok,false);assert.equal((await send(h,s,4,{...request,page:101})).ok,false);assert.equal((await send(h,s,5,{...request,sha:'HEAD; injected'})).ok,false);
+});
+
+
+test('repository branch list uses real local/remote Git refs, excludes tags and does not filter by the opened file',async()=>{
+ const h=harness(Uri.parse('file:///repo')),s=await session(h),repo={rootUri:h.folder,state:{HEAD:{name:'main',commit:hash(1)},refs:[{name:'main',commit:hash(1),type:0},{name:'feature/board',commit:hash(2),type:0},{name:'origin/main',commit:hash(3),type:1},{name:'v1',commit:hash(4),type:2},{name:'bad',commit:'HEAD',type:0}]}};browsing(h,{repo});
+ const result=await send(h,s,1,{type:'repository-branches',repository:s.scope.repository,ref:s.scope.ref});assert.equal(result.ok,true);assert.deepEqual(plain(result.result.branches),[{name:'feature/board',sha:hash(2),type:'branch',current:false},{name:'main',sha:hash(1),type:'branch',current:true},{name:'origin/main',sha:hash(3),type:'remote',current:false}]);assert.equal(result.result.truncated,false);
+ h.vscode.workspace.isTrusted=false;const unavailable=await send(h,s,2,{type:'repository-branches',repository:s.scope.repository,ref:s.scope.ref});assert.equal(unavailable.ok,true);assert.deepEqual(plain(unavailable.result.branches),[]);assert.match(unavailable.result.warnings.join(' '),/Restricted Mode/);
+});
+
+
+test('repository listing is bounded and no-Git provider fallback does not read source bytes',async()=>{
+ const h=harness(Uri.parse('file:///repo')),s=await session(h);for(let i=0;i<10010;i++)h.entries.set(Uri.joinPath(h.folder,'item-'+i+'.txt').toString(),{type:1,size:1});browsing(h);const before=h.reads.length;
+ const result=await send(h,s,1,{type:'repository-tree',repository:s.scope.repository,ref:s.scope.ref});assert.equal(result.ok,true);assert.equal(result.result.entries.length,10000);assert.equal(result.result.truncated,true);assert.match(result.result.warnings.join(' '),/10,000/);assert.equal(h.reads.length,before);
+ const virtual=harness(),v=await session(virtual);const fallback=await send(virtual,v,1,{type:'repository-tree',repository:v.scope.repository,ref:v.scope.ref});assert.equal(fallback.ok,true);assert.deepEqual(plain(fallback.result.entries.map(e=>e.path)),['root.kicad_sch']);assert.match(fallback.result.warnings.join(' '),/cannot enumerate directories/);
+});
+test('history filters invalid provider identities and bounds metadata without fabricating parent edges',async()=>{
+ const h=harness(Uri.parse('file:///repo/sub')),s=await session(h),repo={rootUri:Uri.parse('file:///repo'),state:{HEAD:{commit:hash(1)}},log:async()=>[{hash:hash(1),parents:[hash(2),hash(3)],message:'x'.repeat(5000),authorName:'safe\nname'},{hash:'bad',parents:[]},{hash:hash(4),parents:['bad']}]};browsing(h,{repo});
+ const result=await send(h,s,1,{type:'repository-history',repository:s.scope.repository,ref:s.scope.ref});assert.equal(result.ok,true);assert.equal(result.result.commits.length,1);assert.deepEqual(plain(result.result.commits[0].parents),[hash(2),hash(3)]);assert.equal(result.result.commits[0].message.length,4096);assert.equal(result.result.commits[0].date,null);assert.match(result.result.warnings.join(' '),/invalid Git commit/);
+ const tree=await send(h,s,2,{type:'repository-tree',repository:s.scope.repository,ref:s.scope.ref});assert.match(tree.result.warnings.join(' '),/history covers the whole Git repository/);
+});
+
+
+test('history preserves an explicitly selected commit while refreshing an unpinned first page',async()=>{
+ const h=harness(Uri.parse('file:///repo')),s=await session(h),calls=[],repo={rootUri:h.folder,state:{HEAD:{commit:hash(1)}},getCommit:async sha=>({hash:sha}),log:async options=>{calls.push(options);return[];}};browsing(h,{repo});const request={type:'repository-history',repository:s.scope.repository,ref:s.scope.ref};
+ await send(h,s,1,{...request,sha:hash(8)});repo.state.HEAD.commit=hash(2);await send(h,s,2,{...request,sha:hash(8),page:2});assert.deepEqual(plain(calls.map(call=>call.refNames)),[[hash(8)],[hash(8)]]);
+ await send(h,s,3,request);assert.deepEqual(plain(calls.at(-1).refNames),[hash(2)]);
+});
+test('Git browsing stops if workspace trust is revoked during activation or history reading',async()=>{
+ const h=harness(Uri.parse('file:///repo')),s=await session(h);browsing(h);let apiCalls=0;h.vscode.extensions.getExtension=()=>({isActive:false,activate:async()=>{h.vscode.workspace.isTrusted=false;return{getAPI(){apiCalls++;return{repositories:[]};}};}});
+ const result=await send(h,s,1,{type:'repository-history',repository:s.scope.repository,ref:s.scope.ref});assert.equal(result.ok,true);assert.equal(apiCalls,0);assert.deepEqual(plain(result.result.commits),[]);assert.match(result.result.warnings.join(' '),/trust changed/);
+ const j=harness(Uri.parse('file:///repo')),t=await session(j),repo={rootUri:j.folder,state:{HEAD:{commit:hash(1)}},log:async()=>{j.vscode.workspace.isTrusted=false;return[{hash:hash(1),parents:[],message:'Must not publish after revocation'}];}};browsing(j,{repo});
+ const stopped=await send(j,t,1,{type:'repository-history',repository:t.scope.repository,ref:t.scope.ref});assert.equal(stopped.ok,true);assert.deepEqual(plain(stopped.result.commits),[]);assert.match(stopped.result.warnings.join(' '),/trust changed/);
+});
+test('bounded branch list retains current branch even after an alphabetically earlier 200 branches',async()=>{
+ const h=harness(Uri.parse('file:///repo')),s=await session(h),repo={rootUri:h.folder,state:{HEAD:{name:'zz-current',commit:hash(999)},refs:Array.from({length:220},(_,i)=>({name:'branch-'+String(i).padStart(3,'0'),commit:hash(i+1),type:0}))}};browsing(h,{repo});
+ const result=await send(h,s,1,{type:'repository-branches',repository:s.scope.repository,ref:s.scope.ref});assert.equal(result.ok,true);assert.equal(result.result.branches.length,200);assert.equal(result.result.truncated,true);assert.ok(result.result.branches.some(branch=>branch.current&&branch.name==='zz-current'));
+});
+test('compact conflict webview keeps draw-first defaults, secondary controls and confined runtime resources',async()=>{
+ const h=harness(),s=await session(h),template=fs.readFileSync(path.join(__dirname,'../../extension/conflict-viewer.html'),'utf8');h.entries.set('file:///extension/media/conflict-viewer.html',{bytes:new TextEncoder().encode(template)});
+ const webview={cspSource:'https://resources.example',asWebviewUri:uri=>({toString:()=>`https://resources.example${uri.path}`})},html=await h.api._test.conflictHTML(webview,h.context,s);
+ assert.match(html,/<body class="properties-hidden">/);assert.match(html,/id="toggleProperties" aria-pressed="false"/);assert.match(html,/id="viewOptions" aria-expanded="false"/);assert.match(html,/id="viewOptionsPanel"[^>]* hidden/);assert.match(html,/frame-src &#39;none&#39;/);assert.match(html,/src="https:\/\/resources.example\/extension\/media\/conflict-viewer.js"/);assert.match(html,/href="https:\/\/resources.example\/extension\/media\/conflict-viewer.css"/);
+ for(const match of html.matchAll(/<script[^>]+src="([^"]+)"/g))assert.ok(match[1].startsWith('https://resources.example/extension/'));
+ assert.match(html,/id="saveOriginal" disabled/);assert.match(html,/Original file stays unchanged until you save/);
+});

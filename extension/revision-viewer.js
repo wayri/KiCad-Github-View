@@ -88,11 +88,12 @@
 
     };
 
+    const setStatusText=(id,value)=>{const node=$(id);if(node&&node.textContent!==value)node.textContent=value;};
     let syncFloatingLayers=()=>{};
-    const afterFrame=()=>{syncFloatingLayers();workspace?.draw();if(!scene&&$('renderMode'))$('renderMode').textContent=canvas.motionActive?'2D · WebGL':'2D';host.dataset.renderBackend=canvas.motionActive?'webgl-motion':'canvas2d';if($('accelerationStatus'))$('accelerationStatus').textContent=canvas.motionFailed?'WebGL unavailable; using Canvas2D.':canvas.acceleration==='off'?'Canvas2D only.':'WebGL gesture previews on large drawings when available; source geometry is redrawn after each gesture.';if($('viewScale'))$('viewScale').textContent=Math.round(canvas.viewport.camera.zoom/4*100)+'%';if($('drawingViewLabel'))$('drawingViewLabel').textContent=canvas.netHighlight?(canvas.highlightCount>1?`${canvas.highlightCount} highlight groups`:canvas.netHighlight.name?'Highlighted net · '+canvas.netHighlight.name:'Highlighted components'):canvas.paperVisible?(pcb?'PCB worksheet':'Schematic sheet'):'Board view';report(false);};
+    const afterFrame=()=>{syncFloatingLayers();workspace?.draw();if(!scene)setStatusText('renderMode',canvas.motionActive?'2D · WebGL':'2D');const backend=canvas.motionActive?'webgl-motion':'canvas2d';if(host.dataset.renderBackend!==backend)host.dataset.renderBackend=backend;setStatusText('accelerationStatus',canvas.motionFailed?'WebGL unavailable; using Canvas2D.':canvas.acceleration==='off'?'Canvas2D only.':'WebGL gesture previews on large drawings when available; source geometry is redrawn after each gesture.');setStatusText('viewScale',Math.round(canvas.viewport.camera.zoom/4*100)+'%');setStatusText('drawingViewLabel',canvas.netHighlight?(canvas.highlightCount>1?`${canvas.highlightCount} highlight groups`:canvas.netHighlight.name?'Highlighted net · '+canvas.netHighlight.name:'Highlighted components'):canvas.paperVisible?(pcb?'PCB worksheet':'Schematic sheet'):'Board view');report(false);};
     const originalDraw=canvas.draw.bind(canvas);canvas.draw=()=>{originalDraw();afterFrame();};canvas.addEventListener('kicad:viewframe',afterFrame);
 
-    canvas.canvas.addEventListener?.('pointermove',event=>{const rect=canvas.canvas.getBoundingClientRect(),point=canvas.viewport.camera.screen_to_world({x:event.clientX-rect.left,y:event.clientY-rect.top});if($('cursorCoords'))$('cursorCoords').textContent=`${point.x.toFixed(2)}, ${point.y.toFixed(2)} mm`;});
+    canvas.canvas.addEventListener?.('pointermove',event=>{const rect=canvas.canvas.getBoundingClientRect(),point=canvas.viewport.camera.screen_to_world({x:event.clientX-rect.left,y:event.clientY-rect.top});setStatusText('cursorCoords',`${point.x.toFixed(2)}, ${point.y.toFixed(2)} mm`);});
 
     const focus=position=>{
 
@@ -113,7 +114,7 @@
     if(compactLayerBar)addEventListener('pointerdown',event=>{if(!floatingLayers.contains(event.target)&&floatingToggle){floatingLayers.classList.remove('layers-expanded');floatingToggle.setAttribute('aria-expanded','false');}});
     syncFloatingLayers=()=>{
       const copper=(canvas.design?.layers||[]).filter(layer=>layer.endsWith('.Cu'));
-      floatingLayers.hidden=!pcb||Boolean(scene)||!copper.length;if(floatingLayers.hidden)return;
+      const hidden=!pcb||Boolean(scene)||!copper.length;if(floatingLayers.hidden!==hidden)floatingLayers.hidden=hidden;if(hidden)return;
       const signature=JSON.stringify(copper);
       if(signature!==floatingSignature){
         floatingSignature=signature;floatingLayers.replaceChildren();floatingButtons.clear();
@@ -140,9 +141,9 @@
       }
       for(const [name,button] of floatingButtons){
         const selected=name==='Net names'?canvas.showNetNames===true:name==='Filled copper'?canvas.showFilledCopper!==false:name==='Zone outlines'?canvas.showZoneOutlines!==false:name==='All'?!canvas.focusedLayer&&(canvas.design.layers||[]).every(layer=>canvas.visibleLayers.has(layer)):name==='Overview'?!canvas.focusedLayer&&!canvas.layerSnapshot:canvas.focusedLayer===name;
-        button.setAttribute('aria-pressed',String(selected));
+        if(button.getAttribute('aria-pressed')!==String(selected))button.setAttribute('aria-pressed',String(selected));
       }
-      if(floatingToggle)floatingToggle.textContent=canvas.focusedLayer||'Layers';
+      if(floatingToggle&&floatingToggle.textContent!==(canvas.focusedLayer||'Layers'))floatingToggle.textContent=canvas.focusedLayer||'Layers';
     };
 
     function layers(){
@@ -328,9 +329,14 @@
       modelAssetCache=KiCadBrowserData.createModelAssetCache(async path=>{const result=await send({type:'repo-asset',repository,ref,file:path});if(!result?.ok)throw new Error(result?.error||'Repository model unavailable.');return result.result;});
 
       const mode=$('mode3d'),pane=$('threePane');mode.hidden=false;let busy=false,loading=null;
-      let modelIndex=null;
-      const assetPaths=()=>modelIndex||=send({type:'repo-model-index',repository,ref}).then(result=>
-        result?.ok && Array.isArray(result.result?.paths) ? result.result.paths.slice(0,2000).filter(path=>KiCadBrowserData.validPath(path)) : []).catch(()=>[]);
+      let modelIndex=null,assetWarnings=[];
+      const safeModelPath=path=>typeof path==='string'&&path.length<=500&&/\.(?:wrl|vrml|glb|step|stp)$/i.test(path)&&!/[\\:\x00-\x1f\x7f?#%]/.test(path)&&path.split('/').every(part=>part&&part!=='.'&&part!=='..');
+      const assetPaths=()=>modelIndex||=send({type:'repo-model-index',repository,ref}).then(result=>{
+        if(!result?.ok||!Array.isArray(result.result?.paths)){assetWarnings=['Project model inventory is unavailable; explicit relative model paths can still be loaded.'];return [];}
+        assetWarnings=Array.isArray(result.result.warnings)?result.result.warnings.filter(w=>typeof w==='string').slice(0,48).map(w=>w.slice(0,500)):[];
+        if(result.result.paths.length>2000)assetWarnings.push('Model inventory was limited to 2000 paths.');
+        return result.result.paths.slice(0,2000).filter(safeModelPath);
+      }).catch(()=>{assetWarnings=['Project model inventory could not be read; explicit relative model paths can still be loaded.'];return [];});
 
       const load=()=>loading||=new Promise((resolve,reject)=>{if(globalThis.SpikeBoard3D?.mountBoard3D){resolve(SpikeBoard3D);return;}const script=document.createElement('script');script.src='vendor/spike-board3d.bundle.js';script.onload=()=>globalThis.SpikeBoard3D?.mountBoard3D?resolve(SpikeBoard3D):reject(new Error('SPIKE 3D did not initialize.'));script.onerror=()=>{loading=null;reject(new Error('SPIKE 3D could not be loaded.'));};document.head.append(script);});
 
@@ -344,7 +350,7 @@
 
         try{const engine=await load(),modelPaths=await assetPaths();if(disposed)return;pane.hidden=false;canvas.canvas.hidden=true;
 
-          scene=engine.mountBoard3D(pane,files.find(file=>file.path===rootFile).content,{dark,boardPath:rootFile,assetPaths:modelPaths,loadAsset:modelAssetCache.load,externalInspector:true,onSelect:record=>workspace?.select3D(record),onComment:record=>workspace?.comment3D(record)});
+          scene=engine.mountBoard3D(pane,files.find(file=>file.path===rootFile).content,{dark,boardPath:rootFile,assetPaths:modelPaths,assetWarnings,loadAsset:modelAssetCache.load,externalInspector:true,onSelect:record=>workspace?.select3D(record),onInspect:record=>workspace?.inspect3D(record),onComment:record=>workspace?.comment3D(record)});
 
           workspace.setScene(scene);syncFloatingLayers();$('drawingLegend').hidden=true;lock(true);mode.setAttribute('aria-pressed','true');if($('renderMode'))$('renderMode').textContent='3D';
 
@@ -364,6 +370,7 @@
       if(event.source!==parent||event.origin!==ownOrigin||event.data?.type!=='kicad-review:command')return;
 
       const msg=event.data;
+      if(msg.command==='restore-controls'){workspace.restoreFocusView?.();return;}
       if(msg.command==='open-sheet'){workspace.followSheet?.(msg.file);return;}
       if(msg.command==='refresh-comments'){workspace.refreshComments?.();return;}
       if(msg.command==='highlight-related'){related(msg.selection);return;}

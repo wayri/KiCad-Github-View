@@ -18,6 +18,11 @@ import java.security.MessageDigest;
 import java.util.HashSet;
 import java.util.Locale;
 import java.util.Set;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
+import java.util.HashMap;
+import java.util.concurrent.*;
 import javax.net.ssl.HttpsURLConnection;
 
 /** Native-only GitHub transport. Never returns credentials or raw response errors to JS. */
@@ -27,6 +32,8 @@ final class GitHubClient {
     private static final String CLIENT = "Ov23li8RsSVZk2dHptN1";
     private static final int FILE_LIMIT = 32 * 1024 * 1024;
     private static final int TOTAL_LIMIT = 96 * 1024 * 1024;
+    interface ConnectionFactory { HttpsURLConnection open(URL url)throws IOException; }
+    private final ConnectionFactory connections;
     private final DiskProjectStore diskStore;
     private final GitHubVault vault;
     private final GitHubVault deviceVault;
@@ -48,7 +55,8 @@ final class GitHubClient {
     private int interval;
 
     GitHubClient(Context context) { this(context,"github"); }
-    GitHubClient(Context context, String namespace) { diskStore = new DiskProjectStore(context); vault = new GitHubVault(context,namespace); deviceVault = new GitHubVault(context, namespace+"_device"); token = vault.read();
+    GitHubClient(Context context, String namespace) { this(context,namespace,url->(HttpsURLConnection)url.openConnection()); }
+    GitHubClient(Context context,String namespace,ConnectionFactory connections) { this.connections=connections;diskStore = new DiskProjectStore(context); vault = new GitHubVault(context,namespace); deviceVault = new GitHubVault(context, namespace+"_device"); token = vault.read();
         try { String saved = deviceVault.read(); if (saved != null && token == null) {
             JSONObject pending = new JSONObject(saved); long remaining = pending.getLong("expiresAt") - System.currentTimeMillis();
             if (remaining > 0 && remaining <= 1800000) { deviceCode = pending.getString("deviceCode"); userCode = pending.getString("userCode"); interval = Math.max(5, Math.min(60,pending.optInt("interval",5))); deviceWallExpiry = pending.getLong("expiresAt"); deviceExpiry = SystemClock.elapsedRealtime()+remaining; nextPoll = SystemClock.elapsedRealtime()+interval*1000L; }
@@ -99,6 +107,9 @@ final class GitHubClient {
             case "revision-resolve": return revisionResolve(request, epoch);
             case "revision-branches": return revisionBranches(request, epoch);
             case "revision-commits": return revisionCommits(request, epoch);
+            case "repository-tree": return readRepositoryTree(request,epoch);
+            case "repository-history": return readRepositoryHistory(request,epoch);
+            case "repository-branches": return readRepositoryBranches(request,epoch);
             case "review-list": return reviewList(request, epoch);
             case "review-categories": return categories(repository(request), epoch);
             case "review-thread": return reviewThread(request, epoch);
@@ -228,11 +239,12 @@ final class GitHubClient {
         String root = "/repos/" + repository;
         String sourceRef=request.optString("sourceRef",request.optString("ref",""));
         if(sourceRef.length()>255||hasControl(sourceRef))throw new Failure("Invalid branch or commit");
-        synchronized(this) {
-            check(epoch);
-            JSONObject cached=diskStore.findRemote("github","",repository,request.optString("ref",""));
-            if(cached!=null)return new JSONObject().put("repository",repository).put("sha",cached.getJSONObject("github").getString("sha")).put("cached",true).put("project",cached);
-        }
+        // Cache validation can wait on a disk transfer. Do not hold the provider
+        // monitor: cancel/sign-out are called from the UI thread and must stay responsive.
+        check(epoch);
+        JSONObject cached=diskStore.findRemote("github","",repository,request.optString("ref",""));
+        check(epoch);
+        if(cached!=null)return new JSONObject().put("repository",repository).put("sha",cached.getJSONObject("github").getString("sha")).put("cached",true).put("project",cached);
         JSONObject metadata = api(root, epoch, 1024 * 1024);
         String ref = request.optString("ref", "");
         if (ref.isEmpty()) ref = metadata.getString("default_branch");
@@ -268,42 +280,10 @@ final class GitHubClient {
             return downloaded;
         }
 
-        JSONArray files = new JSONArray(), assets = new JSONArray();
-        Set<String> paths = new HashSet<>();
-        int total = 0, count = 0;
-        for (int i = 0; i < nodes.length(); i++) {
-            check(epoch);
-            if (SystemClock.elapsedRealtime() > deadline) throw new Failure("Repository download timed out; use a smaller repository or local import");
-            JSONObject node = nodes.getJSONObject(i);
-            if (!node.optString("type").equals("blob")) continue;
-            String path = node.getString("path"), lower = path.toLowerCase(Locale.ROOT);
-            boolean binary = lower.matches(".*\\.(step|stp|wrl|vrml|glb|pdf)$");
-            boolean text = lower.matches(".*\\.(kicad_sch|kicad_pcb|kicad_pro|kicad_prl|kicad_dru|kicad_wks|json|gbr|ger|gerber|gtl|gbl|gts|gbs|gto|gbo|gtp|gbp|gko|gm\\d+|g\\d+|drl|xln|csv|tsv|txt|wbk|raw|html|htm)$")
-                    || lower.equals("sym-lib-table") || lower.equals("fp-lib-table") || lower.endsWith("/sym-lib-table") || lower.endsWith("/fp-lib-table");
-            if (!binary && !text) continue;
-            safePath(path);
-            if (!node.optString("mode").equals("100644") && !node.optString("mode").equals("100755")) throw new Failure("Symbolic links cannot be imported");
-            if (!paths.add(lower)) throw new Failure("Duplicate repository file path");
-            if (++count > 2000) throw new Failure("Too many KiCad files (limit 2000)");
-            long size = node.getLong("size");
-            if (size < 0 || size > FILE_LIMIT || size > TOTAL_LIMIT - total) throw new Failure("Repository exceeds 32 MiB per file or 96 MiB total");
-            JSONObject blob = api(root + "/git/blobs/" + validSha(node.getString("sha")), epoch, (int)Math.min(48L * 1024 * 1024, size * 2 + 16384));
-            if (!blob.getString("encoding").equals("base64")) throw new Failure("Unsupported GitHub blob encoding");
-            byte[] bytes = Base64.decode(blob.getString("content"), Base64.DEFAULT);
-            if (bytes.length != size) throw new Failure("Repository file size mismatch");
-            if (bytes.length >= 42 && new String(bytes, 0, 42, StandardCharsets.US_ASCII).startsWith("version https://git-lfs.github.com/spec/"))
-                throw new Failure("Git LFS files must be downloaded locally before import");
-            total += bytes.length;
-            JSONObject item = new JSONObject().put("path", path);
-            if(lower.endsWith(".pdf"))item.put("encoding","base64");
-            if (binary) assets.put(item.put("base64", Base64.encodeToString(bytes, Base64.NO_WRAP)));
-            else {
-                String content = StandardCharsets.UTF_8.newDecoder().onMalformedInput(CodingErrorAction.REPORT)
-                        .onUnmappableCharacter(CodingErrorAction.REPORT).decode(ByteBuffer.wrap(bytes)).toString();
-                if (content.startsWith("version https://git-lfs.github.com/spec/")) throw new Failure("Git LFS files must be downloaded locally before import");
-                files.put(item.put("content", content));
-            }
-        }
+        JSONObject imported=importSmallFiles(nodes,(identity,size)->api(root+"/git/blobs/"+identity,epoch,(int)Math.min(48L*1024*1024,size*2+16384)),()->{
+            check(epoch);if(SystemClock.elapsedRealtime()>deadline)throw new Failure("Repository download timed out; use a smaller repository or local import");
+        },3);
+        JSONArray files=imported.getJSONArray("files"),assets=imported.getJSONArray("assets");
         check(epoch);
         if (files.length() == 0 && assets.length() == 0) throw new Failure("No supported KiCad files found in repository");
         byte[] digest = MessageDigest.getInstance("SHA-256").digest((repository.toLowerCase(Locale.ROOT) + "@" + sha).getBytes(StandardCharsets.UTF_8));
@@ -311,6 +291,58 @@ final class GitHubClient {
         for (byte b : digest) id.append(String.format(Locale.ROOT, "%02x", b & 255));
         return new JSONObject().put("repository", metadata.getString("full_name")).put("sha", sha).put("private", metadata.getBoolean("private"))
                 .put("project", new JSONObject().put("id", id.toString()).put("files", files).put("assets", assets).put("repositoryTree", repositoryTree(nodes)));
+    }
+    interface BlobLoader { JSONObject load(String identity,long size)throws Exception; }
+    interface ImportCheck { void run()throws Exception; }
+    private static final long SMALL_PARALLEL_BYTES=8L*1024*1024;
+    private static final class SmallFile {
+        final int index;final String path,identity;final long size;final boolean binary;
+        SmallFile(int index,String path,String identity,long size){this.index=index;this.path=path;this.identity=identity;this.size=size;this.binary=path.toLowerCase(Locale.ROOT).matches(".*\\.(step|stp|wrl|vrml|glb|pdf)$");}
+    }
+    /** Complete preflight precedes all blob reads. At most three small requests,
+     * or one large request, decode concurrently; output retains tree order. */
+    static JSONObject importSmallFiles(JSONArray nodes,BlobLoader loader,ImportCheck check,int concurrency)throws Exception {
+        if(concurrency<1||concurrency>3)throw new IllegalArgumentException("Transfer concurrency must be 1–3");
+        List<SmallFile> sources=new ArrayList<>();Set<String> paths=new HashSet<>();long total=0;
+        for(int i=0;i<nodes.length();i++) {
+            check.run();JSONObject node=nodes.getJSONObject(i);String path=node.optString("path");
+            if(!node.optString("type").equals("blob")||!importable(path))continue;
+            safePath(path);if(!node.optString("mode").matches("100644|100755"))throw new Failure("Symbolic links cannot be imported");
+            if(!paths.add(path.toLowerCase(Locale.ROOT)))throw new Failure("Duplicate repository file path");
+            if(sources.size()>=2000)throw new Failure("Too many KiCad files (limit 2000)");
+            long size=node.getLong("size");if(size<0||size>FILE_LIMIT||size>TOTAL_LIMIT-total)throw new Failure("Repository exceeds 32 MiB per file or 96 MiB total");
+            String identity=validSha(node.getString("sha"));total+=size;sources.add(new SmallFile(sources.size(),path,identity,size));
+        }
+        JSONObject[] items=new JSONObject[sources.size()];ExecutorService pool=Executors.newFixedThreadPool(concurrency,runnable->{Thread thread=new Thread(runnable,"kiview-github-import");thread.setDaemon(true);return thread;});
+        CompletionService<JSONObject> completed=new ExecutorCompletionService<>(pool);Map<Future<JSONObject>,SmallFile> active=new HashMap<>();
+        int next=0,finished=0;long reserved=0;boolean interrupted=false;
+        try {
+            while(finished<sources.size()) {
+                check.run();if(Thread.currentThread().isInterrupted())throw new InterruptedException("GitHub import cancelled");
+                while(next<sources.size()&&active.size()<concurrency) {
+                    SmallFile file=sources.get(next);if(!active.isEmpty()&&file.size>SMALL_PARALLEL_BYTES-reserved)break;
+                    Future<JSONObject> task=completed.submit(()->decodeSmallFile(file,loader,check));active.put(task,file);reserved+=file.size;next++;
+                }
+                Future<JSONObject> task=completed.take();SmallFile file=active.remove(task);
+                try{items[file.index]=task.get();}catch(ExecutionException failure){Throwable cause=failure.getCause();if(cause instanceof Exception)throw (Exception)cause;if(cause instanceof Error)throw (Error)cause;throw new IOException("GitHub import failed",cause);}
+                reserved-=file.size;finished++;check.run();
+            }
+        }catch(InterruptedException cancellation){interrupted=true;java.io.InterruptedIOException failure=new java.io.InterruptedIOException("GitHub import cancelled");failure.initCause(cancellation);throw failure;}
+        finally {DiskProjectStore.joinTransfers(pool,active.keySet());if(interrupted)Thread.currentThread().interrupt();}
+        JSONArray files=new JSONArray(),assets=new JSONArray();for(SmallFile source:sources)(source.binary?assets:files).put(items[source.index]);
+        check.run();return new JSONObject().put("files",files).put("assets",assets);
+    }
+    private static JSONObject decodeSmallFile(SmallFile file,BlobLoader loader,ImportCheck check)throws Exception {
+        check.run();JSONObject blob=loader.load(file.identity,file.size);check.run();
+        if(!blob.getString("encoding").equals("base64"))throw new Failure("Unsupported GitHub blob encoding");
+        byte[] bytes=Base64.decode(blob.getString("content"),Base64.DEFAULT);
+        if(bytes.length!=file.size)throw new Failure("Repository file size mismatch");
+        if(bytes.length>=42&&new String(bytes,0,42,StandardCharsets.US_ASCII).startsWith("version https://git-lfs.github.com/spec/"))throw new Failure("Git LFS files must be downloaded locally before import");
+        JSONObject item=new JSONObject().put("path",file.path);if(file.path.toLowerCase(Locale.ROOT).endsWith(".pdf"))item.put("encoding","base64");
+        if(file.binary)item.put("base64",Base64.encodeToString(bytes,Base64.NO_WRAP));
+        else {String content=StandardCharsets.UTF_8.newDecoder().onMalformedInput(CodingErrorAction.REPORT).onUnmappableCharacter(CodingErrorAction.REPORT).decode(ByteBuffer.wrap(bytes)).toString();
+            if(content.startsWith("version https://git-lfs.github.com/spec/"))throw new Failure("Git LFS files must be downloaded locally before import");item.put("content",content);}
+        check.run();if(Thread.currentThread().isInterrupted())throw new java.io.InterruptedIOException("GitHub import cancelled");return item;
     }
     /** Metadata only; unsupported repository files are never downloaded into the viewer. */
     static JSONObject repositoryTree(JSONArray nodes) throws Exception {
@@ -326,7 +358,7 @@ final class GitHubClient {
         return new JSONObject().put("entries", entries).put("truncated", omitted);
     }
     private void downloadFile(String repository, String sha, String path, java.io.File target, long size, boolean isPrivate, int epoch, long projectDeadline) throws Exception {
-        HttpsURLConnection connection = (HttpsURLConnection)downloadUrl(repository,sha,path,size,isPrivate).openConnection();
+        HttpsURLConnection connection = connections.open(downloadUrl(repository,sha,path,size,isPrivate));
         connection.setInstanceFollowRedirects(false); connection.setUseCaches(false); connection.setConnectTimeout(15000); connection.setReadTimeout(30000);
         connection.setRequestProperty("Accept", "application/vnd.github.raw+json"); connection.setRequestProperty("User-Agent", "KiCadVizDiff-Android");
         String bearer = credential(epoch); if(isPrivate && bearer!=null) connection.setRequestProperty("Authorization", "Bearer "+bearer);
@@ -406,6 +438,83 @@ final class GitHubClient {
         }
         if (commits.length() == 50) warnings.put("File history was limited to the latest 50 commits at this snapshot.");
         return new JSONObject().put("repository", repo).put("file", file).put("snapshotRef", sha).put("commits", commits).put("warnings", warnings);
+    }
+    private void repositoryCheck(int epoch,long deadline)throws IOException {check(epoch);if(SystemClock.elapsedRealtime()>deadline)throw new Failure("Repository metadata request timed out");}
+    private JSONObject repositorySnapshot(JSONObject request,int epoch,long deadline)throws Exception {
+        String repo=repository(request),ref=request.optString("ref","");String pinned=request.optString("sha","");
+        if(ref.length()>255||hasControl(ref))throw new Failure("Invalid branch or commit");
+        if(!pinned.isEmpty())pinned=validSha(pinned).toLowerCase(Locale.ROOT);
+        if(ref.isEmpty())ref=pinned.isEmpty()?revisionRef(request,repo,epoch):pinned;
+        if(request.optInt("page",1)>1&&pinned.isEmpty()&&!ref.matches("[a-fA-F0-9]{40}"))throw new Failure("Use the returned commit SHA when loading another repository page");
+        repositoryCheck(epoch,deadline);JSONObject commit=api("/repos/"+repo+"/commits/"+encode(pinned.isEmpty()?ref:pinned),epoch,4*1024*1024);
+        String sha=validSha(commit.getString("sha")).toLowerCase(Locale.ROOT);
+        if(!pinned.isEmpty()&&!pinned.equals(sha)||ref.matches("[a-fA-F0-9]{40}")&&!ref.equalsIgnoreCase(sha))throw new Failure("Repository snapshot identity mismatch");
+        repositoryCheck(epoch,deadline);return new JSONObject().put("repository",repo).put("ref",ref).put("sha",sha).put("treeSha",validSha(commit.getJSONObject("commit").getJSONObject("tree").getString("sha")));
+    }
+    private JSONObject pinnedTree(String repo,String identity,boolean recursive,int epoch,long deadline)throws Exception {
+        repositoryCheck(epoch,deadline);JSONObject tree=api("/repos/"+repo+"/git/trees/"+validSha(identity)+(recursive?"?recursive=1":""),epoch,16*1024*1024);
+        if(!validSha(tree.getString("sha")).equalsIgnoreCase(identity))throw new Failure("Repository tree identity mismatch");
+        if(tree.getJSONArray("tree").length()>100000)throw new Failure("Repository tree exceeds metadata limits");repositoryCheck(epoch,deadline);return tree;
+    }
+    static JSONObject treeEntry(JSONObject node,String prefix,boolean direct)throws Exception {
+        String path=node.getString("path");safePath(path);if(direct&&path.indexOf('/')>=0)throw new Failure("Invalid immediate directory entry");
+        path=prefix.isEmpty()?path:prefix+"/"+path;safePath(path);String type=node.getString("type"),mode=node.getString("mode");if(mode.equals("40000"))mode="040000";
+        if(!(type.equals("tree")&&mode.equals("040000")||type.equals("blob")&&mode.matches("100644|100755|120000")||type.equals("commit")&&mode.equals("160000")))throw new Failure("Unsupported repository entry mode");
+        String identity=validSha(node.has("sha")?node.getString("sha"):node.getString("id")).toLowerCase(Locale.ROOT);
+        JSONObject result=new JSONObject().put("path",path).put("type",type).put("mode",mode).put("sha",identity);
+        if(node.has("size")&&node.optLong("size",-1)>=0)result.put("size",node.getLong("size"));return result;
+    }
+    private JSONObject readRepositoryTree(JSONObject request,int epoch)throws Exception {
+        int page=positive(request,"page",1,1000),perPage=positive(request,"perPage",1000,1000);long deadline=SystemClock.elapsedRealtime()+90000;
+        boolean direct=request.has("directory");if(direct&&!(request.get("directory") instanceof String))throw new Failure("Invalid directory path");String directory=request.optString("directory","");if(!directory.isEmpty())safePath(directory);if(directory.split("/",-1).length>32)throw new Failure("Directory nesting exceeds metadata limit");
+        JSONObject snapshot=repositorySnapshot(request,epoch,deadline);String repo=snapshot.getString("repository"),identity=snapshot.getString("treeSha");JSONObject tree;
+        if(direct){
+            tree=pinnedTree(repo,identity,false,epoch,deadline);
+            if(!directory.isEmpty())for(String segment:directory.split("/")){
+                JSONArray children=tree.getJSONArray("tree");String found=null;
+                for(int i=0;i<children.length();i++){JSONObject entry=children.getJSONObject(i);if(entry.optString("path").equals(segment)&&entry.optString("type").equals("tree")){if(found!=null)throw new Failure("Ambiguous saved directory");found=treeEntry(entry,"",true).getString("sha");}}
+                if(found==null)throw new Failure(tree.optBoolean("truncated",true)?"Directory was not present in the bounded parent tree; no latest-branch fallback was used":"Directory is not present at this saved commit");
+                tree=pinnedTree(repo,found,false,epoch,deadline);
+            }
+        }else tree=pinnedTree(repo,identity,true,epoch,deadline);
+        JSONArray nodes=tree.getJSONArray("tree"),entries=new JSONArray(),warnings=new JSONArray();boolean truncated=tree.optBoolean("truncated",true),omitted=false;
+        int start=(page-1)*perPage,end=Math.min(nodes.length(),start+perPage);
+        for(int i=start;i<end;i++){repositoryCheck(epoch,deadline);try{entries.put(treeEntry(nodes.getJSONObject(i),direct?directory:"",direct));}catch(Exception invalid){omitted=true;}}
+        boolean more=end<nodes.length()&&page<1000;if(omitted){truncated=true;warnings.put("Some unsafe or unsupported repository entries were omitted.");}
+        if(tree.optBoolean("truncated",true))warnings.put("GitHub returned a truncated tree. Browse saved directories to inspect omitted descendants.");
+        if(more)warnings.put("More repository entries are available; load the next page.");
+        return new JSONObject().put("repository",repo).put("ref",snapshot.getString("ref")).put("sha",snapshot.getString("sha")).put("directory",directory).put("recursive",!direct).put("entries",entries).put("page",page).put("perPage",perPage).put("hasMore",more).put("nextPage",more?page+1:JSONObject.NULL).put("truncated",truncated).put("warnings",warnings);
+    }
+    static String historyMessage(String message,JSONArray warnings) {
+        String safe=message.replace("\r\n","\n").replace('\r','\n').replaceAll("[\\p{Cntrl}&&[^\\n\\t]]","");
+        if(safe.length()>16384){int end=Character.isHighSurrogate(safe.charAt(16383))?16383:16384;safe=safe.substring(0,end);warnings.put("A commit message was shortened to 16384 characters.");}return safe;
+    }
+    static JSONArray historyParents(JSONArray source,boolean github,JSONArray warnings)throws Exception {
+        if(source==null)throw new Failure("Commit parent identities are missing");JSONArray parents=new JSONArray();
+        for(int i=0;i<Math.min(source.length(),32);i++)parents.put(validSha(github?source.getJSONObject(i).getString("sha"):source.getString(i)).toLowerCase(Locale.ROOT));
+        if(source.length()>32)warnings.put("A commit has more than 32 parents; its parent list is truncated.");return parents;
+    }
+    private JSONObject readRepositoryHistory(JSONObject request,int epoch)throws Exception {
+        int page=positive(request,"page",1,100),perPage=positive(request,"perPage",30,100);long deadline=SystemClock.elapsedRealtime()+90000;
+        JSONObject snapshot=repositorySnapshot(request,epoch,deadline);String repo=snapshot.getString("repository"),sha=snapshot.getString("sha");
+        JSONArray source=new JSONArray(network("https://api.github.com/repos/"+repo+"/commits?sha="+sha+"&per_page="+perPage+"&page="+page,null,credential(epoch),epoch,4*1024*1024)),commits=new JSONArray(),warnings=new JSONArray();
+        if(source.length()>perPage)throw new Failure("Invalid repository history page size");
+        for(int i=0;i<source.length();i++){
+            repositoryCheck(epoch,deadline);JSONObject item=source.getJSONObject(i),commit=item.getJSONObject("commit"),author=commit.optJSONObject("author");if(author==null)author=commit.optJSONObject("committer");
+            String identity=validSha(item.getString("sha")).toLowerCase(Locale.ROOT),name=author==null?"":author.optString("name","").replaceAll("[\\p{Cntrl}]"," "),date=author==null?"":author.optString("date","");if(name.length()>256)name=name.substring(0,256);if(date.length()>64||hasControl(date))throw new Failure("Invalid commit timestamp");
+            JSONArray rawParents=item.getJSONArray("parents");commits.put(new JSONObject().put("sha",identity).put("parents",historyParents(rawParents,true,warnings)).put("parentsTruncated",rawParents.length()>32).put("message",historyMessage(commit.optString("message",""),warnings)).put("author",name).put("date",date).put("url","https://github.com/"+repo+"/commit/"+identity));
+        }
+        boolean more=source.length()==perPage&&page<100,pageLimited=source.length()==perPage&&page==100,truncated=pageLimited;for(int i=0;i<commits.length();i++)truncated|=commits.getJSONObject(i).optBoolean("parentsTruncated");
+        if(more)warnings.put("This is one history page; parent commits can be outside the loaded graph.");if(pageLimited)warnings.put("Repository history reached the 100-page limit; no complete-history claim is made.");
+        repositoryCheck(epoch,deadline);return new JSONObject().put("repository",repo).put("ref",snapshot.getString("ref")).put("sha",sha).put("commits",commits).put("page",page).put("perPage",perPage).put("hasMore",more).put("nextPage",more?page+1:JSONObject.NULL).put("truncated",truncated).put("warnings",warnings);
+    }
+    private JSONObject readRepositoryBranches(JSONObject request,int epoch)throws Exception {
+        int page=positive(request,"page",1,100),perPage=positive(request,"perPage",100,100);String repo=repository(request);
+        JSONArray source=new JSONArray(network("https://api.github.com/repos/"+repo+"/branches?per_page="+perPage+"&page="+page,null,credential(epoch),epoch,4*1024*1024)),branches=new JSONArray(),warnings=new JSONArray();
+        if(source.length()>perPage)throw new Failure("Invalid branch page size");
+        for(int i=0;i<source.length();i++){check(epoch);JSONObject branch=source.getJSONObject(i);String name=branch.getString("name");if(name.isEmpty()||name.length()>255||hasControl(name))throw new Failure("Invalid branch name");branches.put(new JSONObject().put("name",name).put("sha",validSha(branch.getJSONObject("commit").getString("sha")).toLowerCase(Locale.ROOT)));}
+        boolean more=source.length()==perPage&&page<100,truncated=source.length()==perPage&&page==100;if(truncated)warnings.put("Branch listing reached the 100-page limit.");
+        return new JSONObject().put("repository",repo).put("branches",branches).put("page",page).put("perPage",perPage).put("hasMore",more).put("nextPage",more?page+1:JSONObject.NULL).put("truncated",truncated).put("warnings",warnings);
     }
     private static String repository(JSONObject request) throws Exception {
         String value = request.getString("repository");
@@ -815,7 +924,7 @@ final class GitHubClient {
                 || (!url.getHost().equals("api.github.com") && !(url.getHost().equals("uploads.github.com") && bearer != null && body != null
                 && url.getPath().equals("/user-attachments/assets")) && !(url.getHost().equals("github.com") && bearer == null && body != null
                 && (url.getPath().equals("/login/device/code") || url.getPath().equals("/login/oauth/access_token"))))) throw new Failure("Unsupported GitHub endpoint");
-        HttpsURLConnection connection = (HttpsURLConnection) url.openConnection();
+        HttpsURLConnection connection = connections.open(url);
         connection.setInstanceFollowRedirects(false);
         connection.setConnectTimeout(15000); connection.setReadTimeout(20000); connection.setUseCaches(false);
         connection.setRequestProperty("Accept", "application/json");

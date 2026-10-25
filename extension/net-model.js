@@ -16,8 +16,14 @@
   const distance = (a, b) => Math.hypot(b.x-a.x, b.y-a.y);
   const EPS = 1e-7; // Sub-nanometre serialization tolerance, not a proximity connection.
   const LABELS = new Set(["label", "global_label", "hierarchical_label"]);
-  const fresh = (path, code, name, type) => ({ id:`${path}/net:${code}`, path, code, name, kind:type,
+  const fresh = (path, code, name, type) => ({ id:`${path}/net:${code}`, path, code, name, displayName:name, kind:type,
     objectIds:[], uuids:[], primitives:[], stats:{ pads:0, tracks:0, vias:0, zones:0, lengthMm:0 }, members:[] });
+  function displayName(net) {
+    if(typeof net?.displayName==='string' && net.displayName)return net.displayName;
+    // Older prepared models may contain a source UUID in their unnamed fallback.
+    if(net?.kind==='schematic' && /^Unnamed network \(/.test(net.name||''))return 'Unnamed network';
+    return typeof net?.name==='string' && net.name ? net.name : 'Unnamed network';
+  }
   function arcLength(node) {
     const a = point(node,"start"), b = point(node,"mid"), c = point(node,"end");
     if (!a || !b || !c) return null;
@@ -232,6 +238,13 @@
       const preferred=group.filter((e)=>e.name).sort((a,b)=>(a.namePriority ?? 4)-(b.namePriority ?? 4)||a.name.localeCompare(b.name))[0]?.name;
       const first=group.filter((e)=>e.kind === "wire" || e.sheetPin).map((e)=>e.record.id || e.record.key).sort()[0], code=names.length ? `label:${names[0]}` : `source:${first}`;
       const net=fresh(path,code,preferred || `Unnamed network (${group.find((e)=>e.kind === "wire")?.record.metadata.uuid || "wire"})`,"schematic");
+      // Sheet-pin text is useful for display but is not a global/local label:
+      // never merge different child-sheet ports solely because their names match.
+      const sheetNames=[...new Set(group.map(e=>e.sheetPin?.name).filter(Boolean))].sort();
+      const connections=[...new Set(group.filter(e=>e.kind==='pin' && e.record.metadata.properties.Reference)
+        .map(e=>`${e.record.metadata.properties.Reference} pin ${e.pin}`))].sort();
+      net.displayName=preferred || (sheetNames.length?sheetNames.join(' / '):
+        'Unnamed network'+(connections.length?' · '+connections.slice(0,2).join(', ')+(connections.length>2?' …':''):''));
       net.scope="file";net.names=names;
       net.globalNames=[...new Set(group.filter((e)=>e.kind === "global_label" || e.global).map((e)=>e.name).filter(Boolean))].sort();
       net.hierarchicalNames=[...new Set(group.filter((e)=>e.kind === "hierarchical_label").map((e)=>e.name))].sort();
@@ -387,6 +400,6 @@
     function clear(){cache.clear();primitiveIds=new WeakMap();nextPrimitiveId=0;}
     return {build:cachedBuild,clear};
   }
-  root.KiCadNetModel={build,createBuilder,relatedSchematicNets};
+  root.KiCadNetModel={build,createBuilder,relatedSchematicNets,displayName};
   if(typeof module === "object" && module.exports)module.exports=root.KiCadNetModel;
 })(typeof globalThis === "object" ? globalThis : this);

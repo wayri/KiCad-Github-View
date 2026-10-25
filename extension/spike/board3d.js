@@ -2,6 +2,7 @@ import * as THREE from "three";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 import { VRMLLoader } from "three/addons/loaders/VRMLLoader.js";
+import { RoomEnvironment } from "three/addons/environments/RoomEnvironment.js";
 import "../design-diff.js";
 import "../repo-models.js";
 import fzstd from "../vendor/fzstd/fzstd.js";
@@ -13,8 +14,9 @@ import { trackCapsuleDimensions } from "@spike/trackGeometry";
 import { viewportSceneIdentity } from "@spike/viewportScenePolicy";
 import { populationMask, uniqueComponentIndexes } from "./componentState.mjs";
 import { footprintProxies } from "./footprintProxies.mjs";
-import { selectionMatcher, tapGesture } from "./selectionState.mjs";
+import { selectionMatcher, tapGesture, holdGesture } from "./selectionState.mjs";
 import { sphereFitDistance } from "./fitPolicy.mjs";
+import { viewportPixelRatio, boardClipRange } from "./renderQuality.mjs";
 import { createResultOverlay } from "./result3d.js";
 export { mountResultScene } from "./result3d.js";
 
@@ -128,18 +130,29 @@ export function mountBoard3D(container, source, options = {}) {
   const scene = new THREE.Scene(); scene.background = new THREE.Color(initialDark ? 0x0d1b26 : 0xf3f7f5);
   const camera = new THREE.PerspectiveCamera(45, 1, 0.1, Math.max(3000, extent * 30));
   const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false, powerPreference: "high-performance" });
-  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
   renderer.outputColorSpace = THREE.SRGBColorSpace;
+  renderer.toneMapping = THREE.ACESFilmicToneMapping;
+  renderer.toneMappingExposure = 1;
+  // A small, generated neutral studio supplies reflections to metallic STEP /
+  // glTF materials. No network environment map or model-material rewrite.
+  const environmentRoom = new RoomEnvironment();
+  const environmentGenerator = new THREE.PMREMGenerator(renderer);
+  const environment = environmentGenerator.fromScene(environmentRoom, .04, .1, 100);
+  environmentRoom.dispose(); environmentGenerator.dispose();
+  scene.environment = environment.texture; scene.environmentIntensity = .55;
   canvasHost.append(renderer.domElement);
   const controls = new OrbitControls(camera, renderer.domElement);
+  let userAdjustedCamera = false;
+  const cameraInteraction = () => { userAdjustedCamera = true; };
+  controls.addEventListener("start", cameraInteraction);
   controls.enableDamping = true; controls.dampingFactor = 0.1; controls.screenSpacePanning = true;
   controls.minDistance = Math.max(2, extent * .04); controls.maxDistance = extent * 8;
-  // Neutral fill keeps side walls readable; equal opposing keys illuminate
-  // either board face without a dark underside or a one-corner hotspot.
-  scene.add(new THREE.AmbientLight(0xffffff, 1.8));
+  // Oblique keys reveal chamfers and body shape on either face. Neutral fill
+  // keeps dark packages readable without flattening all the surface normals.
+  scene.add(new THREE.AmbientLight(0xffffff, 1.2));
   for (const side of [1, -1]) {
-    const key = new THREE.DirectionalLight(0xffffff, 1.2);
-    key.position.set(0, 0, side * extent); scene.add(key);
+    const key = new THREE.DirectionalLight(0xffffff, 1.6);
+    key.position.set(extent * .65, extent * -.45, side * extent); scene.add(key);
   }
   const boardGroup = new THREE.Group(); scene.add(boardGroup);
   const copperGroups = new Map(), pickables = [];
@@ -149,7 +162,8 @@ export function mountBoard3D(container, source, options = {}) {
   };
   const shape = boardShape(board, world);
   const substrate = new THREE.Mesh(new THREE.ExtrudeGeometry(shape, { depth: thickness, bevelEnabled: false, curveSegments: 8 }),
-    new THREE.MeshStandardMaterial({ color: 0x1b6553, roughness: .58, metalness: .04, side: THREE.DoubleSide }));
+    [new THREE.MeshStandardMaterial({ color: 0x1b6553, roughness: .58, metalness: .04 }),
+      new THREE.MeshStandardMaterial({ color: 0xa69c6d, roughness: .88, metalness: 0 })]);
   substrate.position.z = bottom;
   substrate.userData.record = { type: "Board", name: "Substrate", layer: "Edge.Cuts", id: "board" };
   substrate.userData.identity = viewportSceneIdentity("substrate", "Edge.Cuts", "board");
@@ -225,7 +239,8 @@ export function mountBoard3D(container, source, options = {}) {
     if (componentMesh) { componentMesh.instanceMatrix.needsUpdate = true; componentMesh.computeBoundingSphere(); }
     for (const [index, group] of modelGroups) group.visible = population[index];
   }
-  const modelDiagnostics = [];
+  const modelDiagnostics = Array.isArray(options.assetWarnings)
+    ? options.assetWarnings.filter(item => typeof item === "string").slice(0, 48).map(item => item.slice(0, 500)) : [];
   function showModelDiagnostics() {
     const resolved = loadedModelIndexes.size;
     const problems = modelDiagnostics.length;
@@ -327,6 +342,7 @@ export function mountBoard3D(container, source, options = {}) {
         loadedModelIndexes.add(index);
         if (entry.format === "glb") modelDiagnostics.push(`${entry.reference}: GLB geometry is interpreted in millimetres.`);
         updateComponentVisibility();
+        setSelection(externalSelection);
       } catch (error) {
         modelDiagnostics.push(`${entry.reference}: ${entry.path}: ${error?.message || String(error)}`);
       }
@@ -335,22 +351,39 @@ export function mountBoard3D(container, source, options = {}) {
     await Promise.all(Array.from({ length: Math.min(3, inventory.models.length) }, async () => {
       while (cursor < inventory.models.length && active) await one(inventory.models[cursor++]);
     }));
-    if(active) { showModelDiagnostics(); setSelection(externalSelection); }
+    if(active) {
+      showModelDiagnostics(); setSelection(externalSelection);
+      // Fit real model height after asynchronous decoding, but never undo an
+      // orbit/zoom the user has already started during loading.
+      if (!userAdjustedCamera && loadedModelIndexes.size) fit();
+    }
   }
 
-  function fit(topView = false) {
+  let fittedRadius = Math.hypot(width, height, thickness + 5) / 2;
+  function updateClipping() {
+    const range = boardClipRange(camera.position.distanceTo(controls.target), fittedRadius);
+    camera.near = range.near; camera.far = range.far; camera.updateProjectionMatrix();
+  }
+  controls.addEventListener("change", updateClipping);
+  function sizeViewport() {
     const viewportWidth = Math.max(1, canvasHost.clientWidth), viewportHeight = Math.max(1, canvasHost.clientHeight);
+    const ratio = viewportPixelRatio(viewportWidth, viewportHeight, globalThis.devicePixelRatio, renderer.capabilities.maxTextureSize);
+    if (renderer.getPixelRatio() !== ratio) renderer.setPixelRatio(ratio);
     renderer.setSize(viewportWidth, viewportHeight, false); camera.aspect = viewportWidth / viewportHeight;
+    camera.updateProjectionMatrix();
+  }
+  function fit(topView = false) {
+    sizeViewport();
     boardGroup.updateWorldMatrix(true, true);
     const sphere = new THREE.Box3().setFromObject(boardGroup).getBoundingSphere(new THREE.Sphere());
     const radius = Number.isFinite(sphere.radius) && sphere.radius > 0 ? sphere.radius : Math.hypot(width, height, thickness + 5) / 2;
     const center = sphere.radius > 0 ? sphere.center : new THREE.Vector3();
     const distance = sphereFitDistance(radius, camera.fov, camera.aspect) || extent * 3;
+    fittedRadius = radius;
     controls.maxDistance = Math.max(extent * 8, distance * 4);
-    camera.far = Math.max(3000, distance * 6 + radius); camera.updateProjectionMatrix();
     const direction = new THREE.Vector3(topView ? 0 : .45, topView ? 0 : -.38, 1).normalize();
     camera.position.copy(center).addScaledVector(direction, distance);
-    camera.up.set(0, 1, 0); controls.target.copy(center); controls.update();
+    camera.up.set(0, 1, 0); controls.target.copy(center); controls.update(); updateClipping();
   }
   action("Fit", () => fit()); action("Top", () => fit(true));
   toggle("Front copper", true, (visible) => { groupFor("F.Cu").visible = visible; });
@@ -362,9 +395,17 @@ export function mountBoard3D(container, source, options = {}) {
   let selected = null;
   const gesture = tapGesture();
   const selectionLimit = 2000;
-  const groupHighlight = new THREE.InstancedMesh(new THREE.BoxGeometry(1, 1, 1),
-    new THREE.MeshBasicMaterial({ color: initialDark ? 0xffdf7d : 0x9b5500, wireframe: true, depthTest: false, depthWrite: false }), selectionLimit);
-  groupHighlight.count = 0; groupHighlight.frustumCulled = false; groupHighlight.renderOrder = 101;
+  // Draw only the twelve box edges, never the triangles of a solid cube.
+  const outlineGeometry = new THREE.EdgesGeometry(new THREE.BoxGeometry(1, 1, 1));
+  const unitEdges = outlineGeometry.getAttribute('position');
+  const groupGeometry = new THREE.BufferGeometry();
+  const groupPositions = new THREE.BufferAttribute(new Float32Array(selectionLimit * unitEdges.count * 3), 3);
+  groupPositions.setUsage(THREE.DynamicDrawUsage); groupGeometry.setAttribute('position', groupPositions);
+  groupGeometry.setDrawRange(0, 0);
+  const outlineMaterial = () => new THREE.LineBasicMaterial({ color: initialDark ? 0xffdf7d : 0x9b5500,
+    depthTest: true, depthWrite: false, toneMapped: false });
+  const groupHighlight = new THREE.LineSegments(groupGeometry, outlineMaterial());
+  groupHighlight.frustumCulled = false; groupHighlight.renderOrder = 101;
   scene.add(groupHighlight);
   let externalSelection = {};
   const selectionNotice = document.createElement('div'); selectionNotice.className = 'hint'; selectionNotice.style.bottom = '42px'; selectionNotice.hidden = true; stage.append(selectionNotice);
@@ -374,41 +415,47 @@ export function mountBoard3D(container, source, options = {}) {
     const matrix = new THREE.Matrix4(), local = new THREE.Matrix4(), box = new THREE.Box3();
     const center = new THREE.Vector3(), size = new THREE.Vector3();
     let count = 0, total = 0;
-    const append = (object, instanceId) => {
+    const selectedBounds = new Map();
+    const append = (object, instanceId, record) => {
       if (Number.isInteger(instanceId)) {
         object.getMatrixAt(instanceId, local);
         if (local.determinant() === 0) return;
       }
-      total++;
-      if (count >= selectionLimit) return;
+
       object.updateWorldMatrix(true, false);
       if (Number.isInteger(instanceId)) {
         if (!object.geometry.boundingBox) object.geometry.computeBoundingBox(); box.copy(object.geometry.boundingBox);
         matrix.multiplyMatrices(object.matrixWorld, local); box.applyMatrix4(matrix);
       } else box.setFromObject(object);
-      if (box.isEmpty()) { total--; return; }
-      box.getCenter(center); box.getSize(size);
-      size.set(Math.max(size.x, .08), Math.max(size.y, .08), Math.max(size.z, .08));
-      matrix.compose(center, new THREE.Quaternion(), size);
-      groupHighlight.setMatrixAt(count++, matrix);
+      if (box.isEmpty()) return;
+      const key = record?.ref ? 'part:' + record.ref : record?.uuid || record?.id || object.uuid + ':' + instanceId;
+      if (selectedBounds.has(key)) selectedBounds.get(key).union(box);
+      else if (selectedBounds.size < selectionLimit) selectedBounds.set(key, box.clone());
+      else total++;
+
     };
     for (const object of pickables) {
       let visible = true; for (let node = object; node; node = node.parent) if (!node.visible) visible = false;
       if (!visible) continue;
       const records = object.userData.records;
-      if (records) records.forEach((record, index) => { if (matches(record)) append(object, index); });
-      else if (matches(object.userData.record)) append(object);
+      if (records) records.forEach((record, index) => { if (matches(record)) append(object, index, record); });
+      else if (matches(object.userData.record)) append(object, undefined, object.userData.record);
     }
-    groupHighlight.count = count; groupHighlight.instanceMatrix.needsUpdate = true;
+    for (const box of selectedBounds.values()) {
+      box.expandByScalar(.035); box.getCenter(center); box.getSize(size);
+      for (let i = 0; i < unitEdges.count; i++) groupPositions.setXYZ(count * unitEdges.count + i,
+        center.x + unitEdges.getX(i) * size.x, center.y + unitEdges.getY(i) * size.y, center.z + unitEdges.getZ(i) * size.z);
+      count++;
+    }
+    total += selectedBounds.size;
+    groupGeometry.setDrawRange(0, count * unitEdges.count); groupPositions.needsUpdate = true;
     selectionNotice.hidden = total <= selectionLimit;
     selectionNotice.textContent = `Showing ${count} of ${total} selected 3D objects`;
     selectionNotice.style.display = total > selectionLimit ? 'block' : 'none';
     highlight.visible = false;
     return { highlighted: count, matched: total, limited: total > selectionLimit };
   }
-  const highlight = new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1),
-    new THREE.MeshBasicMaterial({ color: initialDark ? 0xffdf7d : 0x9b5500,
-      wireframe: true, depthTest: false, depthWrite: false }));
+  const highlight = new THREE.LineSegments(outlineGeometry, outlineMaterial());
   highlight.matrixAutoUpdate = false;
   highlight.renderOrder = 100;
   highlight.visible = false;
@@ -419,13 +466,13 @@ export function mountBoard3D(container, source, options = {}) {
     object.updateWorldMatrix(true, false);
     if (Number.isInteger(instanceId)) {
       object.getMatrixAt(instanceId, instanceMatrix);
-      highlight.matrix.multiplyMatrices(object.matrixWorld, instanceMatrix);
-    } else {
-      bounds.setFromObject(object);
-      if (bounds.isEmpty()) { highlight.visible = false; return; }
-      bounds.getCenter(highlightCenter); bounds.getSize(highlightSize);
-      highlight.matrix.compose(highlightCenter, new THREE.Quaternion(), highlightSize);
-    }
+      if (!object.geometry.boundingBox) object.geometry.computeBoundingBox();
+      bounds.copy(object.geometry.boundingBox).applyMatrix4(instanceMatrix).applyMatrix4(object.matrixWorld);
+    } else bounds.setFromObject(object);
+    if (bounds.isEmpty()) { highlight.visible = false; return; }
+    bounds.expandByScalar(.035);
+    bounds.getCenter(highlightCenter); bounds.getSize(highlightSize);
+    highlight.matrix.compose(highlightCenter, new THREE.Quaternion(), highlightSize);
     highlight.matrixWorldNeedsUpdate = true;
     highlight.visible = true;
   }
@@ -436,6 +483,7 @@ export function mountBoard3D(container, source, options = {}) {
   }
   function select(record, point, object, instanceId) {
     selected = { record, point: point.clone() };
+    groupGeometry.setDrawRange(0, 0);
     showHighlight(object, instanceId);
     options.onSelect?.(record);
     inspector.replaceChildren();
@@ -465,9 +513,10 @@ export function mountBoard3D(container, source, options = {}) {
     if (!record) return;
     select(record, hit.point, hit.object, hit.instanceId);
   }
-  renderer.domElement.addEventListener("pointerdown", (event) => { gesture.down(event); menu.hidden = true; });
+  const hold = holdGesture(event => contextMenu(event));
+  renderer.domElement.addEventListener("pointerdown", (event) => { gesture.down(event); hold.down(event); menu.hidden = true; });
   renderer.domElement.addEventListener("pointermove", event => {
-    gesture.move(event);
+    gesture.move(event); hold.move(event);
     if (analysisOverlay && options.onAnalysisHover) {
       const rect = renderer.domElement.getBoundingClientRect();
       pointer.set(((event.clientX - rect.left) / rect.width) * 2 - 1, -((event.clientY - rect.top) / rect.height) * 2 + 1);
@@ -475,27 +524,33 @@ export function mountBoard3D(container, source, options = {}) {
       options.onAnalysisHover(analysisOverlay.mesh.visible ? analysisOverlay.sample(raycaster.intersectObject(analysisOverlay.mesh, false)[0]) : null);
     }
   });
-  renderer.domElement.addEventListener("pointercancel", event => gesture.cancel(event));
+  renderer.domElement.addEventListener("pointercancel", event => { gesture.cancel(event); hold.up(event); });
   renderer.domElement.addEventListener("pointerup", (event) => {
-    if (gesture.up(event) && (event.button === 0 || event.pointerType === 'touch')) pick(event);
+    const held = hold.up(event), tapped = gesture.up(event);
+    if (!held && tapped && (event.button === 0 || event.pointerType === 'touch')) pick(event);
   });
-  renderer.domElement.addEventListener("contextmenu", (event) => {
-    event.preventDefault(); pick(event); if (!selected) return;
+  function contextMenu(event) {
+    event.preventDefault?.(); pick(event); if (!selected) return;
     menu.replaceChildren();
     const actions = [["Focus object", () => { controls.target.copy(selected.point); controls.update(); }],
       ["Copy reference", () => navigator.clipboard.writeText(selected.record.ref || selected.record.name || "")]];
+    if (typeof options.onInspect === "function") actions.unshift(["Properties", () => options.onInspect(selected.record)]);
     if (typeof options.onComment === "function") actions.push(["Comment on object", () => options.onComment(selected.record)]);
     for (const [label, handler] of actions) {
       const button = document.createElement("button"); button.textContent = label; button.type = "button";
       button.addEventListener("click", () => { handler(); menu.hidden = true; }); menu.append(button);
     }
     const rect = stage.getBoundingClientRect();
-    menu.style.left = `${Math.min(event.clientX - rect.left, rect.width - 150)}px`;
-    menu.style.top = `${Math.min(event.clientY - rect.top, rect.height - 80)}px`;
     menu.hidden = false;
+    menu.style.maxWidth = "calc(100% - 16px)"; menu.style.maxHeight = "calc(100% - 16px)"; menu.style.overflowY = "auto";
+    const bounds = menu.getBoundingClientRect();
+    menu.style.left = `${Math.max(8, Math.min(event.clientX - rect.left, rect.width - bounds.width - 8))}px`;
+    menu.style.top = `${Math.max(8, Math.min(event.clientY - rect.top, rect.height - bounds.height - 8))}px`;
+  }
+  renderer.domElement.addEventListener("contextmenu", event => {
+    event.preventDefault(); if (!hold.isHeld()) contextMenu(event);
   });
-  const resize = () => { const width = Math.max(1, canvasHost.clientWidth), height = Math.max(1, canvasHost.clientHeight);
-    renderer.setSize(width, height, false); camera.aspect = width / height; camera.updateProjectionMatrix(); };
+  const resize = sizeViewport;
   const observer = new ResizeObserver(resize); observer.observe(canvasHost); resize();
   let active = true, frame = 0, analysisOverlay = null;
   const layoutFrame = requestAnimationFrame(() => { if (active) { resize(); fit(); } });
@@ -560,8 +615,8 @@ export function mountBoard3D(container, source, options = {}) {
         if (index != null && !population[index]) clearSelection();
       }
     },
-    dispose() { active = false; analysisOverlay?.dispose(); stepClient?.dispose(); cancelAnimationFrame(frame); cancelAnimationFrame(layoutFrame); observer.disconnect(); controls.dispose();
+    dispose() { active = false; analysisOverlay?.dispose(); stepClient?.dispose(); cancelAnimationFrame(frame); cancelAnimationFrame(layoutFrame); observer.disconnect(); controls.removeEventListener("change", updateClipping); controls.removeEventListener("start", cameraInteraction); controls.dispose(); environment.dispose();
     const resources = new Set(); scene.traverse((object) => { if (object.geometry) resources.add(object.geometry);
       const materials = Array.isArray(object.material) ? object.material : object.material ? [object.material] : [];
-      materials.forEach((item) => resources.add(item)); }); resources.forEach((item) => item.dispose()); renderer.dispose(); host.remove(); } };
+      materials.forEach((item) => resources.add(item)); }); resources.forEach((item) => item.dispose()); hold.dispose(); renderer.dispose(); host.remove(); } };
 }

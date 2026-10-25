@@ -117,3 +117,26 @@ test('GitLab merge requests fail visibly before diff preparation and on truncate
  await assert.rejects(api.mergeRequest('group/board',1),/wait for diff preparation/);prepared=true;
  await assert.rejects(api.mergeRequest('group/board',1),/discovery is incomplete/);
 });
+
+test('GitLab repository tree keeps every safe Git object type, pins scope and exposes directory pagination',async t=>{
+ const calls=[];transport(t,async url=>{calls.push(url);if(url.includes('/commits/'))return json({id:sha});const query=new URL(url).searchParams;assert.equal(query.get('ref'),sha);assert.equal(query.get('recursive'),'false');assert.equal(query.get('path'),'design');assert.equal(query.get('page'),'2');return json([{path:'design/sub',type:'tree',mode:'040000',id:'b'.repeat(40)},{path:'design/board.kicad_pcb',type:'blob',mode:'100644',id:'c'.repeat(40)},{path:'design/link',type:'blob',mode:'120000',id:'d'.repeat(40)},{path:'design/module',type:'commit',mode:'160000',id:'e'.repeat(40)},{path:'other/escape',type:'blob',mode:'100644',id:'f'.repeat(40)}],{'x-next-page':'3'});});
+ const result=await api.repositoryTree('group/sub/board','feature/pcb',{directory:'design',page:2});assert.equal(result.sha,sha);assert.equal(result.directory,'design');assert.equal(result.entries.length,4);assert.deepEqual(result.entries.map(n=>n.type),['tree','blob','blob','commit']);assert.equal(result.hasMore,true);assert.equal(result.nextPage,3);assert.equal(result.truncated,true);assert.match(result.warnings.join(' '),/omitted/);assert.match(calls[0],/commits\/feature%2Fpcb$/);
+});
+test('GitLab repository history has actual merge parents and bounded full messages without a file filter',async t=>{
+ const urls=[];transport(t,async url=>{urls.push(url);if(url.includes('/commits/'))return json({id:sha});const query=new URL(url).searchParams;assert.equal(query.get('ref_name'),sha);assert.equal(query.has('path'),false);assert.equal(query.get('per_page'),'30');assert.equal(query.get('page'),'3');return json([{id:'b'.repeat(40),parent_ids:['c'.repeat(40),'d'.repeat(40)],message:'Merge branch\n\nDetails\n'+('界'.repeat(4000)),author_name:'Name',authored_date:'2026-10-25T00:00:00Z'}],{'x-next-page':'4'});});
+ const history=await api.repositoryHistory('group/board','main',3);assert.equal(history.snapshotRef,sha);assert.equal(history.nextPage,4);assert.deepEqual(history.commits[0].parents,['c'.repeat(40),'d'.repeat(40)]);assert.match(history.commits[0].message,/Merge branch\n\nDetails/);assert.ok(new TextEncoder().encode(history.commits[0].message).length<=8192);assert.match(history.warnings.join(' '),/8 KiB/);assert.equal(history.commits[0].url,'https://gitlab.com/group/board/-/commit/'+'b'.repeat(40));
+});
+test('GitLab repository metadata uses configured host authorization and never exposes credentials in results',async t=>{
+ const old=global.KiCadGitLabReviewApi;global.KiCadGitLabReviewApi={authorizationHeaders:async host=>{assert.equal(host,'https://gitlab.example.org');return {'PRIVATE-TOKEN':'private-fixture'};}};t.after(()=>global.KiCadGitLabReviewApi=old);transport(t,async(url,init)=>{assert.equal(new URL(url).origin,'https://gitlab.example.org');assert.equal(init.headers['PRIVATE-TOKEN'],'private-fixture');assert.equal(init.credentials,'omit');assert.equal(init.redirect,'error');return json([{id:sha,parent_ids:[],message:'Root',author_name:'A',authored_date:'2026-01-01'}]);});
+ const result=await api.forHost('https://gitlab.example.org').repositoryHistory('group/board',sha);assert.equal(JSON.stringify(result).includes('private-fixture'),false);assert.equal(result.commits[0].url,'https://gitlab.example.org/group/board/-/commit/'+sha);
+});
+test('GitLab repository metadata validates scope and pages before sending any request',async t=>{
+ let reads=0;transport(t,async()=>{reads++;return json([]);});for(const fn of [()=>api.repositoryTree('../bad',sha),()=>api.repositoryHistory('group/board','bad\n'),()=>api.repositoryTree('group/board',sha,{directory:'../escape'}),()=>api.repositoryTree('group/board',sha,{page:101}),()=>api.repositoryHistory('group/board',sha,'2')])await assert.rejects(fn,/Invalid|page/);assert.equal(reads,0);
+});
+test('GitLab rejects malformed parent IDs and discloses final-page caps',async t=>{
+ transport(t,async url=>new URL(url).pathname.endsWith('/tree')?json([] ,{'x-next-page':'101'}):json([{id:sha,parent_ids:['not-a-sha'],message:'Invalid'}]));await assert.rejects(api.repositoryHistory('group/board',sha),/parents/);const tree=await api.repositoryTree('group/board',sha,{page:100});assert.equal(tree.hasMore,false);assert.equal(tree.truncated,true);assert.match(tree.warnings.join(' '),/10,000/);
+});
+
+test('GitLab repository branch discovery has no drawing requirement and preserves encoded branch names',async t=>{
+ transport(t,async url=>{assert.match(url,/\/branches\?per_page=100&page=1$/);return json([{name:'feature/board',commit:{id:sha}}]);});const result=await api.repositoryBranches('group/sub/board',sha);assert.equal(result.branches[0].name,'feature/board');await assert.rejects(api.repositoryBranches('group/sub/board','bad\n'),/Invalid/);
+});

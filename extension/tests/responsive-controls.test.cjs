@@ -16,3 +16,25 @@ test('phone pickers are constrained to every viewport edge',()=>{
 test('keyboard-reduced and nested viewports bound menu height without losing scroll area',()=>{
  const b=bounds({left:300,top:450,width:280,height:400},393,260);assert.equal(b.height,244);assert.equal(b.top,8);assert.equal(b.left,105);
 });
+
+test('wide Android landscape still constrains transient menus while desktop remains unchanged',()=>{
+ const {install}=require('../responsive-controls.js');
+ for(const android of [true,false]){
+  const menu={hidden:false,style:{},getClientRects:()=>[{}],getBoundingClientRect:()=>({left:880,top:300,width:280,height:400})};
+  const host={innerWidth:915,innerHeight:412,KiCadAndroidRuntime:android,MutationObserver:class{observe(){}},requestAnimationFrame:fn=>fn(),addEventListener(){}};
+  install({body:{},querySelectorAll:()=>[menu]},host);
+  if(android){assert.equal(menu.style.left,'627px');assert.equal(menu.style.top,'8px');assert.equal(menu.style.maxHeight,'396px');assert.equal(menu.style.overflowY,'auto');}
+  else assert.deepEqual(menu.style,{});
+ }
+});
+
+test('part/net disambiguation remains compact and scrollable after placement reconciliation',()=>{
+ const {install}=require('../responsive-controls.js');
+ for(const height of [852,260]){
+  const menu={hidden:false,style:{},classList:{contains:name=>name==='touch-net-picker'},getClientRects:()=>[{}],getBoundingClientRect:()=>({left:20,top:20,width:260,height:400})};
+  const host={innerWidth:393,innerHeight:height,MutationObserver:class{observe(){}},requestAnimationFrame:fn=>fn(),addEventListener(){}};
+  const controls=install({body:{},querySelectorAll:()=>[menu]},host);
+  controls.place(menu,{x:380,y:height-10});controls.scan();
+  assert.equal(menu.style.maxHeight,Math.min(340,height*.6)+'px');assert.equal(menu.style.overflowY,'auto');
+ }
+});

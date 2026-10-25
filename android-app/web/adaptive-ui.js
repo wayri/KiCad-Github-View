@@ -1,6 +1,7 @@
 /* Android-only presentation adapter. Shared controls keep their handlers and state. */
 ((root)=>{
  'use strict';
+ const structureChanged=records=>records.some(record=>[...record.addedNodes,...record.removedNodes].some(node=>node.nodeType===1&&node.namespaceURI!=='http://www.w3.org/2000/svg'));
  const sizeClass=(width,height=root.innerHeight||Infinity)=>width<600?'compact':width<840||height<=500?'medium':'expanded';
  const hasParentWorkspace=host=>{try{for(let frame=host.parent,depth=0;frame&&frame!==host&&depth<8;frame=frame.parent,depth++){if(frame.document?.getElementById('androidWorkspaceHeader'))return true;if(frame.parent===frame)break;}}catch{}return false;};
  const isField=node=>Boolean(node?.closest?.('input,textarea,select,output,[contenteditable=true]'));
@@ -18,6 +19,7 @@
  function openSheet(dialog){lastFocus=d.activeElement;for(const other of d.querySelectorAll('dialog[open]'))if(other!==dialog)other.close();closePanes();if(!dialog.open)dialog.showModal();}
  function showPane(id,trigger){for(const modal of d.querySelectorAll('dialog[open]'))modal.close();if(sizeClass(root.innerWidth)!=='expanded')closePanes(id);if($(id)?.hidden)$(trigger)?.click();if(sizeClass(root.innerWidth)!=='expanded'){const pin=panes.find(p=>p[0]===id)?.[2];if($(pin)?.getAttribute('aria-pressed')==='false')$(pin).click();}}
  API.handleBack=()=>{
+  if(root.KiCadRepositoryExplorer?.close?.())return true;
   if(root.KiCadSectionPages?.back())return true;
   if(root.KiCadAndroidTooltips?.dismiss?.())return true;
   if(root.top?.KiCadAndroidPresentation?.stop?.())return true;
@@ -55,7 +57,7 @@
   const tempCopy=button('Temporary download',()=>{const project=root.KiCadAndroidProject,remote=project?.remote||project?.github;if(!remote)return;projectMenu.dialog.close();const source={...remote,ref:remote.sha,temporaryDownload:true};(project.remote?root.KiCadAndroidGitLab:root.KiCadAndroidGitHub)?.openProject(source);});tempCopy.id='temporaryProjectDownload';projectMenu.content.append(tempCopy);
   API.downloadProject=()=>{if(!root.KiCadAndroidProject)return;menu.dialog.close();projectMenu.dialog.close();if(root.AndroidKiCad?.downloadProject)root.AndroidKiCad.downloadProject();else $('importStatus').textContent='Saving ZIP files is available in the installed Android app.';};
   let loadingTask=null;API.loading=text=>{if(text){if(loadingTask)loadingTask.update(text);else loadingTask=root.KiCadLoading?.activity(text);}else{loadingTask?.end();loadingTask=null;}$('viewer').setAttribute('aria-busy',String(Boolean(text)));};
-  const welcome=$('welcome'),actions=make('div');actions.className='android-welcome-actions';actions.append(button('Open a project folder',()=> $('openFolder').click()),button('Open a file',()=> $('openFiles').click()),button('GitHub projects',()=> $('githubButton').click()),button('GitLab projects',()=> $('gitlabButton').click()),button('Drive / cloud file',()=>cloud.click()));welcome.append(actions);
+  const welcome=$('welcome'),actions=make('div');actions.className='android-welcome-actions';actions.dataset.actionGroup='open';actions.append(button('Open a project folder',()=> $('openFolder').click()),button('Open a file',()=> $('openFiles').click()),button('GitHub projects',()=> $('githubButton').click()),button('GitLab projects',()=> $('gitlabButton').click()),button('Drive / cloud file',()=>cloud.click()));welcome.append(actions);
   for(const provider of ['github','gitlab']){
    const content=$(provider+'Dialog').querySelector('.github-content'),repository=$(provider+'Repository').closest('label'),ref=$(provider+'Ref').closest('label');
    const advanced=make('details');advanced.className='android-repository-options';advanced.append(make('summary','Branch or revision'),ref);
@@ -72,18 +74,21 @@
  function drawing(){
   if(!$('frameControls')||$('androidViewToolbar')||!$('universalSearch'))return;
   const tools=sheet('androidToolsSheet','Drawing tools'),search=sheet('androidSearchSheet','Search project');
-  const toolbar=make('nav');toolbar.id='androidViewToolbar';toolbar.setAttribute('aria-label','Drawing actions');
+  const toolbar=make('nav');toolbar.id='androidViewToolbar';toolbar.classList.add('android-drawing-rail');toolbar.setAttribute('aria-label','Drawing actions');
+  const railToggle=button('Tools',()=>{const hidden=d.body.classList.toggle('android-rail-hidden');railToggle.setAttribute('aria-expanded',String(!hidden));railToggle.setAttribute('aria-label',hidden?'Show drawing tools':'Hide drawing tools');railToggle.title=railToggle.getAttribute('aria-label');},'Hide drawing tools');railToggle.id='androidRailToggle';railToggle.setAttribute('aria-controls','androidViewToolbar');railToggle.setAttribute('aria-expanded','true');const railIcon=root.KiCadUIIcons?.icon('inspect');if(railIcon)railToggle.replaceChildren(railIcon);d.body.append(railToggle);
   const menu=button('Menu',()=>root.top.KiCadAndroidUI?.openMenu?.(),'Project and accounts');menu.hidden=hasParentWorkspace(root);
-  const fit=button('Fit',()=> $('fitDrawing')?.click(),'Fit drawing');
+  const fit=button('Fit',()=> $('fitDrawing')?.click(),'Fit drawing');fit.id='androidFitDrawing';
   const searchButton=button('Search',()=>{openSheet(search.dialog);$('universalSearch').focus();});
-  const highlight=button('Highlight',()=>{const multi=$('multiHighlight');multi.checked=!multi.checked;multi.dispatchEvent(new Event('change',{bubbles:true}));highlight.setAttribute('aria-pressed',String(multi.checked));},'Toggle group highlighting');highlight.setAttribute('aria-pressed','false');
+  const highlight=button('Highlight',()=>{const multi=$('multiHighlight');multi.checked=!multi.checked;multi.dispatchEvent(new Event('change',{bubbles:true}));highlight.setAttribute('aria-pressed',String(multi.checked));},'Toggle group highlighting');highlight.id='androidGroupHighlight';highlight.setAttribute('aria-pressed','false');
   const comments=button('Comments',()=>showPane('commentsSidebar','commentsButton'));
   const unselect=button('Unselect',()=> $('unselect')?.click());unselect.id='androidUnselect';
   const clearHighlights=button('Clear highlights',()=> $('clearHighlights')?.click());clearHighlights.id='androidClearHighlights';
-  const more=button('More',()=>openSheet(tools.dialog),'More drawing tools');const paths=['M4 6h16M4 12h16M4 18h16','M10 3a7 7 0 1 0 0 14 7 7 0 0 0 0-14Zm5 12 6 6','M8 3H3v5M16 3h5v5M3 16v5h5M21 16v5h-5','M3 17 15 5l4 4L7 21H3v-4ZM13 7l4 4','M3 4h18v13H9l-6 4V4Z','M4 4h5M4 4v5M20 4h-5M20 4v5M4 20h5M4 20v-5M20 20h-5M20 20v-5M9 9l6 6M15 9l-6 6','M3 17 15 5l4 4L7 21H3v-4M5 3l16 18','M5 12h.01M12 12h.01M19 12h.01'];[menu,searchButton,fit,highlight,comments,unselect,clearHighlights,more].forEach((b,i)=>{const icon=d.createElementNS('http://www.w3.org/2000/svg','svg');icon.setAttribute('viewBox','0 0 24 24');icon.setAttribute('width','24');icon.setAttribute('height','24');icon.setAttribute('aria-hidden','true');const path=d.createElementNS(icon.namespaceURI,'path');path.setAttribute('d',paths[i]);path.setAttribute('fill','none');path.setAttribute('stroke','currentColor');path.setAttribute('stroke-width','2');path.setAttribute('stroke-linecap','round');icon.append(path);b.title=b.getAttribute('aria-label');b.replaceChildren(icon);});toolbar.append(menu,searchButton,fit,highlight,comments,unselect,clearHighlights,more);d.body.prepend(toolbar);
+  const more=button('More',()=>openSheet(tools.dialog),'More drawing tools');const paths=['M4 6h16M4 12h16M4 18h16','M10 3a7 7 0 1 0 0 14 7 7 0 0 0 0-14Zm5 12 6 6','M8 3H3v5M16 3h5v5M3 16v5h5M21 16v5h-5','M3 17 15 5l4 4L7 21H3v-4ZM13 7l4 4','M3 4h18v13H9l-6 4V4Z','M4 4h5M4 4v5M20 4h-5M20 4v5M4 20h5M4 20v-5M20 20h-5M20 20v-5M9 9l6 6M15 9l-6 6','M3 17 15 5l4 4L7 21H3v-4M5 3l16 18','M5 12h.01M12 12h.01M19 12h.01'];[menu,searchButton,fit,highlight,comments,unselect,clearHighlights,more].forEach((b,i)=>{const icon=d.createElementNS('http://www.w3.org/2000/svg','svg');icon.setAttribute('viewBox','0 0 24 24');icon.setAttribute('width','24');icon.setAttribute('height','24');icon.setAttribute('aria-hidden','true');const path=d.createElementNS(icon.namespaceURI,'path');path.setAttribute('d',paths[i]);path.setAttribute('fill','none');path.setAttribute('stroke','currentColor');path.setAttribute('stroke-width','2');path.setAttribute('stroke-linecap','round');if(b===more){for(const x of [5,12,19]){const dot=d.createElementNS(icon.namespaceURI,'circle');dot.setAttribute('cx',String(x));dot.setAttribute('cy','12');dot.setAttribute('r','1.8');dot.setAttribute('fill','currentColor');icon.append(dot);}}else icon.append(path);b.title=b.getAttribute('aria-label');b.replaceChildren(icon);});toolbar.append(menu,searchButton,fit,highlight,comments,unselect,clearHighlights,more);d.body.prepend(toolbar);
   const mode3d=$('mode3d');if(mode3d){toolbar.insertBefore(mode3d,more);mode3d.classList.add('android-3d-toggle');const sync3d=()=>{const active=mode3d.getAttribute('aria-pressed')==='true',icon=root.KiCadUIIcons?.icon(active?'board':'cube');if(icon)mode3d.replaceChildren(icon);else mode3d.textContent=active?'2D':'3D';mode3d.setAttribute('aria-label',active?'Switch layout to 2D':'Switch layout to 3D');mode3d.title=active?'Return to PCB layout':'View board in 3D';};sync3d();new MutationObserver(sync3d).observe(mode3d,{attributes:true,attributeFilter:['aria-pressed']});}
   const selection=$('selectionMode');selection.classList.add('android-selection-mode');for(const option of selection.options)if(option.value==='all')option.textContent='Smart';selection.title='Smart: choose a part or net under your touch. Part: components only. Net: connections only.';selection.setAttribute('aria-label','Selection mode');
   toolbar.insertBefore(selection,highlight);
+  for(const [id,label,pane,trigger,icon] of [['androidRailExplorer','Project explorer','designNavigator','partsButton','folder'],['androidRailProperties','Properties','designInspector','propertiesButton','inspect']]){const action=button(label,()=>showPane(pane,trigger),label);action.id=id;action.title=label;const svg=root.KiCadUIIcons?.icon(icon);if(svg)action.replaceChildren(svg);toolbar.insertBefore(action,searchButton);}
+  const layers=button('Layers',()=>{$('androidLayerToggle')?.click();},'Choose PCB layers');layers.id='androidRailLayers';layers.title='Choose PCB layers';const layerIcon=root.KiCadUIIcons?.icon('layers');if(layerIcon)layers.replaceChildren(layerIcon);layers.hidden=!$('floatingLayerSelector');toolbar.insertBefore(layers,more);
   // Preserve the shared select element, its current value and existing handlers.
   highlight.title='Group selection: add or remove parts and nets';
   search.content.append($('universalSearch').closest('.universal-search'),$('universalSearchResults'));
@@ -110,32 +115,57 @@
  function workspace(){
   if(!$('workspaceTabs')||$('androidWorkspaceNav'))return;
   const nav=make('nav');nav.id='androidWorkspaceNav';nav.setAttribute('aria-label','Project views');nav.append($('workspaceTabs'));d.body.append(nav);
-  const tools=sheet('androidWorkspaceSheet','Views and revisions');const actions=make('div');actions.className='android-pane-actions';actions.append(button('This project',()=>{tools.dialog.close();root.top.KiCadAndroidUI?.openProjectActions?.();},'Bookmark, save offline or download this project'));tools.content.append(actions,$('projectTools'),$('toolbar'));const bar=make('div');bar.id='androidWorkspaceHeader';bar.append(button('Library',()=>root.top.KiCadAndroidUI?.openMenu?.(),'Library and accounts'),make('strong',root.top.KiCadAndroidProject?.name||root.top.KiCadAndroidProject?.github?.repository||'KiCad project'),button('Project',()=>openSheet(tools.dialog),'Project actions and view options'));$('reviewHeader').append(bar);
+  const tools=sheet('androidWorkspaceSheet','Views and revisions');const actions=make('div');actions.className='android-pane-actions';actions.append(button('This project',()=>{tools.dialog.close();root.top.KiCadAndroidUI?.openProjectActions?.();},'Bookmark, save offline or download this project'));tools.content.append(actions,$('projectTools'),$('toolbar'));const bar=make('div');bar.id='androidWorkspaceHeader';const back=button('Library',()=>root.top.KiCadAndroid?.showHome?.(),'Back to project library');back.dataset.icon='back';const options=button('Project',()=>openSheet(tools.dialog),'Project actions and view options');options.dataset.icon='menu';bar.append(back,make('strong',root.top.KiCadAndroidProject?.name||root.top.KiCadAndroidProject?.github?.repository||'KiCad project'),options);root.KiCadUIIcons?.decorate?.(bar);$('reviewHeader').append(bar);
  }
  function workspaceActions(){
   const nav=$('androidWorkspaceNav'),tools=$('androidWorkspaceSheet');if(!nav||!tools)return;
-  let quick=$('androidWorkspaceActions');if(!quick){quick=make('div');quick.id='androidWorkspaceActions';quick.setAttribute('aria-label','Split and revision comparison');nav.append(quick);}
+  let quick=$('androidWorkspaceActions');if(!quick){quick=make('div');quick.id='androidWorkspaceActions';quick.setAttribute('aria-label','Split and revision comparison');(tools.querySelector?.('.android-sheet-content')||tools).append(quick);}
   const split=$('splitView');if(split&&!$('androidQuickSplit')){const b=button('Split',()=>split.click(),'Split schematic and layout');b.id='androidQuickSplit';b.dataset.icon='flip';quick.append(b);root.KiCadUIIcons?.decorate?.(quick);const update=()=>{b.disabled=split.disabled;b.setAttribute('aria-pressed',split.getAttribute('aria-pressed')||'false');};update();new MutationObserver(update).observe(split,{attributes:true,attributeFilter:['disabled','aria-pressed']});}
   const picker=d.querySelector('.revision-picker');if(picker&&!$('androidQuickCompare')){const b=button('Compare',()=>{openSheet(tools);picker.open=true;picker.querySelector('input')?.focus();},'Compare commits');b.id='androidQuickCompare';b.dataset.icon='compare';quick.append(b);root.KiCadUIIcons?.decorate?.(quick);}
   // A split with several companions still uses the existing validated chooser.
   const chooser=$('pairChooser');if(chooser&&!chooser.dataset.androidBound){chooser.dataset.androidBound='true';let showing=false;new MutationObserver(()=>{if(!chooser.hidden){showing=true;openSheet(tools);}else if(showing){showing=false;tools.close();}}).observe(chooser,{attributes:true,attributeFilter:['hidden']});}
  }
  API.workspaceActions=workspaceActions;
+ function organizeHomeActions(){
+  const welcome=$('welcome'),menu=$('appMenuDialog')?.querySelector('.android-sheet-content');
+  for(const host of [welcome,menu])if(host){
+   for(const actions of [...host.children].filter(node=>node.classList.contains('android-welcome-actions'))){
+    if(actions.dataset.organized)continue;
+    actions.dataset.organized='true';
+    const opening=actions.dataset.actionGroup==='open',heading=make('h2',opening?'Open project':'Engineering tools');
+    heading.className='android-launch-heading';
+    actions.classList.add(opening?'android-source-actions':'android-engineering-actions');
+    host.insertBefore(heading,actions);
+    // Engineering tools arrive after the quick-start links; keep help at the end.
+    const help=[...host.children].find(node=>node.classList.contains('quick-start-link'));
+    if(help&&!opening){host.insertBefore(heading,help);host.insertBefore(actions,help);}
+   }
+  }
+ }
+ API.organizeHomeActions=organizeHomeActions;
  function organizeDrawingTools(){
   const content=$('androidToolsSheet')?.querySelector('.android-sheet-content'),drawing=$('drawingTools');if(!content||!drawing)return;
   if(!content.dataset.organized){
    content.dataset.organized='true';drawing.classList.add('android-primary-tools');content.prepend(drawing);
-   for(const [id,title]of [['display','Display'],['highlight','Highlighting'],['navigation','Navigation & properties'],['more','More tools']]){const group=make('details');group.id='androidToolGroup-'+id;group.className='android-tool-section';const body=make('div');body.className='android-tool-section-body';group.append(make('summary',title),body);content.append(group);}
+   const heading=make('h3','Inspect drawing');heading.id='androidPrimaryToolsHeading';content.prepend(heading);
+   for(const [id,title]of [['display','Display'],['highlight','Selection'],['navigation','Navigation'],['more','Engineering & utilities']]){const group=make('details');group.id='androidToolGroup-'+id;group.className='android-tool-section';const body=make('div');body.className='android-tool-section-body';group.append(make('summary',title),body);content.append(group);}
   }
   const groups=Object.fromEntries(['display','highlight','navigation','more'].map(id=>[id,$('androidToolGroup-'+id).querySelector('.android-tool-section-body')]));
-  const primary=new Set(['openBomManager','openTestpoints','measureButton','viewRuleChecks','openBoardAnalytics','openCalculators']);
+  const primary=new Set(['openBomManager','openTestpoints','measureButton','androidMeasure','viewRuleChecks']);
   const display=new Set(['populationHighlight','gridButton','flipButton','toggleRuleMarkers','themeButton','settingsButton','androidCopperControls','variantBar','mode3d','netClassColors','ratsnestButton']);
-  const highlight=new Set(['highlightControls','androidUnselect','androidClearHighlights']);
-  const nav=new Set(['topSheetNavigation','fitPage','zoomOut','zoomIn','androidAllSheetsButton']);
+  const highlight=new Set(['highlightControls','highlightTestpoints','androidGroupHighlight','androidUnselect','androidClearHighlights','androidSelectText']);
+  const nav=new Set(['topSheetNavigation','fitPage','zoomOut','zoomIn','androidAllSheetsButton','projectButton','fitSelected','androidFitDrawing','openRepositoryExplorer']);
   const move=(node,target)=>{if(node.parentElement!==target)target.append(node);};
   // Move existing controls, preserving listeners, values and accessibility names.
-  for(const node of [...drawing.children,...content.children]){
-   if(node===drawing||node.classList.contains('android-tool-section'))continue;
+  const secondarySelection=['androidGroupHighlight','androidUnselect','androidClearHighlights','androidFitDrawing','androidMeasure'].map($).filter(Boolean);
+  for(const [id,label]of [['androidGroupHighlight','Group highlight'],['androidUnselect','Unselect'],['androidClearHighlights','Clear highlights'],['androidFitDrawing','Fit drawing'],['androidMeasure','Measure']]){
+   const action=$(id);if(action&&!action.querySelector('.button-label')){const caption=make('span',label);caption.className='button-label';action.append(caption);}
+  }
+  // The late mobile measurement proxy shares the original handler and state.
+  // Show one named tool, leaving room for Sidebar and More on a 320 px phone.
+  if($('androidMeasure')&&$('measureButton'))$('measureButton').hidden=true;
+  for(const node of [...drawing.children,...content.children,...secondarySelection]){
+   if(node===drawing||node.id==='androidPrimaryToolsHeading'||node.classList.contains('android-tool-section'))continue;
    let target=primary.has(node.id)?drawing:display.has(node.id)?groups.display:highlight.has(node.id)?groups.highlight:nav.has(node.id)||node.classList.contains('android-pane-actions')?groups.navigation:groups.more;
    if(node.classList.contains('presentation-launch'))target=groups.more;
    move(node,target);
@@ -162,12 +192,12 @@
  const resize=()=>{const area=root.KiCadAndroidUsableViewport;const width=area?.width||root.innerWidth,height=area?.height||root.innerHeight;d.body.dataset.size=sizeClass(width,height);d.body.dataset.orientation=width>height?'landscape':'portrait';compactLayers();propertyBasics();};
  function syncWorkspaceOverlay(){try{const frame=root.frameElement;if(!frame)return;const blocked=panes.some(([id])=>visible($(id)))||Boolean(d.querySelector('dialog[open]'));const value=String(blocked);if(frame.dataset.androidOverlayOpen!==value)frame.dataset.androidOverlayOpen=value;}catch{}}
  function normalizeCloseButtons(){for(const b of d.querySelectorAll('dialog>header button,.sidebar-header button,.viewer-settings header button,#closeNavigator,#closeInspector,#closeComments,#closeRuleWindow,#closeSettings')){if(b.classList.contains('android-close-button')&&b.textContent==='×')continue;if(b.classList.contains('section-page-back'))continue;const text=b.textContent.trim(),label=b.getAttribute('aria-label')||'';if(!/^close\b/i.test(label)&&!/^close$|^[×✕]$/i.test(text)&&!['closeNavigator','closeInspector','closeComments','closeRuleWindow','closeSettings'].includes(b.id))continue;b.classList.add('android-close-button');b.removeAttribute('data-icon');b.type='button';b.setAttribute('aria-label',label||'Close panel');b.title=label||'Close panel';b.textContent='×';}}
- const preparedGroups=new WeakSet();function propertyBasics(){const all=$('allSheetPagesButton'),toolbar=$('androidViewToolbar');if(all&&toolbar){all.hidden=false;if(all.parentElement!==toolbar){all.classList.add('android-all-sheets');all.title='Toggle all schematic sheets on one canvas';all.setAttribute('aria-label','Toggle all sheets');toolbar.insertBefore(all,toolbar.lastElementChild);}}if($('androidAllSheetsButton'))$('androidAllSheetsButton').hidden=!root.KiCadSheetOverview;if(sizeClass(root.innerWidth)!=='compact')return;for(const group of d.querySelectorAll('#propertyList details'))if(!preparedGroups.has(group)){preparedGroups.add(group);const title=group.querySelector('summary')?.textContent||'';group.open=/^(Identity|Electrical|Connected nets)$/.test(title);}}
+ const preparedGroups=new WeakSet();function propertyBasics(){const all=$('allSheetPagesButton'),toolbar=$('androidViewToolbar');if(all&&toolbar){const navigation=$('androidToolGroup-navigation')?.querySelector('.android-tool-section-body');if(navigation){all.hidden=false;all.title='Toggle all schematic sheets on one canvas';all.setAttribute('aria-label','Toggle all sheets');if(all.parentElement!==navigation)navigation.append(all);}}if($('androidAllSheetsButton'))$('androidAllSheetsButton').hidden=!root.KiCadSheetOverview;if(sizeClass(root.innerWidth)!=='compact')return;for(const group of d.querySelectorAll('#propertyList details'))if(!preparedGroups.has(group)){preparedGroups.add(group);const title=group.querySelector('summary')?.textContent||'';group.open=/^(Identity|Electrical|Connected nets)$/.test(title);}}
  function init(){
   d.addEventListener('click',event=>{const modal=event.target;if(modal?.tagName!=='DIALOG'||!modal.open||modal.classList.contains('library-confirm')||modal.id==='androidDraftExit')return;const r=modal.getBoundingClientRect();if(event.clientX<r.left||event.clientX>r.right||event.clientY<r.top||event.clientY>r.bottom)modal.close();});
   d.addEventListener('pointerdown',event=>{if(sizeClass(root.innerWidth)==='expanded'||isField(event.target))return;for(const[id,close]of panes){const pane=$(id);if(visible(pane)&&!pane.contains(event.target)&&!event.target.closest?.('button,dialog,[role=dialog]'))$(close)?.click();}},true);
   // A field tap must never bubble into drawing selection or outside-dismiss handlers.
   for(const type of ['click','dblclick','contextmenu'])d.addEventListener(type,event=>{if(isField(event.target))event.stopPropagation();});
-  resize();shell();drawing();workspace();workspaceActions();compactLayers();root.KiCadAndroidProjectUI?.mount();normalizeCloseButtons();organizeDrawingTools();let queued=false;new MutationObserver(()=>{if(queued)return;queued=true;queueMicrotask(()=>{queued=false;drawing();workspace();workspaceActions();compactLayers();propertyBasics();normalizeCloseButtons();organizeDrawingTools();syncWorkspaceOverlay();});}).observe(d.body,{childList:true,subtree:true});new MutationObserver(syncWorkspaceOverlay).observe(d.body,{attributes:true,subtree:true,attributeFilter:['hidden','open','class']});root.addEventListener('resize',resize);root.addEventListener('kicad-usable-viewport-changed',resize);d.addEventListener('keydown',e=>{if(e.key==='Escape'&&API.handleBack()){e.preventDefault();e.stopPropagation();}},true);}
+  resize();shell();drawing();workspace();workspaceActions();compactLayers();root.KiCadAndroidProjectUI?.mount();normalizeCloseButtons();organizeDrawingTools();organizeHomeActions();let queued=false;new MutationObserver(records=>{if(!structureChanged(records)||queued)return;queued=true;queueMicrotask(()=>{queued=false;drawing();workspace();workspaceActions();compactLayers();propertyBasics();normalizeCloseButtons();organizeDrawingTools();organizeHomeActions();syncWorkspaceOverlay();});}).observe(d.body,{childList:true,subtree:true});new MutationObserver(syncWorkspaceOverlay).observe(d.body,{attributes:true,subtree:true,attributeFilter:['hidden','open','class']});root.addEventListener('resize',resize);root.addEventListener('kicad-usable-viewport-changed',resize);d.addEventListener('keydown',e=>{if(e.key==='Escape'&&API.handleBack()){e.preventDefault();e.stopPropagation();}},true);}
  if(d.readyState==='loading')d.addEventListener('DOMContentLoaded',init,{once:true});else init();
 })(globalThis);

@@ -7,6 +7,14 @@ body.kiview-tool[data-ui-theme=light],body.android-home[data-ui-theme=light]{col
 @media(prefers-color-scheme:light){body.android-home:not([data-ui-theme=dark]){color-scheme:light;--surface:#eceef0;--panel:#f7f8f9;--raised:#fff;--control:#fff;--line:#bcc2ca;--text:#17212b;--muted:#52606c;--accent:#006cc4;--selected:#dbeaf8;--hover:#e3e9ef}}
 body.android-home{--android-surface:var(--surface);--android-container:var(--panel);--android-high:var(--raised);--android-text:var(--text);--android-muted:var(--muted);--android-primary:var(--accent);--android-on-primary:var(--surface);--android-outline:var(--line);font-family:var(--kiview-font)}
 body[data-viewer]{font-family:var(--kiview-font)}
+/* Icon-bearing fields reserve a separate grid cell; input padding cannot move
+   placeholder or entered text beneath the symbol at any control height. */
+body[data-viewer] .search-field{display:grid;grid-template-columns:20px minmax(0,1fr);column-gap:8px;align-items:center;min-width:0;padding-inline:12px;border:1px solid var(--line);border-radius:var(--kiview-control-radius);background:var(--surface)}
+body[data-viewer] .search-field>span{position:static;inset:auto;display:flex;align-items:center;justify-content:center;width:20px;min-width:0;pointer-events:none}
+body[data-viewer] .search-field>span .ui-icon{width:20px;height:20px;flex:0 0 20px}
+body[data-viewer] .search-field>input{width:100%;min-width:0;max-width:100%;padding-inline:0!important;border:0;background:transparent;box-shadow:none}
+body[data-viewer] .search-field:focus-within{outline:2px solid var(--accent);outline-offset:2px}
+body[data-viewer] .search-field>input:focus-visible{outline:none}
 :is(body.kiview-tool,body.android-home,body[data-viewer]) :is(button,input,select,textarea){font-family:var(--kiview-font);border-radius:var(--kiview-control-radius)}
 :is(body.kiview-tool,body.android-home,body[data-viewer]) :is(button,input,select,textarea,summary,a):focus-visible{outline:2px solid var(--accent);outline-offset:3px}
 :is(body.kiview-tool,body.android-home,body[data-viewer]) button:not(:disabled):hover{border-color:var(--accent)}

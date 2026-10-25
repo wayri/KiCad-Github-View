@@ -1122,3 +1122,61 @@ test('website session fallback rejects tabs belonging to a different repository'
  const before=calls.messages.length,result=await message({type:'project',repository:'owner/private',ref:sha('a'),file:'file.kicad_pcb'});
  assert.equal(result.ok,false);assert.equal(calls.messages.length,before);
 });
+
+
+test('model discovery is viewer-only, immutable, bounded and excludes links and non-models',async(t)=>{
+  const urls=[],sha='d'.repeat(40),tree='e'.repeat(40);
+  withFetch(t,async url=>{urls.push(url);return url.includes('/commits/')?json({sha,commit:{tree:{sha:tree}}}):json({truncated:true,tree:[
+    {type:'blob',mode:'100644',path:'models/Package.3dshapes/body.step'},
+    {type:'blob',mode:'100644',path:'models/Package.3dshapes/body.step'},
+    {type:'blob',mode:'120000',path:'linked.wrl'}, {type:'blob',path:'../unsafe.wrl'},
+    {type:'tree',path:'folder.glb'}, {type:'blob',path:'board.kicad_pcb'}]});});
+  const request={type:'repo-model-index',repository:'owner/board',ref:sha};
+  assert.equal((await message(request,githubTab(2,'/owner/board'))).ok,false);assert.equal(urls.length,0);
+  assert.equal((await message({...request,ref:'main'})).ok,false);assert.equal(urls.length,0);
+  const reply=await message(request);assert.equal(reply.ok,true,reply.error);
+  assert.deepEqual(reply.result.paths,['models/Package.3dshapes/body.step']);assert.equal(reply.result.snapshotRef,sha);
+  assert.match(reply.result.warnings.join(' '),/truncated/);assert.ok(urls[1].includes(tree+'?recursive=1'));
+});
+
+
+test('private model inventory reuses the bounded website-session tree at the exact opened commit',async t=>{
+ const previousQuery=chrome.tabs.query,previousSend=chrome.tabs.sendMessage;
+ chrome.tabs.query=async()=>[{id:51,url:'https://github.com/owner/private/blob/main/board.kicad_pcb'}];
+ chrome.tabs.sendMessage=async(id,request)=>({ok:true,result:{sha:sha('a'),items:request.action==='resolve'?[]:
+   request.path===''?[{path:'models',type:'directory'},{path:'board.kicad_pcb',type:'file'}]:
+   [{path:'models/body.step',type:'file'},{path:'models/link.wrl',type:'symlink'}]}});
+ t.after(()=>{chrome.tabs.query=previousQuery;chrome.tabs.sendMessage=previousSend;});
+ withFetch(t,async()=>new Response(null,{status:404}));
+ const result=await message({type:'repo-model-index',repository:'owner/private',ref:sha('a')});
+ assert.equal(result.ok,true,result.error);assert.deepEqual(result.result.paths,['models/body.step']);
+ assert.match(result.result.warnings.join(' '),/website session/);
+ const mismatch=await message({type:'repo-model-index',repository:'owner/private',ref:sha('b')});
+ assert.equal(mismatch.ok,false);assert.match(mismatch.error,/revision|snapshot/i);
+});
+
+test('repository tree pins branches and retains folders, models, symlinks and submodules with explicit incomplete status',async(t)=>{
+ const urls=[];withFetch(t,async(url)=>{urls.push(url);if(url.endsWith('/commits/feature%2Fpcb'))return new Response(sha('a'));if(url.includes('/git/commits/'))return json({sha:sha('a'),tree:{sha:sha('b')}});return json({sha:sha('b'),truncated:true,tree:[{path:'design',type:'tree',sha:sha('c'),mode:'040000'},{path:'design/board.kicad_pcb',type:'blob',sha:sha('d'),mode:'100644'},{path:'models/part.step',type:'blob',sha:sha('e'),mode:'100644'},{path:'link',type:'blob',sha:sha('f'),mode:'120000'},{path:'submodule',type:'commit',sha:sha('a'),mode:'160000'},{path:'../escape',type:'blob',sha:sha('f'),mode:'100644'}]});});
+ const reply=await message({type:'repository-tree',repository:'fork/board',ref:'feature/pcb'});assert.equal(reply.ok,true);assert.equal(reply.result.sha,sha('a'));assert.equal(reply.result.truncated,true);assert.deepEqual(reply.result.entries.map(e=>e.type),['tree','blob','blob','blob','commit']);assert.match(reply.result.warnings.join(' '),/incomplete/);assert.equal(urls.length,3);assert.ok(urls.every(url=>url.includes('/repos/fork/board/')));
+});
+test('repository directory browsing walks immutable trees and pages full-path children',async(t)=>{
+ const urls=[];withFetch(t,async url=>{urls.push(url);if(url.includes('/git/commits/'))return json({sha:sha('a'),tree:{sha:sha('b')}});if(url.endsWith('/git/trees/'+sha('b')))return json({sha:sha('b'),truncated:false,tree:[{path:'models',type:'tree',mode:'040000',sha:sha('c')}]});return json({sha:sha('c'),truncated:false,tree:Array.from({length:150},(_,i)=>({path:'part'+i+'.step',type:'blob',mode:'100644',sha:sha('d')}))});});
+ const reply=await message({type:'repository-tree',repository:'owner/board',ref:sha('a'),directory:'models',page:2});assert.equal(reply.ok,true);assert.equal(reply.result.entries.length,50);assert.equal(reply.result.entries[0].path,'models/part100.step');assert.equal(reply.result.hasMore,false);assert.equal(reply.result.directory,'models');assert.ok(urls.every(url=>!url.includes('recursive')));
+});
+test('repository history is repository-wide, pinned, paginated and retains actual merge parents and multiline messages',async(t)=>{
+ const urls=[];withFetch(t,async url=>{urls.push(url);if(url.includes('/commits/'))return new Response(sha('a'));return new Response(JSON.stringify([{sha:sha('b'),parents:[{sha:sha('c')},{sha:sha('d')}],commit:{message:'Merge branch\n\nFull body\n'+('界'.repeat(4000)),author:{name:'Author',date:'2026-10-25T00:00:00Z'}}}]),{headers:{link:'<https://api.github.com/ignored>; rel="next"'}});});
+ const reply=await message({type:'repository-history',repository:'fork/board',ref:'main',page:2});assert.equal(reply.ok,true);assert.equal(reply.result.snapshotRef,sha('a'));assert.deepEqual(reply.result.commits[0].parents,[sha('c'),sha('d')]);assert.match(reply.result.commits[0].message,/Merge branch\n\nFull body\n/);assert.ok(new TextEncoder().encode(reply.result.commits[0].message).length<=8192);assert.match(reply.result.warnings.join(' '),/8 KiB/);assert.equal(reply.result.nextPage,3);assert.equal(reply.result.commits[0].url,'https://github.com/fork/board/commit/'+sha('b'));const query=new URL(urls[1]).searchParams;assert.equal(query.has('path'),false);assert.equal(query.get('sha'),sha('a'));assert.equal(query.get('per_page'),'30');assert.equal(query.get('page'),'2');
+});
+test('repository browser validates viewer, scope, directory and paging before requests',async(t)=>{
+ let reads=0;withFetch(t,async()=>{reads++;return json({});});for(const type of ['repository-tree','repository-history']){for(const sender of [options,githubTab(9,'/owner/board'),{id:'test-id',url:extensionOrigin+'pcb-viewer.html/evil'}])assert.notEqual((await message({type,repository:'owner/board',ref:sha('a')},sender)).ok,true);for(const change of [{repository:'../repo'},{ref:'bad\n'},{page:0},{page:101},{page:'2'},{directory:'../outside'}]){if(type==='repository-history'&&change.directory)continue;assert.equal((await message({type,repository:'owner/board',ref:sha('a'),...change})).ok,false);}}assert.equal(reads,0);
+});
+test('repository browser rejects mismatched trees and malformed graph parents rather than inventing roots',async(t)=>{
+ withFetch(t,async url=>url.includes('/git/commits/')?json({sha:sha('a'),tree:{sha:sha('b')}}):url.includes('/git/trees/')?json({sha:sha('c'),truncated:false,tree:[]}):json([{sha:sha('a'),parents:[{sha:'branch'}],commit:{message:'bad'}}]));
+ assert.equal((await message({type:'repository-tree',repository:'owner/board',ref:sha('a')})).ok,false);const history=await message({type:'repository-history',repository:'owner/board',ref:sha('a')});assert.equal(history.ok,false);assert.match(history.error,/parents/);
+});
+
+test('repository branch metadata works without a drawing file and retains sender validation',async t=>{
+ const urls=[];withFetch(t,async url=>{urls.push(url);return json([{name:'feature/pcb',commit:{sha:sha('a')}}]);});
+ const result=await message({type:'repository-branches',repository:'owner/board',ref:sha('a')});assert.equal(result.ok,true);assert.equal(result.result.branches[0].name,'feature/pcb');assert.match(urls[0],/branches\?per_page=100&page=1$/);
+ const before=urls.length;assert.equal((await message({type:'repository-branches',repository:'../bad',ref:sha('a')})).ok,false);assert.equal((await message({type:'repository-branches',repository:'owner/board',ref:sha('a')},options)).ok,false);assert.equal(urls.length,before);
+});

@@ -1,6 +1,6 @@
 /* Full-page section navigation; existing controllers retain their fields and state. */
 ((root)=>{'use strict';
- const selector='#appMenuDialog,#androidSettingsDialog,#projectLibraryDialog,#githubDialog,#gitlabDialog,#androidProjectActionsSheet,#androidWorkspaceSheet,#androidToolsSheet,#androidSearchSheet,.android-reader-dialog,dialog.bom-manager,#toolOverflow,#testpointSummaryPage,#viewerSettings';
+ const selector='#androidOpenProjectPage,#androidProjectSettingsSheet,#appMenuDialog,#androidSettingsDialog,#projectLibraryDialog,#githubDialog,#gitlabDialog,#androidProjectActionsSheet,#androidWorkspaceSheet,#androidToolsSheet,#androidSearchSheet,.android-reader-dialog,dialog.bom-manager,#toolOverflow,#testpointSummaryPage,#viewerSettings';
  function install(doc,host){
   const prepared=new WeakSet(),parents=new WeakMap(),inert=new Map();let active=null,origin=null;
   function isolate(){for(const [node,value]of inert)node.inert=value;inert.clear();if(!active)return;for(const node of doc.body.children||[])if(node!==active&&!node.contains(active)&&!(node.tagName==='DIALOG'&&node.open)){inert.set(node,node.inert);node.inert=true;}}
@@ -12,7 +12,7 @@
    const header=page.querySelector('header,.panel-heading,.tool-overflow-heading');if(header){header.classList.add('section-page-header');const close=[...header.querySelectorAll('button')].find(button=>/close|collapse/i.test(button.getAttribute('aria-label')||button.textContent));if(close){close.classList.add('section-page-back');close.setAttribute('aria-label','Back');close.title='Back';close.replaceChildren(root.KiCadUIIcons?.icon('back')||doc.createTextNode('←'));close.addEventListener('click',event=>{event.preventDefault();event.stopImmediatePropagation();active=page;back();},{capture:true});header.prepend(close);}}
   }
   function scan(){for(const page of doc.querySelectorAll(selector)){prepare(page);if(visible(page)&&active!==page)entered(page);}if(active&&!visible(active)){active=null;isolate();}}
-  const observer=new host.MutationObserver(scan);observer.observe(doc.body,{subtree:true,childList:true,attributes:true,attributeFilter:['hidden','open']});
+  const observer=new host.MutationObserver(records=>{if(records.some(record=>record.type==='attributes'?record.target.matches?.(selector):[...record.addedNodes,...record.removedNodes].some(node=>node.nodeType===1&&node.namespaceURI!=='http://www.w3.org/2000/svg')))scan();});observer.observe(doc.body,{subtree:true,childList:true,attributes:true,attributeFilter:['hidden','open']});
   doc.addEventListener('click',()=>{scan();origin=active;host.setTimeout(()=>{origin=null;},0);},{capture:true});
   doc.addEventListener('keydown',event=>{if(event.key==='Escape'&&active&&!doc.querySelector('dialog[open]:not(.section-page)')){event.preventDefault();back();}});
   scan();return{back,scan};

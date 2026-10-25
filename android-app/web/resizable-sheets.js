@@ -15,7 +15,7 @@
   const reveal=target=>{if(!target?.scrollIntoView)return;if(scrollTimer!==null)host.clearTimeout?.(scrollTimer);const show=()=>{scrollTimer=null;if(target===doc.activeElement)target.scrollIntoView({block:'nearest',behavior:'auto'});};if(host.setTimeout)scrollTimer=host.setTimeout(show,100);else host.requestAnimationFrame?.(show);};
   const viewport=()=>viewportGeometry(host).height;
   const mobile=()=>host.innerWidth<600;
-  const targets='dialog:not(#androidQuickStart):not(.android-reader-dialog),#objectMenu,#designNavigator,#designInspector,#commentsSidebar,.viewer-settings,#ruleWindow';
+  const targets='dialog:not(#androidQuickStart):not(.android-reader-dialog),#ruleWindow';
   const closeIds={designNavigator:'closeNavigator',designInspector:'closeInspector',commentsSidebar:'closeComments',viewerSettings:'closeSettings',ruleWindow:'closeRuleWindow'};
   const originalClose=panel=>doc.getElementById?.(closeIds[panel.id])||[...(panel.querySelectorAll?.('button')||[])].find(b=>!b.classList?.contains('android-sheet-dismiss')&&(/^(Close|Cancel)$/i.test(b.textContent?.trim()||'')||/^(Close|Collapse)\b/i.test(b.getAttribute?.('aria-label')||'')));
   const dismiss=panel=>{const original=originalClose(panel);if(original){original.click();return;}if(panel.tagName==='DIALOG')panel.close();else panel.hidden=true;};

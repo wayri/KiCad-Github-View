@@ -29,3 +29,22 @@ export function tapGesture(limit = 6) {
     cancel(event) { pointers.delete(event.pointerId); blocked = true; }
   };
 }
+
+/** Long press is exclusive with orbit, pinch and tap, including cancelled touches. */
+export function holdGesture(open, { later = setTimeout, clear = clearTimeout, delay = 550, limit = 8 } = {}) {
+  const pointers = new Set(); let timer = null, start = null, held = false;
+  const stop = () => { if (timer !== null) clear(timer); timer = null; };
+  return {
+    down(event) {
+      if (!pointers.size) held = false;
+      pointers.add(event.pointerId); stop();
+      if (event.pointerType !== 'touch' || pointers.size !== 1) return;
+      start = { pointerId: event.pointerId, clientX: event.clientX, clientY: event.clientY };
+      timer = later(() => { timer = null; held = true; open(start); }, delay);
+    },
+    move(event) { if (start?.pointerId === event.pointerId && Math.hypot(event.clientX-start.clientX,event.clientY-start.clientY) >= limit) stop(); },
+    up(event) { stop(); pointers.delete(event.pointerId); return held; },
+    isHeld() { return held; },
+    dispose() { stop(); pointers.clear(); start = null; }
+  };
+}

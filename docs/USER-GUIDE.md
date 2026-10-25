@@ -49,6 +49,8 @@ Rendering warnings matter: a visible preview is not proof that every source cons
 
 Choose **Measure** in a PCB drawing, then select two points for a distance. Measurement options include angle, geometry/grid snapping, units and saved board extents. For an angle, select endpoint → vertex → endpoint. Exit measurement mode when finished. Desktop viewers also provide the **M** shortcut. Measurement uses saved 2D geometry; 3D measurement is unavailable.
 
+Use **Highlight testpoints** (pin icon) to highlight candidates on the active drawing. Toggle it off to retain your existing part/net selection. The overlay shows up to 200 testpoints; all remain searchable. In Explorer, choose **Testpoints** to filter the current drawing and focus its search field. Rows include saved net names; search by reference, value or `net:SENSE`. These actions are shared by Android, Chrome and VS Code.
+
 Open **Testpoints & nets** to search candidate testpoints and their saved nets. Select a row to locate it in the drawing and export CSV for a bench checklist. Check classifications and connections against the actual board before probing.
 
 **Board analytics** summarizes saved track lengths, zone polygon areas and routing/placement review candidates. Imported **ERC/DRC** reports can show findings and markers. These controls do not run native KiCad checks, refill zones or establish manufacturing readiness. Candidate airwires and placement flags are not native unrouted/unplaced counts.
@@ -133,3 +135,46 @@ See the illustrated [VS Code conflict guide](../vscode-extension/GUIDE.md#resolv
 - **Large project is incomplete:** inspect truncation and parser diagnostics; reduce the imported set rather than assuming a partial view is complete.
 
 Contact [support@sigharmonic.com](mailto:support@sigharmonic.com) with the app/extension version, operating system, exact steps and a non-confidential minimal example. Do not include account tokens or private project data without authorization.
+
+
+Review cards distinguish **Review: open / skipped / resolved / wont-fix** from
+**Issue: open / closed**. A closed GitHub issue does not automatically resolve
+its design annotations. Refresh the selected thread to read its current GitHub
+state. Phone comments use the connected Android GitHub account; website login
+alone does not connect the app.
+
+
+### More room for drawings and tables
+
+Use **Focus view** (fit-frame icon) to hide drawing sidebars and, in the local
+browser workspace, its outer controls. **Restore controls** or Escape brings the
+controls back without reopening the file. The file-list toggle remembers your
+choice. In conflict review, **Properties** opens both field inspectors and
+**View options** contains the secondary display controls. In the BoM manager,
+**Filters**, **Columns** and **Totals** expand only when needed; opening one
+advanced section closes the others so the table keeps its working space.
+
+### Repository files and commit graph
+
+Open **Repository** from the drawing tools or project page to browse files,
+branches and commit history. Expand folders, search loaded paths, and open a
+commit for its complete message, author, date and parent IDs. Graph colours
+identify lanes; lines follow actual parents, including merges. Load older
+commits to extend the graph. On phones, switch between **Files** and **Commit
+history**; desktop views show both together.
+
+Connected GitHub and GitLab projects expose repository metadata using the
+client's existing authorization. Listings are bounded and show warnings when
+truncated; expand folders to fetch additional contents. Browsing another
+revision does not check out or modify files. VS Code uses its built-in Git
+provider for history and displays working files with status colours; historical
+committed file trees are not available through that API. Restricted workspaces
+and plain file imports show available files and explain unavailable history.
+
+
+### 3D selection outlines
+
+Selected parts use a clean edge outline with no triangle diagonals. Cross-selection
+combines a component body, model meshes and matching pads into one component
+boundary. Outlines respect scene depth so hidden edges do not show through the
+board. Clearing selection removes the outline without changing model materials.

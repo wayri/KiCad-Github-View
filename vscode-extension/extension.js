@@ -6,7 +6,7 @@ const VIEW = "kicadVisualReview.viewer", CHANNEL = "kicad-vscode:v1";
 const MAX_FILE = 8 * 1024 * 1024, MAX_PROJECT = 24 * 1024 * 1024;
 const MAX_MESSAGE = 1024 * 1024, MAX_FILES = 32;
 const MAX_SIDECAR=4*1024*1024,liveSessions=new Set(),pairTargets=new Map();
-const OPERATIONS = new Set(["preview-project-html", "project-inventory", "project-file", "open-project-file", "open-project-overview", "rule-report", "project-search-files", "open-project-drawing", "project", "repo-asset", "pair-selection", "comments-changed", "comment-list", "comment-save", "comment-delete", "storage-get", "storage-set", "open-comment-draft", "github-annotations"]);
+const OPERATIONS = new Set(["repository-tree", "repository-history", "repository-branches", "preview-project-html", "project-inventory", "project-file", "open-project-file", "open-project-overview", "rule-report", "project-search-files", "open-project-drawing", "project", "repo-model-index", "repo-asset", "pair-selection", "comments-changed", "comment-list", "comment-save", "comment-delete", "storage-get", "storage-set", "open-comment-draft", "github-annotations"]);
 let storageQueue=Promise.resolve();
 const safePath = (path) => typeof path === "string" && path.length <= 500 && /\.kicad_(sch|pcb)$/i.test(path) &&
   !path.startsWith("/") && path.split("/").every((p) => p && p !== "." && p !== ".." && !/[\\\x00-\x1f\x7f:]/.test(p));
@@ -337,6 +337,26 @@ async function loadRepoAsset(request,session) {
   if(session.assetBytes>32*1024*1024)throw new Error("Model assets exceed the 32 MiB session limit.");
   return {base64:encodeBase64(bytes),mediaType:/\.(step|stp)$/i.test(request.file)?"model/step":/\.glb$/i.test(request.file)?"model/gltf-binary":"model/vrml"};
 }
+async function repoModelIndex(request,session){
+  if(request.repository!==session.scope.repository||request.ref!==session.scope.ref)throw Error('Model discovery belongs to another workspace or revision.');
+  const candidates=await vscode.workspace.findFiles({baseUri:session.scope.boundary,pattern:'**/*'},'**/{.git,node_modules,__pycache__}/**',5001),paths=[],warnings=[];
+  if(candidates.length>5000)warnings.push('Workspace model discovery reached 5000 files; library path matching may be incomplete.');
+  const prefix=session.scope.boundary.path.replace(/\/$/,'')+'/';
+  for(const uri of candidates.slice(0,5000)){
+    if(!sameScope(uri,session.scope.boundary))continue;const path=uri.path.slice(prefix.length);if(!safeAssetPath(path))continue;
+    try{
+      const parts=path.split('/');
+      for(let i=1;i<=parts.length;i++){
+        const stat=await vscode.workspace.fs.stat(vscode.Uri.joinPath(session.scope.boundary,...parts.slice(0,i)));
+        if(stat.type&vscode.FileType.SymbolicLink)throw Error('linked model excluded');
+        if(!(stat.type&(i===parts.length?vscode.FileType.File:vscode.FileType.Directory)))throw Error('invalid model file or directory');
+      }
+      if(!paths.includes(path))paths.push(path);
+    }catch{warnings.push(`${path}: unavailable or linked model excluded.`);}
+    if(paths.length>=2000){warnings.push('Model discovery is limited to 2000 files; library path matching may be incomplete.');break;}
+  }
+  return {paths:paths.sort(),snapshotRef:session.scope.ref,warnings:warnings.slice(0,48)};
+}
 async function searchProjectFiles(request,session) {
   assertScope(request,session);
   const candidates=await vscode.workspace.findFiles({baseUri:session.scope.boundary,pattern:"**/*.{kicad_sch,kicad_pcb}"},"**/{.git,node_modules}/**",201);
@@ -395,8 +415,138 @@ async function openOverview(session){
   const project={files:session.files,scope:session.scope},overview=createSession(session.uri,project,session.context);overview.overview=true;overview.post=message=>panel.webview.postMessage(message);
   const receiver=panel.webview.onDidReceiveMessage(message=>handleMessage(message,overview,reply=>panel.webview.postMessage(reply)));panel.onDidDispose(()=>{overview.disposed=true;liveSessions.delete(overview);receiver.dispose();});panel.webview.html=await htmlFor(panel.webview,session.context,overview);return {opened:true};
 }
+// Repository browsing remains provider-only: the built-in Git extension owns Git.
+// The public Git API exposes history, not ls-tree; inventory is explicitly the
+// working tree and never invents committed blob identities or executable modes.
+const GIT_SHA=/^[0-9a-f]{40}(?:[0-9a-f]{24})?$/i;
+const BROWSE_LIMIT=10000,BROWSE_PAGE=200;
+function browsePath(value,rootAllowed=false){return typeof value==='string'&&value.length<=1000&&(rootAllowed&&value===''||value.length>0&&!value.startsWith('/')&&value.split('/').length<=64&&value.split('/').every(part=>part&&part!=='.'&&part!=='..'&&part.toLowerCase()!=='.git'&&!/[\\:\x00-\x1f\x7f]/.test(part)));}
+function browseScope(request,session){
+  if(request.repository!==session.scope.repository||request.ref!==session.scope.ref||request.file!==undefined&&!session.paths.has(request.file))throw Error('Repository request belongs to another workspace.');
+  if(request.sha!==undefined&&(typeof request.sha!=='string'||!GIT_SHA.test(request.sha)))throw Error('Invalid repository commit identity.');
+  if(request.refresh!==undefined&&typeof request.refresh!=='boolean')throw Error('Invalid repository refresh request.');
+}
+async function browseGit(session,request){
+  const warnings=[];
+  if(vscode.workspace.isTrusted!==true)return{repo:null,sha:null,warnings:['Git history is unavailable in Restricted Mode; workspace file inventory remains read-only.']};
+  if(session.scope.boundary.scheme!=='file')return{repo:null,sha:null,warnings:['This virtual workspace does not expose native Git history; showing provider file inventory.']};
+  let repo=null;
+  try{
+    const extension=vscode.extensions?.getExtension('vscode.git');
+    if(extension){const exports=extension.isActive?extension.exports:await extension.activate();
+      if(vscode.workspace.isTrusted!==true)return{repo:null,sha:null,warnings:['Workspace trust changed; native Git browsing was stopped.']};
+      const api=exports.getAPI(1);
+      repo=(api.repositories||[]).filter(item=>item.rootUri?.scheme==='file'&&sameScope(session.uri,item.rootUri)).sort((a,b)=>b.rootUri.path.length-a.rootUri.path.length)[0]||null;}
+  }catch{warnings.push('The VS Code Git provider is unavailable.');}
+  if(!repo){warnings.push('No local Git repository is available for this workspace.');return{repo:null,sha:null,warnings};}
+  const identity=repo.rootUri.toString();
+  if(request.refresh||session.repositoryPin?.root!==identity)session.repositoryPin=null;
+  let sha=request.sha||session.repositoryPin?.sha||repo.state?.HEAD?.commit;
+  if(!GIT_SHA.test(sha||'')){warnings.push('This Git repository has no saved HEAD commit.');return{repo,sha:null,warnings};}
+  sha=sha.toLowerCase();
+  if(request.sha&&sha!==session.repositoryPin?.sha&&sha!==(repo.state?.HEAD?.commit||'').toLowerCase()){
+    if(typeof repo.getCommit!=='function')throw Error('The Git provider cannot verify the requested commit.');
+    const commit=await repo.getCommit(sha);if(vscode.workspace.isTrusted!==true)return{repo:null,sha:null,warnings:['Workspace trust changed; native Git browsing was stopped.']};if(commit?.hash?.toLowerCase()!==sha)throw Error('The requested commit is unavailable in this repository.');
+  }
+  session.repositoryPin={root:identity,sha};return{repo,sha,warnings};
+}
+function browseStatus(repo,boundary){
+  const result=new Map(),labels=['modified','added','deleted','renamed','copied','modified','deleted','untracked','ignored','added','renamed','type-changed','conflicted','conflicted','conflicted','conflicted','conflicted','conflicted','conflicted'];
+  for(const [key,staged]of [['indexChanges',true],['workingTreeChanges',false],['mergeChanges',false]])for(const item of (repo?.state?.[key]||[]).slice(0,5000)){
+    if(!item.uri||!sameScope(item.uri,boundary))continue;
+    const path=item.uri.path.slice(boundary.path.replace(/\/$/,'').length+1);if(!browsePath(path))continue;
+    const status=key==='mergeChanges'?'conflicted':labels[item.status]||(staged?'staged':'modified');
+    const previous=result.get(path);result.set(path,{status,staged:staged||previous?.staged||false});
+  }
+  return result;
+}
+async function repositoryTree(request,session){
+  browseScope(request,session);
+  const lazy=request.directory!==undefined,directory=lazy?request.directory:'';
+  if(!browsePath(directory,true))throw Error('Invalid repository directory.');
+  const page=request.page===undefined?1:request.page;if(!Number.isSafeInteger(page)||page<1||page>50||!lazy&&page!==1)throw Error('Invalid repository tree page.');
+  const git=await browseGit(session,request),warnings=[...git.warnings,'File inventory is the working tree; Git object hashes and file modes are not available from this provider.'],boundary=session.scope.boundary,statuses=browseStatus(git.repo,boundary),entries=new Map();
+  let truncated=false;
+  const warn=value=>{if(!warnings.includes(value)&&warnings.length<20)warnings.push(value);};
+  if(git.repo&&git.repo.rootUri.toString()!==boundary.toString())warn('File inventory is scoped to the open workspace folder; history covers the whole Git repository.');
+  const add=(path,type)=>{if(entries.size>=BROWSE_LIMIT){truncated=true;return;}const change=statuses.get(path);entries.set(path,{path,type,sha:null,mode:null,...(change||{})});};
+  async function read(directory){
+    if(session.disposed)throw Error('Repository view was closed.');
+    const parts=directory?directory.split('/'):[];
+    for(let i=0;i<=parts.length;i++){
+      const uri=vscode.Uri.joinPath(boundary,...parts.slice(0,i));if(i&&!sameScope(uri,boundary))throw Error('Repository directory escapes workspace.');
+      const stat=await vscode.workspace.fs.stat(uri);if(stat.type&vscode.FileType.SymbolicLink)throw Error('Symbolic-link repository directories are excluded.');if(!(stat.type&vscode.FileType.Directory))throw Error('Repository path is not a directory.');
+    }
+    const rows=await vscode.workspace.fs.readDirectory(vscode.Uri.joinPath(boundary,...parts));
+    if(!Array.isArray(rows)||rows.length>50000)throw Error('Directory inventory exceeds the provider limit.');
+    return rows.filter(row=>Array.isArray(row)&&typeof row[0]==='string').sort((a,b)=>a[0]<b[0]?-1:a[0]>b[0]?1:0);
+  }
+  if(typeof vscode.workspace.fs.readDirectory!=='function'){
+    warn('This provider cannot enumerate directories; only loaded project files are shown.');
+    for(const file of session.files){if(browsePath(file.path)&&(!lazy||file.path.split('/').slice(0,-1).join('/')===directory))add(file.path,'blob');}
+  }else{
+    const queue=[directory];let visited=0;
+    while(queue.length&&entries.size<BROWSE_LIMIT){
+      const parent=queue.shift();if(++visited>2000){truncated=true;break;}
+      let rows;try{rows=await read(parent);}catch(error){if(lazy||parent==='')throw error;warn('Some repository directories could not be listed.');continue;}
+      for(const [name,type]of rows){
+        const path=parent?parent+'/'+name:name;
+        if(!browsePath(path)||name.includes('/')){if(name!=='.git')warn('Unsafe repository names were excluded.');continue;}
+        if(type&vscode.FileType.SymbolicLink){warn('Symbolic-link repository entries were excluded.');continue;}
+        if(type&vscode.FileType.Directory){add(path,'tree');if(!lazy)queue.push(path);}
+        else if(type&vscode.FileType.File)add(path,'blob');
+        if(entries.size>=BROWSE_LIMIT){truncated=true;break;}
+      }
+      if(lazy)break;
+    }
+    if(queue.length)truncated=true;
+  }
+  for(const [path,change]of statuses){if(change.status!=='deleted'||entries.has(path)||lazy&&path.split('/').slice(0,-1).join('/')!==directory)continue;add(path,'blob');}
+  const list=[...entries.values()].sort((a,b)=>a.path<b.path?-1:a.path>b.path?1:0),changedDirectories=new Set();
+  for(const path of statuses.keys()){const parts=path.split('/');for(let i=1;i<parts.length;i++)changedDirectories.add(parts.slice(0,i).join('/'));}
+  for(const item of list)if(item.type==='tree'&&changedDirectories.has(item.path))item.status='modified';
+  if(truncated)warn('Inventory is bounded at 10,000 entries / 2,000 directories; open a folder to list it separately.');
+  const offset=lazy?(page-1)*BROWSE_PAGE:0,result=lazy?list.slice(offset,offset+BROWSE_PAGE):list,hasMore=lazy&&offset+BROWSE_PAGE<list.length;
+  const head=git.repo?.state?.HEAD?.commit,sha=GIT_SHA.test(head||'')?head.toLowerCase():null;
+  if(request.sha&&request.sha.toLowerCase()!==sha)warn('Selected historical commit does not change this working-tree inventory; historical file trees are unavailable from this Git provider.');
+  return{repository:session.scope.repository,ref:session.scope.ref,sha,treeRef:'HEAD',requestedRef:request.sha||request.ref,workingTree:true,source:'working-tree',entries:result,truncated,warnings,directory:lazy?directory:null,hasMore,nextPage:hasMore?page+1:null};
+}
+async function repositoryBranches(request,session){
+  browseScope(request,session);const git=await browseGit(session,request),warnings=[...git.warnings],branches=[],seen=new Set();
+  const add=(name,sha,type)=>{if(typeof name!=='string'||!name||name.length>500||/[\x00-\x1f\x7f]/.test(name)||!GIT_SHA.test(sha||'')||seen.has(name))return;seen.add(name);branches.push({name,sha:sha.toLowerCase(),type,current:name===git.repo?.state?.HEAD?.name});};
+  for(const ref of (git.repo?.state?.refs||[]).slice(0,5000))if(ref.type===0||ref.type===1)add(ref.name,ref.commit,ref.type===1?'remote':'branch');
+  if(git.repo?.state?.HEAD?.name)add(git.repo.state.HEAD.name,git.repo.state.HEAD.commit,'branch');
+  branches.sort((a,b)=>a.name<b.name?-1:a.name>b.name?1:0);const truncated=branches.length>200||(git.repo?.state?.refs?.length||0)>5000;
+  if(truncated)warnings.push('Branch inventory is bounded at 200 branches.');
+  const selected=branches.slice(0,200),current=branches.find(branch=>branch.current);if(current&&!selected.includes(current)){selected[selected.length-1]=current;selected.sort((a,b)=>a.name<b.name?-1:a.name>b.name?1:0);}
+  return{repository:session.scope.repository,ref:session.scope.ref,sha:git.sha,branches:selected,truncated,warnings};
+}
+async function repositoryHistory(request,session){
+  browseScope(request,session);const page=request.page===undefined?1:request.page;
+  if(!Number.isSafeInteger(page)||page<1||page>100)throw Error('Invalid repository history page.');
+  // A fresh first page follows current HEAD; subsequent pages retain the pin.
+  const git=await browseGit(session,{...request,...(page===1&&request.sha===undefined?{refresh:true}:{})}),warnings=[...git.warnings],base={repository:session.scope.repository,ref:session.scope.ref,sha:git.sha};
+  if(!git.repo||!git.sha||typeof git.repo.log!=='function')return{...base,commits:[],hasMore:false,nextPage:null,warnings:[...warnings,...(git.repo&&git.sha?['This Git provider does not expose repository history.']:[])]};
+  if(vscode.workspace.isTrusted!==true)return{...base,commits:[],hasMore:false,nextPage:null,warnings:[...warnings,'Workspace trust changed; native Git browsing was stopped.']};
+  let raw;try{raw=await git.repo.log({maxEntries:31,skip:(page-1)*30,refNames:[git.sha]});}catch{return{...base,commits:[],hasMore:false,nextPage:null,warnings:[...warnings,'Git history could not be read from the selected commit.']};}
+  if(vscode.workspace.isTrusted!==true)return{...base,commits:[],hasMore:false,nextPage:null,warnings:[...warnings,'Workspace trust changed; native Git browsing was stopped.']};
+  if(session.disposed)throw Error('Repository view was closed.');
+  if(!Array.isArray(raw))throw Error('Git provider returned invalid history.');
+  const commits=[];
+  for(const item of raw.slice(0,30)){
+    if(!GIT_SHA.test(item.hash||'')||!Array.isArray(item.parents)||item.parents.some(sha=>!GIT_SHA.test(sha))){warnings.push('An invalid Git commit record was excluded.');continue;}
+    const when=item.commitDate||item.authorDate,date=when&&typeof when.toISOString==='function'&&typeof when.getTime==='function'&&Number.isFinite(when.getTime())?when.toISOString():null;
+    if(item.parents.length>256)warnings.push('An octopus merge has more than 256 parents; its graph edges are truncated.');
+    commits.push({sha:item.hash.toLowerCase(),parents:item.parents.slice(0,256).map(sha=>sha.toLowerCase()),...(item.parents.length>256?{parentsTruncated:true}:{}),message:String(item.message||'').slice(0,4096),author:String(item.authorName||'Unknown author').replace(/[\x00-\x1f\x7f]/g,'').slice(0,200),date});
+  }
+  const hasMore=raw.length>30&&page<100;if(raw.length>30&&page===100)warnings.push('History is bounded at 3,000 commits.');
+  return{...base,commits,hasMore,nextPage:hasMore?page+1:null,warnings:[...new Set(warnings)].slice(0,20)};
+}
 async function dispatch(request,session) {
   const state=session.context.workspaceState,key=session.storageKey;
+  if(request.type==='repository-tree')return repositoryTree(request,session);
+  if(request.type==='repository-history')return repositoryHistory(request,session);
+  if(request.type==='repository-branches')return repositoryBranches(request,session);
   if(['preview-project-html','project-inventory','project-file','open-project-file','open-project-overview'].includes(request.type)){
     if(request.repository!==session.scope.repository||request.ref!==session.scope.ref)throw new Error('Project request belongs to another workspace.');
     if(request.type==='project-inventory')return projectInventory(session);
@@ -415,6 +565,7 @@ async function dispatch(request,session) {
   }
   if(request.type==="project-search-files")return searchProjectFiles(request,session);
   if(request.type==="open-project-drawing"){assertScope(request,session);await vscode.commands.executeCommand("vscode.openWith",vscode.Uri.joinPath(session.scope.boundary,...request.file.split("/")),VIEW,vscode.ViewColumn.Beside);return {opened:true};}
+  if(request.type==="repo-model-index")return repoModelIndex(request,session);
   if(request.type==="repo-asset")return loadRepoAsset(request,session);
   if(request.type==="pair-selection")return relaySelection(request.selection,session);
   if(request.type==="comments-changed") {

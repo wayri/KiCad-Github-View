@@ -36,3 +36,15 @@ test('large project chooser distinguishes permanent, temporary and cancellation'
   const pending=chooseDownload({bytes:50*1048576},document);const dialog=nodes.find(n=>n.tag==='dialog');nodes.find(n=>n.textContent===label).onclick();assert.equal(await pending,expected);assert.equal(dialog.removed,true);assert.equal(dialog.open,false);assert.match(nodes.find(n=>n.tag==='p').textContent,/Android may delay physical cleanup/);assert.match(nodes.find(n=>n.tag==='p').textContent,/selected duration \(30 minutes to 6 hours\)/);
  }
 });
+
+
+test('authorization requests never retain the global blocking loading surface',async()=>{
+ const previous=global.KiCadLoading;let tracked=0,request;
+ global.KiCadLoading={track:promise=>{tracked++;return promise;}};
+ const api=bridge(()=>({githubRequest:(id,message)=>{request={id,message};}}),{setTimeout:()=>1,clearTimeout(){}});
+ try{for(const type of ['auth-status','device-start','device-poll','device-cancel','open-verification','open-verification-mobile']){
+  const task=api.request({type});api.reply(request.id,{ok:true,result:{}});await task;
+ }assert.equal(tracked,0);
+ const task=api.request({type:'repositories'});api.reply(request.id,{ok:true,result:{repositories:[]}});await task;assert.equal(tracked,1);
+ }finally{api.close();global.KiCadLoading=previous;}
+});

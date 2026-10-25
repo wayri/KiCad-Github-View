@@ -15,7 +15,7 @@ async function revision(query='',extraFiles=[],options={}){
  const initialFile=options.file||(options.pcb?'board.kicad_pcb':'root.kicad_sch');
  const context={URL,URLSearchParams,console,location:{search:'?repository=wayri/board&ref=main&file='+initialFile+query},parent,
   document:{getElementById:get,body:new Element(),createElement:()=>new Element(),createElementNS:()=>new Element(),head:new Element()},
-  chrome:{runtime:{getURL:name=>'chrome-extension://ours/'+name,sendMessage:async message=>{(calls.requests||=[]).push(message);if(message.type==='revision-resolve')return{ok:true,result:{sha:'a'.repeat(40)}};if(message.type==='repo-asset'){(calls.assetRequests||=[]).push(message);return{ok:true,result:{base64:'AAAA'}};}return{ok:true,result:[{path:initialFile,content:options.pcb?'(kicad_pcb)':'(kicad_sch)'},...extraFiles]};}}},
+  chrome:{runtime:{getURL:name=>'chrome-extension://ours/'+name,sendMessage:async message=>{(calls.requests||=[]).push(message);if(message.type==='revision-resolve')return{ok:true,result:{sha:'a'.repeat(40)}};if(message.type==='repo-model-index')return{ok:true,result:options.modelIndex||{paths:[]}};if(message.type==='repo-asset'){(calls.assetRequests||=[]).push(message);return{ok:true,result:{base64:'AAAA'}};}return{ok:true,result:[{path:initialFile,content:options.pcb?'(kicad_pcb)':'(kicad_sch)'},...extraFiles]};}}},
   KiCadPairedReview:require('../paired-review.js'),KiCadReviewTools:require('../review-tools.js'),KiCadWorksheet:require('../worksheet.js'),KiCadBrowserData:require('../browser-data.js'),KiCadDesignModel:require('../design-model.js'),KiCadDesignDiff:require('../design-diff.js'),KiCadViewState:viewState,
   KiCadSchematicRenderer:{build:()=>({primitives:[],layers:[],page:{width:297,height:210},warnings:[]})},
   KiCadPCBRenderer:{build:()=>({primitives:[],layers:options.layers||[],page:{width:297,height:210},warnings:[]})},
@@ -92,6 +92,13 @@ test('paired selection relay validates parent and suppresses cross-highlight ech
  assert.equal(v.calls.related,null);
  v.message({type:'kicad-review:command',command:'refresh-comments'});assert.equal(v.calls.refreshed,1);
 });
+test('3D inventory retains model paths, rejects unsafe paths, and passes diagnostics to the scene',async()=>{
+ const v=await revision('',[],{pcb:true,modelIndex:{paths:['models/part.wrl','models/part.step','models/part.glb','board.kicad_pcb','../escape.wrl','/outside.wrl','models/../escape.wrl','https://elsewhere/part.wrl'],warnings:['Inventory truncated']}});
+ await v.get('mode3d').click();
+ assert.deepEqual(plain(v.calls.modelOptions.assetPaths),['models/part.wrl','models/part.step','models/part.glb']);
+ assert.deepEqual(plain(v.calls.modelOptions.assetWarnings),['Inventory truncated']);
+});
+
 test('3D mode reuses successful model assets across toggles and clears them on pagehide',async()=>{
  const v=await revision('',[],{pcb:true});await v.get('mode3d').click();
  await v.calls.modelOptions.loadAsset('models/part.wrl');
@@ -151,4 +158,12 @@ test('all-sheets Unselect and Clear highlights clear local picks and delegate to
  }
  v.context.KiCadSheetOverview.dispose();
  assert.equal(v.get('unselect').listeners.get('click').size,0);assert.equal(v.get('clearHighlights').listeners.get('click').size,0);
+});
+
+
+test('unchanged drawing frames do not rewrite status labels or copper controls',async()=>{
+ const v=await revision('',[],{pcb:true,layers:['F.Cu','B.Cu']});v.viewframe();
+ let writes=0;for(const id of ['renderMode','accelerationStatus','viewScale','drawingViewLabel']){const node=v.get(id);let value=node.textContent;Object.defineProperty(node,'textContent',{get:()=>value,set:next=>{writes++;value=next;}});}
+ for(let i=0;i<100;i++)v.viewframe();assert.equal(writes,0);
+ v.camera.zoom*=2;v.viewframe();assert.equal(writes,1);assert.equal(v.get('viewScale').textContent,Math.round(v.camera.zoom/4*100)+'%');
 });

@@ -7,6 +7,7 @@ import org.json.*;
 import java.io.*;
 import java.nio.charset.StandardCharsets;
 import java.util.*;
+import java.util.concurrent.*;
 
 /** App-private disk copies; only manifests cross the bridge. */
 final class DiskProjectStore {
@@ -64,7 +65,12 @@ final class DiskProjectStore {
       }
     }
     JSONObject importProject(String name,JSONArray nodes,Downloader downloader,JSONObject metadata,boolean temporary) throws Exception {
-      TRANSFER_GUARD.lock();try {
+        return importProject(name,nodes,downloader,metadata,temporary,3);
+    }
+    // Package-private cap also allows deterministic sequential/parallel native acceptance.
+    JSONObject importProject(String name,JSONArray nodes,Downloader downloader,JSONObject metadata,boolean temporary,int transferCap) throws Exception {
+      if(transferCap<1||transferCap>3)throw new IllegalArgumentException("Transfer concurrency must be 1–3");
+      try{TRANSFER_GUARD.lockInterruptibly();}catch(InterruptedException cancellation){Thread.currentThread().interrupt();InterruptedIOException failure=new InterruptedIOException("Project import cancelled");failure.initCause(cancellation);throw failure;}try {
       synchronized(LOCK) {
         cleanupExpired();
         JSONArray entries=new JSONArray();Set<String> paths=new HashSet<>();long known=0;
@@ -88,22 +94,18 @@ final class DiskProjectStore {
         File stagingMarker=new File(staging,".staging");
         try(FileOutputStream marker=new FileOutputStream(stagingMarker)){marker.getFD().sync();}catch(IOException error){deleteDirectory(staging);throw error;}
         requestCleanupAt(System.currentTimeMillis()+TEMP_LIFETIME);
-        JSONArray files=new JSONArray(),assets=new JSONArray();boolean complete=false;long total=0;
+        JSONArray files=new JSONArray(),assets=new JSONArray();boolean complete=false;
         try {
+            // GitLab refresh-token rotation is currently serial. Other transports
+            // use at most three workers; no whole-file byte arrays enter this pool.
+            int workers=metadata!=null&&metadata.has("gitlab")?1:transferCap;
+            boolean exactReservations=metadata!=null&&metadata.has("github");
+            long[] sizes=downloadEntries(entries,downloader,staging,workers,exactReservations,Math.min(2L*TOTAL_LIMIT-stored,base.getUsableSpace()-32L*1024*1024));
+            // Completion order never changes file indices or manifest order.
             for(int i=0;i<entries.length();i++) {
-                JSONObject item=entries.getJSONObject(i);String path=item.getString("path");File target=new File(staging,Integer.toString(i));long expected=item.getLong("size");
-                downloader.download(path,target,expected);if(!target.isFile())throw new IOException("Downloaded file missing");long actual=target.length();
-                if(path.toLowerCase(Locale.ROOT).endsWith(".pdf")&&actual>ProjectImporter.MAX_FILE_BYTES)throw new IOException("PDF exceeds 32 MiB");
-                if(actual>FILE_LIMIT||actual>TOTAL_LIMIT-total||actual>2L*TOTAL_LIMIT-stored-total)throw new IOException("Downloaded project exceeds its file, project or storage limit");
-                if(expected>=0&&actual!=expected)throw new IOException("Downloaded file size mismatch");
-                if(!path.toLowerCase(Locale.ROOT).matches(".*\\.(step|stp|wrl|vrml|glb|pdf)$")) {
-                    java.nio.charset.CharsetDecoder decoder=StandardCharsets.UTF_8.newDecoder().onMalformedInput(java.nio.charset.CodingErrorAction.REPORT).onUnmappableCharacter(java.nio.charset.CodingErrorAction.REPORT);
-                    try(Reader reader=new InputStreamReader(new FileInputStream(target),decoder)){char[] chars=new char[32768];while(reader.read(chars)!=-1){} }
-                }
-                total+=actual;
-                try(InputStream input=new FileInputStream(target)){byte[] prefix=new byte[128];int n=input.read(prefix);if(n>0&&new String(prefix,0,n,StandardCharsets.US_ASCII).startsWith("version https://git-lfs.github.com/spec/"))throw new IOException("Git LFS sources require a local checkout");}
-                item.put("size",actual).put("diskPath",prefix(temporary)+id+"/"+i);
-                (path.toLowerCase(Locale.ROOT).matches(".*\\.(step|stp|wrl|vrml|glb|pdf)$")?assets:files).put(item);
+                JSONObject item=entries.getJSONObject(i);String path=item.getString("path");
+                item.put("size",sizes[i]).put("diskPath",prefix(temporary)+id+"/"+i);
+                (asset(path)?assets:files).put(item);
             }
             if(files.length()==0&&assets.length()==0)throw new IOException("No KiCad project source files found");
             JSONObject project=new JSONObject().put("id",id).put("diskBacked",true).put("files",files).put("assets",assets).put("name",name).put("offline",true);
@@ -118,6 +120,67 @@ final class DiskProjectStore {
         } finally {if(!complete)deleteDirectory(staging);}
       }
       }finally{TRANSFER_GUARD.unlock();}
+    }
+    private static boolean asset(String path){return path.toLowerCase(Locale.ROOT).matches(".*\\.(step|stp|wrl|vrml|glb|pdf)$");}
+    private static final class Transfer {
+        final int index;final long bytes,reserved;
+        Transfer(int index,long bytes,long reserved){this.index=index;this.bytes=bytes;this.reserved=reserved;}
+    }
+    private static long[] downloadEntries(JSONArray entries,Downloader downloader,File staging,int workers,boolean exactReservations,long storageBudget)throws Exception {
+        ExecutorService pool=Executors.newFixedThreadPool(workers,runnable->{Thread thread=new Thread(runnable,"kiview-project-transfer");thread.setDaemon(true);return thread;});
+        CompletionService<Transfer> completed=new ExecutorCompletionService<>(pool);
+        Set<Future<Transfer>> active=new HashSet<>();long[] sizes=new long[entries.length()];long total=0,reserved=0;int next=0,finished=0;
+        boolean interrupted=false;
+        try {
+            while(finished<entries.length()) {
+                if(Thread.currentThread().isInterrupted())throw new InterruptedException("Project import cancelled");
+                while(next<entries.length()&&active.size()<workers) {
+                    JSONObject item=entries.getJSONObject(next);final int index=next;final String path=item.getString("path");final long expected=item.getLong("size");
+                    long remaining=Math.min(TOTAL_LIMIT-total,storageBudget-total);
+                    long maximum=exactReservations&&expected>=0?expected:FILE_LIMIT;
+                    // For unknown/untrusted declared sizes reserve the full native
+                    // per-file cap. Near a quota, retain the previous single-file
+                    // behavior and validate its actual size before starting another.
+                    if(!active.isEmpty()&&maximum>remaining-reserved)break;
+                    final long reservation=Math.min(maximum,Math.max(0,remaining));
+                    Future<Transfer> task=completed.submit(()->new Transfer(index,downloadEntry(downloader,path,new File(staging,Integer.toString(index)),expected),reservation));
+                    active.add(task);reserved+=reservation;next++;
+                    if(maximum>remaining)break;
+                }
+                Future<Transfer> task=completed.take();active.remove(task);Transfer transfer;
+                try{transfer=task.get();}catch(ExecutionException failure){Throwable cause=failure.getCause();if(cause instanceof Exception)throw (Exception)cause;if(cause instanceof Error)throw (Error)cause;throw new IOException("Project transfer failed",cause);}
+                reserved-=transfer.reserved;
+                if(transfer.bytes>TOTAL_LIMIT-total||transfer.bytes>storageBudget-total)throw new IOException("Downloaded project exceeds its file, project or storage limit");
+                total+=transfer.bytes;sizes[transfer.index]=transfer.bytes;finished++;
+            }
+            return sizes;
+        }catch(InterruptedException cancellation){interrupted=true;InterruptedIOException failure=new InterruptedIOException("Project import cancelled");failure.initCause(cancellation);throw failure;}
+        finally {
+            joinTransfers(pool,active);
+            if(interrupted)Thread.currentThread().interrupt();
+        }
+    }
+    // Future cancellation is not proof that an underlying stream has closed.
+    // Both disk and in-memory imports join every worker before returning failure.
+    static void joinTransfers(ExecutorService pool,Collection<? extends Future<?>> active) {
+        boolean interrupted=Thread.interrupted();for(Future<?> task:active)task.cancel(true);pool.shutdownNow();
+        while(!pool.isTerminated())try{pool.awaitTermination(1,TimeUnit.SECONDS);}catch(InterruptedException cancellation){interrupted=true;pool.shutdownNow();}
+        if(interrupted)Thread.currentThread().interrupt();
+    }
+    private static long downloadEntry(Downloader downloader,String path,File target,long expected)throws Exception {
+        if(Thread.currentThread().isInterrupted())throw new InterruptedIOException("Project import cancelled");
+        downloader.download(path,target,expected);
+        if(!target.isFile())throw new IOException("Downloaded file missing");long actual=target.length();
+        if(path.toLowerCase(Locale.ROOT).endsWith(".pdf")&&actual>ProjectImporter.MAX_FILE_BYTES)throw new IOException("PDF exceeds 32 MiB");
+        if(actual>FILE_LIMIT)throw new IOException("Downloaded project exceeds its file, project or storage limit");
+        if(expected>=0&&actual!=expected)throw new IOException("Downloaded file size mismatch");
+        if(!asset(path)) {
+            java.nio.charset.CharsetDecoder decoder=StandardCharsets.UTF_8.newDecoder().onMalformedInput(java.nio.charset.CodingErrorAction.REPORT).onUnmappableCharacter(java.nio.charset.CodingErrorAction.REPORT);
+            try(Reader reader=new InputStreamReader(new FileInputStream(target),decoder)){char[] chars=new char[32768];while(reader.read(chars)!=-1){if(Thread.currentThread().isInterrupted())throw new InterruptedIOException("Project import cancelled");}}
+        }
+        try(InputStream input=new FileInputStream(target)){byte[] prefix=new byte[128];int n=input.read(prefix);if(n>0&&new String(prefix,0,n,StandardCharsets.US_ASCII).startsWith("version https://git-lfs.github.com/spec/"))throw new IOException("Git LFS sources require a local checkout");}
+        if(Thread.currentThread().isInterrupted())throw new InterruptedIOException("Project import cancelled");
+        return actual;
     }
     JSONObject promote(JSONObject source)throws Exception {
       TRANSFER_GUARD.lock();try {

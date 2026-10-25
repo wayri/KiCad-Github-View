@@ -45,14 +45,58 @@
     return files.sort();
   }
   async function inventory(repository,ref,path){scope(repository,ref,path);const snapshot=await resolve(repository,ref,path),listing=await tree(repository,snapshot.sha);return {files:listing.entries.filter(item=>root.KiCadGitHub.filePath(item.path)).sort((a,b)=>a.path.localeCompare(b.path)).map(item=>({path:item.path,size:0})),snapshotRef:snapshot.sha,warnings:listing.warnings};}
+  async function modelIndex(repository,ref){
+    if(!validRepository(repository)||!SHA.test(ref||''))throw Error('Model discovery requires a repository and immutable revision.');
+    const listing=await tree(repository,ref);
+    const paths=[...new Set(listing.entries.filter(item=>/\.(wrl|vrml|glb|step|stp)$/i.test(item.path)&&!/[?#%]/.test(item.path)).map(item=>item.path))].sort();
+    return {paths,snapshotRef:ref,warnings:listing.warnings};
+  }
   async function projectFile(repository,ref,path){scope(repository,ref,path);if(!root.KiCadGitHub.filePath(path))throw new Error('Unsupported project file.');const content=await file(repository,ref,path);if(content===null)throw new Error('Project file unavailable at this revision.');return {path,content};}
   async function search(repository,ref,path){const listing=await inventory(repository,ref,path),warnings=[...listing.warnings];const drawings=listing.files.filter(item=>root.KiCadBrowserData.validPath(item.path)).sort((a,b)=>(b.path===path?1:0)-(a.path===path?1:0)),settings=listing.files.filter(item=>/\.kicad_pro$/i.test(item.path));const files=[],saved=[];let total=0;
     for(const item of drawings.slice(0,32)){try{const content=await file(repository,listing.snapshotRef,item.path);if(content===null){warnings.push(`${item.path}: unavailable.`);continue;}const bytes=new TextEncoder().encode(content).length;if(total+bytes>root.KiCadBrowserData.PROJECT_MAX_BYTES){warnings.push('Project search reached its 96 MiB source limit.');break;}total+=bytes;files.push({path:item.path,content});}catch(error){warnings.push(`${item.path}: ${error.message}`);}}
     for(const item of settings.slice(0,8)){try{const content=await file(repository,listing.snapshotRef,item.path);if(content!==null&&new TextEncoder().encode(content).length<=MIB)saved.push({path:item.path,content});else warnings.push(`${item.path}: settings unavailable or exceed 1 MiB.`);}catch(error){warnings.push(`${item.path}: ${error.message}`);}}
     if(drawings.length>32)warnings.push('Project search loads at most 32 drawings.');if(settings.length>8)warnings.push('Only the first eight project settings files were retrieved.');return {files,settings:saved,warnings,snapshotRef:listing.snapshotRef,totalDrawings:drawings.length};
   }
-  async function branches(repository,ref,path){scope(repository,ref,path);const {value,next,link}=await json(`${endpoint(repository)}/branches?per_page=100&page=1`);if(!Array.isArray(value)||value.length>100)throw new Error('Invalid GitLab branch listing.');return {repository,branches:value.filter(item=>root.KiCadBrowserData.validRef(item?.name)&&SHA.test(item?.commit?.id)).map(item=>({name:item.name,sha:item.commit.id})),warnings:next||/rel="next"/.test(link)||value.length===100?['At most 100 branches shown; enter another branch manually.']:[]};}
+  async function branches(repository,ref,path){scope(repository,ref,path);return repositoryBranches(repository,ref);}
+  async function repositoryBranches(repository,ref){if(!validRepository(repository)||!root.KiCadBrowserData.validRef(ref))throw Error('Invalid GitLab repository location.');const {value,next,link}=await json(`${endpoint(repository)}/branches?per_page=100&page=1`);if(!Array.isArray(value)||value.length>100)throw new Error('Invalid GitLab branch listing.');return {repository,branches:value.filter(item=>root.KiCadBrowserData.validRef(item?.name)&&SHA.test(item?.commit?.id)).map(item=>({name:item.name,sha:item.commit.id})),warnings:next||/rel="next"/.test(link)||value.length===100?['At most 100 branches shown; enter another branch manually.']:[]};}
   async function commits(repository,ref,path){const snapshot=await resolve(repository,ref,path),query=new URLSearchParams({ref_name:snapshot.sha,path,per_page:'50',page:'1'});const {value,next,link}=await json(`${endpoint(repository)}/commits?${query}`);if(!Array.isArray(value)||value.length>50)throw new Error('Invalid GitLab commit listing.');const clean=value=>typeof value==='string'?value.replace(/[\x00-\x1f\x7f]/g,' ').slice(0,300):'';return {repository,file:path,snapshotRef:snapshot.sha,commits:value.filter(item=>SHA.test(item?.id)).map(item=>({sha:item.id,message:clean(item.title),author:clean(item.author_name),date:clean(item.authored_date)})),warnings:next||/rel="next"/.test(link)||value.length===50?['At most 50 commits shown; enter an older SHA manually.']:[]};}
+  function repositoryPage(page=1){if(!Number.isSafeInteger(page)||page<1||page>100)throw Error('Repository page must be between 1 and 100.');return page;}
+  async function repositorySnapshot(repository,ref){
+    if(!validRepository(repository)||!root.KiCadBrowserData.validRef(ref))throw Error('Invalid GitLab repository location.');
+    if(SHA.test(ref))return ref.toLowerCase();
+    const {value}=await json(`${endpoint(repository)}/commits/${encodeURIComponent(ref)}`);if(!SHA.test(value?.id||''))throw Error('GitLab did not resolve an immutable repository revision.');return value.id.toLowerCase();
+  }
+  function repositoryMessage(value,warnings){
+    if(typeof value!=='string')return '';value=value.replace(/[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]/g,'');
+    const encoder=new TextEncoder();if(encoder.encode(value).length<=8192)return value;
+    let low=0,high=Math.min(value.length,8192);while(low<high){const middle=Math.ceil((low+high)/2);if(encoder.encode(value.slice(0,middle)).length<=8192)low=middle;else high=middle-1;}
+    warnings.push('A commit message was shortened to 8 KiB.');return value.slice(0,low);
+  }
+  async function repositoryTree(repository,ref,{page=1,directory}={}){
+    page=repositoryPage(page);if(directory!==undefined&&directory!==''&&!validPath(directory))throw Error('Invalid GitLab repository directory.');
+    const sha=await repositorySnapshot(repository,ref),recursive=directory===undefined,query=new URLSearchParams({ref:sha,recursive:String(recursive),per_page:'100',page:String(page),...(directory?{path:directory}:{})});
+    const {value,next,link}=await json(`${endpoint(repository)}/tree?${query}`);if(!Array.isArray(value)||value.length>100)throw Error('Invalid GitLab repository tree.');
+    const entries=[],warnings=[],seenPaths=new Set(),modes={tree:['040000'],blob:['100644','100755','120000'],commit:['160000']};
+    for(const item of value){
+      if(!item||seenPaths.has(item.path)||!validPath(item.path)||!SHA.test(item.id||'')||!modes[item.type]?.includes(item.mode)||directory!==undefined&&item.path.split('/').slice(0,-1).join('/')!==directory){warnings.push('Invalid repository entry omitted.');continue;}
+      seenPaths.add(item.path);entries.push({path:item.path,type:item.type,sha:item.id.toLowerCase(),mode:item.mode});
+    }
+    const more=Boolean(next)||/rel="next"/.test(link)||value.length===100,hasMore=more&&page<100;
+    if(more&&!hasMore)warnings.push('Repository tree browsing stopped at 10,000 entries; expand folders to inspect their pinned contents.');
+    return {repository,ref,sha,snapshotRef:sha,directory:directory||'',entries,truncated:more||entries.length!==value.length,hasMore,nextPage:hasMore?page+1:null,warnings:[...new Set(warnings)]};
+  }
+  async function repositoryHistory(repository,ref,page=1){
+    page=repositoryPage(page);const sha=await repositorySnapshot(repository,ref),query=new URLSearchParams({ref_name:sha,per_page:'30',page:String(page)});
+    const {value,next,link}=await json(`${endpoint(repository)}/commits?${query}`);if(!Array.isArray(value)||value.length>30)throw Error('Invalid GitLab repository history.');
+    const warnings=[],commits=[],seen=new Set(),text=value=>typeof value==='string'?value.replace(/[\x00-\x1f\x7f]/g,' ').slice(0,200):'';
+    for(const item of value){
+      if(!SHA.test(item?.id||'')||seen.has(item.id.toLowerCase())){warnings.push('Invalid or duplicate commit omitted.');continue;}
+      if(!Array.isArray(item.parent_ids)||item.parent_ids.length>32||item.parent_ids.some(parent=>!SHA.test(parent||'')))throw Error('Invalid GitLab commit parents; graph cannot be represented faithfully.');
+      seen.add(item.id.toLowerCase());const id=item.id.toLowerCase();commits.push({sha:id,parents:item.parent_ids.map(parent=>parent.toLowerCase()),message:repositoryMessage(item.message,warnings),author:text(item.author_name),date:text(item.authored_date),url:`${host}/${repository}/-/commit/${id}`});
+    }
+    const more=Boolean(next)||/rel="next"/.test(link)||value.length===30,hasMore=more&&page<100;if(more&&!hasMore)warnings.push('History browsing stopped at 3,000 commits.');
+    return {repository,ref,sha,snapshotRef:sha,commits,hasMore,nextPage:hasMore?page+1:null,warnings:[...new Set(warnings)]};
+  }
   async function compareTrees(repository,base,head,headRepository=repository){
     // A truncated tree cannot establish absence: never infer deletions from it.
     const listings=await Promise.all([tree(repository,base),tree(headRepository,head)]);
@@ -120,7 +164,7 @@
     return {base:refs.base_sha,head:refs.head_sha,baseTip:refs.start_sha,headRepository,files,
       warnings:['Changed drawings are identified from complete commit trees. Only unique byte-identical moves are recognized as renames; edited or ambiguous moves appear as added/removed.']};
   }
-  return {validRepository,validPath,file,resolve,directory,schematics,inventory,projectFile,search,branches,commits,compare,mergeRequest,response,endpoint};
+  return {validRepository,validPath,file,resolve,directory,schematics,inventory,modelIndex,projectFile,search,branches,commits,repositoryTree,repositoryHistory,repositoryBranches,compare,mergeRequest,response,endpoint};
   }
   root.KiCadGitLabProvider={...forHost(),forHost};
   if(typeof module==='object'&&module.exports)module.exports=root.KiCadGitLabProvider;

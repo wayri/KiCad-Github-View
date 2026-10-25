@@ -1076,3 +1076,100 @@ test('iOS review export uses native Share with the same bounded payload as Andro
  const api=require('../review-handoff.js');let handoff;const exported=[];const view=workspaceRuntime(async()=>[],{localRuntime:true,handoff:{...api,open:o=>handoff=o},top:{KiViewIOS:{exportText:(...args)=>exported.push(args)}}});view.load();view.get('openReviewHandoff').click();
  const text=await api.create(await handoff.getState(),handoff.getFiles());handoff.onExport('pocket-kiview-review.json',text,'application/json;charset=utf-8');assert.equal(exported.length,1);assert.equal(exported[0][0],'pocket-kiview-review.json');assert.equal(exported[0][1],text);assert.equal(exported[0][2],'application/json');assert.throws(()=>handoff.onExport('too-large.json','x'.repeat(4*1024*1024+1),'application/json'),/exceeds 4 MiB/);view.workspace.dispose();
 });
+
+
+test('Android selection and cross-probing update highlights without opening Properties',()=>{
+ const view=workspaceRuntime(undefined,{android:true});view.load();
+ view.get('objectList').children[0].click();assert.equal(view.get('selectedName').textContent,'R1');assert.equal(view.get('designInspector').hidden,true);
+ view.get('netList').children[0].click();assert.equal(view.canvas.netHighlight.name,'SIGNAL');assert.equal(view.get('designInspector').hidden,true);
+ view.workspace.highlightRelated({kind:'part',reference:'R1',path:'root.kicad_sch'});assert.equal(view.get('designInspector').hidden,true);
+ view.workspace.highlightRelated({kind:'net',netName:'SIGNAL',path:'root.kicad_sch'});assert.equal(view.get('designInspector').hidden,true);
+ view.workspace.select3D({uuid:'fp',ref:'R1'});assert.equal(view.get('designInspector').hidden,true);
+ view.workspace.inspect3D({uuid:'fp',ref:'R1'});assert.equal(view.get('designInspector').hidden,false);assert.equal(view.get('selectedName').textContent,'R1');view.workspace.dispose();
+});
+test('Android long-press menu opens Properties only after its explicit Inspect action',()=>{
+ const view=workspaceRuntime(undefined,{android:true,query:()=>[{bbox:{context:{uuid:'fp',reference:'R1'}}}]});view.load();
+ view.canvas.canvas.dispatchEvent(uiEvent('contextmenu',{clientX:790,clientY:590,button:2}));assert.equal(view.get('designInspector').hidden,true);assert.equal(view.get('objectMenu').hidden,false);
+ view.get('objectMenu').children.find(b=>b.textContent==='Inspect properties').click();assert.equal(view.get('designInspector').hidden,false);assert.equal(view.get('selectedName').textContent,'R1');view.workspace.dispose();
+});
+
+
+test('schematic net display uses attached sheet-pin text while callbacks keep source identity',()=>{
+ const selections=[],uuid='95e84e92-806d-4809-ad70-48202504e491',view=workspaceRuntime(undefined,{pcb:false,android:true,onSelection:item=>selections.push(item),files:[{path:'root.kicad_sch',content:`(kicad_sch (wire (pts (xy 0 0) (xy 20 0)) (uuid "${uuid}")) (sheet (at 20 0) (size 10 10) (uuid "sheet") (property "Sheetname" "Child") (property "Sheetfile" "child.kicad_sch") (pin "ENABLE" input (at 20 0 180) (uuid "sheet-pin"))))`}]});
+ let labels=[];view.canvas.setNetNames=nets=>{labels=nets;};view.load();
+ assert.match(view.get('netList').textContent,/ENABLE/);assert.doesNotMatch(view.get('netList').textContent,new RegExp(uuid));
+ view.get('netList').children[0].click();assert.match(view.get('selectionStatus').textContent,/ENABLE/);assert.equal(view.get('selectedName').textContent,'ENABLE');assert.match(view.get('propertyList').textContent,/Net name ENABLE/);
+ assert.equal(labels[0].name,'ENABLE','canvas overlay gets display text');assert.ok(view.canvas.netHighlight.name.includes(uuid),'highlight identity remains unchanged');assert.ok(selections.at(-1).netName.includes(uuid),'cross-view matching still uses source identity');
+ view.canvas.query=()=>view.design.primitives.filter(p=>p.kind==='wire');view.get('selectionMode').value='net';view.canvas.touchNetPick({clientX:50,clientY:50});assert.equal(view.get('selectedName').textContent,'ENABLE');view.workspace.dispose();
+});
+
+test('unlabelled network UI does not expose raw UUID as its primary name',()=>{
+ const uuid='95e84e92-806d-4809-ad70-48202504e491',view=workspaceRuntime(undefined,{pcb:false,files:[{path:'root.kicad_sch',content:`(kicad_sch (wire (pts (xy 0 0) (xy 20 0)) (uuid "${uuid}")))`}]});view.load();view.get('netList').children[0].click();
+ assert.equal(view.get('selectedName').textContent,'Unnamed network');assert.equal(view.get('selectionStatus').textContent,'Unnamed network · sheet network');assert.doesNotMatch(view.get('netList').textContent,new RegExp(uuid));assert.ok(view.canvas.netHighlight.uuids.includes(uuid));view.workspace.dispose();
+});
+
+
+test('touch disambiguation uses net display names rather than schematic source UUIDs',()=>{
+ const uuid='95e84e92-806d-4809-ad70-48202504e491',view=workspaceRuntime(undefined,{pcb:false,files:[{path:'root.kicad_sch',content:`(kicad_sch (wire (pts (xy 0 0) (xy 20 0)) (uuid "${uuid}")) (sheet (at 20 0) (size 10 10) (uuid "sheet") (property "Sheetfile" "child.kicad_sch") (pin "ENABLE" input (at 20 0 180) (uuid "sheet-pin"))) (wire (pts (xy 0 1) (xy 20 1)) (uuid "other-wire")) (label "OTHER" (at 0 1) (uuid "label")))`}]});
+ view.load();view.canvas.query=()=>view.design.primitives.filter(p=>p.kind==='wire');assert.equal(view.canvas.touchNetPick({clientX:50,clientY:50}),true);
+ const popup=view.document.body.querySelector('.touch-net-picker');assert.ok(popup);assert.match(popup.textContent,/ENABLE/);assert.match(popup.textContent,/OTHER/);assert.doesNotMatch(popup.textContent,new RegExp(uuid));
+ popup.children.find(n=>n.tagName==='BUTTON'&&n.textContent.includes('ENABLE')).click();assert.equal(view.get('selectedName').textContent,'ENABLE');assert.ok(view.canvas.netHighlight.uuids.includes(uuid));view.workspace.dispose();
+});
+
+
+const testpointBoard=(prefix='')=>`(kicad_pcb (net 1 "SENSE") (net 2 "GND")
+ (footprint "Resistor" (layer "F.Cu") (at 0 0) (uuid "${prefix}r") (property "Reference" "R1") (property "Value" "10k") (pad "1" smd rect (at 0 0) (size 1 1) (layers "F.Cu") (net 2 "GND") (uuid "${prefix}rp")))
+ (footprint "TestPoint:TestPoint_Pad" (layer "F.Cu") (at 10 0) (uuid "${prefix}tp") (property "Reference" "TP1") (property "Value" "TestPoint") (pad "1" smd circle (at 0 0) (size 1 1) (layers "F.Cu") (net 1 "SENSE") (uuid "${prefix}tpp")))
+ (segment (start 10 0) (end 20 0) (width .2) (layer "F.Cu") (net 1) (uuid "${prefix}track")))`;
+
+test('quick testpoint highlight toggles independently of selected parts and nets',()=>{
+ const source=testpointBoard(),view=workspaceRuntime(undefined,{source,testpointTools:require('../testpoint-tools.js')});view.load();
+ const resistor=view.get('objectList').children.find(row=>/\bR1\b/.test(row.textContent));resistor.click();assert.equal(view.get('selectedName').textContent,'R1');
+ view.get('highlightTestpoints').click();assert.equal(view.get('highlightTestpoints').attributes['aria-pressed'],'true');assert.equal(view.get('selectedName').textContent,'R1');assert.ok([...view.canvas.netPrimitives].some(p=>p.uuid==='tpp'));assert.ok(![...view.canvas.netPrimitives].some(p=>p.uuid==='track'),'testpoint highlight does not silently select its full net');assert.match(view.get('highlightSummary').textContent,/1 testpoints/);assert.match(view.get('reviewNotice').textContent,/linked to 1 saved net/);
+ view.get('highlightTestpoints').click();assert.equal(view.get('highlightTestpoints').attributes['aria-pressed'],'false');assert.equal(view.get('selectedName').textContent,'R1');assert.equal(view.canvas.netPrimitives.size,0);
+ view.get('netList').children.find(row=>row.textContent.includes('GND')).click();const net=view.canvas.netHighlight;
+ view.get('highlightTestpoints').click();view.get('highlightTestpoints').click();assert.equal(view.get('selectedName').textContent,'GND');assert.equal(view.canvas.netHighlight,net);assert.ok([...view.canvas.netPrimitives].some(p=>p.uuid==='rp'));assert.ok(![...view.canvas.netPrimitives].some(p=>p.uuid==='tpp'));view.workspace.dispose();
+});
+
+test('quick testpoint filtering opens searchable navigator with resolved net association',()=>{
+ const view=workspaceRuntime(undefined,{source:testpointBoard(),testpointTools:require('../testpoint-tools.js')});view.load();view.get('partSearch').value='stale';view.get('allSheets').checked=true;
+ view.get('filterTestpoints').click();assert.equal(view.get('objectFilter').value,'testpoints');assert.equal(view.get('partSearch').value,'');assert.equal(view.get('allSheets').checked,false);assert.equal(view.get('designNavigator').hidden,false);assert.equal(view.get('partSearch').focused,true);
+ assert.equal(view.get('objectList').children.length,1);assert.match(view.get('objectList').textContent,/TP1.*SENSE/);assert.doesNotMatch(view.get('objectList').textContent,/R1/);
+ view.get('partSearch').value='net:SENSE';view.get('partSearch').oninput();assert.match(view.get('objectList').textContent,/TP1/);view.get('objectList').children[0].click();assert.equal(view.get('selectedName').textContent,'TP1');assert.match(view.get('propertyList').textContent,/Net SENSE/);view.get('selectObjectNet').click();assert.equal(view.canvas.netHighlight.name,'SENSE');
+ view.get('partSearch').value='net:GND';view.get('partSearch').oninput();assert.match(view.get('objectList').textContent,/No testpoints match/);view.workspace.dispose();
+});
+
+test('quick testpoint overlay and filter stay scoped to the active loaded drawing',()=>{
+ const files=[{path:'a.kicad_pcb',content:testpointBoard('a-')},{path:'b.kicad_pcb',content:testpointBoard('b-')}];let active='a.kicad_pcb';
+ const view=workspaceRuntime(undefined,{files,currentFile:()=>active,testpointTools:require('../testpoint-tools.js')});view.load();view.get('highlightTestpoints').click();view.get('filterTestpoints').click();assert.equal(view.get('objectList').children.length,1);assert.ok([...view.canvas.netPrimitives].every(p=>p.uuid!=='b-tpp'));
+ active='b.kicad_pcb';const design=require('../pcb-renderer.js').build(require('../design-diff.js').parse(files[1].content),active);view.canvas.design=design;view.canvas.primitives=design.primitives;view.workspace.draw();
+ assert.ok([...view.canvas.netPrimitives].some(p=>p.uuid==='b-tpp'));assert.ok([...view.canvas.netPrimitives].every(p=>p.uuid!=='a-tpp'));assert.equal(view.get('objectList').children.length,1);view.get('highlightTestpoints').click();assert.equal(view.canvas.netPrimitives.size,0);view.workspace.dispose();
+});
+
+test('quick testpoint actions report no matches and Escape clears the overlay state',()=>{
+ const empty=workspaceRuntime(undefined,{testpointTools:require('../testpoint-tools.js')});empty.load();empty.get('highlightTestpoints').click();assert.equal(empty.get('highlightTestpoints').attributes['aria-pressed'],'false');assert.match(empty.get('reviewNotice').textContent,/No saved testpoints found on this drawing/);empty.get('filterTestpoints').click();assert.match(empty.get('objectList').textContent,/No saved testpoints found on this drawing/);empty.workspace.dispose();
+ const view=workspaceRuntime(undefined,{source:testpointBoard(),testpointTools:require('../testpoint-tools.js')});view.load();view.get('highlightTestpoints').click();view.key('Escape');assert.equal(view.get('highlightTestpoints').attributes['aria-pressed'],'false');assert.equal(view.canvas.netPrimitives.size,0);view.workspace.dispose();
+});
+
+test('testpoint classification is cached while panning or drawing repeatedly',()=>{
+ const tools=require('../testpoint-tools.js');let classified=0;const view=workspaceRuntime(undefined,{source:testpointBoard(),testpointTools:{...tools,classify:object=>{classified++;return tools.classify(object);}}});view.load();view.get('highlightTestpoints').click();const count=classified;
+ for(let i=0;i<5;i++)view.workspace.draw();view.get('highlightTestpoints').click();view.get('filterTestpoints').click();assert.equal(classified,count);assert.equal(count,2,'only saved components are classified, not pads/tracks');view.workspace.dispose();
+});
+
+test('review annotation states and GitHub issue state are displayed independently on Android and desktop',async()=>{
+ for(const android of [true,false])for(const state of ['open','skipped']){
+  const note={id:'state-'+state,text:'Review this connection',state,severity:'info',createdAt:'2026-10-10T00:00:00Z',anchor:{repository:'wayri/fixture',ref:'main',file:'board.kicad_pcb'},github:{source:'issue',number:7,state:'closed',author:'reviewer',url:'https://github.com/wayri/fixture/issues/7'}};
+  const view=workspaceRuntime(async request=>request.type==='comment-list'?[note]:[],{android});view.load();await view.workspace.refreshComments();const card=view.get('commentList').children[0];assert.match(card.textContent,new RegExp('Review: '+state));assert.match(card.textContent,/Issue: closed/);assert.equal(note.state,state);assert.equal(note.github.state,'closed');view.workspace.dispose();
+ }
+});
+
+
+test('schematic quick testpoints highlight symbol geometry and retain named source-pin nets',()=>{
+ const source=`(kicad_sch (version 20250114) (lib_symbols (symbol "Connector:TestPoint" (symbol "TestPoint_0_1" (circle (center 0 0) (radius 1) (stroke (width 0) (type default)) (fill (type none)))) (symbol "TestPoint_1_1" (pin passive line (at 0 0 0) (length 0) (name "TP") (number "1"))))) (symbol (lib_id "Connector:TestPoint") (at 10 10 0) (unit 1) (uuid "probe-symbol") (property "Reference" "TP1") (property "Value" "TestPoint")) (wire (pts (xy 10 10) (xy 20 10)) (uuid "signal-wire")) (label "SENSE" (at 20 10) (uuid "label")))`;
+ const view=workspaceRuntime(undefined,{pcb:false,files:[{path:'root.kicad_sch',content:source}],testpointTools:require('../testpoint-tools.js')});view.load();view.get('highlightTestpoints').click();assert.ok([...view.canvas.netPrimitives].some(p=>p.uuid==='probe-symbol'||p.ownerUuid==='probe-symbol'));assert.match(view.get('reviewNotice').textContent,/linked to 1 saved net/);view.get('filterTestpoints').click();assert.match(view.get('objectList').textContent,/TP1.*SENSE/);view.workspace.dispose();
+});
+
+test('quick testpoint highlighting caps the overlay without hiding searchable testpoints',()=>{
+ const source='(kicad_pcb '+Array.from({length:201},(_,i)=>`(footprint "TestPoint" (layer "F.Cu") (at ${i} 0) (uuid "probe-${i}") (property "Reference" "TP${i+1}") (pad "1" smd circle (at 0 0) (size 1 1) (layers "F.Cu") (uuid "pad-${i}")))`).join(' ')+')';
+ const view=workspaceRuntime(undefined,{source,testpointTools:require('../testpoint-tools.js')});view.load();view.get('highlightTestpoints').click();assert.match(view.get('highlightSummary').textContent,/200 testpoints/);assert.match(view.get('reviewNotice').textContent,/first 200 of 201/);const owners=new Set([...view.canvas.netPrimitives].map(p=>p.ownerUuid||p.uuid));assert.equal(owners.size,200);view.get('filterTestpoints').click();assert.equal(view.get('objectCount').textContent,'201 objects');view.workspace.dispose();
+});

@@ -136,6 +136,9 @@ final class GitLabClient {
             }
             case "import":case "revision-import":return importProject(host,request,epoch);
             case "revision-resolve":return revisionResolve(host,request,epoch);
+            case "repository-tree":return readRepositoryTree(host,request,epoch);
+            case "repository-history":return readRepositoryHistory(host,request,epoch);
+            case "repository-branches":return repositoryBranches(host,request,epoch);
             case "revision-branches": {
                 String root=project(request);validateRevisionRequest(request);JSONArray source=array(host,root+"/repository/branches?per_page=100&page=1",epoch),branches=new JSONArray(),warnings=new JSONArray();
                 for(int i=0;i<source.length();i++){JSONObject branch=source.getJSONObject(i);String name=branch.getString("name");validRef(name);branches.put(new JSONObject().put("name",name).put("sha",sha(branch.getJSONObject("commit").getString("id"))));}
@@ -270,13 +273,69 @@ final class GitLabClient {
     private JSONObject revisionResolve(String host,JSONObject request,int epoch)throws Exception {
         validateRevisionRequest(request);String ref=request.getString("ref"),commit=sha(json(host,project(request)+"/repository/commits/"+encode(ref),epoch).getString("id"));return new JSONObject().put("repository",repository(request)).put("ref",ref).put("sha",commit);
     }
+    private static int metadataPage(JSONObject request,String key,int fallback,int maximum)throws Exception {
+        if(!request.has(key))return fallback;Object value=request.get(key);int number=request.getInt(key);
+        if(!(value instanceof Number)||request.getDouble(key)!=number||number<1||number>maximum)throw new Failure("Invalid "+key);return number;
+    }
+    private void repositoryCheck(int epoch,long deadline)throws Exception {check(epoch);if(SystemClock.elapsedRealtime()>deadline)throw new Failure("Repository metadata request timed out");}
+    private JSONObject repositorySnapshot(String host,JSONObject request,int epoch,long deadline)throws Exception {
+        String repository=repository(request),root=project(request),ref=request.optString("ref",""),pinned=request.optString("sha","");
+        if(ref.length()>255||controls(ref))throw new Failure("Invalid branch or commit");if(!pinned.isEmpty())pinned=sha(pinned);
+        if(ref.isEmpty())ref=pinned.isEmpty()?json(host,root,epoch).optString("default_branch",""):pinned;validRef(ref);
+        if(request.optInt("page",1)>1&&pinned.isEmpty()&&!ref.matches("[a-fA-F0-9]{40}"))throw new Failure("Use the returned commit SHA when loading another repository page");
+        repositoryCheck(epoch,deadline);String identity=sha(json(host,root+"/repository/commits/"+encode(pinned.isEmpty()?ref:pinned),epoch).getString("id"));
+        if(!pinned.isEmpty()&&!pinned.equals(identity)||ref.matches("[a-fA-F0-9]{40}")&&!ref.equalsIgnoreCase(identity))throw new Failure("Repository snapshot identity mismatch");
+        repositoryCheck(epoch,deadline);return new JSONObject().put("repository",repository).put("ref",ref).put("sha",identity);
+    }
+    private JSONObject readRepositoryTree(String host,JSONObject request,int epoch)throws Exception {
+        int page=metadataPage(request,"page",1,1000),perPage=metadataPage(request,"perPage",100,100);long deadline=SystemClock.elapsedRealtime()+90000;
+        boolean direct=request.has("directory");if(direct&&!(request.get("directory") instanceof String))throw new Failure("Invalid directory path");String directory=request.optString("directory","");if(!directory.isEmpty())safePath(directory);if(directory.split("/",-1).length>32)throw new Failure("Directory nesting exceeds metadata limit");
+        JSONObject snapshot=repositorySnapshot(host,request,epoch,deadline);String identity=snapshot.getString("sha");
+        String endpoint=project(request)+"/repository/tree?ref="+identity+"&recursive="+(!direct)+"&per_page="+perPage+"&page="+page+(directory.isEmpty()?"":"&path="+encode(directory));
+        JSONArray source=array(host,endpoint,epoch),entries=new JSONArray(),warnings=new JSONArray();boolean omitted=false;
+        if(source.length()>perPage)throw new Failure("Invalid repository tree page size");
+        for(int i=0;i<source.length();i++){
+            repositoryCheck(epoch,deadline);try{
+                JSONObject entry=GitHubClient.treeEntry(source.getJSONObject(i),"",false);String path=entry.getString("path");
+                if(direct){String prefix=directory.isEmpty()?"":directory+"/";if(!path.startsWith(prefix)||path.substring(prefix.length()).isEmpty()||path.substring(prefix.length()).indexOf('/')>=0)throw new Failure("Directory entry is outside the pinned folder");}
+                entries.put(entry);
+            }catch(Exception invalid){omitted=true;}
+        }
+        boolean more=source.length()==perPage&&page<1000,truncated=omitted||source.length()==perPage&&page==1000;
+        if(omitted)warnings.put("Some unsafe or unsupported repository entries were omitted.");if(more)warnings.put("More repository entries may be available; load the next page.");if(page==1000&&source.length()==perPage)warnings.put("Repository tree reached the 1000-page limit.");
+        repositoryCheck(epoch,deadline);return new JSONObject().put("provider","gitlab").put("host",host).put("repository",snapshot.getString("repository")).put("ref",snapshot.getString("ref")).put("sha",identity).put("directory",directory).put("recursive",!direct).put("entries",entries).put("page",page).put("perPage",perPage).put("hasMore",more).put("nextPage",more?page+1:JSONObject.NULL).put("truncated",truncated).put("warnings",warnings);
+    }
+    private JSONObject readRepositoryHistory(String host,JSONObject request,int epoch)throws Exception {
+        int page=metadataPage(request,"page",1,100),perPage=metadataPage(request,"perPage",30,100);long deadline=SystemClock.elapsedRealtime()+90000;
+        JSONObject snapshot=repositorySnapshot(host,request,epoch,deadline);String repository=snapshot.getString("repository"),identity=snapshot.getString("sha");
+        JSONArray source=array(host,project(request)+"/repository/commits?ref_name="+identity+"&per_page="+perPage+"&page="+page,epoch),commits=new JSONArray(),warnings=new JSONArray();
+        if(source.length()>perPage)throw new Failure("Invalid repository history page size");
+        for(int i=0;i<source.length();i++){
+            repositoryCheck(epoch,deadline);JSONObject commit=source.getJSONObject(i);String id=sha(commit.getString("id")),date=commit.optString("authored_date",commit.optString("committed_date","")),author=commit.optString("author_name","").replaceAll("[\\p{Cntrl}]"," ");
+            if(author.length()>256)author=author.substring(0,256);if(date.length()>64||controls(date))throw new Failure("Invalid commit timestamp");JSONArray rawParents=commit.getJSONArray("parent_ids");
+            commits.put(new JSONObject().put("sha",id).put("parents",GitHubClient.historyParents(rawParents,false,warnings)).put("parentsTruncated",rawParents.length()>32).put("message",GitHubClient.historyMessage(commit.optString("message",""),warnings)).put("author",author).put("date",date).put("url",host+"/"+repository+"/-/commit/"+id));
+        }
+        boolean more=source.length()==perPage&&page<100,pageLimited=source.length()==perPage&&page==100,truncated=pageLimited;for(int i=0;i<commits.length();i++)truncated|=commits.getJSONObject(i).optBoolean("parentsTruncated");
+        if(more)warnings.put("This is one history page; parent commits can be outside the loaded graph.");if(pageLimited)warnings.put("Repository history reached the 100-page limit; no complete-history claim is made.");
+        repositoryCheck(epoch,deadline);return new JSONObject().put("provider","gitlab").put("host",host).put("repository",repository).put("ref",snapshot.getString("ref")).put("sha",identity).put("commits",commits).put("page",page).put("perPage",perPage).put("hasMore",more).put("nextPage",more?page+1:JSONObject.NULL).put("truncated",truncated).put("warnings",warnings);
+    }
+    private JSONObject repositoryBranches(String host,JSONObject request,int epoch)throws Exception {
+        int page=metadataPage(request,"page",1,100),perPage=metadataPage(request,"perPage",100,100);JSONArray source=array(host,project(request)+"/repository/branches?per_page="+perPage+"&page="+page,epoch),branches=new JSONArray(),warnings=new JSONArray();
+        if(source.length()>perPage)throw new Failure("Invalid branch page size");
+        for(int i=0;i<source.length();i++){check(epoch);JSONObject branch=source.getJSONObject(i);String name=branch.getString("name");validRef(name);branches.put(new JSONObject().put("name",name).put("sha",sha(branch.getJSONObject("commit").getString("id"))));}
+        boolean more=source.length()==perPage&&page<100,truncated=source.length()==perPage&&page==100;if(truncated)warnings.put("Branch listing reached the 100-page limit.");
+        return new JSONObject().put("provider","gitlab").put("host",host).put("repository",repository(request)).put("branches",branches).put("page",page).put("perPage",perPage).put("hasMore",more).put("nextPage",more?page+1:JSONObject.NULL).put("truncated",truncated).put("warnings",warnings);
+    }
     private JSONObject importProject(String host,JSONObject request,int epoch) throws Exception {
         long deadline=SystemClock.elapsedRealtime()+(request.optBoolean("downloadLarge")?30L:8L)*60*1000;String repository=repository(request),root=project(request);
         String sourceRef=request.optString("sourceRef",request.optString("ref",""));if(sourceRef.length()>255||controls(sourceRef))throw new Failure("Invalid branch or commit");
-        synchronized(this) {
-            check(epoch);JSONObject cached=diskStore==null?null:diskStore.findRemote("gitlab",host,repository,request.optString("ref",""));
-            if(cached!=null)return new JSONObject().put("provider","gitlab").put("host",host).put("repository",repository).put("sha",cached.getJSONObject("gitlab").getString("sha")).put("cached",true).put("project",cached);
-        }
+        DiskProjectStore cachedStore;
+        synchronized(this) { check(epoch);cachedStore=diskStore; }
+        // A different project transfer may own the disk lock. Never keep the
+        // provider monitor while waiting: UI cancellation also needs that monitor.
+        JSONObject cached=cachedStore==null?null:cachedStore.findRemote("gitlab",host,repository,request.optString("ref",""));
+        check(epoch);
+        if(cached!=null)return new JSONObject().put("provider","gitlab").put("host",host).put("repository",repository).put("sha",cached.getJSONObject("gitlab").getString("sha")).put("cached",true).put("project",cached);
         JSONObject metadata=json(host,root,epoch);String ref=request.optString("ref","");if(ref.isEmpty())ref=metadata.optString("default_branch","");
         if(ref.isEmpty()||ref.length()>255||controls(ref))throw new Failure("Invalid branch or commit");
         String sha=sha(json(host,root+"/repository/commits/"+encode(ref),epoch).getString("id"));

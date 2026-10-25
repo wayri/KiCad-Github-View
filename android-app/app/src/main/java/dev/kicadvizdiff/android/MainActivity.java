@@ -289,15 +289,25 @@ public final class MainActivity extends Activity {
         viewport.addView(webView, new FrameLayout.LayoutParams(
                 FrameLayout.LayoutParams.MATCH_PARENT,
                 FrameLayout.LayoutParams.MATCH_PARENT));
-        // On modern Android the viewport owns all insets, including the IME. Older
-        // releases let the decor resize for the keyboard and consume system bars.
+        // Draw backgrounds to every edge. Only the IME resizes the native view;
+        // cutout/gesture clearance belongs to individual HTML controls.
         if (Build.VERSION.SDK_INT >= 30) {
             viewport.setOnApplyWindowInsetsListener((view, insets) -> {
-                android.graphics.Insets safe = insets.getInsets(
-                        WindowInsets.Type.systemBars() | WindowInsets.Type.displayCutout()
-                                | WindowInsets.Type.ime());
-                view.setPadding(safe.left, safe.top, safe.right, safe.bottom);
+                android.graphics.Insets safe = insets.getInsets(WindowInsets.Type.systemBars() | WindowInsets.Type.displayCutout());
+                int ime = insets.getInsets(WindowInsets.Type.ime()).bottom;
+                int gestureBottom = insets.getInsets(WindowInsets.Type.mandatorySystemGestures()).bottom;
+                view.setPadding(0, 0, 0, ime);
+                safeViewportInsets = new int[]{safe.left,safe.top,safe.right,ime>0?0:Math.max(safe.bottom,gestureBottom)};
+                publishSafeInsets();
                 return WindowInsets.CONSUMED;
+            });
+        } else if (Build.VERSION.SDK_INT >= 28) {
+            viewport.setOnApplyWindowInsetsListener((view, insets) -> {
+                android.view.DisplayCutout cutout = insets.getDisplayCutout();
+                view.setPadding(0,0,0,0);
+                safeViewportInsets = cutout == null ? new int[4] : new int[]{cutout.getSafeInsetLeft(),cutout.getSafeInsetTop(),cutout.getSafeInsetRight(),cutout.getSafeInsetBottom()};
+                publishSafeInsets();
+                return insets.consumeDisplayCutout();
             });
         }
         setContentView(viewport);
@@ -320,7 +330,14 @@ public final class MainActivity extends Activity {
         super.onStop();
     }
 
+    private int[] safeViewportInsets = new int[4];
+    private void publishSafeInsets() {
+        if(webView==null||!trustedPage()||webView.getWidth()<=0||webView.getHeight()<=0)return;
+        webView.evaluateJavascript("(()=>{const sx=innerWidth/"+webView.getWidth()+",sy=innerHeight/"+webView.getHeight()+";window.KiCadAndroidSafeInsets={left:"+safeViewportInsets[0]+"*sx,top:"+safeViewportInsets[1]+"*sy,right:"+safeViewportInsets[2]+"*sx,bottom:"+safeViewportInsets[3]+"*sy};window.dispatchEvent(new Event('kicad-safe-insets'));})()",null);
+    }
+
     private void publishFold() {
+        publishSafeInsets();
         if (destroyed || webView == null || !trustedPage() || webView.getWidth() <= 0 || webView.getHeight() <= 0) return;
         int[] location = new int[2];webView.getLocationInWindow(location);
         double[] region = foldBounds == null ? null : FoldGeometry.project(foldVertical,
@@ -354,12 +371,45 @@ public final class MainActivity extends Activity {
 
     private void configureWindow() {
         applySystemBarAppearance();
+        if (Build.VERSION.SDK_INT >= 28) {
+            WindowManager.LayoutParams attributes = getWindow().getAttributes();
+            attributes.layoutInDisplayCutoutMode = Build.VERSION.SDK_INT >= 30
+                    ? WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_ALWAYS
+                    : WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES;
+            getWindow().setAttributes(attributes);
+        }
         if (Build.VERSION.SDK_INT >= 30) {
             getWindow().setDecorFitsSystemWindows(false);
             getWindow().setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_NOTHING);
         } else {
             getWindow().setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE);
         }
+        enterFullscreen();
+    }
+
+    @SuppressWarnings("deprecation")
+    private void enterFullscreen() {
+        if (Build.VERSION.SDK_INT >= 30) {
+            android.view.WindowInsetsController controller = getWindow().getInsetsController();
+            if (controller != null) {
+                controller.setSystemBarsBehavior(android.view.WindowInsetsController.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE);
+                controller.hide(WindowInsets.Type.statusBars() | WindowInsets.Type.navigationBars());
+            }
+        } else {
+            android.view.View decor = getWindow().getDecorView();
+            decor.setSystemUiVisibility(decor.getSystemUiVisibility()
+                    | android.view.View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY
+                    | android.view.View.SYSTEM_UI_FLAG_FULLSCREEN
+                    | android.view.View.SYSTEM_UI_FLAG_HIDE_NAVIGATION
+                    | android.view.View.SYSTEM_UI_FLAG_LAYOUT_STABLE
+                    | android.view.View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN
+                    | android.view.View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION);
+        }
+    }
+
+    @Override public void onWindowFocusChanged(boolean hasFocus) {
+        super.onWindowFocusChanged(hasFocus);
+        if (hasFocus) enterFullscreen();
     }
 
     @SuppressWarnings("deprecation")

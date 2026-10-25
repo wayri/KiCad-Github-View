@@ -14,7 +14,7 @@ test('drawing field grid toggles custom columns, groups safely, and exports the 
  class Element{
   constructor(tag){this.tag=tag;this.children=[];this.events={};this.dataset={};this.value='';this.textContent='';}
   append(...nodes){for(const n of nodes){if(n instanceof Element){n.remove();n.parent=this;n.parentElement=this;}this.children.push(n);}}
-  prepend(n){this.children.unshift(n);n.parent=this;}addEventListener(name,fn){this.events[name]=fn;}
+  prepend(n){n.remove();this.children.unshift(n);n.parent=this;n.parentElement=this;}addEventListener(name,fn){this.events[name]=fn;}
   setAttribute(){}focus(){}showModal(){}replaceChildren(){this.children=[];}
   remove(){if(this.parent)this.parent.children=this.parent.children.filter(n=>n!==this);}close(){this.events.close?.();}
  }
@@ -22,11 +22,18 @@ test('drawing field grid toggles custom columns, groups safely, and exports the 
  const find=(n,p)=>{if(n instanceof Element&&p(n))return n;for(const c of n.children||[]){const found=find(c,p);if(found)return found;}};
  try{
   const objects=[part('R1',{properties:{Value:'10k',Footprint:'0603',MPN:'AAA'}}),part('R2',{properties:{Value:'10k',Footprint:'0603',MPN:'BBB'}})],saved=new Map(),exports=[];
-  const dialog=api.open({objects,scope:'field-grid',storage:{getItem:k=>saved.get(k),setItem:(k,v)=>saved.set(k,v)},onExport:(...args)=>exports.push(args)});
+  const dialog=api.open({objects,scope:'field-grid',variants:[{id:'default',name:'Default'},{id:'prototype',name:'Prototype'}],storage:{getItem:k=>saved.get(k),setItem:(k,v)=>saved.set(k,v)},onExport:(...args)=>exports.push(args)});
   const fieldOptions=find(dialog,n=>n.className==='bom-manager-field-options');assert.equal(fieldOptions.open,false,'column settings start collapsed on desktop and phone');
   const layout=find(dialog,n=>n.className==='bom-manager-field-layout');assert.equal(layout.children.length,1);assert.equal(layout.children[0].className,'bom-manager-results','the table occupies the full layout without a permanent settings sidebar');
   assert.equal(fieldOptions.parent.className,'bom-manager-tools');assert.equal(find(dialog,n=>n.className==='bom-manager-filters').open,undefined);
   assert.ok(find(dialog,n=>n.className==='bom-manager-filters'&&find(n,c=>c.textContent==='Boards to build')),'build setup is in the expandable filters');
+  const primary=find(dialog,n=>n.className==='bom-manager-controls');assert.deepEqual(primary.children.map(n=>n.className||n.textContent),['bom-manager-search','bom-manager-group','bom-manager-grouping'],'default toolbar only contains search and grouping');
+  const sourceControl=find(dialog,n=>n.tag==='label'&&n.textContent==='Source');assert.equal(sourceControl.parent,find(dialog,n=>n.className==='bom-manager-filters').children[1],'source selection stays available in expandable filters');
+  assert.equal(find(dialog,n=>n.tag==='label'&&n.textContent==='Assembly variant').parent,sourceControl.parent,'variant selection remains next to source in expandable filters');
+  const totals=find(dialog,n=>n.className==='bom-manager-totals'),summary=find(dialog,n=>n.className==='bom-manager-summary');assert.equal(summary.parent,totals);assert.notEqual(totals.open,true,'build metrics do not consume table space by default');
+  assert.equal(find(dialog,n=>n.className==='bom-manager-count').textContent,'2 / 2 parts');
+  fieldOptions.open=true;fieldOptions.events.toggle();assert.equal(find(dialog,n=>n.className==='bom-manager-filters').open,false);totals.open=true;totals.events.toggle();assert.equal(fieldOptions.open,false,'opening totals closes optional column controls');
+
   let grid=find(dialog,n=>n.className==='bom-manager-field-grid');assert.equal(grid.children[1].children.length,2);
   assert.deepEqual(grid.children[0].children[0].children.map(n=>n.textContent),['Reference','Value','Footprint','Qty','DNP','Exclude from BoM','Assembly','Actions']);
   const mpnRow=find(dialog,n=>n.tag==='tr'&&n.children[0]?.textContent==='MPN'),show=mpnRow.children[1].children[0];show.checked=true;show.events.change();
@@ -126,7 +133,7 @@ test('manager locates unfinished parts without saving progress and keeps whole-s
  class Element{
   constructor(tag){this.tag=tag;this.children=[];this.events={};this.dataset={};this.value='';this.textContent='';}
   append(...nodes){for(const n of nodes){if(n instanceof Element){n.remove();n.parent=this;n.parentElement=this;}this.children.push(n);}}
-  prepend(n){this.children.unshift(n);n.parent=this;}addEventListener(name,fn){this.events[name]=fn;}
+  prepend(n){n.remove();this.children.unshift(n);n.parent=this;n.parentElement=this;}addEventListener(name,fn){this.events[name]=fn;}
   setAttribute(){}focus(){}showModal(){}replaceChildren(){this.children=[];}
   remove(){if(this.parent)this.parent.children=this.parent.children.filter(n=>n!==this);}close(){this.events.close?.();}
  }

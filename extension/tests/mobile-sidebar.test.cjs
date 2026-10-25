@@ -7,7 +7,7 @@ function fixture(storage=new Map(),width=393,height=852){
  for(const [panel,close]of [['designNavigator','closeNavigator'],['designInspector','closeInspector'],['commentsSidebar','closeComments']]){nodes.get(panel).hidden=true;nodes.get(close).onclick=()=>nodes.get(panel).hidden=true;}
  nodes.get('partsButton').onclick=()=>nodes.get('designNavigator').hidden=false;
  const doc={body:{classList:{toggle:(key,value)=>value?classes.add(key):classes.delete(key)}},getElementById:id=>nodes.get(id),createElement:()=>new Node(),querySelectorAll:()=>[]};
- const host={innerWidth:width,innerHeight:height,MutationObserver:class{observe(){}},localStorage:{getItem:key=>storage.get(key),setItem:(key,value)=>storage.set(key,value)},addEventListener:(key,fn)=>events[key]=fn};
+ const host={innerWidth:width,innerHeight:height,MutationObserver:class{constructor(callback){events.mutations=callback;}observe(){}},localStorage:{getItem:key=>storage.get(key),setItem:(key,value)=>storage.set(key,value)},addEventListener:(key,fn)=>events[key]=fn};
  return{api:install(doc,host),nodes,events,storage,classes,host,doc};
 }
 test('phone button opens Explorer and hiding closes all sidebars through their controls',()=>{
@@ -23,4 +23,12 @@ test('desktop panes remain available and short phone landscape retains its toggl
 test('the same control follows the phone toolbar when it is mounted after the shared toolbar',()=>{
  const f=fixture(),button=f.nodes.get('phoneSidebarToggle'),desktop=f.doc.createElement('nav');desktop.id='frameControls';f.nodes.delete('androidViewToolbar');f.api.scan();assert.equal(button.parentElement,desktop);
  const mobile=f.doc.createElement('nav');mobile.id='androidViewToolbar';f.api.scan();assert.equal(button.parentElement,mobile);assert.equal(f.nodes.get('phoneSidebarToggle'),button);button.onclick();assert.equal(f.nodes.get('designNavigator').hidden,false);
+});
+
+
+test('status text and SVG overlay frames do not rescan menus; late HTML controls still do',()=>{
+ const f=fixture();let scans=0;f.doc.querySelectorAll=()=>{scans++;return [];};
+ const text={nodeType:3},svg={nodeType:1,namespaceURI:'http://www.w3.org/2000/svg'};
+ for(let i=0;i<100;i++)f.events.mutations([{addedNodes:[text,svg],removedNodes:[text]}]);assert.equal(scans,0);
+ f.events.mutations([{addedNodes:[{nodeType:1,namespaceURI:'http://www.w3.org/1999/xhtml'}],removedNodes:[]}]);assert.equal(scans,1);
 });

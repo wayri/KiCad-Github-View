@@ -313,3 +313,33 @@ test('global name expansion retains transitive alias closure and exact case',()=
   const result=relatedSchematicNets(nets,'0');assert.equal(result.matches.length,1001);
   assert.ok(result.matches.some(n=>n.id==='alias'));assert.ok(!result.matches.some(n=>n.id==='case'));
 });
+
+
+test('display names use saved labels and PCB names without replacing internal net identities',()=>{
+ const fs=[schematic(wire('95e84e92-806d-4809-ad70-48202504e491',[0,0],[10,0])+label('label-id','SENSOR_ENABLE',10,0)),board('(net 12 "/Power/+3V3") (segment (start 0 0) (end 1 0) (net 12) (uuid "track"))')];
+ const {nets}=build(fs);
+ const schematicNet=nets.find(n=>n.kind==='schematic'),pcbNet=nets.find(n=>n.kind==='pcb');
+ assert.equal(schematicNet.displayName,'SENSOR_ENABLE');assert.equal(schematicNet.name,'SENSOR_ENABLE');assert.equal(schematicNet.code,'label:SENSOR_ENABLE');
+ assert.equal(pcbNet.displayName,'/Power/+3V3');assert.equal(pcbNet.code,'12');assert.match(pcbNet.id,/net:12$/);
+});
+
+test('attached sheet-pin labels name the display without joining unrelated child ports',()=>{
+ const port=(id,x)=>`(sheet (at ${x} 0) (size 10 10) (uuid "${id}") (property "Sheetname" "Child") (property "Sheetfile" "child.kicad_sch") (pin "ENABLE" input (at ${x} 0 180) (uuid "${id}-pin")))`;
+ const source=schematic(wire('parent-wire-a',[0,0],[10,0])+port('sheet-a',10)+wire('parent-wire-b',[30,0],[40,0])+port('sheet-b',40));
+ const {nets}=build([source]);assert.equal(nets.length,2);assert.equal(new Set(nets.map(n=>n.id)).size,2);
+ assert.deepEqual(nets.map(n=>n.displayName),['ENABLE','ENABLE']);assert.ok(nets.every(n=>n.names.length===0));
+ assert.ok(nets.every(n=>n.name.startsWith('Unnamed network (parent-wire-')));
+ const labelled=schematic(wire('wire',[0,0],[10,0])+port('sheet',10)+label('label','ACTUAL_LABEL',0,0));
+ assert.equal(build([labelled]).nets[0].displayName,'ACTUAL_LABEL','an explicit wire label has display priority over sheet-pin text');
+});
+
+test('unlabelled UUID networks have honest readable display names and keep pin context where available',()=>{
+ const uuid='95e84e92-806d-4809-ad70-48202504e491',source=schematic(wire(uuid,[0,0],[10,0])+'(symbol (lib_id "Device:R") (at 0 0) (uuid "resistor") (property "Reference" "R7"))'+wire('second-wire',[30,0],[40,0]));
+ const design={primitives:[{kind:'pin',uuid:'resistor',ownerUuid:'resistor',pinNumber:'2',connectPoint:{x:0,y:0}}]};
+ const {nets}=build([source],new Map([[source.path,design]])),net=nets.find(n=>n.uuids.includes(uuid)),other=nets.find(n=>n.uuids.includes('second-wire'));
+ assert.equal(net.displayName,'Unnamed network · R7 pin 2');assert.equal(other.displayName,'Unnamed network');
+ assert.match(net.name,new RegExp(uuid));assert.ok(net.id.includes(uuid));assert.notEqual(net.id,other.id);
+ const {displayName}=require('../net-model.js');assert.equal(displayName(net),net.displayName);
+ assert.equal(displayName({kind:'schematic',name:`Unnamed network (${uuid})`}), 'Unnamed network');
+ assert.equal(displayName({kind:'pcb',name:uuid}),uuid,'a saved PCB name must not be guessed away simply because it resembles an ID');
+});

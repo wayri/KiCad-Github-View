@@ -1,0 +1,20 @@
+/* CPU-only probe. Usage: node extension/tests/viewer-performance.bench.cjs board.kicad_pcb */
+const fs=require('node:fs'),{performance}=require('node:perf_hooks');
+const diff=require('../design-diff.js'),model=require('../design-model.js');
+const pcb=require('../pcb-renderer.js'),nets=require('../net-model.js');
+const {objectNetLookup,populationOverlayCache}=require('../review-workspace.js');
+const path=process.argv[2];
+if(!path)throw Error('Pass a local .kicad_pcb file; source content is never included in output.');
+const files=[{path,content:fs.readFileSync(path,'utf8')}],timings={};
+const measure=(name,fn)=>{const start=performance.now(),result=fn();timings[name]=performance.now()-start;return result;};
+const snapshot=measure('parseMs',()=>diff.prepareProject(files));
+const saved=measure('modelMs',()=>model.buildProject(files,null,snapshot));
+const drawing=measure('geometryMs',()=>pcb.build(diff.preparedFile(snapshot,path),path));
+const connectivity=measure('connectivityMs',()=>nets.build(files,new Map([[path,drawing]]),snapshot));
+const parts=saved.objects.filter(item=>item.kind==='footprint'),lookup=objectNetLookup();
+measure('objectNetIndexMs',()=>lookup(connectivity,parts[0]));
+let matches=0;measure('allFootprintLookupsMs',()=>{for(const part of parts)matches+=lookup(connectivity,part).length;});
+const objects=model.applyVariant(saved,'default'),overlays=populationOverlayCache();
+measure('populationIndexMs',()=>overlays(objects,saved,'default',path));
+measure('populationLookup1000FramesMs',()=>{for(let i=0;i<1000;i++)overlays(objects,saved,'default',path);});
+console.log(JSON.stringify({bytes:Buffer.byteLength(files[0].content),objects:saved.objects.length,primitives:drawing.primitives.length,footprints:parts.length,matches,timings,scope:'Single CPU pass; excludes network, worker cloning, canvas rendering and device UI. Timing varies with warmup and host.'},null,2));

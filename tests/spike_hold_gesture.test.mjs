@@ -1,0 +1,7 @@
+import {test} from 'node:test';
+import assert from 'node:assert/strict';
+import {holdGesture} from '../extension/spike/selectionState.mjs';
+function fixture(){const timers=new Map();let next=0,opened=[];const hold=holdGesture(event=>opened.push(event),{later:fn=>{timers.set(++next,fn);return next;},clear:id=>timers.delete(id)});const event=(id=1,x=10,y=10)=>({pointerId:id,pointerType:'touch',clientX:x,clientY:y});return{hold,timers,opened,event,fire(){for(const fn of [...timers.values()])fn();timers.clear();}};}
+test('hold opens the touched location once and suppresses pointer-up selection',()=>{const f=fixture();f.hold.down(f.event());f.fire();assert.equal(f.opened.length,1);assert.equal(f.opened[0].clientX,10);assert.equal(f.hold.up(f.event()),true);assert.equal(f.hold.isHeld(),true);f.hold.down(f.event());assert.equal(f.hold.isHeld(),false);f.hold.dispose();});
+test('orbit, pinch, cancellation and disposal cannot open a long-press menu',()=>{for(const action of ['move','pinch','cancel','dispose']){const f=fixture();f.hold.down(f.event());if(action==='move')f.hold.move(f.event(1,30));if(action==='pinch')f.hold.down(f.event(2));if(action==='cancel')f.hold.up(f.event());if(action==='dispose')f.hold.dispose();f.fire();assert.equal(f.opened.length,0,action);assert.equal(f.hold.isHeld(),false);}});
+test('mouse presses retain the normal context-menu path without scheduling holds',()=>{const f=fixture();f.hold.down({...f.event(),pointerType:'mouse'});assert.equal(f.timers.size,0);assert.equal(f.hold.up(f.event()),false);});

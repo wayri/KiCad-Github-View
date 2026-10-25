@@ -12,7 +12,7 @@ async function renderer() {
     const moduleURL = pathToFileURL(path.join(dependency, 'three/build/three.module.js')).href;
     const controlSource = fs.readFileSync(path.join(dependency, 'three/examples/jsm/controls/OrbitControls.js'), 'utf8').replace(/from 'three'/g, `from '${moduleURL}'`);
     const controlURL = 'data:text/javascript;base64,' + Buffer.from(controlSource).toString('base64');
-    const source = fs.readFileSync(path.join(root, 'extension/spike/result3d.js'), 'utf8').replace('from "three"', `from "${moduleURL}"`).replace('from "three/addons/controls/OrbitControls.js"', `from "${controlURL}"`);
+    const source = fs.readFileSync(path.join(root, 'extension/spike/result3d.js'), 'utf8').replace('from "three"', `from "${moduleURL}"`).replace('from "three/addons/controls/OrbitControls.js"', `from "${controlURL}"`).replace('from "./renderQuality.mjs"', `from "${pathToFileURL(path.join(root, 'extension/spike/renderQuality.mjs')).href}"`);
     loaded = Promise.all([import('data:text/javascript;base64,' + Buffer.from(source).toString('base64')), import(moduleURL)]);
   }
   return loaded;

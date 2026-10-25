@@ -42,7 +42,7 @@ async function githubSessionProject(repository,ref,file,originalError) {
     return result.items.filter(item=>item.type==='file'&&/\.kicad_sch$/i.test(item.path)).map(item=>item.path);
   });
 }
-async function githubSessionInventory(repository,ref,originalError) {
+async function githubSessionInventory(repository,ref,originalError,acceptPath=KiCadGitHub.filePath) {
   const snapshot=await githubSessionRead(repository,ref,'resolve');if(!snapshot)throw originalError;
   const pending=[''],files=[],warnings=[];let directories=0;
   while(pending.length&&directories<64&&files.length<1000) {
@@ -51,7 +51,7 @@ async function githubSessionInventory(repository,ref,originalError) {
     for(const item of result.items) {
       if(typeof item.path!=='string'||item.path.length>500||item.path.split('/').slice(0,-1).join('/')!==directory||item.path.split('/').some(p=>!p||p==='.'||p==='..'||/[\\:\x00-\x1f\x7f]/.test(p)))throw Error('Unsafe GitHub session tree.');
       if(item.type==='directory'){if(item.path.split('/').length<=9&&pending.length<1000)pending.push(item.path);else warnings.push('Session tree traversal limit reached; project structure is incomplete.');}
-      else if(item.type==='file'&&KiCadGitHub.filePath(item.path)&&files.length<1000)files.push({path:item.path,size:0});
+      else if(item.type==='file'&&acceptPath(item.path)&&files.length<1000)files.push({path:item.path,size:0});
     }
   }
   if(pending.length||files.length===1000)warnings.push('Session tree discovery is limited to 64 directories and 1000 supported files. Connect GitHub for larger repositories.');
@@ -291,8 +291,9 @@ async function revisionResolve(repository,ref,file){
   try {return {repository,ref,sha:await githubResolvedSha(repository,ref)};}
   catch(error){if(!/HTTP (401|403|404)|rate limit/i.test(error.message))throw error;const snapshot=await githubSessionRead(repository,ref,'resolve');if(!snapshot)throw error;return {repository,ref,sha:snapshot.sha};}
 }
-async function revisionBranches(repository,ref,file){
-  revisionScope(repository,ref,file);
+async function revisionBranches(repository,ref,file){revisionScope(repository,ref,file);return repositoryBranches(repository,ref);}
+async function repositoryBranches(repository,ref){
+  repositoryScope(repository,ref);
   const {value,next}=await revisionJson(`https://api.github.com/repos/${repository}/branches?per_page=100&page=1`);
   if(!Array.isArray(value)||value.length>100)throw new Error('Invalid branch listing.');
   const warnings=[],branches=[];
@@ -309,6 +310,65 @@ async function revisionCommits(repository,ref,file){
   for(const item of value){if(!SHA.test(item?.sha)){warnings.push('Invalid commit entry omitted.');continue;}const bounded=value=>typeof value==='string'?value.replace(/[\x00-\x1f\x7f]/g,' ').slice(0,300):'';commits.push({sha:item.sha,message:bounded(item.commit?.message?.split('\n')[0]),author:bounded(item.commit?.author?.name),date:bounded(item.commit?.author?.date)});}
   if(next||value.length===50)warnings.push('At most 50 commits touching this file shown; enter an older SHA manually.');
   return {repository,file,snapshotRef:snapshot.sha,commits,warnings:[...new Set(warnings)]};
+}
+
+// Repository metadata is independent of the currently selected drawing.
+function repositoryScope(repository,ref){if(!KiCadBrowserData.validRepository(repository)||!KiCadBrowserData.validRef(ref))throw Error('Invalid repository location.');}
+function repositoryPath(path){return typeof path==='string'&&path.length<=500&&!path.startsWith('/')&&!/[\\:\x00-\x1f\x7f]/.test(path)&&path.split('/').every(part=>part&&part!=='.'&&part!=='..');}
+function repositoryPage(page=1){if(!Number.isSafeInteger(page)||page<1||page>100)throw Error('Repository page must be between 1 and 100.');return page;}
+function repositoryMessage(value,warnings){
+  if(typeof value!=='string')return '';
+  value=value.replace(/[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]/g,'');
+  const encoder=new TextEncoder();if(encoder.encode(value).length<=8192)return value;
+  let low=0,high=Math.min(value.length,8192);while(low<high){const middle=Math.ceil((low+high)/2);if(encoder.encode(value.slice(0,middle)).length<=8192)low=middle;else high=middle-1;}
+  warnings.push('A commit message was shortened to 8 KiB.');return value.slice(0,low);
+}
+function repositoryEntry(item,prefix='',warnings=[]){
+  if(!item||!['tree','blob','commit'].includes(item.type)||!repositoryPath(item.path)||!SHA.test(item.sha||'')||!({tree:['040000'],blob:['100644','100755','120000'],commit:['160000']}[item.type]?.includes(item.mode))){
+    warnings.push('Invalid repository entry omitted.');return null;
+  }
+  return {path:prefix+item.path,type:item.type,sha:item.sha.toLowerCase(),mode:item.mode};
+}
+async function repositoryTree(repository,ref,{page=1,directory}={}){
+  repositoryScope(repository,ref);page=repositoryPage(page);
+  if(directory!==undefined&&directory!==''&&!repositoryPath(directory))throw Error('Invalid repository directory.');
+  if(directory!==undefined&&directory.split('/').length>32)throw Error('Repository directory exceeds 32 levels.');
+  if(directory===undefined&&page!==1)throw Error('Recursive GitHub trees use directory browsing rather than page numbers.');
+  const snapshot=await githubSchematicSnapshot(repository,ref),warnings=[];let treeSha=snapshot.treeSha;
+  const deadline=Date.now()+90000;
+  // Resolve every directory component through immutable Git trees. Never mix
+  // a branch-tip Contents response with an earlier graph/tree snapshot.
+  for(const part of directory?directory.split('/'):[]){
+    if(Date.now()>deadline)throw Error('Repository directory lookup timed out.');
+    const listing=await githubDiscoveryJson(`https://api.github.com/repos/${repository}/git/trees/${treeSha}`,16*1024*1024);
+    if(!Array.isArray(listing.tree)||listing.tree.length>100000||listing.sha?.toLowerCase()!==treeSha.toLowerCase()||typeof listing.truncated!=='boolean')throw Error('Invalid or mismatched GitHub repository tree.');
+    const found=listing.tree.find(item=>item.path===part&&item.type==='tree'&&SHA.test(item.sha||''));
+    if(!found)throw Error(listing.truncated?'GitHub truncated this directory; its requested child could not be resolved.':'Repository directory was not found at the pinned revision.');
+    treeSha=found.sha;
+  }
+  const recursive=directory===undefined,listing=await githubDiscoveryJson(`https://api.github.com/repos/${repository}/git/trees/${treeSha}${recursive?'?recursive=1':''}`,16*1024*1024);
+  if(!Array.isArray(listing.tree)||listing.tree.length>100000||listing.sha?.toLowerCase()!==treeSha.toLowerCase()||typeof listing.truncated!=='boolean')throw Error('Invalid or mismatched GitHub repository tree.');
+  const prefix=directory?directory+'/':'';
+  const seenPaths=new Set(),clean=listing.tree.map(item=>{if(seenPaths.has(item?.path)){warnings.push('Duplicate repository entry omitted.');return null;}seenPaths.add(item?.path);if(!recursive&&typeof item?.path==='string'&&item.path.includes('/')){warnings.push('Invalid directory entry omitted.');return null;}return repositoryEntry(item,prefix,warnings);}).filter(Boolean);
+  const truncated=Boolean(listing.truncated)||clean.length>10000||clean.length!==listing.tree.length;
+  if(truncated)warnings.push('Repository tree is incomplete; expand folders to browse their pinned contents.');
+  const available=clean.slice(0,10000),start=recursive?0:(page-1)*100,entries=available.slice(start,recursive?10000:start+100),hasMore=!recursive&&start+100<available.length&&page<100;
+  if(!recursive&&start+100<clean.length&&page===100)warnings.push('Directory browsing stopped at 10,000 entries.');
+  return {repository,ref,sha:snapshot.sha,snapshotRef:snapshot.sha,directory:directory||'',entries,truncated,hasMore,nextPage:hasMore?page+1:null,warnings:[...new Set(warnings)]};
+}
+async function repositoryHistory(repository,ref,page=1){
+  repositoryScope(repository,ref);page=repositoryPage(page);
+  const pinned=SHA.test(ref)?ref.toLowerCase():await githubResolvedSha(repository,ref),query=new URLSearchParams({sha:pinned,per_page:'30',page:String(page)});
+  const {value,next}=await revisionJson(`https://api.github.com/repos/${repository}/commits?${query}`);
+  if(!Array.isArray(value)||value.length>30)throw Error('Invalid GitHub repository history.');
+  const warnings=[],commits=[],seen=new Set(),text=value=>typeof value==='string'?value.replace(/[\x00-\x1f\x7f]/g,' ').slice(0,200):'';
+  for(const item of value){
+    if(!SHA.test(item?.sha||'')||seen.has(item.sha.toLowerCase())){warnings.push('Invalid or duplicate commit omitted.');continue;}
+    if(!Array.isArray(item.parents)||item.parents.length>32||item.parents.some(parent=>!SHA.test(parent?.sha||'')))throw Error('Invalid GitHub commit parents; graph cannot be represented faithfully.');
+    seen.add(item.sha.toLowerCase());const sha=item.sha.toLowerCase();commits.push({sha,parents:item.parents.map(parent=>parent.sha.toLowerCase()),message:repositoryMessage(item.commit?.message,warnings),author:text(item.commit?.author?.name),date:text(item.commit?.author?.date),url:`https://github.com/${repository}/commit/${sha}`});
+  }
+  const more=next||value.length===30,hasMore=more&&page<100;if(more&&!hasMore)warnings.push('History browsing stopped at 3,000 commits.');
+  return {repository,ref,sha:pinned,snapshotRef:pinned,commits,hasMore,nextPage:hasMore?page+1:null,warnings:[...new Set(warnings)]};
 }
 
 async function projectSearchFiles(repository, ref, file) {
@@ -349,6 +409,24 @@ async function projectInventory(repository,ref,file){
   const warnings=[];if(tree.truncated)warnings.push('GitHub truncated the repository tree; project structure is incomplete.');if(entries.length>1000)warnings.push('First 1000 supported project files shown.');
   return {files:entries.slice(0,1000).map(item=>({path:item.path,size:Number(item.size)||0})),snapshotRef:commit.sha,warnings};
   } catch(error){if(!/HTTP (401|403|404)|rate limit/i.test(error.message))throw error;return githubSessionInventory(repository,ref,error);}
+}
+async function repositoryModelIndex(repository,ref){
+  if(!validRepository(repository)||!SHA.test(ref||''))throw Error('Model discovery requires a repository and immutable revision.');
+  try{
+    const commit=await githubJson(`https://api.github.com/repos/${repository}/commits/${ref}`);
+    if(commit?.sha!==ref||!SHA.test(commit?.commit?.tree?.sha))throw Error('Model discovery revision did not match the opened board.');
+    const tree=await githubJson(`https://api.github.com/repos/${repository}/git/trees/${commit.commit.tree.sha}?recursive=1`);
+    if(!Array.isArray(tree.tree)||tree.tree.length>100000)throw Error('Repository tree exceeds model discovery limit.');
+    const paths=[...new Set(tree.tree.filter(item=>item?.type==='blob'&&item.mode!=='120000'&&validAssetPath(item.path)&&!/[?#%:]/.test(item.path)).map(item=>item.path))].sort();
+    const warnings=[];if(tree.truncated)warnings.push('GitHub truncated the repository tree; model discovery is incomplete.');
+    if(paths.length>2000)warnings.push('Model discovery is limited to 2000 files; library path matching may be incomplete.');
+    return {paths:paths.slice(0,2000),snapshotRef:ref,warnings};
+  }catch(error){
+    if(!/HTTP (401|403|404)|rate limit/i.test(error.message))throw error;
+    const listing=await githubSessionInventory(repository,ref,error,validAssetPath);
+    if(listing.snapshotRef!==ref)throw Error('Model discovery revision did not match the opened board.');
+    return {paths:listing.files.map(item=>item.path),snapshotRef:ref,warnings:listing.warnings};
+  }
 }
 async function projectFile(repository,ref,file){
   if(!KiCadBrowserData.validRepository(repository)||!KiCadBrowserData.validRef(ref)||!KiCadGitHub.filePath(file))throw new Error('Invalid project file.');
@@ -901,11 +979,15 @@ async function gitlabDispatch(message, sender) {
       return KiCadBrowserData.loadProject(repository,snapshot.sha,file,api.file,api.directory,'gitlab',api.schematics);
     }
     case 'project-inventory': return api.inventory(repository,ref,file);
+    case 'repo-model-index': return api.modelIndex(repository,ref);
     case 'project-file': return api.projectFile(repository,ref,file);
     case 'project-search-files': return api.search(repository,ref,file);
     case 'revision-resolve': return api.resolve(repository,ref,file);
     case 'revision-branches': return api.branches(repository,ref,file);
     case 'revision-commits': return api.commits(repository,ref,file);
+    case 'repository-branches': return api.repositoryBranches(repository,ref);
+    case 'repository-tree': return api.repositoryTree(repository,ref,{page:message.page,directory:message.directory});
+    case 'repository-history': return api.repositoryHistory(repository,ref,message.page);
     case 'design-changes': return api.compare(repository,message.base,message.head,file);
     case 'drawing-files': {
       const snapshot=await api.resolve(repository,ref,file);
@@ -1037,6 +1119,9 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       case "pdf-file":
         if(!viewerSender(sender)&&!pdfSender(sender))throw Error("Only owned viewers can retrieve PDFs.");
         return githubAsset(message.repository,message.ref,message.file,true);
+      case "repo-model-index":
+        if(!viewerSender(sender))throw Error("Only extension viewers can discover 3D models.");
+        return repositoryModelIndex(message.repository,message.ref);
       case "repo-asset":
         if (!viewerSender(sender)) throw new Error("Only extension viewers can retrieve 3D models.");
         return githubAsset(message.repository, message.ref, message.file);
@@ -1048,6 +1133,12 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       }
       case "project-inventory":
         if(!viewerSender(sender)&&!pdfSender(sender)&&!analysisSender(sender))throw new Error('Only extension viewers can inspect project files.');return projectInventory(message.repository,message.ref,message.file);
+      case 'repository-branches':
+        if(!viewerSender(sender))throw Error('Only extension viewers can browse repository branches.');return repositoryBranches(message.repository,message.ref);
+      case 'repository-tree':
+        if(!viewerSender(sender))throw Error('Only extension viewers can browse repository files.');return repositoryTree(message.repository,message.ref,{page:message.page,directory:message.directory});
+      case 'repository-history':
+        if(!viewerSender(sender))throw Error('Only extension viewers can browse repository history.');return repositoryHistory(message.repository,message.ref,message.page);
       case 'revision-branches':
         if(!viewerSender(sender))throw new Error('Only extension viewers can list branches.');return revisionBranches(message.repository,message.ref,message.file);
       case 'revision-commits':
@@ -1132,5 +1223,5 @@ if (typeof module === "object" && module.exports) {
   module.exports = { githubFile, githubPull, githubFiles, githubDirectory, githubSchematicInventory, drawingFiles, openViewerWindow,
     githubAsset, designChanges, senderAllowed, viewerSender, analysisSender, optionsSender, openFromAction,
     commentList, commentSave, commentDelete, openCommentDraft, claimCommentDraft,
-    acknowledgeCommentDraft, githubAnnotations, revisionBranches,revisionCommits,revisionResolve };
+    acknowledgeCommentDraft, githubAnnotations, revisionBranches,revisionCommits,revisionResolve,repositoryTree,repositoryHistory,repositoryBranches };
 }

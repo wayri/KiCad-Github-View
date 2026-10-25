@@ -132,3 +132,14 @@ test('PCB node budget supports saved filled copper while retaining schematic nod
   assert.equal(parse('(kicad_pcb ' + many + ')').length, 1000002);
   assert.throws(() => parse('(kicad_sch ' + many + ')'), /too many/);
 });
+
+
+test('parser fast whitespace path preserves Unicode, escapes, comments and delimiter grammar',()=>{
+ const {parse}=require('../design-diff.js');
+ const expected=parse('(kicad_sch (value "line\\nquote\\\\") ; comment\n (at -1.25 2e3))');
+ for(const whitespace of [' ', '\t', '\r\n', '\v', '\f', '\u00a0', '\u2028', '\u2029', '\ufeff']){
+  assert.deepEqual(parse('(kicad_sch'+whitespace+'(value "line\\nquote\\\\") ; comment\n'+whitespace+'(at -1.25 2e3))'),expected);
+ }
+ assert.throws(()=>parse('(kicad_sch (value "unterminated))'),/Unterminated/);
+ assert.throws(()=>parse('(kicad_sch ))'),/parenthesis/);
+});

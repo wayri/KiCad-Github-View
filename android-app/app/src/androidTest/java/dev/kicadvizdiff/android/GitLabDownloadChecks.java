@@ -14,6 +14,7 @@ import javax.net.ssl.HttpsURLConnection;
 final class GitLabDownloadChecks {
     private static final long SIZE=33L*1024*1024;
     static int run(Context context) throws Exception {
+        int cancellationChecks=cacheCancellationChecks(context);
         String commit="a".repeat(40), identity=blobIdentity();
         final boolean[] redirect={false}, corrupt={false}, oversized={false};
         GitLabClient client=new GitLabClient(context,url->{
@@ -46,7 +47,40 @@ final class GitLabDownloadChecks {
         int epoch=client.generation();client.cancelRequests();
         try {client.handle(request,epoch);throw new AssertionError("Cancelled transfer accepted");}
         catch(IOException expected){require(expected.getMessage().contains("cancelled"),"Unexpected cancellation error");}
-        return 8;
+        return 8+cancellationChecks;
+    }
+    /** Hold the real shared disk monitor while a provider waits for its cache.
+     * Cancellation must not wait for the unrelated transfer owning that monitor. */
+    private static int cacheCancellationChecks(Context context)throws Exception {
+        java.lang.reflect.Field field=DiskProjectStore.class.getDeclaredField("LOCK");field.setAccessible(true);Object diskLock=field.get(null);
+        GitHubClient github=new GitHubClient(context,"cache_cancellation_selftest");
+        GitLabClient gitlab=new GitLabClient(context,url->{throw new IOException("Cancelled import unexpectedly reached network");});
+        gitlab.setDiskProjectStore(new DiskProjectStore(context));
+        for(int provider=0;provider<2;provider++) {
+            final boolean isGitHub=provider==0;final int epoch=isGitHub?github.generation():gitlab.generation();
+            final Throwable[] failure={null};java.util.concurrent.CountDownLatch cancelled=new java.util.concurrent.CountDownLatch(1);
+            Thread importThread=new Thread(()->{try {
+                JSONObject request=new JSONObject().put("action","import").put("repository","cache-cancellation/test").put("ref","a".repeat(40));
+                if(isGitHub)github.handle(request,epoch);else gitlab.handle(request.put("host","https://gitlab-cache-test.invalid"),epoch);
+            }catch(Throwable error){failure[0]=error;}},"cache-cancellation-import");
+            Thread cancelThread=new Thread(()->{try{if(isGitHub)github.cancelRequests();else gitlab.cancelRequests();}finally{cancelled.countDown();}},"cache-cancellation-cancel");
+            boolean waiting=false,responsive=false;
+            try {
+                synchronized(diskLock) {
+                    importThread.start();long until=System.nanoTime()+java.util.concurrent.TimeUnit.SECONDS.toNanos(3);
+                    while(importThread.isAlive()&&System.nanoTime()<until&&!(waiting=importThread.getState()==Thread.State.BLOCKED))Thread.sleep(5);
+                    if(waiting){cancelThread.start();responsive=cancelled.await(2,java.util.concurrent.TimeUnit.SECONDS);if(!responsive)importThread.interrupt();}
+                }
+            }finally{
+                // Release the disk lock even on a regression, then clean up both workers.
+                importThread.join(5000);if(cancelThread.getState()!=Thread.State.NEW)cancelThread.join(5000);
+            }
+            require(waiting,"Provider did not wait for the test disk lock");
+            require(responsive,(isGitHub?"GitHub":"GitLab")+" cancellation waited behind project disk I/O");
+            require(!importThread.isAlive()&&!cancelThread.isAlive(),"Cache cancellation worker did not finish");
+            require(failure[0] instanceof IOException&&failure[0].getMessage().contains("cancelled"),"Cancelled cache lookup returned data or reached network");
+        }
+        return 4;
     }
     private static void require(boolean condition,String message){if(!condition)throw new AssertionError(message);}
     private static String blobIdentity()throws Exception {

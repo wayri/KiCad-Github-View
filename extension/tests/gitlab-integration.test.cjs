@@ -200,3 +200,26 @@ test('GitLab readback retains matching upload metadata and omits images from ano
  assert.equal((await h.send(query)).ok,false);assert.equal((await h.send(query,{id:'test',url:HOST+'/group/private/-/blob/main/board.kicad_pcb'})).ok,false);
  await h.send({type:'gitlab-auth-set',provider:'gitlab',host:HOST,token:TOKEN},h.options);const result=await h.send(query);assert.equal(result.ok,true,result.error);assert.equal(result.result.users[0].login,'team_user');assert.ok(h.calls.filter(c=>c.url.includes('/members/all')).every(c=>new URL(c.url).origin===HOST&&c.init.headers.Authorization==='Bearer '+TOKEN));
  });
+
+
+test('GitLab model discovery stays pinned to an authorized host and excludes non-models and links',async()=>{
+ const h=harness(url=>new URL(url).pathname.endsWith('/tree')?new Response(JSON.stringify([
+ {type:'blob',mode:'100644',path:'models/Package.3dshapes/body.step'},
+ {type:'blob',mode:'120000',path:'linked.wrl'}, {type:'blob',path:'board.kicad_pcb'},
+ {type:'blob',path:'../unsafe.wrl'}, {type:'blob',path:'model.wrl?query'}])):null);await h.add();
+ const input={type:'repo-model-index',provider:'gitlab',host:HOST,repository:'group/private',ref:SHA};
+ const result=await h.send(input);assert.equal(result.ok,true,result.error);
+ assert.deepEqual(Array.from(result.result.paths),['models/Package.3dshapes/body.step']);assert.equal(result.result.snapshotRef,SHA);
+ assert.ok(h.calls.every(call=>new URL(call.url).searchParams.get('ref')===SHA));
+ const before=h.calls.length;assert.equal((await h.send({...input,ref:'main'})).ok,false);
+ assert.equal((await h.send(input,{id:'test',url:HOST+'/group/private'})).ok,false);assert.equal(h.calls.length,before);
+});
+
+test('repository graph and tree messages preserve GitLab viewer and configured-host isolation',async()=>{
+ const h=harness((url)=>{const u=new URL(url);if(u.pathname.endsWith('/tree'))return new Response(JSON.stringify([{path:'board.kicad_pcb',type:'blob',mode:'100644',id:SHA}]));if(u.pathname.endsWith('/commits'))return new Response(JSON.stringify([{id:SHA,parent_ids:['b'.repeat(40)],message:'Subject\n\nBody',author_name:'A',authored_date:'2026-10-25T00:00:00Z'}]));});
+ const base={provider:'gitlab',host:HOST,repository:'group/private',ref:SHA};
+ assert.equal((await h.send({...base,type:'repository-history'})).ok,false);assert.equal(h.calls.length,0);await h.add();
+ const tree=await h.send({...base,type:'repository-tree',directory:''});assert.equal(tree.ok,true);assert.equal(tree.result.entries[0].sha,SHA);
+ const history=await h.send({...base,type:'repository-history'});assert.equal(history.ok,true);assert.equal(history.result.commits[0].message,'Subject\n\nBody');assert.equal(history.result.commits[0].parents[0],'b'.repeat(40));
+ const before=h.calls.length;for(const sender of [h.options,{id:'test',url:'https://github.com/group/private'},{id:'test',url:'https://other.example.org/group/private'}])assert.notEqual((await h.send({...base,type:'repository-history'},sender)).ok,true);assert.equal(h.calls.length,before);
+});

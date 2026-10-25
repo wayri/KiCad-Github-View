@@ -47,9 +47,9 @@ def payload(root=ROOT):
         if name.endswith('.html'):
             text = content.decode('utf-8')
             text = text.replace('<link rel="stylesheet" href="ui-foundation.css">', '')
-            text = text.replace('</head>', '<link rel="stylesheet" href="android.css"><link rel="stylesheet" href="compact-ui.css"><link rel="stylesheet" href="copper-controls.css"><link rel="stylesheet" href="settings.css"><link rel="stylesheet" href="measurement-tools.css"><link rel="stylesheet" href="ui-foundation.css"></head>')
+            text = text.replace('</head>', '<link rel="stylesheet" href="android.css"><link rel="stylesheet" href="compact-ui.css"><link rel="stylesheet" href="copper-controls.css"><link rel="stylesheet" href="settings.css"><link rel="stylesheet" href="measurement-tools.css"><link rel="stylesheet" href="ui-foundation.css"><link rel="stylesheet" href="android-design.css"></head>')
             text = re.sub(r'<script src=', '<script src="local-project.js"></script><script src="remote-review.js"></script><script src="revision-snapshots.js"></script><script src="runtime.js"></script><script src=', text, count=1)
-            text = text.replace('</body>', '<script src="android-project.js"></script><script src="touch-tooltips.js"></script><script src="resizable-sheets.js"></script><script src="adaptive-ui.js"></script><script src="measurement-tools.js"></script><script src="presentation.js"></script><script src="engineering-tools.js"></script></body>')
+            text = text.replace('</body>', '<script src="android-project.js"></script><script src="touch-tooltips.js"></script><script src="resizable-sheets.js"></script><script src="adaptive-ui.js"></script><script src="measurement-tools.js"></script><script src="presentation.js"></script><script src="engineering-tools.js"></script><script src="android-design.js"></script><script src="edge-to-edge.js"></script></body>')
             # Folder HTML is deliberately excluded: it must never execute with a native bridge.
             content = text.encode('utf-8')
         result[name] = content

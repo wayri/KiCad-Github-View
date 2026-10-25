@@ -7,3 +7,17 @@
 .object-presence{font-size:11px;font-weight:600;margin-top:5px;padding:5px 7px;border-radius:4px;border:1px solid var(--line)}.object-presence.added{color:#b6f3cc;background:#19432b}.object-presence.removed{color:#ffd79c;background:#533b1d}.object-presence.absent{color:#ffc5be;background:#482c30}@media(prefers-color-scheme:light){.object-presence.added{color:#155b2d;background:#daf2e1}.object-presence.removed{color:#754900;background:#fff0cf}.object-presence.absent{color:#8b2b24;background:#ffe3df}}
 
 .properties-heading{position:sticky;top:-9px;background:var(--panel);padding-bottom:5px;z-index:1}.properties-heading>strong{display:block}.part-chooser{position:fixed;z-index:10;display:grid;gap:5px;max-height:170px;overflow:auto;width:240px;padding:9px;border:1px solid var(--line);border-radius:6px;background:var(--panel);box-shadow:0 5px 20px #0007}.part-chooser button{text-align:left}
+
+/* Default to drawings, with inspection and secondary commands on demand. */
+header{position:relative;min-height:42px;padding:4px 8px;gap:6px;flex-wrap:nowrap}
+.identity{min-width:90px;max-width:380px;overflow:hidden}.identity strong{font-size:12px;white-space:nowrap}.identity small{white-space:nowrap;text-overflow:ellipsis;overflow:hidden;line-height:1.2}
+#conflictCount{white-space:nowrap;font-size:11px}header>button{flex:none;min-height:30px}
+.view-options{position:absolute;right:8px;top:calc(100% + 4px);z-index:20;display:flex;flex-wrap:wrap;align-items:center;gap:8px;width:min(360px,calc(100vw - 16px));padding:10px;border:1px solid var(--line);border-radius:6px;background:var(--panel);box-shadow:0 5px 18px #0005}
+.view-options label{min-height:30px}.view-options button{flex:1 1 auto}
+#conflictStatus{padding:3px 8px;max-height:60px;overflow:auto}#conflictStatus:empty{display:none}
+main{padding:0 4px;gap:4px}.pane-heading{min-height:34px;padding:3px 6px}.pane-heading>div{flex:1;min-width:0}.pane-heading small{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:10px;line-height:1.2}.pane-heading button{min-height:28px;padding:3px 7px;flex:none}
+.properties{width:200px;max-width:35%;padding:7px}.properties-heading{top:-7px}
+#differenceDetails{margin:3px 8px 0}#differenceDetails>summary{padding:2px 4px;min-height:22px}
+footer{margin-top:2px;padding:4px 8px;gap:6px;min-height:42px;flex-wrap:nowrap}footer>div{min-width:0}footer strong{font-size:11px}footer small{font-size:10px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}footer button{flex:none;min-height:30px}
+@media(max-width:850px){.identity strong{font-size:11px}.identity small{max-width:160px}header{gap:4px;padding:4px}header>button{padding:4px 6px}footer small{max-width:32vw}}
+@media(max-width:650px){.identity{flex:1;flex-basis:auto;max-width:none;min-width:70px}.identity strong{white-space:normal;line-height:1.15}.identity small{display:none}#conflictCount{max-width:55px;white-space:normal;line-height:1.1}header>button{font-size:11px}header{flex-wrap:wrap}.identity{flex-basis:calc(100% - 70px)}footer{flex-wrap:wrap}footer>div{flex:1 1 100%}footer small{max-width:100%}.properties{width:165px;max-width:40%}}

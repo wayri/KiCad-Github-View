@@ -15,6 +15,9 @@
   const OMIT = new Set(["uuid", "tstamp", "filled_polygon", "fill_segments"]);
   const NUMBER = /^[-+]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][-+]?\d+)?$/;
 
+  // KiCad files are overwhelmingly ASCII. Keep the same ECMAScript whitespace
+  // grammar without constructing/testing a regular expression for every byte.
+  const spaceCode=code=>code===32||(code>=9&&code<=13)||(code>127&&/\s/.test(String.fromCharCode(code)));
   function parse(source) {
     if (typeof source !== "string") throw new TypeError("KiCad source must be a string.");
     const board = /^\s*\(kicad_pcb(?:\s|\))/.test(source);
@@ -28,7 +31,7 @@
     };
     while (i < source.length) {
       const ch = source[i];
-      if (/\s/.test(ch)) { i++; continue; }
+      if (spaceCode(source.charCodeAt(i))) { i++; continue; }
       if((ch==="<"||ch===">")&&/^(?:<{7,}|>{7,})(?:\s|$)/.test(source.slice(i,i+120)))throw new Error("Unresolved Git merge conflict at line "+(source.slice(0,i).split("\n").length)+". Resolve the conflict in a separate copy before viewing.");
       if (ch === ";") { while (i < source.length && source[i] !== "\n") i++; continue; }
       if (ch === "(") {
@@ -58,7 +61,7 @@
         append({ quoted: value }); continue;
       }
       const start = i;
-      while (i < source.length && !/[\s();"]/.test(source[i])) i++;
+      while (i < source.length) { const code=source.charCodeAt(i);if(code===40||code===41||code===59||code===34||spaceCode(code))break;i++; }
       if (start === i) throw new Error("Unexpected KiCad source character.");
       const token = source.slice(start, i);
       if (NUMBER.test(token)) {

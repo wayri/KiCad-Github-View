@@ -1,5 +1,6 @@
 import * as THREE from "three";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
+import { viewportPixelRatio } from "./renderQuality.mjs";
 
 const MAX_TRIANGLES = 200000;
 const MAX_POINTS = 600000;
@@ -44,7 +45,7 @@ export function createResultOverlay(surface, transform = p => p) {
   geometry.setAttribute("position", new THREE.Float32BufferAttribute(positions, 3));
   geometry.setAttribute("color", new THREE.Float32BufferAttribute(colors, 3));
   geometry.computeBoundingSphere();
-  const material = new THREE.MeshBasicMaterial({ vertexColors: true, side: THREE.DoubleSide, transparent: true, opacity: .85, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 });
+  const material = new THREE.MeshBasicMaterial({ vertexColors: true, toneMapped: false, side: THREE.DoubleSide, transparent: true, opacity: .85, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 });
   const mesh = new THREE.Mesh(geometry, material); group.add(mesh, pins);
   function sample(hit) {
     if (!hit || hit.object !== mesh || hit.faceIndex == null) return null;
@@ -96,7 +97,7 @@ export function mountResultScene(container, options = {}) {
   let renderer;
   try { renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false }); }
   catch (error) { notice.textContent = "3D rendering is unavailable on this device. Use the 2D result view."; return { host, unavailable: true, setSurface() {}, setOpacity() {}, setTheme() {}, setProbes() {}, fit() {}, dispose() { host.remove(); } }; }
-  renderer.setPixelRatio(Math.min(globalThis.devicePixelRatio || 1, 2)); renderer.outputColorSpace = THREE.SRGBColorSpace;
+  renderer.outputColorSpace = THREE.SRGBColorSpace;
   renderer.domElement.setAttribute('role', 'img'); renderer.domElement.setAttribute('aria-label', '3D saved result surface'); stage.append(renderer.domElement);
   const scene = new THREE.Scene(); scene.background = new THREE.Color(0x101d28);
   const camera = new THREE.PerspectiveCamera(45, 1, .001, 1000000); camera.up.set(0, 0, 1);
@@ -136,7 +137,10 @@ export function mountResultScene(container, options = {}) {
   const up = event => { const tap = gesture && gesture.id === event.pointerId && !gesture.moved && (event.button === 0 || event.pointerType === "touch"); gesture = null; if (!tap) return; const result = pick(event); if (result) { valueText.textContent = `${result.value.toPrecision(6)} ${result.unit} at (${result.x.toFixed(3)}, ${result.y.toFixed(3)}, ${result.z.toFixed(3)}) · ${result.method}`; options.onProbe?.(result); } };
   const cancel = () => { gesture = null; }; const leave = () => options.onHover?.(null);
   for (const [name, fn] of [["pointerdown", down], ["pointermove", move], ["pointerup", up], ["pointercancel", cancel], ["pointerleave", leave]]) renderer.domElement.addEventListener(name, fn);
-  const resize = () => { if (!active) return; const w = Math.max(stage.clientWidth, 1), h = Math.max(stage.clientHeight, 1); renderer.setSize(w, h, false); camera.aspect = w / h; camera.updateProjectionMatrix(); };
+  const resize = () => { if (!active) return; const w = Math.max(stage.clientWidth, 1), h = Math.max(stage.clientHeight, 1);
+    const ratio = viewportPixelRatio(w, h, globalThis.devicePixelRatio, renderer.capabilities.maxTextureSize);
+    if (renderer.getPixelRatio() !== ratio) renderer.setPixelRatio(ratio);
+    renderer.setSize(w, h, false); camera.aspect = w / h; camera.updateProjectionMatrix(); };
   const observer = new ResizeObserver(resize); observer.observe(stage); resize();
   const lost = event => { event.preventDefault(); notice.textContent = "3D graphics context lost. Reopen this view to restore rendering."; active = false; cancelAnimationFrame(frame); };
   renderer.domElement.addEventListener("webglcontextlost", lost);

@@ -55,3 +55,13 @@ test('rejects corrupt checksum, trailing frames, huge allocation, unknown size a
   await assert.rejects(decode({base64:'???'}, decompress), /base64/);
   await assert.rejects(decode({base64:bytes.subarray(0,bytes.length-1).toString('base64')}, decompress), /Truncated/);
 });
+
+
+test('outlined embedded fixture preserves the exact native model asset and a usable board outline',async()=>{
+ const fs=require('node:fs'),path=require('node:path'),dir=path.join(__dirname,'fixtures/embedded');
+ const native=collect(fs.readFileSync(path.join(dir,'native-box.kicad_pcb'),'utf8'),'native-box.kicad_pcb');
+ const source=fs.readFileSync(path.join(dir,'outlined-box.kicad_pcb'),'utf8'),outlined=collect(source,'outlined-box.kicad_pcb');
+ assert.deepEqual(outlined.models[0].embeddedAsset,native.models[0].embeddedAsset);
+ assert.match(source,/gr_rect \(start 0 10\) \(end 25 35\)/);
+ assert.match(new TextDecoder().decode(await decode(outlined.models[0].embeddedAsset,decompress)),/geometry Box/);
+});

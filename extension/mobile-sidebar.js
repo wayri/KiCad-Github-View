@@ -1,5 +1,6 @@
 /* Phone sidebar visibility is shared between schematic and layout frames. */
 ((root)=>{'use strict';
+ const structureChanged=records=>records.some(record=>[...record.addedNodes,...record.removedNodes].some(node=>node.nodeType===1&&node.namespaceURI!=='http://www.w3.org/2000/svg'));
  const KEY='kiview:phone-sidebar-visible';
  const phone=(width,height)=>width<600||(width<840&&height<=500);
  function install(doc,host){
@@ -12,7 +13,7 @@
    if(toolbar&&toggle&&toggle.parentElement!==toolbar)toolbar.prepend(toggle);
    for(const rail of doc.querySelectorAll('.sidebar-dock')){rail.id=rail.classList.contains('left')?'phoneExplorerDock':'phoneInspectionDock';for(const button of rail.querySelectorAll('.dock-tab'))if(!decorated.has(button)){decorated.add(button);const name=button.textContent.trim();button.setAttribute('aria-label',name);button.title=name;if(host.KiCadUIIcons){const caption=doc.createElement('span');caption.className='mobile-sidebar-label';caption.textContent=name;button.replaceChildren(host.KiCadUIIcons.icon(button.id==='dockNavigator'?'folder':button.id==='dockComments'?'comment':'inspect'),caption);}}}sync();
   }
-  const observer=new host.MutationObserver(scan);observer.observe(doc.body,{subtree:true,childList:true});scan();host.addEventListener('resize',sync);host.addEventListener('kicad-usable-viewport-changed',sync);host.addEventListener('storage',event=>{if(event.key===KEY)set(event.newValue==='1',{persist:false});});return{set,get:()=>shown,scan};
+  const observer=new host.MutationObserver(records=>{if(structureChanged(records))scan();});observer.observe(doc.body,{subtree:true,childList:true});scan();host.addEventListener('resize',sync);host.addEventListener('kicad-usable-viewport-changed',sync);host.addEventListener('storage',event=>{if(event.key===KEY)set(event.newValue==='1',{persist:false});});return{set,get:()=>shown,scan};
  }
  const api={KEY,phone,install};if(typeof module==='object'&&module.exports){module.exports=api;return;}if(root.document){const start=()=>{root.KiCadPhoneSidebar=install(root.document,root);};if(root.document.readyState==='loading')root.document.addEventListener('DOMContentLoaded',start,{once:true});else start();}
 })(globalThis);

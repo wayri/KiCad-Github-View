@@ -1,6 +1,7 @@
 /* Project walkthroughs and local slide decks. Source drawings remain unchanged. */
 ((root)=>{
  'use strict';
+ const structureChanged=records=>records.some(record=>[...record.addedNodes,...record.removedNodes].some(node=>node.nodeType===1&&node.namespaceURI!=='http://www.w3.org/2000/svg'));
  const field=node=>Boolean(node?.closest?.('input,textarea,select,output,[contenteditable=true]'));
  const nextIndex=(index,delta,length)=>Math.max(0,Math.min(length-1,index+delta));
  const API={nextIndex,field};if(typeof module==='object'&&module.exports)module.exports=API;
@@ -16,7 +17,7 @@
   }
  }
  function init(){
-  if(!d.body.classList.contains('android-home')){attach();let queued=false;new MutationObserver(()=>{if(queued)return;queued=true;queueMicrotask(()=>{queued=false;attach();});}).observe(d.body,{childList:true,subtree:true});d.addEventListener('keydown',e=>topApi()?.key(e),true);return;}
+  if(!d.body.classList.contains('android-home')){attach();let queued=false;new MutationObserver(records=>{if(!structureChanged(records)||queued)return;queued=true;queueMicrotask(()=>{queued=false;attach();});}).observe(d.body,{childList:true,subtree:true});d.addEventListener('keydown',e=>topApi()?.key(e),true);return;}
   let active=false,mode='live',slides=[],index=0,store=null,storeKey='',editingId=null;
   const make=(tag,text)=>{const n=d.createElement(tag);if(text)n.textContent=text;return n;};
   const setText=(node,text)=>{if(node.textContent!==text)node.textContent=text;};
@@ -53,7 +54,7 @@
   API.key=e=>{if(!active||field(e.target))return;if(e.key==='Escape'){API.stop();e.preventDefault();e.stopImmediatePropagation();}else if(['ArrowRight','PageDown','ArrowLeft','PageUp'].includes(e.key)){advance(['ArrowRight','PageDown'].includes(e.key)?1:-1);e.preventDefault();e.stopImmediatePropagation();}};
   root.KiCadAndroidPresentation=API;d.addEventListener('keydown',API.key,true);
   root.addEventListener('kicad-project-home',()=>{API.stop();editor.close();});root.addEventListener('kicad-project-opened',()=>{API.stop();editor.close();store=null;});
-  const seen=new WeakSet(),knownDocs=new Set();let queued=false;function scan(){attach();for(const doc of [...knownDocs])if(doc!==d&&!doc.defaultView?.frameElement?.isConnected)knownDocs.delete(doc);for(const doc of documents()){knownDocs.add(doc);if(!seen.has(doc)){seen.add(doc);doc.addEventListener('load',()=>{scan();refresh();},true);new MutationObserver(()=>{if(queued)return;queued=true;queueMicrotask(()=>{queued=false;scan();refresh();});}).observe(doc.body,{childList:true,subtree:true});}}}
+  const seen=new WeakSet(),knownDocs=new Set();let queued=false;function scan(){attach();for(const doc of [...knownDocs])if(doc!==d&&!doc.defaultView?.frameElement?.isConnected)knownDocs.delete(doc);for(const doc of documents()){knownDocs.add(doc);if(!seen.has(doc)){seen.add(doc);doc.addEventListener('load',()=>{scan();refresh();},true);new MutationObserver(records=>{const pageNameChanged=active&&records.some(record=>record.target.id==='activeSheet'||record.target.parentElement?.id==='activeSheet');if((!structureChanged(records)&&!pageNameChanged)||queued)return;queued=true;queueMicrotask(()=>{queued=false;scan();refresh();});}).observe(doc.body,{childList:true,subtree:true});}}}
   scan();
  }
  if(d.readyState==='loading')d.addEventListener('DOMContentLoaded',init,{once:true});else init();

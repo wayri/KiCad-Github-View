@@ -119,12 +119,13 @@ function open(options) {
  const dialog = document.createElement('dialog'); dialog.className = 'bom-manager bom-management-dialog';dialog.setAttribute('aria-label','Bill of materials and assembly management');
  const el = (tag, content, cls) => {const node=document.createElement(tag);if(content !== undefined)node.textContent=content;if(cls)node.className=cls;return node;};
  const button = (label, action) => {const b=el('button',label);b.type='button';b.addEventListener('click',action);return b;};
- const header=el('header',undefined,'bom-manager-heading'), title=el('h2','Bill of materials'); header.append(title,button('Close',()=>dialog.close()));
+ const header=el('header',undefined,'bom-manager-heading'), title=el('h2','Bill of materials'),countLabel=el('output',undefined,'bom-manager-count');countLabel.setAttribute('aria-label','Matching and total parts');header.append(title,countLabel,button('Close',()=>dialog.close()));
  const note=el('p','Procurement fields are local management metadata for this saved revision. They do not edit KiCad source. Multi-unit schematic symbols count once per saved file/reference; repeated sheet instances are not expanded.','bom-manager-note');
  const controls=el('div',undefined,'bom-manager-controls'), result=el('div',undefined,'bom-manager-results'), feedback=el('p',initialWarning,'bom-manager-feedback'); feedback.setAttribute('role','status');
  const select = (label, pairs) => {const wrap=el('label',label), s=el('select');for(const [value,name] of pairs){const opt=el('option',name);opt.value=value;s.append(opt);}wrap.append(s);controls.append(wrap);s.addEventListener('change',render);return s;};
  const source=select('Source',[['symbol','Schematic symbols'],['footprint','PCB footprints']]);
- if(options.variants?.length){const assemblyVariant=select('Assembly variant',options.variants.map(v=>[v.id,v.name]));assemblyVariant.value=options.variant||'default';assemblyVariant.addEventListener('change',()=>{dialog.close();options.onVariant?.(assemblyVariant.value);});}
+ let assemblyVariant=null;
+ if(options.variants?.length){assemblyVariant=select('Assembly variant',options.variants.map(v=>[v.id,v.name]));assemblyVariant.value=options.variant||'default';assemblyVariant.addEventListener('change',()=>{dialog.close();options.onVariant?.(assemblyVariant.value);});}
  source.value = typeof scope === 'object' && ['symbol','footprint'].includes(scope.kind) ? scope.kind : model(objects,'symbol').length ? 'symbol':'footprint';
  const view=select('View',[['parts','Individual parts'],['groups','Grouped quantities']]);
  const population=select('Population',[['all','All'],['fitted','Fitted'],['dnp','DNP']]);
@@ -147,11 +148,11 @@ function open(options) {
  let fieldDescriptors=[],fieldSignature='';
  const fieldOptions=el('details',undefined,'bom-manager-field-options');fieldOptions.open=false;fieldOptions.append(el('summary','Columns'));const fieldSettings=el('div',undefined,'bom-manager-field-settings');fieldOptions.append(fieldSettings);
  const groupLabel=el('label',undefined,'bom-manager-group'),groupCheck=el('input');groupCheck.type='checkbox';groupCheck.checked=false;groupCheck.setAttribute('aria-label','Group symbols');groupLabel.append(groupCheck,el('span','Group symbols'));controls.append(groupLabel);view.parentElement.remove();groupCheck.addEventListener('change',()=>{view.value=groupCheck.checked?'groups':'parts';render();});
- const groupingLabel=el('label','Group by'),grouping=el('select');grouping.setAttribute('aria-label','Group BoM by');for(const p of fieldTable.PRESETS){const opt=el('option',p.label);opt.value=p.id;grouping.append(opt);}grouping.value='value-footprint';groupingLabel.append(grouping);controls.append(groupingLabel);grouping.addEventListener('change',()=>{fieldDescriptors=fieldTable.preset(fieldDescriptors,grouping.value);fieldSignature='';groupCheck.checked=true;view.value='groups';render();});
+ const groupingLabel=el('label','Group by'),grouping=el('select');grouping.setAttribute('aria-label','Group BoM by');for(const p of fieldTable.PRESETS){const opt=el('option',p.label);opt.value=p.id;grouping.append(opt);}grouping.value='value-footprint';groupingLabel.append(grouping);groupingLabel.className='bom-manager-grouping';controls.append(groupingLabel);grouping.addEventListener('change',()=>{fieldDescriptors=fieldTable.preset(fieldDescriptors,grouping.value);fieldSignature='';groupCheck.checked=true;view.value='groups';render();});
  const gridLayout=el('div',undefined,'bom-manager-field-layout');gridLayout.append(result);
  function prepareFields(all){const discovered=fieldTable.fields(all),signature=JSON.stringify(discovered.map(f=>f.key));if(signature===fieldSignature)return;fieldSignature=signature;const previous=new Map(fieldDescriptors.map(f=>[f.key,f]));fieldDescriptors=discovered.map(f=>({...f,...(previous.has(f.key)?{show:previous.get(f.key).show,groupBy:previous.get(f.key).groupBy}:{})}));fieldSettings.replaceChildren();const table=el('table'),head=el('tr');for(const name of ['Field','Show','Group by'])head.append(el('th',name));table.append(head);for(const field of fieldDescriptors){const row=el('tr');row.append(el('td',field.label));for(const key of ['show','groupBy']){const cell=el('td'),check=el('input');check.type='checkbox';check.checked=field[key];check.setAttribute('aria-label',(key==='show'?'Show ':'Group by ')+field.label);check.addEventListener('change',()=>{field[key]=check.checked;if(key==='groupBy'){grouping.value='custom';groupCheck.checked=true;view.value='groups';}render();});cell.append(check);row.append(cell);}table.append(row);}fieldSettings.append(table);}
  const content=el('div',undefined,'bom-manager-content android-sheet-content');
- const filters=el('details',undefined,'bom-manager-filters'),filterHeading=el('summary','Filters and sorting'),filterControls=el('div',undefined,'bom-manager-controls');filters.append(filterHeading,filterControls);filterControls.append(button('Reset filters',()=>{population.value='all';excluded.value='hide';status.value='all';assembly.value='all';side.value='all';sort.value='reference';search.value='';render();}));
+ const filters=el('details',undefined,'bom-manager-filters'),filterHeading=el('summary','Filters'),filterControls=el('div',undefined,'bom-manager-controls');filterHeading.title='Source, variant, population, sorting and build setup';filters.append(filterHeading,filterControls);filterControls.append(source.parentElement);if(assemblyVariant)filterControls.append(assemblyVariant.parentElement);filterControls.append(button('Reset filters',()=>{population.value='all';excluded.value='hide';status.value='all';assembly.value='all';side.value='all';sort.value='reference';search.value='';render();}));
  for(const selector of [population,excluded,status,assembly,side,sort])filterControls.append(selector.parentElement);
  filterControls.append(buildLabel,nextPart);
  const info=el('details',undefined,'bom-manager-info'),infoHeading=el('summary','About');info.append(infoHeading,note);
@@ -161,8 +162,11 @@ function open(options) {
  const resetMatching=button('Reset matching parts…',()=>requestReset(filtered(),'matching the current source and filters'));
  const resetAll=button('Reset entire source…',()=>requestReset(model(objects,source.value,metadata),'in the entire '+(source.value==='symbol'?'schematic symbol':'PCB footprint')+' source, including hidden, excluded and DNP parts'));
  resetActions.append(resetMatching,resetAll);resets.append(resetActions);
- const tools=el('div',undefined,'bom-manager-tools');tools.append(filters,fieldOptions,transfers,resets,info);
- controls.prepend(searchLabel);content.append(controls,tools,summary,feedback,gridLayout);dialog.append(header,content);document.body.append(dialog);
+ const totalsPanel=el('details',undefined,'bom-manager-totals');totalsPanel.append(el('summary','Totals'),summary);
+ const tools=el('div',undefined,'bom-manager-tools');tools.append(filters,fieldOptions,transfers,resets,totalsPanel,info);
+ // Keep a single optional panel open so settings never consume the whole table.
+ for(const panel of [filters,fieldOptions,transfers,resets,totalsPanel,info])panel.addEventListener('toggle',()=>{if(panel.open)for(const other of tools.children)if(other!==panel)other.open=false;});
+ controls.prepend(searchLabel);content.append(controls,tools,feedback,gridLayout);dialog.append(header,content);document.body.append(dialog);
  function persist(next) {
   let json;try {json=metadataJSON(scope,next);if(!storage)throw new Error('Browser draft storage is unavailable.');storage.setItem(storageKey,json);}
   catch(e){feedback.textContent='Draft was not saved: '+e.message;return false;}
@@ -208,7 +212,9 @@ function open(options) {
   if(total){metric('Build requirement',`${total.buildParts} parts`,`${total.boards} boards · ${total.unpriced} unpriced per board`);const overall=totals(all);metric('Assembly verification',`${overall.verified} / ${overall.fitted}`, `${overall.fitted-overall.verified} unfinished in this source · ${total.verified}/${total.fitted} visible verified`);if(Object.keys(total.currencies).length)metric('Visible build cost',Object.entries(total.currencies).map(([c,n])=>`${c} ${n.toFixed(2)}`).join(' · '),'Priced parts only · currencies kept separate');}
   nextPart.disabled=!onLocate||!nextAssembly(parts,assemblyCursor);
   resetMatching.disabled=!parts.length;resetAll.disabled=!all.length;
-  filterHeading.textContent='Filters and sorting'+([population.value!=='all',excluded.value!=='hide',status.value!=='all',assembly.value!=='all',side.value!=='all',sort.value!=='reference'].filter(Boolean).length?' · active':'');
+  const activeFilters=[population.value!=='all',excluded.value!=='hide',status.value!=='all',assembly.value!=='all',side.value!=='all',sort.value!=='reference'].filter(Boolean).length;
+  filterHeading.textContent='Filters'+(activeFilters?' · '+activeFilters:'');
+  countLabel.textContent=`${parts.length} / ${all.length} parts`;countLabel.title=(source.value==='symbol'?'Schematic symbols':'PCB footprints')+(assemblyVariant?' · variant '+assemblyVariant.value:'');
   if(!parts.length){const empty=el('div',undefined,'bom-manager-empty');empty.append(el('strong',all.length?'No parts match your filters':'No saved parts in this source'),el('p',all.length?'Clear search or reset filters to show the full list.':'Choose another source or open a saved schematic or PCB.'));result.append(empty);return;}
   const scroll=el('div',undefined,'bom-manager-grid-scroll'),table=el('table',undefined,'bom-manager-field-grid'),head=el('thead'),hr=el('tr'),columns=fieldDescriptors.filter(f=>f.show);table.setAttribute('aria-label','BoM symbol fields');
   for(const field of columns){const th=el('th',field.label);th.setAttribute('scope','col');hr.append(th);}hr.append(el('th','Actions'));head.append(hr);table.append(head);const body=el('tbody');table.append(body);

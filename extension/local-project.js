@@ -30,6 +30,11 @@ function transport(project,storage,options={}){
   if(!message||typeof message.type!=='string')throw Error('Invalid local request.');
   if(message.provider&&message.provider!==(project.remote?.provider||'github')||message.host&&message.host!==(project.remote?.host||'https://github.com')||message.repository&&message.repository!==scope||message.ref&&message.ref!==ref)throw Error('Request belongs to another imported project.');
   switch(message.type){
+   case 'repository-tree':{
+    const entries=[...(project.repositoryTree?.entries||[]),...project.files.map(f=>({path:f.path,type:'blob'})),...project.assets.map(f=>({path:f.path,type:'blob'}))];
+    const unique=[...new Map(entries.map(e=>[e.path,e])).values()];return{repository:scope,ref,sha:ref,imported:true,entries:unique,truncated:Boolean(project.repositoryTree?.truncated),hasMore:false,warnings:['Imported source files only; no Git working tree is connected.']};}
+   case 'repository-history':return{commits:[],hasMore:false,warnings:['Commit history requires a connected GitHub/GitLab project or a local Git workspace in VS Code.']};
+   case 'repository-branches':return{branches:[],warnings:[]};
    case 'revision-resolve':return{sha:ref};
    case 'project-inventory':return{files:[...project.files,...(options.local?project.assets:[])].map(f=>({path:f.path,size:f.size??(f.content?.length||Math.floor(f.base64.length*3/4))})),snapshotRef:ref,warnings:[]};
    case 'project-file':return readSource(message.file);
