@@ -94,6 +94,27 @@ Inspect plots and probe saved values. Supported spatial exports provide **2D/3D 
 
 Click any image to open it at full size. Captures show several development versions; older release downloads may look different. [Capture sources and attribution](docs/images/README.md).
 
+### Current renderer and compact workspace | 0.12.62
+
+[![PIC Programmer PCB in the shared Three.js renderer, High quality and dark theme](docs/images/current/pcb-3d-dark-0.12.62.jpg)](docs/images/current/pcb-3d-dark-0.12.62.jpg)
+
+Production WebGL rendering of KiCad's public PIC Programmer demo, captured on 27 October 2026. Component bodies in these captures are **approximate footprint stand-ins**; linked mechanical models were not loaded. High quality is enabled. These are browser-rendered application pixels, with no generated imagery or operating-system status bar.
+
+<details>
+<summary><strong>Light theme, top view and compact drawing workspaces</strong></summary>
+
+| Light theme | Top view |
+| :---: | :---: |
+| [![Light-theme PCB material preview](docs/images/current/pcb-3d-light-0.12.62.jpg)](docs/images/current/pcb-3d-light-0.12.62.jpg) | [![Top view of the public PIC Programmer board](docs/images/current/pcb-3d-top-0.12.62.jpg)](docs/images/current/pcb-3d-top-0.12.62.jpg) |
+
+| Compact PCB workspace | Compact schematic workspace |
+| :---: | :---: |
+| [![Current PCB viewer with compact controls](docs/images/current/pcb-workspace-0.12.62.png)](docs/images/current/pcb-workspace-0.12.62.png) | [![Current schematic viewer with compact controls](docs/images/current/schematic-workspace-0.12.62.png)](docs/images/current/schematic-workspace-0.12.62.png) |
+
+The drawing workspaces use the same public demo through a local read-only fixture transport. They demonstrate the shared viewer UI, not live GitHub authentication, a VS Code window or a physical Android device. [Capture details](docs/images/README.md#current-release-renders-2026-10-27).
+
+</details>
+
 ### Chrome | open a project and get straight to the drawing
 
 Read local projects offline or inspect supported GitHub/GitLab file pages. Open the whole project folder to retain sheet and model paths.
