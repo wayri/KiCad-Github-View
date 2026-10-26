@@ -7,7 +7,22 @@ function create(project,request,comments,storage){
  const call=(action,fields={})=>request({type:action,repository,...(provider==='gitlab'?{host}:{}),...fields});
  const check=message=>{if(!repository)throw Error('Open a GitHub or GitLab project first.');if(message.repository&&message.repository.toLowerCase()!==repository.toLowerCase()||message.provider&&message.provider!==provider||message.host&&message.host!==host)throw Error('Review request belongs to another project or server.');};
  const hash=async value=>Array.from(new Uint8Array(await root.crypto.subtle.digest('SHA-256',new TextEncoder().encode(value))),v=>v.toString(16).padStart(2,'0')).join('');
- const thread=(kind,number)=>call(provider==='github'?'review-thread':'thread',{kind,number});
+ const prepareChatAuth=async()=>{if(provider==='gitlab')await call('auth-status');};
+ const thread=async(kind,number,fields={})=>{if(fields.includeCapabilities)await prepareChatAuth();return call(provider==='github'?'review-thread':'thread',{kind,number,...fields});};
+ async function chatWrite(message){
+  if(message.ref!==remote.sha||!project.files.some(file=>file.path===message.file))throw Error('Chat belongs to another saved project revision or drawing.');
+  if(!message.thread||!['issue','discussion'].includes(message.thread.kind)||!Number.isSafeInteger(message.thread.number)||message.thread.number<1||!['create','reply','edit'].includes(message.action))throw Error('Invalid chat destination or action.');
+  if(typeof message.body!=='string'||!message.body.trim()||new TextEncoder().encode(message.body).length>60000||message.body.includes('\0')||typeof message.clientMutationId!=='string'||! /^[A-Za-z0-9_-]{16,100}$/.test(message.clientMutationId))throw Error('Enter a message up to 60000 bytes with a valid operation identity.');
+  const fields={ref:message.ref,file:message.file,thread:message.thread,messageAction:message.action,body:message.body,clientMutationId:message.clientMutationId};
+  for(const key of ['messageId','replyTo','expectedUpdatedAt'])if(message[key]!==undefined)fields[key]=message[key];
+  await prepareChatAuth();
+  if(message.annotation){if(message.action==='edit')throw Error('Drawing annotations cannot be edited as plain chat messages.');let note=comments.validateComment(message.annotation),anchor=note.anchor;
+   if(note.id!==message.clientMutationId||note.text!==message.body||note.threadType!==message.thread.kind||(anchor.provider||'github')!==provider||anchor.repository!==repository||anchor.ref!==message.ref||anchor.file!==message.file||provider==='gitlab'&&anchor.host!==host)throw Error('Drawing context belongs to another chat.');
+   if(note.capture){const value=await call(provider==='github'?'review-upload':'upload',{capture:note.capture,ref:message.ref,file:message.file,chatContext:true});note=comments.validateComment({...note,attachments:[comments.validateAttachment(value.attachment||value)]});}
+   fields.annotation=note;fields.renderedBody=comments.toMarkdown(note);
+  }
+  return call('chat-message-write',fields);
+ }
  async function annotations(message){
   const notes=[],warnings=[],seen=new Set(),selected=message.discussionNumber||message.issueNumber||message.pullNumber;
   const add=(body,meta)=>{let parsed;try{parsed=comments.fromMarkdown(body||'');}catch{warnings.push('An oversized annotation body was skipped.');return;}for(const note of parsed){if(notes.length>=500)break;const a=note.anchor,key=meta.url+':'+note.id;if((a.provider||'github')!==provider||a.repository.toLowerCase()!==repository.toLowerCase()||a.ref!==message.ref||a.file!==message.file||provider==='gitlab'&&a.host!==host||seen.has(key))continue;seen.add(key);notes.push({...note,github:meta});}};
@@ -44,7 +59,9 @@ function create(project,request,comments,storage){
   case 'comment-policy-status':result=await call(provider==='github'?'review-policy':'policy');break;
   case 'comment-mention-users':result=await call(provider==='github'?'review-contributors':'contributors',{query:message.query||'',source:message.source||'all'});break;
   case 'github-discussion-categories':if(provider!=='github')throw Error('GitLab conversations belong to issues.');result=(await call('review-categories')).categories;break;
-  case 'github-thread-read':result=await thread(message.kind,message.number);break;
+  case 'github-thread-read':{if(message.includeCapabilities!==undefined&&typeof message.includeCapabilities!=='boolean')throw Error('Invalid conversation capability request.');result=await thread(message.kind,message.number,message.includeCapabilities?{includeCapabilities:true,ref:message.ref,file:message.file}:{});break;}
+  case 'chat-message-write':result=await chatWrite(message);break;
+  case 'chat-thread-list':{const cursor=message.cursor==null?undefined:message.cursor;if(message.ref!==remote.sha||!project.files.some(file=>file.path===message.file)||!['issue','discussion'].includes(message.kind)||message.page!==undefined&&(!Number.isSafeInteger(message.page)||message.page<1||message.page>5)||cursor!==undefined&&(provider==='gitlab'||message.kind==='issue'||typeof cursor!=='string'||!cursor||cursor.length>1024||/[\x00-\x1f\x7f]/.test(cursor)))throw Error('Invalid chat list scope or pagination.');await prepareChatAuth();result=await call('chat-thread-list',{ref:message.ref,file:message.file,kind:message.kind,...(message.page!==undefined?{page:message.page}:{}),...(cursor!==undefined?{cursor}:{})});break;}
   case 'github-annotations':case 'comment-remote-list':result=await annotations(message);break;
   case 'github-publish-comment':case 'comment-publish':result=await publish(message);break;
   case 'github-recover-publication':throw Error('An uncertain publication is protected against automatic reposting. Inspect the remote thread before creating another draft.');

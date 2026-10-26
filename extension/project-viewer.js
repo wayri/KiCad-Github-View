@@ -9,6 +9,7 @@
   if(signal?.aborted)throw signal.reason||Error('Loading stopped.');
   const pending=chrome.runtime.sendMessage({type,repository,ref,...extra,...providerContext,...(scoped?{loadId}:{})});
   const result=signal?await new Promise((resolve,reject)=>{let settled=false;const finish=(error,value)=>{if(settled)return;settled=true;clearTimeout(timer);signal.removeEventListener('abort',abort);error?reject(error):resolve(value);};const abort=()=>{if(scoped)void chrome.runtime.sendMessage({type:'load-cancel',loadId,...providerContext}).catch(()=>{});finish(signal.reason||Object.assign(Error('Loading stopped.'),{name:'AbortError'}));};const timer=setTimeout(()=>{if(scoped)void chrome.runtime.sendMessage({type:'load-cancel',loadId,...providerContext}).catch(()=>{});finish(Error('Loading stopped after 5 minutes. Retry this file.'));},300000);signal.addEventListener('abort',abort,{once:true});if(signal.aborted)abort();Promise.resolve(pending).then(value=>finish(null,value),error=>finish(error));}):await pending;
+  if(result?.accessIssue)globalThis.KiCadStartupHealth?.showAccessIssue(result.accessIssue);
   if(!result?.ok)throw Error(result?.error||'Project request failed.');return result.result;
  }
  function button(label,fn){const n=node('button',label);n.type='button';n.onclick=fn;return n;}
@@ -17,7 +18,7 @@
  const analysisFile=path=>/\.(json|csv|tsv|wbk|raw|html?)$/i.test(path)||/\.txt$/i.test(path)&&/(report|analysis|sim|thermal|mechanic)/i.test(path);
  function showAnalysis(){
   const list=$('analysisReportList'),host=$('analysisPreviewHost');list.replaceChildren();for(const file of inventory.filter(f=>analysisFile(f.path)))list.append(button(file.path,()=>load(file.path)));
-  if(globalThis.KiCadVSCodeContext&&!globalThis.KiCadAndroidRuntime){host.replaceChildren(node('p','Analysis viewing is available in the browser extension and Android app. This VS Code view cannot embed the analysis viewer. Open Saved source to inspect the report.'));return;}
+  if(globalThis.KiCadVSCodeContext&&!globalThis.KiCadAndroidRuntime){const info=node('p','Saved analysis, simulation and KiCad Monkey reports open in their own Results tab.');host.replaceChildren(info);if(analysisFile(active))host.append(button('Open saved report',async()=>{try{await KiCadEngineeringLauncher.open('analysis-viewer.html',{repository,ref,file:active,...providerContext});}catch(error){info.textContent=error.message;}}));return;}
   if(!analysisFile(active)){host.replaceChildren(node('p','Select a saved analysis report above.'));return;}
   const url=chrome.runtime.getURL('analysis-viewer.html')+'?'+new URLSearchParams({repository,ref,file:active,...providerContext});if(host.children[0]?.src===url)return;
   const frame=node('iframe');frame.title='Read-only analysis: '+active;frame.src=url;host.replaceChildren(frame);

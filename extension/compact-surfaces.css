@@ -1,0 +1,68 @@
+/* Shared density contract. Drawing geometry and document prose keep their own styles. */
+:root{--ui-control-height:30px;--ui-header-height:36px;--ui-space:6px;--ui-caption:11px;--ui-radius:5px}
+body :is(.viewer-settings,.review-sidebar,.review-control-popover,.workspace-tools-menu,.tool-overflow-content,.revision-picker,.repository-explorer,dialog):not(.android-reader-dialog) :is(button,select,input:not([type=checkbox]):not([type=radio]):not([type=range]):not([type=file])){min-height:var(--ui-control-height);font-size:12px;line-height:1.35;border-radius:var(--ui-radius)}
+body :is(.viewer-settings,.review-sidebar,.review-control-popover,.workspace-tools-menu,.tool-overflow-content,.revision-picker,.repository-explorer,dialog) button{padding:4px 7px}
+body :is(.viewer-settings,.review-sidebar,.review-control-popover,.workspace-tools-menu,.tool-overflow-content,.revision-picker,.repository-explorer,dialog) :is(select,input:not([type=checkbox]):not([type=radio]):not([type=range]):not([type=file])){padding:4px 7px}
+body :is(.viewer-settings,.review-sidebar,.review-control-popover,.workspace-tools-menu,.tool-overflow-content,.revision-picker,.repository-explorer,dialog) :is(.hint,small,.note-meta){font-size:var(--ui-caption);line-height:1.4}
+body :is(dialog,.viewer-settings,.revision-picker,.repository-explorer)>header,body :is(.sidebar-heading,.rule-window-header,.section-page-header){min-height:var(--ui-header-height)!important;padding:3px 8px!important;gap:var(--ui-space)!important}
+body :is(dialog,.viewer-settings,.revision-picker,.repository-explorer)>header :is(h1,h2,h3,strong),body :is(.sidebar-heading,.rule-window-header,.section-page-header) :is(h2,strong){font-size:12px!important;line-height:1.35;margin:0;letter-spacing:normal}
+body :is(.surface-dismiss,.section-page-back),body dialog>header .surface-dismiss{display:inline-flex!important;align-items:center;justify-content:center;flex:0 0 var(--ui-control-height);width:var(--ui-control-height)!important;height:var(--ui-control-height)!important;min-width:var(--ui-control-height)!important;min-height:var(--ui-control-height)!important;padding:3px!important;margin:0;border:0;background:transparent;color:inherit;font:20px/1 system-ui!important}
+body .section-page-back .ui-icon{width:18px;height:18px}
+body .section-page .section-page-back{width:var(--ui-control-height)!important;height:var(--ui-control-height)!important;min-width:var(--ui-control-height)!important;min-height:var(--ui-control-height)!important;padding:5px!important}
+body :is(.section-page>.android-sheet-content,.section-page>.github-content,.tool-overflow-content){padding:10px!important;gap:var(--ui-space)}
+body :is(.review-control-popover,.workspace-tools-menu,.view-options,.revision-picker,.universal-search-popup){border-radius:var(--ui-radius);padding:6px;box-shadow:0 5px 18px #0004}
+body :is(.review-control-popover,.workspace-tools-menu,.view-options,.revision-picker) :is(label,summary){font-size:12px;line-height:1.4;gap:5px}
+body .sidebar-section>summary,body .property-group>summary{padding:5px 7px;font-size:11px;min-height:28px;line-height:1.5}
+body .property-group :is(dt,dd){padding:5px 4px;font-size:12px;line-height:1.4}body .property-group{margin-bottom:6px;border-radius:var(--ui-radius)}
+body .property-searchbar{padding:5px 0 6px}body .property-searchbar input{min-height:var(--ui-control-height);font-size:12px;padding:4px 7px}
+body .selection-heading h2{font-size:14px;line-height:1.35}body .selection-heading p{font-size:11px}
+body :is(.navigator-tabs,.inspector-tabs,.comment-subtabs,.comment-category-tabs){gap:3px;padding:3px}
+body :is(.navigator-tabs,.inspector-tabs,.comment-subtabs,.comment-category-tabs)>button{min-height:var(--ui-control-height);padding:4px 6px;font-size:11px;border-radius:var(--ui-radius)}
+body .comment-tools,body .inspector-actions{gap:4px}body .comment-tools button{font-size:11px}
+body[data-workspace-chrome] #frameControls{min-height:var(--ui-header-height);padding:3px 6px;gap:5px}
+body[data-workspace-chrome] #frameControls :is(button,select,input){min-height:var(--ui-control-height);font-size:11px}
+body[data-workspace-chrome] #reviewHeader{min-height:var(--ui-header-height);padding:2px 6px;gap:5px}
+body[data-workspace-chrome] #workspaceTabs button{padding:3px 7px;min-height:28px;font-size:11px}
+body[data-workspace-chrome] .workspace-tools-menu button{min-height:var(--ui-control-height);padding:4px 7px;gap:7px}
+body[data-workspace-chrome] .workspace-tools-menu .button-label{font-size:11px}
+body[data-workspace-chrome] .workspace-tools-menu .workspace-quick-tools button{min-height:44px;padding:4px 2px;gap:3px}
+body[data-workspace-chrome] .workspace-tools-menu .ui-icon{width:17px;height:17px;flex-basis:17px}
+body.project-app .project-header{min-height:var(--ui-header-height);padding:3px 8px;gap:6px}body.project-app .project-header strong{font-size:12px}
+body.project-app .project-header :is(button,input){min-height:var(--ui-control-height);padding:4px 7px;font-size:11px}
+body.project-app .project-active{padding:6px 10px;gap:6px}body.project-app .project-active h2{font-size:14px}
+body.project-app .project-tabs{padding:3px 8px;gap:3px}body.project-app .project-tabs button{min-height:var(--ui-control-height);font-size:11px;padding:4px 7px}
+body.project-app .project-panel{padding:10px}body.project-app .project-panel :is(th,td){padding:5px 7px}
+body.project-app .settings-categories button{min-height:var(--ui-control-height);padding:5px 7px;font-size:12px}
+body.project-app .setting-field{min-height:32px}body.project-app .settings-card{padding-inline:10px;border-radius:var(--ui-radius)}
+body.compact-tool>.compact-tool-header{height:var(--ui-header-height);min-height:var(--ui-header-height);max-height:var(--ui-header-height);padding:2px 6px;gap:4px}
+body.compact-tool .compact-tool-header :is(.tool-identity strong,#title){font-size:12px}
+body.compact-tool .compact-tool-header :is(button,label.file,label.file-action){width:var(--ui-control-height);height:var(--ui-control-height);min-height:var(--ui-control-height);min-width:var(--ui-control-height);padding:6px}
+body.compact-tool .compact-tool-header .ui-icon{width:18px;height:18px;flex-basis:18px}
+body.compact-tool .tool-overflow-content{gap:6px}body.compact-tool .tool-overflow-content>.tool-menu-group{padding:6px 0}
+body.compact-tool .tool-overflow-content button{min-height:var(--ui-control-height);padding:5px 7px;font-size:12px}
+body.compact-tool .tool-overflow-content>label{gap:5px;font-size:12px}
+body.tool-surface>header,body.tool-surface.compact-tool>.compact-tool-header,body.tool-surface>.workbench-header{height:var(--ui-header-height);min-height:var(--ui-header-height);max-height:var(--ui-header-height)}
+body.tool-surface>header,body>.workspace-header,body:has(#conflictPath)>header{min-height:var(--ui-header-height);padding:3px 8px;gap:6px;flex:none}
+body.tool-surface>header :is(strong,#title),body>.workspace-header strong,body:has(#conflictPath)>header strong{font-size:12px;line-height:1.35}
+body.tool-surface>header small{font-size:10px;line-height:1.3}
+body.tool-surface>header :is(button,select),body>.workspace-header button,body:has(#conflictPath)>header button{min-height:var(--ui-control-height);padding:4px 7px;font-size:11px}
+body.tool-surface>header .icon-only{width:var(--ui-control-height);min-width:var(--ui-control-height);height:var(--ui-control-height);padding:5px}
+body.tool-surface>header select{min-height:var(--ui-control-height);height:var(--ui-control-height);padding:3px 6px}
+body.tool-surface.kiview-tool>header :is(button:not(.pin),select,label.file,label.file-action){height:var(--ui-control-height)!important;min-height:var(--ui-control-height)!important;padding-block:4px!important}
+body.tool-surface>header :is(.icon-only,.compact-tool-action){width:var(--ui-control-height)!important;min-width:var(--ui-control-height)!important;padding:5px!important}
+body.tool-surface>header .ui-icon{width:18px;height:18px}
+body.tool-surface>nav{padding:3px 8px;gap:4px}body.tool-surface>nav button{min-height:var(--ui-control-height);padding:4px 7px;font-size:11px}
+body:has(#conflictPath) .pane-heading{padding:3px 6px;gap:5px;min-height:var(--ui-header-height)}body:has(#conflictPath)>footer{padding:4px 8px;gap:5px}
+body:has(#signinAvailability){font-size:14px;max-width:48rem;margin:16px auto;padding:0 12px}body:has(#signinAvailability) h1{font-size:20px;margin:12px 0}body:has(#signinAvailability) h2{font-size:15px;margin:6px 0}body:has(#signinAvailability) section{padding:12px;margin:12px 0;border-radius:6px}body:has(#signinAvailability) :is(input,select,button){font-size:13px;padding:5px 8px;min-height:var(--ui-control-height)}
+@media(max-width:839px),(pointer:coarse){
+ :root{--ui-control-height:36px;--ui-header-height:42px;--ui-space:6px;--ui-caption:11px}
+ body :is(.viewer-settings,.review-sidebar,.review-control-popover,.workspace-tools-menu,.tool-overflow-content,.revision-picker,.repository-explorer,dialog) button{min-width:36px}
+ body :is(.viewer-settings,.review-sidebar,.tool-overflow-content,.revision-picker,dialog) :is(select,input:not([type=checkbox]):not([type=radio]):not([type=range]):not([type=file])){min-height:40px;font-size:13px}
+ body .section-page .section-page-header{min-height:42px!important;padding:3px 8px!important}
+ body .section-page .section-page-back{width:36px!important;height:36px!important;min-height:36px!important;min-width:36px!important;padding:7px!important}
+ body :is(dialog,.review-sidebar) :is(.tool-group,.inspector-actions,.android-pane-actions,.github-account-tools,.comment-post-row){gap:5px}
+ body #sheetOverview>header{padding:4px 6px;gap:4px}body #sheetOverview>header>strong{font-size:12px;flex-basis:auto}body #sheetOverview>header>button{min-height:36px;padding:4px 6px;font-size:11px}body #sheetOverview>header>small{font-size:10px;max-height:36px}
+ body :is(#objectMenu,.touch-net-picker) button{padding:6px 9px;min-height:40px;font-size:12px}
+ body[data-workspace-chrome] .workspace-tools-menu .workspace-quick-tools button{min-height:44px;height:auto}
+}
+@media(prefers-reduced-motion:reduce){body .surface-dismiss{transition:none}}

@@ -93,3 +93,24 @@ test('report source paths and host routes accept only bounded safe text formats'
  for(const file of ['analysis.json','results.csv','results.tsv','simulation.wbk','output.raw','report.html','report.htm','simulation.txt','root.kicad_sch.txt']){assert.equal(filePath(file),file);assert.equal(require('../browser-data.js').validPath(file),false);assert.ok(route('https://github.com/owner/repo/blob/main/'+file));}
  for(const file of ['../results.csv','/analysis.wbk','x\\analysis.raw','x:report.html','results.csv.exe','report.js'])assert.equal(filePath(file),null);
 });
+
+test('repository routes preserve main-page scope and exact slash branch metadata',()=>{
+ const {repositoryRoute,repositoryRef,detectedProjects}=require('../parsing.js');
+ assert.deepEqual(repositoryRoute('https://github.com/owner/repo'),{kind:'repository',repository:'owner/repo'});
+ assert.equal(repositoryRoute('https://github.com/owner/repo/issues'),null);
+ assert.equal(repositoryRoute('https://github.com/owner/repo/pull/4'),null);
+ const tree=repositoryRoute('https://github.com/owner/repo/tree/feature/new-ui/design');
+ assert.equal(repositoryRef(tree,[]),null);
+ assert.equal(repositoryRef(tree,[JSON.stringify({refInfo:{name:'old'} }),JSON.stringify({payload:{refInfo:{name:'feature/new-ui',currentOid:'a'.repeat(40)}}})]),'feature/new-ui');
+ assert.equal(repositoryRef(repositoryRoute('https://github.com/owner/repo')), 'HEAD');
+ assert.equal(repositoryRef(repositoryRoute('https://github.com/owner/repo/tree/feature+test')),'feature+test');
+ assert.equal(repositoryRoute('https://evil.example/owner/repo'),null);
+ assert.equal(repositoryRoute('https://user:pass@github.com/owner/repo'),null);
+ assert.deepEqual(repositoryRoute('https://gitlab.com/group/sub/board'),{kind:'repository',provider:'gitlab',host:'https://gitlab.com',repository:'group/sub/board'});
+ assert.equal(repositoryRoute('https://gitlab.com/group/board/-/issues'),null);
+ const gitlab=repositoryRoute('https://gitlab.com/group/sub/board/-/tree/review/new');
+ assert.equal(repositoryRef(gitlab,[],{projectPath:'group/sub/board',originalBranch:'review/new'}),'review/new');
+ const entries=['a/board.kicad_sch','a/board.kicad_pro','a/board.kicad_pcb','b/other.kicad_pro','loose.kicad_pcb'].map(path=>({path,type:'blob',mode:'100644'}));
+ entries.push({path:'link.kicad_pro',type:'blob',mode:'120000'},{path:'../bad.kicad_pro',type:'blob'});
+ assert.deepEqual(detectedProjects(entries),['a/board.kicad_pro','b/other.kicad_pro','loose.kicad_pcb']);
+});

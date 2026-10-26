@@ -19,7 +19,7 @@ async function run() {
   await vscode.commands.executeCommand("kicadVisualReview.open",root);
   const tab=await waitForTab(root);
   assert.ok(tab,"open command creates a real native custom editor: "+JSON.stringify(vscode.window.tabGroups.all.flatMap(group=>group.tabs).map(item=>({label:item.label,type:item.input.constructor.name,uri:item.input.uri?.toString(),viewType:item.input.viewType}))));assert.equal(tab.input.viewType,"kicadVisualReview.viewer");
-  const context={workspaceState:{get:(key,fallback)=>fallback,update:async()=>{}}},session=api.createSession(root,project,context);
+  const context={extensionUri:extension.extensionUri,workspaceState:{get:(key,fallback)=>fallback,update:async()=>{}}},session=api.createSession(root,project,context);
   let reply;const send=async(id,request)=>{await api.handleMessage({channel:api.CHANNEL,token:session.token,id,request},session,(response)=>{reply=response.reply;});assert.equal(reply.ok,true,reply.error);return reply.result;};
   const scope={repository:session.scope.repository,ref:session.scope.ref,file:session.scope.rootFile},notes=await send(1,{type:"comment-list",...scope});
   const existing=notes.find((note)=>note.id==="vscode-host-smoke"),now=new Date().toISOString();
@@ -39,9 +39,13 @@ async function run() {
   assert.equal(modelReply?.ok,true,modelReply?.error);assert.equal(modelReply.result.mediaType,"model/step");
   assert.match(Buffer.from(modelReply.result.base64,"base64").toString("utf8"),/ISO-10303-21/);
   assert.deepEqual(await vscode.workspace.fs.readFile(boards[0]),pcbBefore,"STEP asset retrieval did not modify the PCB");
+  const report=vscode.Uri.joinPath(folder.uri,'reports','native-smoke.json');await vscode.workspace.fs.createDirectory(vscode.Uri.joinPath(report,'..'));await vscode.workspace.fs.writeFile(report,new TextEncoder().encode(JSON.stringify({schema:'kicad_monkey.design.a0',generator:'kicad_monkey',components:[{designator:'TP1',value:'Smoke test'}],nets:[]})));
+  let reportReply;await api.handleMessage({channel:api.CHANNEL,token:modelSession.token,id:2,request:{type:'open-analysis-viewer',repository:modelSession.scope.repository,ref:modelSession.scope.ref,file:modelSession.scope.rootFile,path:'reports/native-smoke.json'}},modelSession,response=>{reportReply=response.reply;});assert.equal(reportReply?.ok,true,reportReply?.error);
+  const resultTab=()=>vscode.window.tabGroups.all.flatMap(group=>group.tabs).find(item=>item.label==='Results: native-smoke.json');
+  for(let i=0;i<20&&!resultTab();i++)await new Promise(resolve=>setTimeout(resolve,100));assert.ok(resultTab(),'saved analysis opens a dedicated native Results tab');
   const output=vscode.Uri.joinPath(extension.extensionUri,"..",".vizdiff","vscode-host-smoke","result.json");
   await vscode.workspace.fs.createDirectory(vscode.Uri.joinPath(output,".."));
-  await vscode.workspace.fs.writeFile(output,new TextEncoder().encode(JSON.stringify({runId:process.env.KICAD_SMOKE_RUN_ID||null,verifiedAt:new Date().toISOString(),activated:true,schematicEditorOpened:true,hierarchyFiles:project.files.length,boardEditorOpened:true,stepAssetRead:true,stepFrontend:"not verified by host smoke",sidecarPersisted:true,sourcesUnchanged:true,rendererControls:"not visually inspected"},null,2)));
+  await vscode.workspace.fs.writeFile(output,new TextEncoder().encode(JSON.stringify({runId:process.env.KICAD_SMOKE_RUN_ID||null,verifiedAt:new Date().toISOString(),activated:true,schematicEditorOpened:true,hierarchyFiles:project.files.length,boardEditorOpened:true,analysisReportOpened:true,stepAssetRead:true,stepFrontend:"not verified by host smoke",sidecarPersisted:true,sourcesUnchanged:true,rendererControls:"not visually inspected"},null,2)));
   console.log("KICAD_HOST_SMOKE_OK");
 }
 module.exports={run};

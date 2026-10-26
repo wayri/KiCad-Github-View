@@ -122,6 +122,9 @@ body .object-row.selected{background:var(--selected);color:var(--text);border:1p
 #designInspector.review-sidebar .selection-heading h2{font-size:16px}
 .review-footer #panelSpaceStatus{white-space:normal;font-size:9px}
 
+.measurement-history{font-size:11px;min-width:150px;max-width:100%}.measurement-history>summary{cursor:pointer;padding:5px 8px}.measurement-history>div{display:grid;gap:4px;padding:8px;max-height:240px;overflow:auto;background:var(--panel);border:1px solid var(--line);border-radius:7px}.measurement-history button{text-align:left;justify-content:flex-start;white-space:normal;font-size:11px}.measurement-history p{color:var(--muted);font-size:11px}
+body:not(.android-design) .measurement-history{position:relative}body:not(.android-design) .measurement-history[open]>div{position:absolute;bottom:calc(100% + 6px);right:0;width:min(420px,calc(100vw - 20px));z-index:30;box-shadow:0 8px 26px #0004}
+.saved-reports-content{padding:14px;display:grid;gap:12px;max-width:720px;margin:auto}.saved-reports-content>p{font-size:12px;color:var(--muted)}.saved-report-list{display:grid;gap:5px;max-height:60vh;overflow:auto}.saved-report-list button{justify-content:flex-start;text-align:left;white-space:normal;overflow-wrap:anywhere;min-height:36px;font-size:12px}
 /* One compact toolbar row; optional assembly/highlight controls share a flyout. */
 #frameControls{padding:4px 8px;min-height:38px;gap:5px;flex-wrap:nowrap!important;overflow-x:auto}
 .drawing-title{flex:0 0 auto!important;gap:5px}.document-mark{display:none}#viewerKind{font-size:11px}#activeSheet{font-size:9px;max-width:150px}

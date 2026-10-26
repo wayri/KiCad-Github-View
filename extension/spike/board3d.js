@@ -3,6 +3,12 @@ import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 import { VRMLLoader } from "three/addons/loaders/VRMLLoader.js";
 import { RoomEnvironment } from "three/addons/environments/RoomEnvironment.js";
+import { RoundedBoxGeometry } from "three/addons/geometries/RoundedBoxGeometry.js";
+import { EffectComposer } from "three/addons/postprocessing/EffectComposer.js";
+import { RenderPass } from "three/addons/postprocessing/RenderPass.js";
+import { GTAOPass } from "three/addons/postprocessing/GTAOPass.js";
+import { OutputPass } from "three/addons/postprocessing/OutputPass.js";
+import { SMAAPass } from "three/addons/postprocessing/SMAAPass.js";
 import "../design-diff.js";
 import "../repo-models.js";
 import fzstd from "../vendor/fzstd/fzstd.js";
@@ -16,32 +22,37 @@ import { viewportSceneIdentity } from "@spike/viewportScenePolicy";
 import { populationMask, uniqueComponentIndexes } from "./componentState.mjs";
 import { footprintProxies } from "./footprintProxies.mjs";
 import { selectionMatcher, tapGesture, holdGesture } from "./selectionState.mjs";
-import { sphereFitDistance } from "./fitPolicy.mjs";
-import { viewportPixelRatio, boardClipRange } from "./renderQuality.mjs";
+import { sphereFitDistance,boxFitDistance } from "./fitPolicy.mjs";
+import { qualityName, qualityViewport, boardOcclusion, boardClipRange, studioLights, studioMaterials, padHasMaskOpening, physicalColors } from "./renderQuality.mjs";
 import { createResultOverlay } from "./result3d.js";
+import { sourceZoneGeometry,drillLoopInsideBoard } from "./sourceGeometry.mjs";
+import { nativePadOutline,padSourceDetails,nativeDrillOutline } from "./padGeometry.mjs";
+import { MeasurementSession,distanceLabel } from "./measurement3d.mjs";
 export { mountResultScene } from "./result3d.js";
 
 const STYLE = `
   :host{display:block;width:100%;height:100%;font:12px/1.4 system-ui,-apple-system,"Segoe UI",sans-serif;
-    --ink:#e7f3ef;--surface:#0b1720;--bar:#172832;--border:#39515a;--accent:#9ee4c2;
-    --muted:#b1c9cf;--button:#27414a;--button-border:#4a6870;--button-ink:#f0faf7;
-    --hint:#0d1c27e8;--panel:#10232df2;--menu:#1a333a;--notice:#18272d;color:var(--ink)}
-  :host([data-theme="light"]){--ink:#172e36;--surface:#f3f7f5;--bar:#e5efea;--border:#a7bdb9;
-    --accent:#175d48;--muted:#405c61;--button:#fff;--button-border:#83a79b;--button-ink:#173b33;
-    --hint:#fffefaed;--panel:#fffffff2;--menu:#fff;--notice:#e8f1ec}
+    --ink:#e6e9ef;--surface:#151820;--bar:#1e2128;--border:#343944;--accent:#91b9ff;
+    --muted:#9ca5b5;--button:#292d36;--button-border:#343944;--button-ink:#e6e9ef;
+    --hint:#1e2128e8;--panel:#1e2128f2;--menu:#252a34;--notice:#1e2128;color:var(--ink)}
+  :host([data-theme="light"]){--ink:#252c38;--surface:#e7ebf1;--bar:#fff;--border:#d9dee7;
+    --accent:#336ac2;--muted:#616d80;--button:#edf0f5;--button-border:#d9dee7;--button-ink:#252c38;
+    --hint:#ffffffed;--panel:#fffffff2;--menu:#fff;--notice:#fff}
   *{box-sizing:border-box}.shell{display:flex;flex-direction:column;width:100%;height:100%;min-height:0;background:var(--surface)}
-  .bar{display:flex;align-items:center;gap:9px;min-height:42px;padding:6px 9px;background:var(--bar);border-bottom:1px solid var(--border);flex-wrap:wrap}
-  .title{font-weight:700;color:var(--accent);white-space:nowrap}.detail{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--muted)}.spacer{flex:1}
-  button{background:var(--button);border:1px solid var(--button-border);color:var(--button-ink);padding:5px 9px;border-radius:5px;font:600 12px system-ui;cursor:pointer}
+  .bar{display:flex;align-items:center;gap:7px;min-height:36px;padding:3px 8px;background:var(--bar);border-bottom:1px solid var(--border);flex-wrap:nowrap;overflow-x:auto;scrollbar-width:thin;flex-shrink:0}
+  .title{font-weight:600;color:var(--ink);white-space:nowrap}.detail{font-size:11px;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--muted)}.spacer{flex:1}
+  button,select{background:var(--button);border:1px solid var(--button-border);color:var(--button-ink);padding:4px 8px;border-radius:5px;font:500 11px system-ui;min-height:28px;cursor:pointer;flex-shrink:0}
   button:hover{border-color:var(--accent)}button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
-  label{display:flex;align-items:center;gap:4px;white-space:nowrap;color:var(--ink)}input{accent-color:var(--accent)}
+  label{display:flex;align-items:center;gap:4px;white-space:nowrap;color:var(--muted);font-size:11px}input{accent-color:var(--accent)}.quality-label{margin-left:3px}.visibility{position:relative;flex-shrink:0}.visibility summary{cursor:pointer;padding:5px 8px;border-radius:5px;color:var(--muted);font-size:11px}.visibility[open] summary{background:var(--button)}.visibility-options{position:fixed;right:8px;top:38px;z-index:6;display:grid;gap:10px;padding:12px;background:var(--menu);border:1px solid var(--border);border-radius:7px;box-shadow:0 8px 22px #0004}.visibility-options input{width:16px;height:16px}
   .stage{position:relative;flex:1;min-height:0;overflow:hidden}.canvas{position:absolute;inset:0}.canvas canvas{display:block;width:100%;height:100%}
   .hint{position:absolute;left:12px;bottom:10px;padding:5px 8px;border:1px solid var(--border);border-radius:5px;background:var(--hint);color:var(--ink);pointer-events:none}
   .inspector{position:absolute;right:12px;bottom:12px;width:min(280px,45%);max-height:50%;overflow:auto;background:var(--panel);border:1px solid var(--border);border-radius:7px;padding:10px;box-shadow:0 8px 28px #0005}
   .inspector[hidden],.menu[hidden]{display:none}.inspector h2{font-size:13px;margin:0 0 6px;color:var(--accent)}.inspector dl{display:grid;grid-template-columns:auto 1fr;gap:3px 8px;margin:0}.inspector dt{color:var(--muted)}.inspector dd{margin:0;overflow-wrap:anywhere}
   .menu{position:absolute;z-index:4;display:grid;gap:3px;padding:5px;border:1px solid var(--border);border-radius:5px;background:var(--menu);box-shadow:0 7px 25px #0005}
-  .notice{padding:5px 9px;background:var(--notice);color:var(--muted);font-size:11px;border-top:1px solid var(--border)}
-  @media(max-width:700px){.detail{display:none}.bar{gap:5px}.hint{display:none}.inspector{width:min(260px,65%)}}
+  .notice{padding:3px 9px;background:var(--notice);color:var(--muted);font-size:10px;border-top:1px solid var(--border);flex-shrink:0}.notice details{display:inline;margin-left:8px}.notice summary{display:inline;cursor:pointer;color:var(--accent)}.notice details[open]{display:block;margin:6px 0 0}.notice ul{max-height:120px;overflow:auto;margin:6px 0;padding-left:16px;line-height:1.6}.quality-notice{position:absolute;left:12px;right:12px;top:10px;z-index:7;padding:10px 12px;border:1px solid #bf725c;border-radius:7px;background:var(--panel);color:var(--ink);font-size:12px;max-width:560px}.quality-notice[hidden]{display:none}.quality-notice button{margin:6px 0 0 8px}
+  button[aria-pressed=true]{border-color:var(--accent);color:var(--accent)}.measurement-panel{position:absolute;bottom:10px;left:10px;z-index:5;width:min(350px,calc(100% - 20px));padding:10px 12px;border:1px solid var(--border);border-radius:8px;background:var(--panel);box-shadow:0 4px 18px #0003;display:grid;gap:6px}.measurement-panel[hidden],.measurement-label[hidden]{display:none}.measurement-heading{display:flex;align-items:center;gap:6px}.measurement-heading strong{font-size:12px;margin-right:auto}.measurement-panel output{font:600 18px/1.3 system-ui;color:var(--ink);font-variant-numeric:tabular-nums}.measurement-panel small{color:var(--muted);font-size:10px}.measurement-panel .measurement-tools{display:flex;align-items:center;gap:6px}.measurement-panel .measurement-tools select{min-width:0;flex:1}.measurement-panel p{margin:0;color:var(--muted);font-size:11px}.measurement-label{position:absolute;z-index:4;pointer-events:none;padding:4px 7px;border:1px solid #c5a35f;border-radius:5px;background:var(--panel);color:var(--ink);font:600 12px/1.4 system-ui;white-space:nowrap;box-shadow:0 2px 8px #0004}:host([data-measuring=true]) .hint{display:none}
+  @media(max-width:700px){.detail{display:none}.bar{gap:4px}.hint{display:none}.inspector{width:min(260px,65%)}.quality-label>span{display:none}}
+  @media(pointer:coarse){button,select,.visibility summary{min-height:40px}.bar{min-height:44px}.visibility-options{top:46px}.visibility-options label{min-height:32px}}
 `;
 
 function pathFor(points, transform) {
@@ -87,6 +98,9 @@ export function mountBoard3D(container, source, options = {}) {
   options ||= {};
   const initialDark = options.dark !== false;
   const board = parseKicadBoard(source);
+  const sourceAST=globalThis.KiCadDesignDiff.parse(source),savedZones=sourceZoneGeometry(sourceAST);
+  const padDetails=padSourceDetails(sourceAST),nativePads=board.pads.map(pad=>({...pad,...padDetails.get(pad.id)}));
+  const geometryDiagnostics=[];
   if (!board?.bounds || !Number.isFinite(board.width) || !Number.isFinite(board.height)) {
     throw new Error("SPIKE could not parse this PCB layout.");
   }
@@ -103,81 +117,161 @@ export function mountBoard3D(container, source, options = {}) {
   const inspector = document.createElement("div"); inspector.className = "inspector"; inspector.hidden = true;
   const menu = document.createElement("div"); menu.className = "menu"; menu.hidden = true;
   const notice = document.createElement("div"); notice.className = "notice";
-  notice.textContent = "SPIKE 3D · bounded footprint stand-ins appear where linked model geometry is unavailable.";
+  notice.textContent = "Material preview · mask openings follow saved pad layer flags · footprint stand-ins where linked models are unavailable.";
+  const qualityNotice=document.createElement('div');qualityNotice.className='quality-notice';qualityNotice.hidden=true;qualityNotice.setAttribute('role','status');stage.append(qualityNotice);
   stage.append(canvasHost, hint, inspector, menu); shell.append(bar, stage, notice); shadow.append(style, shell); container.append(host);
 
-  const title = document.createElement("strong"); title.className = "title"; title.textContent = "SPIKE 3D";
+  const title = document.createElement("strong"); title.className = "title"; title.textContent = "3D board";
   const detail = document.createElement("span"); detail.className = "detail";
   detail.textContent = `${board.width.toFixed(1)} × ${board.height.toFixed(1)} mm · ${board.components.length} parts · ${board.tracks.length} tracks`;
   const spacer = document.createElement("span"); spacer.className = "spacer";
   function action(label, handler) {
     const button = document.createElement("button"); button.type = "button"; button.textContent = label;
-    button.addEventListener("click", handler); bar.append(button); return button;
+    button.addEventListener("click",()=>{handler();invalidate();}); bar.append(button); return button;
   }
+  const visibility=document.createElement('details');visibility.className='visibility';
+  const visibilityLabel=document.createElement('summary');visibilityLabel.textContent='Layers';
+  const visibilityOptions=document.createElement('div');visibilityOptions.className='visibility-options';visibility.append(visibilityLabel,visibilityOptions);
   function toggle(label, initial, handler) {
     const wrapper = document.createElement("label"), input = document.createElement("input");
-    input.type = "checkbox"; input.checked = initial; input.addEventListener("change", () => handler(input.checked));
-    wrapper.append(input, document.createTextNode(label)); bar.append(wrapper); return input;
+    input.type = "checkbox"; input.checked = initial; input.addEventListener("change", () => {handler(input.checked);invalidate();});
+    wrapper.append(input, document.createTextNode(label)); visibilityOptions.append(wrapper); return input;
   }
   bar.append(title, detail, spacer);
+  const qualityKey='pocket-kivi:3d-quality:v1';let initialQuality='balanced';
+  try{initialQuality=qualityName(localStorage.getItem(qualityKey));}catch{}
+  if(options.quality)initialQuality=qualityName(options.quality);
+  const qualityLabel=document.createElement('label');qualityLabel.className='quality-label';const qualityCaption=document.createElement('span');qualityCaption.textContent='Quality';
+  const qualitySelect=document.createElement('select');qualitySelect.setAttribute('aria-label','3D rendering quality');qualitySelect.title='High: ambient occlusion and enhanced antialiasing. Balanced: responsive studio lighting. Low: reduced memory.';
+  for(const [value,label]of [['low','Low'],['balanced','Balanced'],['high','High']]){const option=document.createElement('option');option.value=value;option.textContent=label;qualitySelect.append(option);}qualitySelect.value=initialQuality;qualityLabel.append(qualityCaption,qualitySelect);
 
   const centerX = (board.bounds.minX + board.bounds.maxX) / 2;
   const centerY = (board.bounds.minY + board.bounds.maxY) / 2;
   const world = ([x, y]) => [x - centerX, centerY - y];
+  const localPadPoint=([x,y])=>[x,-y];
+  const padShape=outline=>{const shape=new THREE.Shape();pathFor(outline.outline,localPadPoint).getPoints().forEach((point,index)=>index?shape.lineTo(point.x,point.y):shape.moveTo(point.x,point.y));if(outline.drill)shape.holes.push(pathFor(outline.drill,localPadPoint));return shape;};
   const width = Math.max(1, board.width), height = Math.max(1, board.height), extent = Math.max(width, height);
   const thickness = board.stackup?.filter((layer) => Number.isFinite(layer.thickness))
     .reduce((sum, layer) => sum + layer.thickness, 0) || 1.6;
   const top = thickness / 2, bottom = -top;
-  const scene = new THREE.Scene(); scene.background = new THREE.Color(initialDark ? 0x0d1b26 : 0xf3f7f5);
+  const scene = new THREE.Scene(); scene.background = new THREE.Color(initialDark ? 0x151820 : 0xe7ebf1);
   const camera = new THREE.PerspectiveCamera(45, 1, 0.1, Math.max(3000, extent * 30));
   const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false, powerPreference: "high-performance" });
+  let active=true,frame=0,contextLost=false,renderCount=0,pipeline=null,quality=initialQuality,shaderFailure=false;
+  const constrained=Boolean(globalThis.matchMedia?.('(pointer:coarse)').matches||globalThis.navigator?.deviceMemory&&globalThis.navigator.deviceMemory<=4);
+  function invalidate(){if(!active||contextLost||frame)return;frame=requestAnimationFrame(drawFrame);}
+  function graphicsNotice(message,retry=false){qualityNotice.replaceChildren(document.createTextNode(message));qualityNotice.hidden=false;
+    const close=document.createElement('button');close.type='button';close.textContent='Dismiss';close.onclick=()=>{qualityNotice.hidden=true;};qualityNotice.append(close);
+    if(retry){const button=document.createElement('button');button.type='button';button.textContent='Retry graphics';button.onclick=()=>renderer.forceContextRestore();qualityNotice.append(button);}
+  }
+  function disposePipeline(){if(!pipeline)return;for(const pass of pipeline.passes){pass.dispose?.();if(pass instanceof GTAOPass){pass.gtaoMaterial.dispose();pass.blendMaterial.dispose();pass.depthTexture?.dispose();}}pipeline.composer.dispose();pipeline=null;}
+  function createPipeline(){
+    disposePipeline();if(quality!=='high')return;
+    if(!renderer.extensions.has('EXT_color_buffer_float'))throw Error('Floating-point render targets are unavailable.');
+    const target=new THREE.WebGLRenderTarget(1,1,{type:THREE.HalfFloatType,depthBuffer:true,stencilBuffer:false});
+    const composer=new EffectComposer(renderer,target),passes=[];pipeline={composer,passes};
+    const base=new RenderPass(scene,camera),ao=new GTAOPass(scene,camera,1,1,undefined,boardOcclusion(thickness));
+    ao.blendIntensity=.65;ao.updatePdMaterial({radius:4,rings:2,samples:12});
+    // Translucent solder zones, glass and result overlays must not become
+    // opaque occluders when the normal/depth pass substitutes its material.
+    const inheritedVisibility=ao.overrideVisibility.bind(ao);ao.overrideVisibility=()=>{inheritedVisibility();scene.traverse(object=>{const materials=Array.isArray(object.material)?object.material:[object.material];if(materials.some(material=>material&&(material.transparent||material.depthTest===false)))object.visible=false;});};
+    const output=new OutputPass(),smaa=new SMAAPass(1,1);
+    for(const texture of [smaa.areaTexture,smaa.searchTexture])texture.image?.addEventListener?.('load',invalidate,{once:true});
+    passes.push(base,ao,output,smaa);for(const pass of passes)composer.addPass(pass);
+  }
+  function fallbackQuality(message){disposePipeline();quality='balanced';qualitySelect.value=quality;host.dataset.quality=quality;shaderFailure=false;renderer.setRenderTarget(null);graphicsNotice(message);sizeViewport();}
+  function applyQuality(value,persist=true){quality=qualityName(value);qualitySelect.value=quality;host.dataset.quality=quality;qualityNotice.hidden=true;shaderFailure=false;
+    if(persist)try{localStorage.setItem(qualityKey,quality);}catch{}
+    renderer.shadowMap.enabled=quality!=='low';renderer.shadowMap.needsUpdate=true;
+    try{createPipeline();}catch{fallbackQuality('High quality is unavailable on this graphics device. Balanced rendering is active.');}
+    sizeViewport();invalidate();return quality;
+  }
+  qualitySelect.onchange=()=>applyQuality(qualitySelect.value);
+  renderer.debug.onShaderError=()=>{shaderFailure=true;};
   renderer.outputColorSpace = THREE.SRGBColorSpace;
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
   renderer.toneMappingExposure = 1;
+  // Two bounded, cached maps add contact/depth cues without redrawing shadow
+  // geometry every orbit frame. Geometry/visibility changes invalidate them.
+  renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+  renderer.shadowMap.autoUpdate = false; renderer.shadowMap.needsUpdate = true;
   // A small, generated neutral studio supplies reflections to metallic STEP /
   // glTF materials. No network environment map or model-material rewrite.
-  const environmentRoom = new RoomEnvironment();
-  const environmentGenerator = new THREE.PMREMGenerator(renderer);
-  const environment = environmentGenerator.fromScene(environmentRoom, .04, .1, 100);
-  environmentRoom.dispose(); environmentGenerator.dispose();
-  scene.environment = environment.texture; scene.environmentIntensity = .55;
+  function createEnvironment(){if(!renderer.extensions.has('EXT_color_buffer_float'))return null;const room=new RoomEnvironment(),generator=new THREE.PMREMGenerator(renderer);const result=generator.fromScene(room,.04,.1,100);room.dispose();generator.dispose();return result;}
+  let environment=createEnvironment();
+  scene.environment = environment?.texture||null; scene.environmentIntensity = .65;
   canvasHost.append(renderer.domElement);
   const controls = new OrbitControls(camera, renderer.domElement);
   let userAdjustedCamera = false;
   const cameraInteraction = () => { userAdjustedCamera = true; };
   controls.addEventListener("start", cameraInteraction);
+  controls.addEventListener('change',invalidate);
   controls.enableDamping = true; controls.dampingFactor = 0.1; controls.screenSpacePanning = true;
   controls.minDistance = Math.max(2, extent * .04); controls.maxDistance = extent * 8;
   // Oblique keys reveal chamfers and body shape on either face. Neutral fill
   // keeps dark packages readable without flattening all the surface normals.
-  scene.add(new THREE.AmbientLight(0xffffff, 1.2));
-  for (const side of [1, -1]) {
-    const key = new THREE.DirectionalLight(0xffffff, 1.6);
-    key.position.set(extent * .65, extent * -.45, side * extent); scene.add(key);
+  scene.add(new THREE.AmbientLight(0xffffff, .35));
+  for (const light of studioLights) {
+    const key = new THREE.DirectionalLight(light.color, light.intensity);
+    if(Math.abs(light.z)===1){
+      key.castShadow=true;key.shadow.mapSize.set(1024,1024);
+      key.shadow.camera.left=key.shadow.camera.bottom=-extent;
+      key.shadow.camera.right=key.shadow.camera.top=extent;
+      key.shadow.camera.near=.1;key.shadow.camera.far=extent*5;
+      key.shadow.normalBias=.02;key.shadow.bias=-.0001;
+    }
+    key.position.set(extent * light.x, extent * light.y, extent * light.z); scene.add(key);
   }
   const boardGroup = new THREE.Group(); scene.add(boardGroup);
   const copperGroups = new Map(), pickables = [];
+  const appearanceRecords=[];let realistic=true;
+  const appearanceLabel=document.createElement('label');appearanceLabel.append(document.createTextNode('Appearance'));
+  const appearanceSelect=document.createElement('select');appearanceSelect.setAttribute('aria-label','3D board appearance');
+  for(const [value,label]of [['realistic','Realistic'],['layers','Layer colors']]){const option=document.createElement('option');option.value=value;option.textContent=label;appearanceSelect.append(option);}appearanceLabel.append(appearanceSelect);visibilityOptions.append(appearanceLabel);
+  function applyAppearance(){for(const record of appearanceRecords){const {mesh,role,layer}=record;
+    if(role==='pads'){mesh.material.color.setHex(0xffffff);record.pads.forEach((pad,index)=>mesh.setColorAt(index,new THREE.Color(realistic?(padHasMaskOpening(pad,layer)?physicalColors.exposedCopper:physicalColors.coatedCopper):layerThreeColor(layer))));if(mesh.instanceColor)mesh.instanceColor.needsUpdate=true;}
+    else mesh.material.color.setHex(realistic?physicalColors.coatedCopper:layerThreeColor(layer));
+    mesh.material.metalness=realistic&&role!=='pads'?.08:studioMaterials.copper.metalness;
+    mesh.material.roughness=realistic&&role!=='pads'?.52:studioMaterials.copper.roughness;
+  }invalidate();}
+  appearanceSelect.onchange=()=>{realistic=appearanceSelect.value==='realistic';applyAppearance();};
   const groupFor = (layer) => {
     if (!copperGroups.has(layer)) { const group = new THREE.Group(); group.name = layer; boardGroup.add(group); copperGroups.set(layer, group); }
     return copperGroups.get(layer);
   };
   const shape = boardShape(board, world);
+  // Saved pad/via drill loops cut the substrate itself; NPTH does not need a
+  // copper annulus. Cap triangulation work and disclose omissions explicitly.
+  const drilled=new Set();let drillCount=0,drillPoints=0,omittedDrills=0;
+  const inside=(point,loop)=>{let result=false;for(let i=0,j=loop.length-1;i<loop.length;j=i++){const [a,b]=[loop[i],loop[j]];if((a[1]>point[1])!==(b[1]>point[1])&&point[0]<(b[0]-a[0])*(point[1]-a[1])/(b[1]-a[1])+a[0])result=!result;}return result;};
+  const outer=board.outlineLoops?.[0],outlineHoles=board.outlineLoops?.slice(1)||[];
+  for(const item of [...nativePads,...board.vias.map(via=>({...via,shape:'circle',width:via.size,height:via.size,drillShape:'circle',rotation:0}))]){
+    if(!(item.drill>0))continue;const loop=nativeDrillOutline(item);if(!loop){omittedDrills++;continue;}
+    const angle=(item.rotation||0)*Math.PI/180,c=Math.cos(angle),s=Math.sin(angle),[cx,cy]=world(item.at);
+    if(outlineHoles.some(hole=>inside(item.at,hole)))continue;
+    const points=loop.map(([x,y])=>[cx+x*c+y*s,cy+x*s-y*c]);
+    const key=JSON.stringify(points.map(point=>point.map(value=>Math.round(value*10000)/10000)));if(drilled.has(key))continue;
+    if(drillCount>=1024||drillPoints+points.length>100000||!outer||!drillLoopInsideBoard(points.map(([x,y])=>[x+centerX,centerY-y]),outer,outlineHoles)){omittedDrills++;continue;}
+    drilled.add(key);drillCount++;drillPoints+=points.length;shape.holes.push(pathFor(points,point=>point));
+  }
+  if(omittedDrills)geometryDiagnostics.push(`${omittedDrills} drill loops could not be cut within the saved-geometry/triangulation budget.`);
   const substrate = new THREE.Mesh(new THREE.ExtrudeGeometry(shape, { depth: thickness, bevelEnabled: false, curveSegments: 8 }),
-    [new THREE.MeshStandardMaterial({ color: 0x1b6553, roughness: .58, metalness: .04 }),
-      new THREE.MeshStandardMaterial({ color: 0xa69c6d, roughness: .88, metalness: 0 })]);
+    [new THREE.MeshPhysicalMaterial(studioMaterials.solderMask),
+      new THREE.MeshStandardMaterial(studioMaterials.substrateEdge)]);
   substrate.position.z = bottom;
+  substrate.receiveShadow = true;
   substrate.userData.record = { type: "Board", name: "Substrate", layer: "Edge.Cuts", id: "board" };
   substrate.userData.identity = viewportSceneIdentity("substrate", "Edge.Cuts", "board");
   boardGroup.add(substrate); pickables.push(substrate);
   const edges = new THREE.LineSegments(new THREE.EdgesGeometry(substrate.geometry, 20),
-    new THREE.LineBasicMaterial({ color: 0x8ce4bc, transparent: true, opacity: .68 }));
+    new THREE.LineBasicMaterial({ color: 0x9bb7ac, transparent: true, opacity: .42 }));
   edges.position.z = bottom; boardGroup.add(edges);
 
   for (const [layer, color] of [["F.Cu", layerThreeColor("F.Cu")], ["B.Cu", layerThreeColor("B.Cu")]]) {
     const z = layer === "F.Cu" ? top + .025 : bottom - .025;
     const tracks = board.tracks.filter((item) => item.layer === layer);
     const trackMesh = makeInstanced(groupFor(layer), new THREE.PlaneGeometry(1, 1),
-      new THREE.MeshStandardMaterial({ color, metalness: .4, roughness: .58, side: THREE.DoubleSide }), tracks,
+      new THREE.MeshStandardMaterial({ color, ...studioMaterials.copper, side: THREE.DoubleSide }), tracks,
       (object, track) => {
         const a = world(track.start), b = world(track.end);
         const length = Math.hypot(b[0] - a[0], b[1] - a[1]);
@@ -186,18 +280,19 @@ export function mountBoard3D(container, source, options = {}) {
         object.rotation.set(0, 0, Math.atan2(b[1] - a[1], b[0] - a[0]));
         object.scale.set(Math.max(.04, capsule.shapeLength), Math.max(.04, capsule.width), 1);
       }, viewportSceneIdentity("copper-track", layer, "tracks"));
-    if (trackMesh) pickables.push(trackMesh);
-    const pads = board.pads.filter((item) => item.layer === layer || item.layers?.includes(layer));
-    const padMesh = makeInstanced(groupFor(layer), new THREE.BoxGeometry(1, 1, .04),
-      new THREE.MeshStandardMaterial({ color: layerThreeColor(layer), metalness: .4, roughness: .58 }), pads,
-      (object, pad) => {
-        const [x, y] = world(pad.at);
-        object.position.set(x, y, z); object.rotation.set(0, 0, pad.rotation * Math.PI / 180);
-        object.scale.set(Math.max(.15, pad.width), Math.max(.15, pad.height), 1);
-      }, viewportSceneIdentity("copper-pad", layer, "pads"));
-    if (padMesh) pickables.push(padMesh);
-    for (const zone of board.zones.filter((item) => item.layer === layer).slice(0, 300)) {
+    if (trackMesh) {pickables.push(trackMesh);appearanceRecords.push({mesh:trackMesh,role:'tracks',layer});}
+    const pads = nativePads.filter((item) => item.layer === layer || item.layers?.includes(layer)||item.layers?.includes('*.Cu'));
+    const batches=new Map();let omittedPads=0;
+    for(const pad of pads){const outline=nativePadOutline(pad);if(!outline){omittedPads++;continue;}const key=JSON.stringify([pad.shape,pad.width,pad.height,pad.roundrectRatio,pad.drill,pad.drillShape,pad.drillWidth,pad.drillHeight,pad.drillOffset]);if(!batches.has(key)){if(batches.size>=256){omittedPads++;continue;}batches.set(key,{outline,pads:[]});}batches.get(key).pads.push(pad);}
+    if(omittedPads)geometryDiagnostics.push(`${layer}: ${omittedPads} unsupported/ambiguous pad shapes omitted; no rectangular stand-ins were substituted.`);
+    const padMaterial=new THREE.MeshStandardMaterial({color:0xffffff,...studioMaterials.copper});
+    for(const [key,batch]of batches){const geometry=new THREE.ExtrudeGeometry(padShape(batch.outline),{depth:.04,bevelEnabled:false,curveSegments:8});
+      const padMesh=makeInstanced(groupFor(layer),geometry,padMaterial,batch.pads,(object,pad)=>{const[x,y]=world(pad.at);object.position.set(x,y,z-.02);object.rotation.z=(pad.rotation||0)*Math.PI/180;},viewportSceneIdentity('copper-pad',layer,key));
+      if(padMesh){pickables.push(padMesh);appearanceRecords.push({mesh:padMesh,role:'pads',layer,pads:batch.pads});}
+    }
+    for (const zone of savedZones.records.filter((item) => item.layer === layer)) {
       if (zone.points.length < 3) continue;
+      if(!zone.filled){const geometry=new THREE.BufferGeometry().setFromPoints(zone.points.map(point=>{const [x,y]=world(point);return new THREE.Vector3(x,y,z);}));const boundary=new THREE.LineLoop(geometry,new THREE.LineBasicMaterial({color:layerThreeColor(layer),transparent:true,opacity:.6}));groupFor(layer).add(boundary);continue;}
       const zoneShape = new THREE.Shape();
       pathFor(zone.points, world).getPoints().forEach((point, index) => {
         if (index === 0) zoneShape.moveTo(point.x, point.y); else zoneShape.lineTo(point.x, point.y);
@@ -206,24 +301,26 @@ export function mountBoard3D(container, source, options = {}) {
         new THREE.MeshStandardMaterial({ color, transparent: true, opacity: .34, side: THREE.DoubleSide, depthWrite: false }));
       mesh.position.z = z - (layer === "F.Cu" ? .005 : -.005); mesh.userData.record = { ...zone, type: "Zone" };
       groupFor(layer).add(mesh); pickables.push(mesh);
+      appearanceRecords.push({mesh,role:'zone',layer});
     }
   }
-  const viaMesh = makeInstanced(boardGroup, new THREE.CylinderGeometry(.5, .5, 1, 16).rotateX(Math.PI / 2),
-    new THREE.MeshStandardMaterial({ color: 0xd0ac56, metalness: .5, roughness: .58 }), board.vias,
-    (object, via) => { const [x, y] = world(via.at); object.position.set(x, y, 0); object.rotation.set(0, 0, 0);
-      object.scale.set(Math.max(.2, via.size), Math.max(.2, via.size), thickness + .08); },
-    viewportSceneIdentity("via-barrel", "through", "vias"));
-  if (viaMesh) pickables.push(viaMesh);
+  const viaBatches=new Map();let omittedVias=0;
+  for(const via of board.vias){const outline=nativePadOutline({shape:'circle',width:via.size,height:via.size,drill:via.drill,drillShape:'circle'});if(!outline){omittedVias++;continue;}const key=JSON.stringify([via.size,via.drill]);if(!viaBatches.has(key)){if(viaBatches.size>=128){omittedVias++;continue;}viaBatches.set(key,{outline,vias:[]});}viaBatches.get(key).vias.push(via);}
+  if(omittedVias)geometryDiagnostics.push(`${omittedVias} unsupported via annuli omitted.`);
+  const viaMaterial=new THREE.MeshStandardMaterial({color:physicalColors.exposedCopper,...studioMaterials.copper});
+  for(const[key,batch]of viaBatches){const geometry=new THREE.ExtrudeGeometry(padShape(batch.outline),{depth:thickness+.08,bevelEnabled:false,curveSegments:8});const mesh=makeInstanced(boardGroup,geometry,viaMaterial,batch.vias,(object,via)=>{const[x,y]=world(via.at);object.position.set(x,y,bottom-.04);},viewportSceneIdentity('via-barrel','through',key));if(mesh)pickables.push(mesh);}
+  applyAppearance();
   const parts = new THREE.Group(); boardGroup.add(parts);
   const proxyPoses = footprintProxies(board);
-  const componentMesh = makeInstanced(parts, new THREE.BoxGeometry(1, 1, 1),
-    new THREE.MeshStandardMaterial({ color: 0xdee5d9, metalness: .08, roughness: .72 }), board.components,
+  const componentMesh = makeInstanced(parts, new RoundedBoxGeometry(1, 1, 1, 2, .06),
+    new THREE.MeshStandardMaterial(studioMaterials.proxy), board.components,
     (object, part) => { const pose = proxyPoses.get(part); const [x, y] = world(pose?.at || part.at); const below = part.layer?.startsWith("B.");
       object.position.set(x, y, below ? bottom - 1.1 : top + 1.1);
       object.rotation.set(0, 0, pose?.rotation || 0);
       object.scale.set(pose?.width || 0, pose?.height || 0, pose ? 2.1 : 0); },
     viewportSceneIdentity("component", "F.Fab", "proxies"));
   if (componentMesh) pickables.push(componentMesh);
+  if (componentMesh) { componentMesh.castShadow = true; componentMesh.receiveShadow = true; }
   const componentIndexes = uniqueComponentIndexes(board.components);
   const componentMatrices = board.components.map((_, index) => {
     const matrix = new THREE.Matrix4();
@@ -239,14 +336,21 @@ export function mountBoard3D(container, source, options = {}) {
       population[index] && !loadedModelIndexes.has(index) ? componentMatrices[index] : hiddenMatrix));
     if (componentMesh) { componentMesh.instanceMatrix.needsUpdate = true; componentMesh.computeBoundingSphere(); }
     for (const [index, group] of modelGroups) group.visible = population[index];
+    renderer.shadowMap.needsUpdate=true;
+    invalidate();
   }
   const modelDiagnostics = Array.isArray(options.assetWarnings)
     ? options.assetWarnings.filter(item => typeof item === "string").slice(0, 48).map(item => item.slice(0, 500)) : [];
+  if(savedZones.unfilled)modelDiagnostics.push(`${savedZones.unfilled} zones have no saved copper fill; only their boundaries are shown.`);
+  if(savedZones.truncated)modelDiagnostics.push('Saved zone display reached its polygon/point budget; additional copper is omitted.');
+  modelDiagnostics.push(...geometryDiagnostics);
+  showModelDiagnostics();
   function showModelDiagnostics() {
     const resolved = loadedModelIndexes.size;
     const problems = modelDiagnostics.length;
-    notice.textContent = `Real model geometry: ${resolved}/${board.components.length} footprints · ${board.components.length-resolved} without linked geometry (bounded stand-ins where usable footprint bounds exist)`
-      + (problems ? ` · ${problems} diagnostic samples: ${modelDiagnostics.slice(0, 3).join(" | ")}${problems>3?` | +${problems-3} more`:""}` : "");
+    notice.replaceChildren(document.createTextNode(`Material preview · linked models ${resolved}/${board.components.length}`));
+    const details=document.createElement('details'),summary=document.createElement('summary'),list=document.createElement('ul');summary.textContent=problems?`${problems} rendering notes`:'Rendering details';
+    for(const message of ['Mask openings follow saved pad layer flags; this is not a reconstructed solder-mask solid.',`${board.components.length-resolved} footprints have no linked model; bounded stand-ins are used only where usable saved footprint bounds exist.`,...modelDiagnostics]){const row=document.createElement('li');row.textContent=message;list.append(row);}details.append(summary,list);notice.append(details);
     notice.title = modelDiagnostics.join("\n");
   }
   function glbIsSelfContained(bytes) {
@@ -321,6 +425,7 @@ export function mountBoard3D(container, source, options = {}) {
         clone.traverse(object => {
           if (object.isMesh && object.geometry?.attributes?.position?.count) {
             meshCount++;
+            object.castShadow = true; object.receiveShadow = true;
             object.userData.record = { ...board.components[index], type: "Component", modelPath: entry.path };
             pickables.push(object);
           }
@@ -368,31 +473,89 @@ export function mountBoard3D(container, source, options = {}) {
   controls.addEventListener("change", updateClipping);
   function sizeViewport() {
     const viewportWidth = Math.max(1, canvasHost.clientWidth), viewportHeight = Math.max(1, canvasHost.clientHeight);
-    const ratio = viewportPixelRatio(viewportWidth, viewportHeight, globalThis.devicePixelRatio, renderer.capabilities.maxTextureSize);
+    const plan=qualityViewport(viewportWidth,viewportHeight,globalThis.devicePixelRatio,renderer.capabilities.maxTextureSize,quality,constrained),ratio=plan.ratio;
     if (renderer.getPixelRatio() !== ratio) renderer.setPixelRatio(ratio);
     renderer.setSize(viewportWidth, viewportHeight, false); camera.aspect = viewportWidth / viewportHeight;
+    if(pipeline){pipeline.composer.setPixelRatio(ratio);pipeline.composer.setSize(viewportWidth,viewportHeight);}
     camera.updateProjectionMatrix();
+    invalidate();
   }
   function fit(topView = false) {
     sizeViewport();
     boardGroup.updateWorldMatrix(true, true);
-    const sphere = new THREE.Box3().setFromObject(boardGroup).getBoundingSphere(new THREE.Sphere());
+    const bounds=new THREE.Box3().setFromObject(boardGroup),sphere = bounds.getBoundingSphere(new THREE.Sphere());
     const radius = Number.isFinite(sphere.radius) && sphere.radius > 0 ? sphere.radius : Math.hypot(width, height, thickness + 5) / 2;
     const center = sphere.radius > 0 ? sphere.center : new THREE.Vector3();
-    const distance = sphereFitDistance(radius, camera.fov, camera.aspect) || extent * 3;
+    const direction = new THREE.Vector3(topView ? 0 : .45, topView ? 0 : -.38, 1).normalize();
+    const distance = boxFitDistance(bounds.getSize(new THREE.Vector3()).toArray(),direction.toArray(),camera.fov,camera.aspect)||sphereFitDistance(radius, camera.fov, camera.aspect) || extent * 3;
     fittedRadius = radius;
     controls.maxDistance = Math.max(extent * 8, distance * 4);
-    const direction = new THREE.Vector3(topView ? 0 : .45, topView ? 0 : -.38, 1).normalize();
     camera.position.copy(center).addScaledVector(direction, distance);
     camera.up.set(0, 1, 0); controls.target.copy(center); controls.update(); updateClipping();
   }
   action("Fit", () => fit()); action("Top", () => fit(true));
+  const measureButton=action('Measure',()=>setMeasurementMode(!measuring));measureButton.setAttribute('aria-pressed','false');measureButton.setAttribute('aria-label','Measure distance between 3D surfaces');measureButton.title='Measure between two visible 3D surface points';
+  bar.append(qualityLabel,visibility);
   toggle("Front copper", true, (visible) => { groupFor("F.Cu").visible = visible; });
   toggle("Back copper", true, (visible) => { groupFor("B.Cu").visible = visible; });
-  toggle("Parts", true, (visible) => { parts.visible = visible; });
+  toggle("Parts", true, (visible) => { parts.visible = visible; renderer.shadowMap.needsUpdate=true; });
   fit();
 
   const raycaster = new THREE.Raycaster(), pointer = new THREE.Vector2();
+  const measurementSession=new MeasurementSession();let measuring=false,measurementUnit='mm';
+  const measurementPanel=document.createElement('section');measurementPanel.className='measurement-panel';measurementPanel.hidden=true;measurementPanel.setAttribute('aria-label','3D surface measurement');
+  const measurementHeading=document.createElement('div');measurementHeading.className='measurement-heading';
+  const measurementTitle=document.createElement('strong');measurementTitle.textContent='Surface distance';
+  const measurementUnits=document.createElement('select');measurementUnits.setAttribute('aria-label','3D measurement units');for(const unit of ['mm','mil']){const option=document.createElement('option');option.value=unit;option.textContent=unit;measurementUnits.append(option);}
+  const measurementExit=document.createElement('button');measurementExit.type='button';measurementExit.textContent='Done';measurementExit.title='Exit measurement mode';measurementExit.onclick=()=>setMeasurementMode(false);
+  measurementHeading.append(measurementTitle,measurementUnits,measurementExit);
+  const measurementOutput=document.createElement('output');measurementOutput.setAttribute('aria-live','polite');
+  const measurementStatus=document.createElement('p');measurementStatus.setAttribute('role','status');
+  const measurementDelta=document.createElement('small'),measurementDisclaimer=document.createElement('small');measurementDisclaimer.textContent='Model surfaces · footprint stand-ins are approximate.';
+  const measurementTools=document.createElement('div');measurementTools.className='measurement-tools';
+  const measurementHistory=document.createElement('select');measurementHistory.setAttribute('aria-label','Recent 3D measurements');
+  const measurementClear=document.createElement('button');measurementClear.type='button';measurementClear.textContent='Clear';measurementClear.title='Clear all 3D measurements';measurementClear.onclick=clearMeasurements;
+  measurementTools.append(measurementHistory,measurementClear);measurementPanel.append(measurementHeading,measurementOutput,measurementStatus,measurementDelta,measurementTools,measurementDisclaimer);stage.append(measurementPanel);
+  const measurementLabel=document.createElement('div');measurementLabel.className='measurement-label';measurementLabel.hidden=true;measurementLabel.setAttribute('aria-hidden','true');stage.append(measurementLabel);
+  const measureGroup=new THREE.Group();measureGroup.visible=false;scene.add(measureGroup);
+  const measureGeometry=new THREE.BufferGeometry();measureGeometry.setAttribute('position',new THREE.BufferAttribute(new Float32Array(6),3));
+  const measureMaterial=new THREE.LineBasicMaterial({color:0xffd37a,transparent:true,opacity:.95,depthTest:false,depthWrite:false,toneMapped:false});
+  const measureLine=new THREE.Line(measureGeometry,measureMaterial);measureLine.frustumCulled=false;measureLine.renderOrder=201;measureGroup.add(measureLine);
+  const markerGeometry=new THREE.SphereGeometry(1,12,8),markerMaterial=new THREE.MeshBasicMaterial({color:0xffd37a,transparent:true,opacity:.95,depthTest:false,depthWrite:false,toneMapped:false});
+  const measureMarkers=[new THREE.Mesh(markerGeometry,markerMaterial),new THREE.Mesh(markerGeometry,markerMaterial)];for(const marker of measureMarkers){marker.renderOrder=202;measureGroup.add(marker);}
+  const toWorld=point=>new THREE.Vector3(point.x-centerX,centerY-point.y,point.z);
+  function updateMeasurementPanel(message){
+    const current=measurementSession.selected,pending=measurementSession.pending;
+    measurementOutput.textContent=current?(current.approximate?'≈ ':'')+distanceLabel(current.distance,measurementUnit):'—';
+    measurementStatus.textContent=message||(pending?'Choose the second surface point.':current?'Choose a point to start another measurement.':'Choose the first surface point.');
+    const signed=value=>(measurementUnit==='mil'?value/.0254:value).toFixed(measurementUnit==='mil'?2:3);
+    measurementDelta.textContent=current?`ΔX ${signed(current.delta.x)} · ΔY ${signed(current.delta.y)} · ΔZ ${signed(current.delta.z)} ${measurementUnit}`:'';
+    measurementHistory.replaceChildren();const prompt=document.createElement('option');prompt.value='';prompt.textContent=measurementSession.records.length?'Recent measurements':'No measurements yet';measurementHistory.append(prompt);
+    for(const record of measurementSession.records){const option=document.createElement('option');option.value=String(record.id);option.textContent=`#${record.id} · ${record.approximate?'≈ ':''}${distanceLabel(record.distance,measurementUnit)}`;measurementHistory.append(option);}measurementHistory.value=current?String(current.id):'';measurementHistory.disabled=!measurementSession.records.length;
+    measurementLabel.textContent=current?(current.approximate?'≈ ':'')+distanceLabel(current.distance,measurementUnit):'';
+    updateMeasurementGraphics();invalidate();
+  }
+  function updateMeasurementGraphics(){
+    const current=measurementSession.selected,pending=measurementSession.pending;measureGroup.visible=measuring&&Boolean(current||pending);measurementLabel.hidden=!measuring||!current;
+    if(!measureGroup.visible)return;const from=toWorld(current?.from||pending),to=current?toWorld(current.to):null;measureMarkers[0].position.copy(from);measureMarkers[1].visible=Boolean(to);measureLine.visible=Boolean(to);
+    if(to){measureMarkers[1].position.copy(to);const positions=measureGeometry.getAttribute('position');positions.setXYZ(0,from.x,from.y,from.z);positions.setXYZ(1,to.x,to.y,to.z);positions.needsUpdate=true;
+      const center=from.clone().add(to).multiplyScalar(.5).project(camera);measurementLabel.hidden=center.z<-1||center.z>1;
+      measurementLabel.style.left=Math.max(8,Math.min(canvasHost.clientWidth-measurementLabel.offsetWidth-8,(center.x+1)*canvasHost.clientWidth/2+8))+'px';measurementLabel.style.top=Math.max(8,Math.min(canvasHost.clientHeight-measurementLabel.offsetHeight-8,(1-center.y)*canvasHost.clientHeight/2-24))+'px';
+    }
+    for(const marker of measureMarkers){const radius=Math.max(.005,camera.position.distanceTo(marker.position)*2*Math.tan(camera.fov*Math.PI/360)/Math.max(1,canvasHost.clientHeight)*3.5);marker.scale.setScalar(radius);}
+  }
+  function setMeasurementMode(enabled){if(!active)return false;measuring=Boolean(enabled);host.dataset.measuring=String(measuring);measureButton.setAttribute('aria-pressed',String(measuring));measurementPanel.hidden=!measuring;if(!measuring)measurementSession.pending=null;updateMeasurementPanel();options.onMeasurementMode?.(measuring);return measuring;}
+  function clearMeasurements(){measurementSession.clear();updateMeasurementPanel();options.onMeasurement?.(null);}
+  measurementUnits.onchange=()=>{measurementUnit=measurementUnits.value==='mil'?'mil':'mm';updateMeasurementPanel();};
+  measurementHistory.onchange=()=>{const record=measurementSession.replay(measurementHistory.value);if(record){updateMeasurementPanel();options.onMeasurement?.(record);}};
+  const escapeMeasurement=event=>{if(event.key==='Escape'&&measuring){event.preventDefault();event.stopPropagation();setMeasurementMode(false);measureButton.focus();}};
+  shadow.addEventListener('keydown',escapeMeasurement);
+  function measureSurface(){
+    const visible=item=>{for(let node=item;node;node=node.parent)if(!node.visible)return false;return true;};
+    const hit=raycaster.intersectObjects(pickables.filter(visible),false)[0];if(!hit){updateMeasurementPanel('Choose a visible board or model surface.');return;}
+    const result=measurementSession.add({x:hit.point.x+centerX,y:centerY-hit.point.y,z:hit.point.z,approximate:hit.object===componentMesh});
+    updateMeasurementPanel();if(result?.distance!==undefined)options.onMeasurement?.(result);
+  }
   let selected = null;
   const gesture = tapGesture();
   const selectionLimit = 2000;
@@ -411,6 +574,7 @@ export function mountBoard3D(container, source, options = {}) {
   let externalSelection = {};
   const selectionNotice = document.createElement('div'); selectionNotice.className = 'hint'; selectionNotice.style.bottom = '42px'; selectionNotice.hidden = true; stage.append(selectionNotice);
   function setSelection(selection = {}) {
+    invalidate();
     externalSelection = selection || {};
     const matches = selectionMatcher(externalSelection, board);
     const matrix = new THREE.Matrix4(), local = new THREE.Matrix4(), box = new THREE.Box3();
@@ -464,6 +628,7 @@ export function mountBoard3D(container, source, options = {}) {
   const instanceMatrix = new THREE.Matrix4(), bounds = new THREE.Box3();
   const highlightCenter = new THREE.Vector3(), highlightSize = new THREE.Vector3();
   function showHighlight(object, instanceId) {
+    invalidate();
     object.updateWorldMatrix(true, false);
     if (Number.isInteger(instanceId)) {
       object.getMatrixAt(instanceId, instanceMatrix);
@@ -503,6 +668,7 @@ export function mountBoard3D(container, source, options = {}) {
     const rect = renderer.domElement.getBoundingClientRect();
     pointer.set(((event.clientX - rect.left) / rect.width) * 2 - 1, -((event.clientY - rect.top) / rect.height) * 2 + 1);
     raycaster.setFromCamera(pointer, camera);
+    if(measuring){measureSurface();return;}
     if (analysisOverlay?.mesh.visible) {
       const result = analysisOverlay.sample(raycaster.intersectObject(analysisOverlay.mesh, false)[0]);
       if (result) { options.onAnalysisProbe?.(result); return; }
@@ -531,7 +697,7 @@ export function mountBoard3D(container, source, options = {}) {
     if (!held && tapped && (event.button === 0 || event.pointerType === 'touch')) pick(event);
   });
   function contextMenu(event) {
-    event.preventDefault?.(); pick(event); if (!selected) return;
+    event.preventDefault?.();if(measuring)return;pick(event); if (!selected) return;
     menu.replaceChildren();
     const actions = [["Focus object", () => { controls.target.copy(selected.point); controls.update(); }],
       ["Copy reference", () => navigator.clipboard.writeText(selected.record.ref || selected.record.name || "")]];
@@ -553,15 +719,35 @@ export function mountBoard3D(container, source, options = {}) {
   });
   const resize = sizeViewport;
   const observer = new ResizeObserver(resize); observer.observe(canvasHost); resize();
-  let active = true, frame = 0, analysisOverlay = null;
+  let analysisOverlay = null;
   const layoutFrame = requestAnimationFrame(() => { if (active) { resize(); fit(); } });
-  const animate = () => { if (!active) return; frame = requestAnimationFrame(animate); controls.update(); renderer.render(scene, camera); };
-  animate();
+  function drawFrame(){frame=0;if(!active||contextLost)return;controls.update();updateMeasurementGraphics();
+    try{
+      if(pipeline){pipeline.composer.render();if(shaderFailure||renderer.getContext().getError()!==renderer.getContext().NO_ERROR)throw Error('Enhanced rendering failed.');}
+      else renderer.render(scene,camera);
+      renderCount++;
+    }catch{
+      if(pipeline){fallbackQuality('Enhanced rendering could not complete. Balanced rendering is active.');invalidate();}
+      else graphicsNotice('The graphics device could not draw this view. Try Low quality or reopen 3D.');
+    }
+  }
+  const onContextLost=event=>{event.preventDefault();contextLost=true;cancelAnimationFrame(frame);frame=0;qualitySelect.disabled=true;graphicsNotice('The graphics context was interrupted. The board and selection are retained while the browser recovers.',true);};
+  const onContextRestored=()=>{if(!active)return;contextLost=false;qualitySelect.disabled=false;disposePipeline();environment?.dispose();environment=createEnvironment();scene.environment=environment?.texture||null;renderer.shadowMap.needsUpdate=true;quality='balanced';qualitySelect.value=quality;host.dataset.quality=quality;graphicsNotice('Graphics restored. Balanced rendering is active; High quality can be selected again.');sizeViewport();invalidate();};
+  renderer.domElement.addEventListener('webglcontextlost',onContextLost);
+  renderer.domElement.addEventListener('webglcontextrestored',onContextRestored);
+  const closeVisibility=event=>{if(!event.composedPath().includes(visibility))visibility.open=false;};
+  const escapeVisibility=event=>{if(event.key==='Escape'&&visibility.open){visibility.open=false;visibilityLabel.focus();event.stopPropagation();}};
+  document.addEventListener('pointerdown',closeVisibility);shadow.addEventListener('keydown',escapeVisibility);
+  applyQuality(initialQuality,false);
   void loadRepositoryModels();
   return { host, board,
+    setMeasurementMode,clearMeasurements,
+    measurementState(){return{mode:measuring,unit:measurementUnit,...measurementSession.snapshot()};},
+    setQuality(value){return applyQuality(value);},
+    getRenderStats(){const plan=qualityViewport(canvasHost.clientWidth,canvasHost.clientHeight,globalThis.devicePixelRatio,renderer.capabilities.maxTextureSize,quality,constrained);return{...plan,ambientOcclusion:Boolean(pipeline),renderCount,contextLost,gpuTextures:renderer.info.memory.textures,drawCalls:renderer.info.render.calls};},
     setAnalysisOverlay(surface) {
       if (!active) return { placed: false, reason: "3D viewer is closed." };
-      if (!surface) { analysisOverlay?.dispose(); analysisOverlay = null; return { placed: false, reason: "Overlay cleared." }; }
+      if (!surface) { analysisOverlay?.dispose(); analysisOverlay = null; invalidate();return { placed: false, reason: "Overlay cleared." }; }
       const basis = surface.zBasis;
       const savedLayer = surface.layer;
       if ((surface.zKnown && !["front-depth", "board-center"].includes(basis)) || (!surface.zKnown && !["F.Cu", "B.Cu"].includes(savedLayer))) return { placed: false, reason: "Saved result elevation basis or board layer is unknown; use the standalone result scene." };
@@ -571,21 +757,22 @@ export function mountBoard3D(container, source, options = {}) {
       // The result UI identifies this as showing the selected field through the board.
       next.mesh.material.depthTest = false; next.mesh.renderOrder = 20;
       analysisOverlay?.dispose(); analysisOverlay = next; scene.add(next.group);
+      invalidate();
       return { placed: true, basis: surface.zKnown ? basis : savedLayer, flat: !surface.zKnown };
     },
-    setAnalysisProbes(probes) { analysisOverlay?.setProbes(probes); },
-    setAnalysisOpacity(value) { analysisOverlay?.setOpacity(value); },
+    setAnalysisProbes(probes) { analysisOverlay?.setProbes(probes);invalidate(); },
+    setAnalysisOpacity(value) { analysisOverlay?.setOpacity(value);invalidate(); },
     setSelection,
     fit(topView=false){if(active)fit(topView);},
     zoom(factor){if(!active||!Number.isFinite(factor)||factor<=0)return;const offset=camera.position.clone().sub(controls.target);const distance=Math.max(controls.minDistance,Math.min(controls.maxDistance,offset.length()/factor));if(offset.length()>0)camera.position.copy(controls.target).add(offset.setLength(distance));controls.update();},
     setTheme(dark) {
       if (!active) return;
       host.dataset.theme = dark ? "dark" : "light";
-      scene.background.setHex(dark ? 0x0d1b26 : 0xf3f7f5);
+      scene.background.setHex(dark ? 0x151820 : 0xe7ebf1);
       highlight.material.color.setHex(dark ? 0xffdf7d : 0x9b5500);
       groupHighlight.material.color.setHex(dark ? 0xffdf7d : 0x9b5500);
       resize();
-      renderer.render(scene, camera);
+      invalidate();
     },
     selectReference(reference) {
       const index = componentIndexes.get(reference);
@@ -616,8 +803,8 @@ export function mountBoard3D(container, source, options = {}) {
         if (index != null && !population[index]) clearSelection();
       }
     },
-    dispose() { active = false; analysisOverlay?.dispose(); stepClient?.dispose(); cancelAnimationFrame(frame); cancelAnimationFrame(layoutFrame); observer.disconnect(); controls.removeEventListener("change", updateClipping); controls.removeEventListener("start", cameraInteraction); controls.dispose(); environment.dispose();
-    const resources = new Set(); scene.traverse((object) => { if (object.geometry) resources.add(object.geometry);
+    dispose() { if(measuring)options.onMeasurementMode?.(false);active = false; analysisOverlay?.dispose(); stepClient?.dispose(); cancelAnimationFrame(frame); cancelAnimationFrame(layoutFrame); observer.disconnect();controls.removeEventListener('change',invalidate); controls.removeEventListener("change", updateClipping); controls.removeEventListener("start", cameraInteraction); controls.dispose();disposePipeline();environment?.dispose();renderer.domElement.removeEventListener('webglcontextlost',onContextLost);renderer.domElement.removeEventListener('webglcontextrestored',onContextRestored);document.removeEventListener('pointerdown',closeVisibility);shadow.removeEventListener('keydown',escapeVisibility);shadow.removeEventListener('keydown',escapeMeasurement);
+    const resources = new Set(); scene.traverse((object) => {object.shadow?.dispose?.(); if (object.geometry) resources.add(object.geometry);
       const materials = Array.isArray(object.material) ? object.material : object.material ? [object.material] : [];
       materials.forEach((item) => resources.add(item)); }); resources.forEach((item) => item.dispose()); hold.dispose(); renderer.dispose(); host.remove(); } };
 }

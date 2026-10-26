@@ -24,3 +24,9 @@ test('angle guidance, original disabled state and Back follow the shared ruler l
  f.original.disabled=true;f.observers.get(f.original)();assert.equal(f.nodes.get('androidMeasure').disabled,true,'3D engine disables measurement action');
 });
 test('views without the shared measurement engine remain untouched',()=>{const f=fixture();f.nodes.delete('measureButton');assert.equal(f.api.mount(),false);assert.equal(f.api.handleBack(),false);assert.equal(f.nodes.has('androidMeasure'),false);});
+test('3D measurements use their own surface panel without opening duplicate 2D controls',()=>{
+ const f=fixture(),mode={...f.original,attrs:{'aria-pressed':'true'}};f.nodes.set('mode3d',mode);f.api.mount();f.nodes.get('androidMeasure').click();
+ assert.equal(f.original.getAttribute('aria-pressed'),'true');assert.equal(f.nodes.get('androidMeasure').getAttribute('aria-label'),'Measure 3D surface distance');assert.equal(f.nodes.get('androidMeasurementPanel').hidden,true);
+ assert.equal(f.api.handleBack(),true);assert.equal(f.original.getAttribute('aria-pressed'),'false');
+ mode.setAttribute('aria-pressed','false');f.observers.get(mode)();f.nodes.get('androidMeasure').click();assert.equal(f.nodes.get('androidMeasurementPanel').hidden,false);
+});

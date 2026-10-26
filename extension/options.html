@@ -18,7 +18,7 @@
     #deviceCode { font: bold 1.6rem/1.5 monospace; letter-spacing: .12em; } #signinAvailability { font-size: .9rem; }
     #tokenStatus { min-height: 1.5em; } p { max-width: 65ch; }
   </style>
-<link rel="stylesheet" href="section-pages.css"><link rel="stylesheet" href="phone-polish.css"></head>
+<link rel="stylesheet" href="section-pages.css"><link rel="stylesheet" href="phone-polish.css"><link rel="stylesheet" href="compact-surfaces.css"></head>
 <body>
   <p><a href="local-viewer.html" target="_blank" rel="noopener">Open local KiCad workspace</a> — read saved schematics and PCBs, or drop a project folder.</p>
   <h1>KiCad Visual Review settings</h1>
@@ -79,11 +79,12 @@
     <p id="gitlabStatus" role="status" aria-live="polite"></p>
     <p>Reset deletes credentials and the public Application ID for this server. Removing a server also removes its preview registration and browser permission. Review notes are retained. Revoke credentials separately in GitLab account settings.</p>
   </section>
+  <section aria-label="Connection and browser checks"><h2>Connection and browser checks</h2><p>Viewer controls load but nothing opens? Run these read-only checks. They contact public GitHub endpoints without sending project files or account credentials.</p><button id="runViewerDiagnostics" type="button">Check viewer connection</button><pre id="viewerDiagnostics" role="status" style="white-space:pre-wrap;overflow-wrap:anywhere"></pre><p>Managed Chrome or Edge: ask your administrator to inspect <code>chrome://policy</code> or <code>edge://policy</code>, especially ExtensionSettings and runtime blocked hosts. Required GitHub hosts: github.com, api.github.com and raw.githubusercontent.com. The app cannot override organizational policy.</p></section>
   <section aria-label="Software license"><h2>Software license</h2><p>Copyright (c) 2026 Yawar B (wayri). <a href="LICENSE.txt" target="_blank" rel="noopener">Source-available license</a> · <a href="terms.html" target="_blank" rel="noopener">Terms</a>. Paid software distribution or monetized hosting requires written permission. Third-party licenses remain applicable.</p></section>
-  <script src="ui-icons.js"></script><script src="responsive-controls.js"></script><script src="section-pages.js"></script><script src="review-comments.js"></script>
+  <script src="startup-health.js"></script><script src="ui-icons.js"></script><script src="responsive-controls.js"></script><script src="section-pages.js"></script><script src="review-comments.js"></script>
   <script src="review-file-store.js"></script>
-  <script src="options.js"></script>
+  <script src="options.js"></script><script src="environment-options.js"></script>
   <script src="gitlab-options.js"></script>
   <script src="review-file-settings.js"></script>
-</body>
+<script src="compact-surfaces.js"></script></body>
 </html>

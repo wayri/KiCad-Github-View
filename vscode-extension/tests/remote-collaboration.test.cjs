@@ -151,3 +151,35 @@ test('publication guard releases after failure so a later explicit retry can pro
  let attempts=0;const h=harness({factory:()=>({publish:async()=>{attempts++;if(attempts===1)throw Error('Synthetic definitive failure');return{remoteRef:{number:7}};}})});
  const args={comment:h.note,destination:'new-issue'};await assert.rejects(h.request('comment-publish',args),/Synthetic/);assert.equal((await h.request('comment-publish',args)).remoteRef.number,7);assert.equal(attempts,2);
 });
+
+test('chat writes bind workspace scope, verify annotation sources and exclude concurrent request-scoped adapters',async()=>{
+ let entered,release,received;const started=new Promise(resolve=>entered=resolve),gate=new Promise(resolve=>release=resolve);
+ const h=harness({factory:()=>({chatMessageWrite:async args=>{received=args;entered();await gate;return{messageId:'12'};}})});
+ const args={thread:{kind:'issue',number:1},action:'create',body:'Hello',clientMutationId:'mutation_0123456789'};
+ const first=h.request('chat-message-write',args);await started;
+ await assert.rejects(h.request('chat-message-write',args),/already being sent/);release();assert.equal((await first).messageId,'12');
+ assert.equal(received.repository,'owner/board');assert.equal(received.ref,sha);assert.equal(received.file,'workspace/board.kicad_pcb');assert.equal(h.auth[0][2].createIfNone,true);
+ const dirty=harness({dirty:true});await assert.rejects(dirty.request('chat-message-write',{...args,annotation:{...dirty.note,id:args.clientMutationId,text:args.body}}),/differs/);assert.equal(dirty.auth.length,0);
+ await assert.rejects(h.request('chat-message-write',{...args,annotation:{...h.note,anchor:{...h.note.anchor,repository:'foreign/repo'}}}),/another workspace/);
+});
+
+test('real GitHub chat adapter writes quoted reply and reads capabilities through host credentials',async()=>{
+ const posted=[];const h=harness({factory:realFactory('github'),transport:async(url,init)=>{
+  if(init.method==='POST'){posted.push(JSON.parse(init.body));return json({...issue,id:12});}
+  if(url.endsWith('/user'))return json({login:'reviewer'});
+  if(url.includes('/contents/'))return new Response(null,{status:404});
+  if(url.includes('/comments?'))return json([{...issue,id:11}]);
+  if(url.endsWith('/issues/1'))return json(issue);
+  return json({full_name:'owner/board',default_branch:'main',private:false});
+ }});
+ const args={thread:{kind:'issue',number:1},action:'reply',replyTo:'11',body:'Reply',clientMutationId:'mutation_0123456789'};
+ assert.equal((await h.request('chat-message-write',args)).messageId,'12');assert.match(posted[0].body,/^> Reply to/);
+ assert.equal((await h.request('chat-message-write',args)).duplicate,true);assert.equal(posted.length,1);
+ assert.equal((await h.request('github-thread-read',{kind:'issue',number:1,includeCapabilities:true})).comments[0].canEdit,true);
+});
+
+test('real conversation discovery adapter uses workspace-bound host transport',async()=>{
+ const h=harness({factory:realFactory('github'),transport:async(url,init)=>{assert.ok(url.includes('/repos/owner/board/issues?'));assert.equal(init.method,'GET');return json([{...issue,pull_request:{}},{...issue,number:2,title:'Conversation'}]);}});
+ const result=await h.request('chat-thread-list',{kind:'issue',page:2});assert.equal(result.threads.length,1);assert.equal(result.threads[0].url,'https://github.com/owner/board/issues/2');assert.ok(h.fetches[0].url.endsWith('page=2'));
+ await assert.rejects(h.request('chat-thread-list',{kind:'issue',repository:'foreign/repo'}),/another repository/);
+});

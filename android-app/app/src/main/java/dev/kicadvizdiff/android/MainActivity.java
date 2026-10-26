@@ -113,8 +113,8 @@ public final class MainActivity extends Activity {
     private volatile boolean destroyed;
     private String pendingProject;
     private String pendingProjectLink;
-    private JSONObject activeProject;
-    private String activeProviderHost;
+    private volatile JSONObject activeProject;
+    private volatile String activeProviderHost;
     private boolean activePrivate;
     private JSONObject pendingDownload;
     private int pendingDownloadEpoch;
@@ -630,6 +630,10 @@ public final class MainActivity extends Activity {
                     } else if (action.equals("device-cancel")) { github.cancelDevice(); clearCopiedGitHubCode(); }
 
                     final int epoch = github.generation();
+                    final boolean chatScoped=action.equals("chat-message-write")||action.equals("chat-thread-list")||request.optBoolean("chatContext")||action.equals("review-thread")&&request.optBoolean("includeCapabilities");
+                    final JSONObject chatProject=activeProject;final int chatProjectEpoch=downloadGeneration.get();
+                    final NativeChatScope.Guard chatGuard=()->{if(downloadGeneration.get()!=chatProjectEpoch||activeProject!=chatProject||!"https://github.com".equals(activeProviderHost)||!NativeChatRequest.matchesProject(chatProject,"github","https://github.com",request))throw new java.io.IOException("The chat project changed; reopen its conversation before posting");};
+                    if(chatScoped)chatGuard.check();
                     if (action.equals("copy-device-code")) {
                         if(!copyGitHubCode()) throw new IllegalArgumentException();
                         githubReply(id,epoch,-1,new JSONObject().put("copied",true),null); return;
@@ -645,7 +649,7 @@ public final class MainActivity extends Activity {
                     final ReadTicket read=GitHubClient.cancellableRead(action)?beginRead(githubReads,id,action.equals("import")):null;
                     final int importEpoch = -1;
                     providerRequestGuard.execute(githubExecutor, () -> {
-                        try { JSONObject result = read==null?github.handle(request, epoch):github.handleLoad(request,epoch,read.operation); githubReply(id, epoch, importEpoch, result, null, read);
+                        try (NativeChatScope.Scope chatLease=chatScoped?NativeChatScope.enter(chatGuard):null) { JSONObject result = read==null?github.handle(request, epoch):github.handleLoad(request,epoch,read.operation); githubReply(id, epoch, importEpoch, result, null, read);
                             if (action.equals("device-start") || action.equals("auth-status")) runOnUiThread(MainActivity.this::checkGitHubLogin);
                         }
                         catch (Exception error) { githubReply(id, epoch, importEpoch, null, githubError(error),read); }
@@ -667,12 +671,16 @@ public final class MainActivity extends Activity {
                     if (action.equals("sign-out") || action.equals("token-connect") || action.equals("oauth-start")) { purgeProject(host); gitlab.reset(host); }
 
                     final int epoch = gitlab.generation();
+                    final boolean chatScoped=action.equals("chat-message-write")||action.equals("chat-thread-list")||request.optBoolean("chatContext")||action.equals("thread")&&request.optBoolean("includeCapabilities");
+                    final JSONObject chatProject=activeProject;final int chatProjectEpoch=downloadGeneration.get();
+                    final NativeChatScope.Guard chatGuard=()->{if(downloadGeneration.get()!=chatProjectEpoch||activeProject!=chatProject||!host.equals(activeProviderHost)||!NativeChatRequest.matchesProject(chatProject,"gitlab",host,request))throw new java.io.IOException("The chat project changed; reopen its conversation before posting");};
+                    if(chatScoped)chatGuard.check();
                     if (action.equals("token-connect")) { showGitLabTokenDialog(id, host, epoch); return; }
                     final boolean opens=action.equals("import");
                     if(opens)stopProjectLoads();
                     final ReadTicket read=GitLabClient.cancellableRead(action)?beginRead(gitlabReads,id,action.equals("import")):null;
                     providerRequestGuard.execute(gitlabExecutor, () -> {
-                        try {
+                        try (NativeChatScope.Scope chatLease=chatScoped?NativeChatScope.enter(chatGuard):null) {
                             JSONObject result;
                             if (action.equals("oauth-start")) {
                                 result = gitlab.startOAuth(host, request.getString("clientId"), epoch);

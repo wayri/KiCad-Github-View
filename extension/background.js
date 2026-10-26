@@ -1,6 +1,6 @@
 "use strict";
 
-importScripts("parsing.js", "browser-data.js", "review-comments.js", "review-file-store.js", "credential-vault.js", "github-review-api.js", "gitlab-provider.js", "gitlab-review-api.js", "gitlab-hosts.js", "mention-users.js");
+importScripts("parsing.js", "browser-data.js", "review-comments.js", "review-file-store.js", "credential-vault.js", "github-review-api.js", "gitlab-provider.js", "gitlab-review-api.js", "gitlab-hosts.js", "mention-users.js", "environment-diagnostics.js");
 
 let mentionService=null;
 function mentionUsers(message){
@@ -48,7 +48,7 @@ async function sessionLoadMessage(tabId,message,signal){
 async function githubSessionRead(repository,ref,action,path='',limit=8*1024*1024,signal) {
   checkLoad(signal);if(!validRepository(repository)||!KiCadBrowserData.validRef(ref))throw Error('Invalid GitHub session location.');
   if(!chrome.tabs?.query)return null;
-  const tabs=await chrome.tabs.query({url:`https://github.com/${repository}/*`});
+  const tabs=await chrome.tabs.query({url:[`https://github.com/${repository}`,`https://github.com/${repository}/*`]});
   for(const tab of tabs.slice(0,8)) {
     let url;try{url=new URL(tab.url);}catch{continue;}
     if(url.origin!=='https://github.com'||url.pathname.split('/').slice(1,3).join('/').toLowerCase()!==repository.toLowerCase())continue;
@@ -1074,6 +1074,9 @@ async function gitlabDispatch(message, sender,signal) {
     case 'comment-publish':
     case 'github-publish-comment': return auth.publish({...message,host,destination:message.discussion?'discussion':message.destination});
     case 'github-thread-read': return auth.readThread({...message,provider:'gitlab',host});
+    case 'chat-message-write': return auth.chatMessageWrite({...message,provider:'gitlab',host});
+    case 'chat-thread-list': return auth.chatThreadList({...message,provider:'gitlab',host});
+    case 'chat-reaction': throw new Error('Chat reactions are not supported by this provider bridge.');
     case 'comment-remote-list':
     case 'github-annotations': return gitlabAnnotations(api,{...message,host});
     case 'open-options': await chrome.runtime.openOptionsPage();return {opened:true};
@@ -1081,10 +1084,55 @@ async function gitlabDispatch(message, sender,signal) {
   }
 }
 
+async function repositoryDetection(message,sender){
+  if(sender?.id!==chrome.runtime.id||!Number.isInteger(sender.tab?.id)||(sender.frameId??0)!==0)throw Error('Repository discovery requires its top-level host page.');
+  const host=message.provider==='gitlab'?(message.host||'https://gitlab.com'):'https://github.com';
+  const route=KiCadGitHub.repositoryRoute(sender.url,{gitlabHosts:message.provider==='gitlab'?[host]:[]});
+  if(!route||route.repository!==message.repository||(route.provider||'github')!==(message.provider||'github')||(route.host||'https://github.com')!==host)throw Error('Repository discovery does not match the host page.');
+  let ref=message.ref;
+  if(!KiCadBrowserData.validRef(ref)||(!route.tail&&ref!=='HEAD')||route.tail&&!(route.tail.join('/')===ref||route.tail.join('/').startsWith(ref+'/')))throw Error('Repository branch does not match the host page.');
+  let listing;
+  if(message.provider==='gitlab'){
+    if(globalThis.KiCadGitLabHosts?!await KiCadGitLabHosts.allowed(host):host!=='https://gitlab.com')throw Error('Configure and grant access to this GitLab host first.');
+    const api=KiCadGitLabProvider.forHost(host,{sessionRead:(url,limit)=>gitlabSessionResponse(host,message.repository,url,limit)});
+    if(ref==='HEAD'){
+      const response=await api.response(api.endpoint(message.repository).replace(/\/repository$/,''),1024*1024);
+      const metadata=response&&JSON.parse(new TextDecoder().decode(response.bytes));ref=metadata?.default_branch;
+      if(!KiCadBrowserData.validRef(ref))throw Error('GitLab did not return a default branch.');
+    }
+    listing=await api.repositoryTree(message.repository,ref,{page:1});
+    for(let page=2;listing.hasMore&&page<=10;page++){
+      const next=await api.repositoryTree(message.repository,listing.sha,{page});
+      if(next.sha!==listing.sha)throw Error('Repository revision changed during discovery.');
+      listing.entries.push(...next.entries);listing.hasMore=next.hasMore;listing.warnings.push(...(next.warnings||[]));
+    }
+    listing.truncated=Boolean(listing.hasMore||listing.warnings.length);
+  }else{
+    try{
+      if(ref==='HEAD'){
+        const metadata=await githubDiscoveryJson(`https://api.github.com/repos/${message.repository}`,1024*1024);ref=metadata?.default_branch;
+        if(!KiCadBrowserData.validRef(ref))throw Error('GitHub did not return a default branch.');
+      }
+      listing=await repositoryTree(message.repository,ref);
+    }catch(error){
+      if(!/HTTP (401|403|404)|rate limit/i.test(error.message))throw error;
+      const session=await githubSessionInventory(message.repository,ref,error,path=>/\.kicad_(pro|sch|pcb)$/i.test(path)&&KiCadGitHub.filePath(path));
+      listing={sha:session.snapshotRef,entries:session.files.map(file=>({path:file.path,type:'blob'})),warnings:session.warnings,truncated:session.warnings.some(warning=>/limited|incomplete|limit reached/i.test(warning))};
+    }
+  }
+  const projects=KiCadGitHub.detectedProjects(listing.entries);
+  return {repository:message.repository,ref,sha:listing.sha,projects,truncated:Boolean(listing.truncated||listing.hasMore||projects.length===100),warnings:[...new Set(listing.warnings||[])]};
+}
+
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   const customHostSender=sender?.id===chrome.runtime.id&&typeof sender.url==='string'&&sender.url.startsWith('https://')&&message?.provider==='gitlab';
   if (!(senderAllowed(sender) || pdfSender(sender) || analysisSender(sender) || optionsSender(sender)||customHostSender) || !message || typeof message !== "object") return false;
   (async () => {
+    if(message.type==='repository-detect')return repositoryDetection(message,sender);
+    if(message.type==='viewer-diagnostics'){
+      if(!optionsSender(sender))throw Error('Only extension settings can run environment diagnostics.');
+      return KiCadEnvironmentDiagnostics.check({fetch,permissions:chrome.permissions,version:chrome.runtime.getManifest().version});
+    }
     if (message.provider !== undefined && !['github','gitlab'].includes(message.provider)) throw new Error('Unsupported repository provider.');
     if(pdfSender(sender)&&!['pdf-file','project-inventory'].includes(message.type))throw new Error('PDF viewer only reads PDF files and project inventory.');
     if(analysisSender(sender)&&!['project-inventory','project-file'].includes(message.type))throw new Error('Analysis viewers can only read project inventory and source files.');
@@ -1145,6 +1193,15 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       case "github-thread-read":
         if (!viewerSender(sender)) throw new Error("Only extension viewers can read GitHub threads.");
         return KiCadGitHubReviewApi.readThread(message);
+      case 'chat-message-write':
+        if (!viewerSender(sender)) throw new Error('Only extension viewers can write chat messages.');
+        return KiCadGitHubReviewApi.chatMessageWrite(message);
+      case 'chat-thread-list':
+        if (!viewerSender(sender)) throw new Error('Only extension viewers can list chat conversations.');
+        return KiCadGitHubReviewApi.chatThreadList(message);
+      case 'chat-reaction':
+        if (!viewerSender(sender)) throw new Error('Only extension viewers can change chat reactions.');
+        throw new Error('Chat reactions are not supported by this provider bridge.');
       case "github-discussion-categories":
         if (!viewerSender(sender)) throw new Error("Only extension viewers can retrieve discussion categories.");
         return KiCadGitHubReviewApi.categories(message.repository);
@@ -1266,7 +1323,10 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
                }
                sendResponse({ ok: true, result });
              },
-             (error) => sendResponse({ ok: false, error: error.message || String(error) }));
+             (error) => {
+               const accessIssue=globalThis.KiCadEnvironmentDiagnostics?.classifyAccessError?.(error);
+               sendResponse({ ok: false, error: error.message || String(error),...(accessIssue?{accessIssue}:{}) });
+             });
   return true;
 });
 

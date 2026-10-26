@@ -23,13 +23,14 @@
   unitsLabel.append(units);units.onchange=()=>{const originalUnits=$('rulerUnits');if(!originalUnits)return;originalUnits.value=units.value;originalUnits.dispatchEvent(new root.Event('change',{bubbles:true}));};
   options.append(unitsLabel,controls);panel.append(heading);if(result)panel.append(result);panel.append(options);toolbar.after(panel);
   // The shared ruler controls are never replaced: handlers, validation and snaps survive.
-  const sync=()=>{const on=active();panel.hidden=!on;quick.disabled=original.disabled;quick.setAttribute('aria-pressed',String(on));
+  const sync=()=>{const on=active(),three=$('mode3d')?.getAttribute('aria-pressed')==='true';panel.hidden=!on||three;quick.disabled=original.disabled;quick.setAttribute('aria-pressed',String(on));quick.setAttribute('aria-label',three?'Measure 3D surface distance':'Measure layout distance or angle');quick.title=quick.getAttribute('aria-label');
    const kind=$('rulerKind')?.value;instructions.textContent=kind==='angle'?'Tap endpoint → vertex → endpoint.':'Tap two points on the drawing.';
    units.value=$('rulerUnits')?.value||'mm';
    if(on){$('androidToolsSheet')?.close();d.body.classList.remove('drawing-focused');}
   };
   original.addEventListener('click',sync);$('rulerKind')?.addEventListener('change',sync);$('rulerUnits')?.addEventListener('change',sync);
   new root.MutationObserver(sync).observe(original,{attributes:true,attributeFilter:['aria-pressed','disabled']});
+  if($('mode3d'))new root.MutationObserver(sync).observe($('mode3d'),{attributes:true,attributeFilter:['aria-pressed']});
   sync();return true;
  };
  const init=()=>{API.mount();let queued=false;new root.MutationObserver(()=>{if(queued)return;queued=true;root.queueMicrotask(()=>{queued=false;API.mount();});}).observe(d.body,{childList:true,subtree:true});};

@@ -28,9 +28,10 @@
   if(visible($('ruleWindow'))){$('closeRuleWindow')?.click();return true;}
   if(visible($('viewerSettings'))){$('closeSettings')?.click();return true;}
   for(const id of ['objectMenu','companionChooser','extraReviewControls'])if(visible($(id))){$(id).hidden=true;return true;}
+  if(root.KiCadChatDraft?.closeMenus?.())return true;
   for(const[id,close]of [...panes].reverse())if(visible($(id))){$(close)?.click();return true;}
   for(const detail of d.querySelectorAll('details[open]'))if(visible(detail)){detail.open=false;return true;}
-  if(exitDraft&&!$('commentEditor')?.hidden&&$('commentText')?.value.trim()){openSheet(exitDraft.dialog);return true;}
+  if(exitDraft&&(root.KiCadChatDraft?.hasDraft?.()||!$('commentEditor')?.hidden&&$('commentText')?.value.trim())){openSheet(exitDraft.dialog);return true;}
   // Shared sheet navigation knows the actual parent, including scattered subsheets.
   if(d.body?.classList.contains('text-select-mode')){API.setTextSelection(false);return true;}
   if(root.KiCadAndroidMeasurements?.handleBack?.())return true;
@@ -95,6 +96,7 @@
   $('universalSearch').addEventListener('keydown',e=>{if(e.key==='Enter'&&$('universalSearchResults').hidden)search.dialog.close();});
   $('universalSearchResults').addEventListener('click',event=>{if(event.target.closest('[role=option]'))search.dialog.close();});
   const allSheets=button('All sheets',()=>{root.KiCadSheetOverview?.open?.();tools.dialog.close();});allSheets.id='androidAllSheetsButton';allSheets.hidden=!root.KiCadSheetOverview;const shortcuts=make('div');shortcuts.className='android-pane-actions';shortcuts.append(allSheets,button('Sheets and parts',()=>showPane('designNavigator','partsButton')),button('Properties',()=>showPane('designInspector','propertiesButton')));tools.content.append(shortcuts);
+  const reviewComments=button('Comments',()=>showPane('commentsSidebar','commentsButton'),'Read drawing comments and threads');reviewComments.id='androidDrawingComments';reviewComments.dataset.icon='comment';tools.content.append(reviewComments);
   for(const id of ['topSheetNavigation','drawingTools','highlightControls','variantBar'])if($(id))tools.content.append($(id));
   const selectText=button('Select text mode',()=>{API.setTextSelection(!d.body.classList.contains('text-select-mode'));tools.dialog.close();},'Select text mode');selectText.id='androidSelectText';selectText.setAttribute('aria-pressed','false');tools.content.append(selectText);
   const textSheet=sheet('androidTextSheet','Select and copy drawing text'),textBox=make('textarea');textBox.id='androidCopyText';textBox.readOnly=true;textBox.setAttribute('aria-label','Text from the active drawing');
@@ -106,8 +108,10 @@
   const help=make('details');help.className='android-tool-help';help.append(make('summary','Touch controls'),make('p','Select chooses Smart, Part or Net. Highlight adds items to a group. Hold the drawing for comments and net actions; double-tap a sheet to enter it.'));tools.content.append(help);
   // Close only launch actions. Toggles, navigation and field controls stay available.
   shortcuts.addEventListener('click',e=>{if(e.target.closest('button'))tools.dialog.close();});
+  const launches=new Set(['openBomManager','openTestpoints','viewRuleChecks','androidMeasure','mode3d','androidRailLayers','openSavedReports']);
+  tools.content.addEventListener('click',event=>{if(launches.has(event.target.closest('button')?.id))tools.dialog.close();});
   const actions=make('div');actions.className='android-comment-actions';actions.addEventListener('pointerdown',event=>{if(sizeClass(root.innerWidth)==='compact'&&d.activeElement===$('commentText')&&event.target.closest?.('button'))event.preventDefault();});for(const id of ['commentPostRow','saveComment','cancelComment'])if($(id))actions.append($(id));$('commentEditor').append(actions);
-  exitDraft=sheet('androidDraftExit','Unsaved comment');exitDraft.content.append(make('p','Save this comment as a local draft before leaving, or discard it.'),button('Keep editing',()=>{exitDraft.dialog.close();showPane('commentsSidebar','commentsButton');$('commentText').focus();}),button('Save draft',()=>{exitDraft.dialog.close();showPane('commentsSidebar','commentsButton');$('saveComment').click();}),button('Discard draft',()=>{$('cancelComment').click();exitDraft.dialog.close();}));
+  exitDraft=sheet('androidDraftExit','Unsaved comment');exitDraft.content.append(make('p','Save this comment as a local draft before leaving, or discard it.'),button('Keep editing',()=>{exitDraft.dialog.close();showPane('commentsSidebar','commentsButton');if(root.KiCadChatDraft?.hasDraft?.())root.KiCadChatDraft.focus();else $('commentText').focus();}),button('Save draft',async()=>{if(root.KiCadChatDraft?.hasDraft?.()){if(await root.KiCadChatDraft.save())exitDraft.dialog.close();return;}exitDraft.dialog.close();showPane('commentsSidebar','commentsButton');$('saveComment').click();}),button('Discard draft',()=>{if(root.KiCadChatDraft?.hasDraft?.())root.KiCadChatDraft.discard();$('cancelComment').click();exitDraft.dialog.close();}));
   $('addCommentTab')?.addEventListener('click',()=>{if($('commentEditor').hidden)$('newComment').click();});
   // These headings need only Pin and Close on tablets; phone sheets close with Back.
   for(const id of ['expandNavigator','tallNavigator','expandProperties','tallProperties','expandComments','tallComments'])if($(id))$(id).hidden=true;
@@ -147,19 +151,21 @@
   const content=$('androidToolsSheet')?.querySelector('.android-sheet-content'),drawing=$('drawingTools');if(!content||!drawing)return;
   if(!content.dataset.organized){
    content.dataset.organized='true';drawing.classList.add('android-primary-tools');content.prepend(drawing);
-   const heading=make('h3','Inspect drawing');heading.id='androidPrimaryToolsHeading';content.prepend(heading);
-   for(const [id,title]of [['display','Display'],['highlight','Selection'],['navigation','Navigation'],['more','Engineering & utilities']]){const group=make('details');group.id='androidToolGroup-'+id;group.className='android-tool-section';const body=make('div');body.className='android-tool-section-body';group.append(make('summary',title),body);content.append(group);}
+   const heading=make('h3','Inspect');heading.id='androidPrimaryToolsHeading';content.prepend(heading);
+   for(const [id,title]of [['navigation','Design'],['highlight','Review'],['display','Display options'],['more','More tools']]){const group=make('details');group.id='androidToolGroup-'+id;group.className='android-tool-section';group.open=id==='navigation'||id==='highlight';const body=make('div');body.className='android-tool-section-body';group.append(make('summary',title),body);content.append(group);}
+   content.prepend($('androidToolGroup-navigation'));
   }
   const groups=Object.fromEntries(['display','highlight','navigation','more'].map(id=>[id,$('androidToolGroup-'+id).querySelector('.android-tool-section-body')]));
-  const primary=new Set(['openBomManager','openTestpoints','measureButton','androidMeasure','viewRuleChecks']);
-  const display=new Set(['populationHighlight','gridButton','flipButton','toggleRuleMarkers','themeButton','settingsButton','androidCopperControls','variantBar','mode3d','netClassColors','ratsnestButton']);
-  const highlight=new Set(['highlightControls','highlightTestpoints','androidGroupHighlight','androidUnselect','androidClearHighlights','androidSelectText']);
+  const primary=new Set(['openBomManager','openTestpoints','measureButton','androidMeasure','viewRuleChecks','mode3d','androidRailLayers','openSavedReports']);
+  const display=new Set(['populationHighlight','gridButton','flipButton','toggleRuleMarkers','themeButton','settingsButton','androidCopperControls','variantBar','netClassColors','ratsnestButton']);
+  const highlight=new Set(['highlightControls','highlightTestpoints','androidGroupHighlight','androidUnselect','androidClearHighlights','androidSelectText','androidDrawingComments']);
   const nav=new Set(['topSheetNavigation','fitPage','zoomOut','zoomIn','androidAllSheetsButton','projectButton','fitSelected','androidFitDrawing','openRepositoryExplorer']);
   const move=(node,target)=>{if(node.parentElement!==target)target.append(node);};
   // Move existing controls, preserving listeners, values and accessibility names.
-  const secondarySelection=['androidGroupHighlight','androidUnselect','androidClearHighlights','androidFitDrawing','androidMeasure'].map($).filter(Boolean);
-  for(const [id,label]of [['androidGroupHighlight','Group highlight'],['androidUnselect','Unselect'],['androidClearHighlights','Clear highlights'],['androidFitDrawing','Fit drawing'],['androidMeasure','Measure']]){
-   const action=$(id);if(action&&!action.querySelector('.button-label')){const caption=make('span',label);caption.className='button-label';action.append(caption);}
+  const secondarySelection=['androidGroupHighlight','androidUnselect','androidClearHighlights','androidFitDrawing','androidMeasure','androidRailLayers'].map($).filter(Boolean);
+  for(const [id,label,icon]of [['androidGroupHighlight','Group highlight','highlight'],['androidUnselect','Unselect','close'],['androidClearHighlights','Clear highlights','close'],['androidFitDrawing','Fit drawing','fit'],['androidMeasure','Measure','ruler'],['measureButton','Measure','ruler'],['viewRuleChecks','Rules','rules'],['mode3d','3D view','cube'],['androidRailLayers','Layers','layers'],['openBomManager','BoM','assembly'],['openTestpoints','Testpoints','pin'],['openSavedReports','Reports','analytics']]){
+   const action=$(id);if(!action)continue;action.setAttribute?.('data-icon',icon);action.setAttribute?.('aria-label',id==='viewRuleChecks'?'ERC and DRC results':id==='openSavedReports'?'Saved analysis and KiCad Monkey reports':action.getAttribute?.('aria-label')||label);
+   if(!action.querySelector('.button-label')){const caption=make('span',label);caption.className='button-label';const svg=root.KiCadUIIcons?.icon?.(icon);if(svg&&!action.querySelector('svg'))action.replaceChildren(svg,caption);else action.append(caption);}else if(!['mode3d','androidMeasure'].includes(id))action.querySelector('.button-label').textContent=label;
   }
   // The late mobile measurement proxy shares the original handler and state.
   // Show one named tool, leaving room for Sidebar and More on a 320 px phone.
@@ -167,9 +173,12 @@
   for(const node of [...drawing.children,...content.children,...secondarySelection]){
    if(node===drawing||node.id==='androidPrimaryToolsHeading'||node.classList.contains('android-tool-section'))continue;
    let target=primary.has(node.id)?drawing:display.has(node.id)?groups.display:highlight.has(node.id)?groups.highlight:nav.has(node.id)||node.classList.contains('android-pane-actions')?groups.navigation:groups.more;
-   if(node.classList.contains('presentation-launch'))target=groups.more;
+   if(node.classList.contains('presentation-launch')||node.classList.contains('android-selection-field'))target=groups.highlight;
    move(node,target);
   }
+  const priority=['androidMeasure','measureButton','viewRuleChecks','mode3d','androidRailLayers','openBomManager','openSavedReports','openTestpoints'].map($).filter(node=>node?.parentElement===drawing);
+  const ordered=[...priority,...[...drawing.children].filter(node=>!priority.includes(node))];
+  if(ordered.some((node,index)=>drawing.children[index]!==node))drawing.append(...ordered);
   root.KiCadUIIcons?.decorate?.(content);
  }
  API.organizeDrawingTools=organizeDrawingTools;

@@ -35,7 +35,11 @@
    if(page==='analysis-viewer.html'&&android.openAnalysis)return android.openAnalysis(source.file,source.ref);
    if(android.openTools)return android.openTools(page,source.file||'',source.ref);
   }
-  if(root.KiCadVSCodeContext)throw Error('Open these standalone engineering tools in the browser extension or Android app.');
+  if(root.KiCadVSCodeContext){
+   if(page!=='analysis-viewer.html')throw Error('Open these standalone engineering tools in the browser extension or Android app.');
+   const drawing=root.KiCadVSCodeContext.drawingFile||new URLSearchParams(root.KiCadVSCodeContext.search||'').get('file');
+   return root.chrome.runtime.sendMessage({type:'open-analysis-viewer',repository:source.repository,ref:source.ref,file:drawing,path:source.file}).then(reply=>{if(!reply?.ok)throw Error(reply?.error||'Could not open the saved report.');return reply.result;});
+  }
   if(!root.chrome?.runtime?.getURL||typeof root.open!=='function')throw Error('Engineering tools require the installed extension or app.');
   const url=root.chrome.runtime.getURL(page)+(Object.keys(source).length?'?'+new URLSearchParams(source):'');
   root.open(url,'_blank','noopener,noreferrer');

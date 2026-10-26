@@ -12,7 +12,7 @@
  if(online)window.top.KiCadAndroid.ensureSnapshots();
  const source=async(ref,options)=>ref&&online?window.top.KiCadAndroidRevisionCache.get(ref,options):project;
  const reviewAdapters=new Map();
- const remoteTypes=new Set(['github-auth-status','comment-policy-status','comment-mention-users','github-discussion-categories','github-thread-read','github-annotations','comment-remote-list','github-publish-comment','comment-publish','github-recover-publication']);
+ const remoteTypes=new Set(['chat-message-write','chat-thread-list','github-auth-status','comment-policy-status','comment-mention-users','github-discussion-categories','github-thread-read','github-annotations','comment-remote-list','github-publish-comment','comment-publish','github-recover-publication']);
  const loadReads=new Set(['project','revision','project-inventory','project-file']),loads=new Map(),cancelledLoads=new Set();
  const validLoadId=id=>typeof id==='string'&&id.length>0&&id.length<=160;
  const dispatch=async message=>{let load=null;try{

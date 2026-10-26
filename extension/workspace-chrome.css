@@ -1,0 +1,87 @@
+/* A quiet, drawing-first desktop shell shared by web and VS Code. */
+body[data-workspace-chrome]{--surface:#17191f;--panel:#1e2128;--raised:#292d36;--control:#171a21;--line:#343944;--text:#e6e9ef;--muted:#9ca5b5;--accent:#91b9ff;--selected:#293c59;--hover:#2a303b;--kiview-font:var(--vscode-font-family,system-ui,-apple-system,"Segoe UI",sans-serif);font:12px/1.5 var(--kiview-font);color:var(--text);background:var(--surface);color-scheme:dark}
+body[data-workspace-chrome][data-ui-theme=light]{--surface:#f4f5f8;--panel:#fff;--raised:#edf0f5;--control:#fafbfc;--line:#d9dee7;--text:#252c38;--muted:#616d80;--accent:#336ac2;--selected:#e6eefb;--hover:#eef2f8;color-scheme:light}
+body[data-workspace-chrome][data-editor-host=vscode]{--surface:var(--vscode-editor-background,#17191f);--panel:var(--vscode-sideBar-background,#1e2128);--raised:var(--vscode-toolbar-hoverBackground,#292d36);--control:var(--vscode-input-background,#171a21);--line:var(--vscode-panel-border,#343944);--text:var(--vscode-foreground,#e6e9ef);--muted:var(--vscode-descriptionForeground,#9ca5b5);--accent:var(--vscode-focusBorder,#91b9ff);--selected:var(--vscode-list-inactiveSelectionBackground,#293c59);--hover:var(--vscode-list-hoverBackground,#2a303b)}
+body[data-workspace-chrome].vscode-light{color-scheme:light}
+body[data-workspace-chrome] :is(button,input,select,textarea){font-family:inherit;border-radius:6px}
+body[data-workspace-chrome] :is(input,select,textarea){background:var(--control);color:var(--text);border-color:var(--line)}
+body[data-workspace-chrome] input::placeholder{color:var(--muted);opacity:.85}
+body[data-workspace-chrome] button{font-weight:500}
+body[data-workspace-chrome] button:not(:disabled):hover{background:var(--hover);color:var(--text);border-color:var(--line)}
+body[data-workspace-chrome] button:is([aria-pressed=true],[aria-selected=true]){background:var(--selected);color:var(--text);border-color:transparent}
+body[data-workspace-chrome] :is(button,input,select,textarea,summary,a):focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+body[data-workspace-chrome] #frameControls{min-height:40px;padding:4px 8px;gap:6px;background:var(--panel);border-color:var(--line)}
+body[data-workspace-chrome] #frameControls .universal-search{flex:0 1 240px;min-width:120px;max-width:260px}
+body[data-workspace-chrome] #universalSearch{min-height:30px;height:30px;font-size:12px;border-radius:6px}
+body[data-workspace-chrome] #selectionMode{width:120px;min-width:100px;flex:0 0 120px;height:30px;min-height:30px;font-size:11px;padding:4px 8px}
+body[data-workspace-chrome] #frameControls .frame-actions{width:auto;gap:5px;flex:0 0 auto}
+body[data-workspace-chrome] #frameControls .tool-group{padding-right:6px;gap:2px;border-color:var(--line)}
+body[data-workspace-chrome] #frameControls .tool-group button:has(.ui-icon){width:30px;min-width:30px;height:30px;min-height:30px;border:0;background:transparent;padding:6px}
+body[data-workspace-chrome] #frameControls :is(#focusView,.workspace-view-options){height:30px;min-height:30px;width:30px;min-width:30px;padding:6px;flex:0 0 30px;border-color:transparent;background:transparent}
+body[data-workspace-chrome] #frameControls .workspace-view-options{margin-left:auto}
+body[data-workspace-chrome] #frameControls .workspace-view-options .button-label{display:none}
+body[data-workspace-chrome] #frameControls .ui-icon{width:18px;height:18px;flex-basis:18px}
+body[data-workspace-chrome] .top-sheet-navigation #sheetSelect{width:150px;min-height:30px;height:30px;border-color:transparent;background:var(--raised)}
+body[data-workspace-chrome] #drawingTools{width:40px;flex-basis:40px;padding:5px 3px;gap:3px;background:var(--panel);border-color:var(--line)}
+body[data-workspace-chrome] #drawingTools button{width:32px;min-width:32px;height:32px;min-height:32px;border:0;border-radius:6px}
+body[data-workspace-chrome] #reviewWorkspace{--tool-strip-width:40px}
+body[data-workspace-chrome] :is(.review-sidebar,#designNavigator,#designInspector,#commentsSidebar){background:var(--panel);border-color:var(--line);box-shadow:0 8px 32px #0002}
+body[data-workspace-chrome] :is(.sidebar-heading,.panel-heading){padding:7px 10px;gap:6px;min-height:36px;border-color:var(--line)}
+body[data-workspace-chrome] :is(.sidebar-heading,.panel-heading) h2{font-size:12px;font-weight:600;letter-spacing:0}
+body[data-workspace-chrome] :is(.sidebar-heading,.panel-heading) button{min-height:26px;height:26px;min-width:26px;width:26px;padding:5px;border:0;background:transparent}
+body[data-workspace-chrome] #designNavigator .navigator-tabs{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));padding:3px 8px 6px;gap:3px;border-color:var(--line);overflow:visible}
+body[data-workspace-chrome] #designNavigator .navigator-tabs button{min-width:0;max-width:100%;overflow:hidden;gap:4px;padding:5px 3px}
+body[data-workspace-chrome] #designNavigator .navigator-tabs .ui-icon{width:15px;height:15px;flex-basis:15px}
+body[data-workspace-chrome] .navigator-tabs button{border:0;border-radius:5px;min-height:30px;padding:5px;font-size:11px;color:var(--muted)}
+body[data-workspace-chrome] .navigator-tabs button[aria-selected=true]{background:var(--selected);color:var(--text)}
+body[data-workspace-chrome] .navigator-pane{padding:10px;gap:8px}
+body[data-workspace-chrome] .selection-heading h2{font-size:18px;letter-spacing:-.02em}
+body[data-workspace-chrome] .selection-heading>span{background:var(--raised);border:0;color:var(--accent);width:32px;height:32px;flex-basis:32px}
+body[data-workspace-chrome] .property-group{margin:14px 0}
+body[data-workspace-chrome] .property-group h3{font-size:11px;text-transform:none;letter-spacing:0;color:var(--text);font-weight:600}
+body[data-workspace-chrome] .property-group dl{gap:8px 12px;font-size:12px}
+body[data-workspace-chrome] .property-group dt{color:var(--muted)}
+body[data-workspace-chrome] :is(.object-row,.net-member-list button){border-radius:5px;background:transparent}
+body[data-workspace-chrome] .object-row.selected{background:var(--selected);border-color:transparent}
+body[data-workspace-chrome] .review-footer{background:var(--panel);border-color:var(--line);color:var(--muted);min-height:22px;font-size:10px}
+body[data-workspace-chrome] :is(.review-control-popover,.universal-search-popup,#objectMenu,.workspace-tools-menu){background:var(--panel);color:var(--text);border:1px solid var(--line);border-radius:9px;box-shadow:0 12px 36px #0004}
+body[data-workspace-chrome] .review-control-popover{left:auto;right:10px;width:min(560px,calc(100% - 20px));padding:12px}
+body[data-workspace-chrome] .workspace-display-options{display:flex;flex-wrap:wrap;gap:6px;align-items:center;padding-bottom:10px;margin-bottom:6px;border-bottom:1px solid var(--line)}
+body[data-workspace-chrome] .workspace-display-options h3{flex-basis:100%;text-transform:none;letter-spacing:0;font-size:12px;color:var(--text);margin:0 0 4px}
+body[data-workspace-chrome] .workspace-tools-menu{position:fixed;z-index:1000;display:grid;gap:2px;padding:6px;width:240px;max-width:calc(100vw - 16px);max-height:calc(100dvh - 16px);overflow:auto}
+body[data-workspace-chrome] .workspace-menu-heading{padding:7px 8px;color:var(--muted);font-size:11px;border-bottom:1px solid var(--line);margin-bottom:3px}
+body[data-workspace-chrome] .workspace-quick-tools{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:4px;padding:3px 0 6px;border-bottom:1px solid var(--line)}
+body[data-workspace-chrome] .workspace-tools-menu .workspace-quick-tools button{flex-direction:column;justify-content:center;gap:5px;min-height:54px;padding:6px 2px;text-align:center}
+body[data-workspace-chrome] .workspace-quick-tools button .button-label{font-size:11px}
+body[data-workspace-chrome] .workspace-tool-search{width:100%;min-height:30px;padding:5px 8px;margin:4px 0}
+body[data-workspace-chrome] .workspace-tools-menu button{display:flex;justify-content:flex-start;gap:10px;text-align:left;width:100%;height:auto;min-height:34px;border:0;background:transparent;padding:7px 9px}
+body[data-workspace-chrome] .workspace-tools-menu .button-label{display:inline!important;position:static;clip-path:none;width:auto;height:auto;overflow:visible;font-size:12px;white-space:normal}
+body[data-workspace-chrome] .workspace-tools-menu .ui-icon{width:18px;height:18px;flex:0 0 18px;color:var(--muted)}
+body[data-workspace-chrome] #reviewHeader{min-height:36px;background:var(--panel);border-color:var(--line);padding:3px 8px;gap:8px}
+body[data-workspace-chrome] #workspaceTabs{padding:0;border:0;background:transparent;gap:2px}
+body[data-workspace-chrome] #workspaceTabs button{min-height:28px;font-size:12px;padding:4px 10px;color:var(--muted);border-radius:5px}
+body[data-workspace-chrome] #workspaceTabs button.active{background:var(--selected);color:var(--text);box-shadow:none}
+body[data-workspace-chrome] #projectTools{border-color:var(--line);padding-left:8px}
+body[data-workspace-chrome] #projectTools>button{color:var(--muted)}
+body[data-workspace-chrome].project-app .project-header{min-height:40px;padding:4px 12px;background:var(--panel);border-color:var(--line)}
+body[data-workspace-chrome].project-app .project-header strong{font-size:12px}
+body[data-workspace-chrome].project-app #projectRevision{display:none}
+body[data-workspace-chrome].project-app .project-header button{background:transparent;border-color:transparent;font-size:11px;min-height:30px}
+body[data-workspace-chrome].project-app .project-tree{background:var(--panel);width:220px;min-width:180px;padding:12px 8px}
+body[data-workspace-chrome].project-app .project-tree h2{font-size:11px;color:var(--muted);font-weight:600;margin-bottom:10px}
+body[data-workspace-chrome].project-app .project-active{padding:10px 16px;gap:8px}
+body[data-workspace-chrome].project-app .project-file-heading h2{font-size:15px;letter-spacing:-.02em}
+body[data-workspace-chrome].project-app .project-tabs{padding:2px 12px 5px;background:var(--surface);border-color:var(--line);gap:3px}
+body[data-workspace-chrome].project-app .project-tabs button.icon-caption{min-height:30px;flex-direction:row;font-size:11px;padding:5px 8px;border:0;border-radius:5px;gap:5px}
+body[data-workspace-chrome].project-app .project-tabs .ui-icon{width:16px;height:16px;flex-basis:16px}
+body[data-workspace-chrome].project-app .project-tabs button[aria-pressed=true]{background:var(--selected);box-shadow:none}
+body[data-workspace-chrome].project-app .project-panel{padding:16px}
+body[data-workspace-chrome].project-app .settings-card{border-radius:8px;border-color:var(--line);background:var(--panel);padding:0 16px 12px}
+body[data-workspace-chrome].project-app .settings-categories{background:transparent;border:0;padding:0;gap:3px}
+body[data-workspace-chrome].project-app .settings-categories button{font-size:12px;padding:7px 10px;border-radius:5px;min-height:32px}
+body[data-workspace-chrome].project-app .settings-categories button[aria-pressed=true]{background:var(--selected);border:0}
+body[data-workspace-chrome].project-app .setting-field{min-height:38px;border-color:var(--line)}
+@media(max-width:900px){body[data-workspace-chrome] #frameControls .universal-search{flex-basis:170px;min-width:120px}body[data-workspace-chrome] #selectionMode{width:104px;min-width:104px;flex-basis:104px}body[data-workspace-chrome].project-app .project-tabs button.icon-caption{padding:5px 7px}}
+@media(pointer:coarse){body[data-workspace-chrome] #frameControls button,body[data-workspace-chrome] #drawingTools button,body[data-workspace-chrome] .workspace-tools-menu button{min-height:44px;height:44px;min-width:44px}body[data-workspace-chrome] #drawingTools{width:52px;flex-basis:52px}body[data-workspace-chrome] #reviewWorkspace{--tool-strip-width:52px}}
+@media(prefers-reduced-motion:no-preference){body[data-workspace-chrome] button{transition:background-color .12s ease,color .12s ease,border-color .12s ease}}
+body[data-workspace-chrome].vscode-high-contrast,body[data-workspace-chrome].vscode-high-contrast-light{--line:var(--vscode-contrastBorder);--accent:var(--vscode-focusBorder)}

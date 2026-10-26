@@ -49,6 +49,7 @@ final class GitLabClient {
     }
     private void check(int epoch) throws IOException {
         NativeLoadOperation.checkCurrent();
+        NativeChatScope.checkCurrent();
         if (!current(epoch)||Thread.currentThread().isInterrupted()) throw new Failure("GitLab request cancelled");
     }
     static String validateHost(String host) throws Exception {
@@ -76,6 +77,9 @@ final class GitLabClient {
             record=refreshRecords.get(host);
             if(record==null||record.optLong("expiresAt",0)>System.currentTimeMillis()+60000)return tokens.get(host);
         }
+        // A rotating token must be persisted outside a project lease. The bridge
+        // refreshes sign-in first; a scoped request never suspends its guard.
+        if(NativeChatScope.active())throw new Failure("Refresh GitLab sign-in before this conversation request, then retry.");
         String client=record.getString("clientId"),refresh=record.getString("refreshToken");
         byte[] body=("client_id="+encode(client)+"&refresh_token="+encode(refresh)+"&grant_type=refresh_token&redirect_uri="+encode("kicadvizdiff://gitlab-oauth")).getBytes(StandardCharsets.UTF_8);
         // Refresh tokens may rotate server-side: Stop must finish persisting that rotation,
@@ -123,7 +127,7 @@ final class GitLabClient {
         JSONObject connected=connectToken(host,result.getString("access_token"),epoch);saveOAuth(host,client,result,epoch);return connected;
     }
     static boolean cancellableRead(String action) {
-        return java.util.Arrays.asList("repositories", "import", "revision-import", "revision-resolve", "revision-branches", "revision-commits", "repository-tree", "repository-history", "repository-branches", "policy", "threads", "thread", "contributors").contains(action);
+        return java.util.Arrays.asList("repositories", "import", "revision-import", "revision-resolve", "revision-branches", "revision-commits", "repository-tree", "repository-history", "repository-branches", "policy", "threads", "thread", "chat-thread-list", "contributors").contains(action);
     }
     JSONObject handleLoad(JSONObject request, int epoch, NativeLoadOperation operation) throws Exception {
         if (!cancellableRead(request.optString("action"))) throw new IllegalArgumentException("Only project reads can be stopped");
@@ -172,6 +176,8 @@ final class GitLabClient {
                 return new JSONObject().put("threads",threads).put("hasMore",values.length()==100);
             }
             case "thread": return readThread(host,request,epoch);
+            case "chat-message-write": return chatWrite(host,request,epoch);
+            case "chat-thread-list": return chatThreadList(host,request,epoch);
             case "contributors": {
                 JSONArray users=new JSONArray(),warnings=new JSONArray();String query=request.optString("query","").toLowerCase(Locale.ROOT);if(query.length()>100||controls(query))throw new Failure("Invalid people query");
                 if(credential(host,epoch)==null)return new JSONObject().put("users",users).put("warnings",warnings.put("Sign in to discover GitLab project members"));
@@ -194,7 +200,7 @@ final class GitLabClient {
         JSONObject value=json(host,endpoint,epoch);
         if(value.optInt("iid")!=number||value.optDouble("iid")!=number||threadId(value,"project_id")!=projectId||!Arrays.asList("opened","closed").contains(value.optString("state"))||!(value.opt("title") instanceof String))throw new Failure("GitLab returned an invalid Issue identity");
         ThreadText text=new ThreadText();JSONObject result=threadRecord(value,true,null,null,url,text);
-        result.put("provider","gitlab").put("host",host).put("repository",repository).put("kind","issue").put("number",number).put("title",value.getString("title").substring(0,Math.min(1024,value.getString("title").length()))).put("state",value.getString("state").equals("opened")?"open":"closed");
+        result.put("provider","gitlab").put("host",host).put("repository",repository).put("projectId",projectId).put("kind","issue").put("number",number).put("title",value.getString("title").substring(0,Math.min(1024,value.getString("title").length()))).put("state",value.getString("state").equals("opened")?"open":"closed");
         JSONArray comments=new JSONArray();Set<String> seen=new HashSet<>();
         for(int page=1;page<=8&&!text.stopped;page++) {
             check(epoch);if(SystemClock.elapsedRealtime()>deadline)throw new Failure("GitLab thread read timed out");
@@ -207,14 +213,14 @@ final class GitLabClient {
                     JSONObject note=notes.optJSONObject(n);if(note!=null&&note.optBoolean("system"))continue;
                     if(comments.length()>=200||text.stopped){text.stopped=true;break;}
                     JSONObject entry=threadRecord(note,false,group.getBoolean("individual_note")?null:parent,group.getBoolean("individual_note")?null:group.getString("id"),url,text);
-                    if(entry!=null){String id=entry.getString("id");if(parent==null)parent=id;if(seen.add(id))comments.put(entry);}
+                    if(entry!=null){entry.put("replyDiscussionId",group.getString("id"));String id=entry.getString("id");if(parent==null)parent=id;if(seen.add(id))comments.put(entry);}
                 }
                 if(text.stopped)break;
             }
             if(groups.length()<100)break;if(page==8)text.stopped=true;
         }
         if(text.stopped)text.warn("Thread readback was truncated at 200 comments, 10 requests or the text limit. Open GitLab for the complete conversation.");
-        check(epoch);return result.put("comments",comments).put("warnings",text.warnings);
+        check(epoch);result.put("comments",comments).put("warnings",text.warnings);if(request.optBoolean("includeCapabilities",false))chatCapabilities(host,request,result,epoch);return result;
     }
     private static long threadId(JSONObject value,String key)throws Exception {
         Object raw=value==null?null:value.opt(key);long id=raw instanceof Number?((Number)raw).longValue():0;
@@ -241,8 +247,48 @@ final class GitLabClient {
             String created=value.optString("created_at"),updated=value.optString("updated_at");
             if(!threadTime(created)||!threadTime(updated)||rawAuthor!=JSONObject.NULL&&(author==null||!author.optString("username").matches("[A-Za-z0-9][A-Za-z0-9_.-]{0,99}")))throw new Failure("GitLab returned invalid thread provenance");
             JSONObject entry=new JSONObject().put("id",String.valueOf(id)).put("author",author==null?JSONObject.NULL:author.getString("username")).put("createdAt",created).put("updatedAt",updated).put("body",text.take(value.opt(root?"description":"body"))).put("url",root?url:url+"#note_"+id).put("replyTo",replyTo==null?JSONObject.NULL:replyTo);
-            if(discussionId!=null)entry.put("discussionId",discussionId);return entry;
+            if(author!=null&&author.optLong("id",0)>0)entry.put("authorId",author.getLong("id"));entry.put("bodyTruncated",!value.optString(root?"description":"body","").equals(entry.getString("body")));if(discussionId!=null)entry.put("discussionId",discussionId);return entry;
         }catch(Exception invalid){if(root)throw new Failure("GitLab returned invalid thread provenance");text.warn("Some thread comments had invalid provenance and were omitted.");return null;}
+    }
+    private JSONObject chatThreadList(String host,JSONObject request,int epoch)throws Exception {
+        NativeChatRequest.validateScope(request.getString("ref"),request.getString("file"));String kind=request.getString("kind");if(request.has("cursor")&&!request.isNull("cursor"))throw new Failure("GitLab Issue discovery does not use a cursor");if(!Arrays.asList("issue","discussion").contains(kind))throw new Failure("Invalid chat kind");int page=request.optInt("page",1);if(page<1||page>5||request.has("page")&&(!(request.get("page")instanceof Number)||request.getDouble("page")!=page))throw new Failure("Invalid chat list page");
+        if(kind.equals("discussion"))return new JSONObject().put("threads",new JSONArray()).put("hasMore",false).put("supported",false);
+        String repo=repository(request);JSONObject project=json(host,project(request),epoch);if(!repo.equals(project.optString("path_with_namespace")))throw new Failure("Project identity changed");long projectId=threadId(project,"id");JSONArray rows=array(host,"/projects/"+projectId+"/issues?scope=all&state=all&order_by=updated_at&sort=desc&per_page=20&page="+page,epoch),threads=new JSONArray();if(rows.length()>20)throw new Failure("Invalid chat page size");
+        for(int i=0;i<rows.length();i++){JSONObject row=rows.getJSONObject(i);if(threadId(row,"project_id")!=projectId)throw new Failure("Issue belongs to another project");long iid=NativeChatRequest.remoteId(row,"iid");if(iid>Integer.MAX_VALUE)throw new Failure("Invalid Issue number");int number=(int)iid;String updated=row.getString("updated_at");if(number<1||!threadTime(updated))throw new Failure("Invalid Issue summary");threads.put(new JSONObject().put("kind","issue").put("number",number).put("title",NativeChatRequest.summaryTitle(row)).put("state",NativeChatRequest.summaryState(row,true)).put("updatedAt",updated).put("author",NativeChatRequest.summaryAuthor(row,true)).put("url",host+"/"+repo+"/-/issues/"+number));}
+        boolean more=rows.length()==20&&page<5;return new JSONObject().put("threads",threads).put("hasMore",more).put("nextPage",more?page+1:JSONObject.NULL).put("truncated",rows.length()==20&&page==5);
+    }
+    private void chatCapabilities(String host,JSONObject request,JSONObject thread,int epoch)throws Exception {
+        boolean allowed=false;long viewer=0;try{if(credential(host,epoch)!=null){JSONObject user=json(host,"/user",epoch);viewer=threadId(user,"id");allowed=policy(host,request,epoch).getBoolean("allowed");}}catch(Exception denied){check(epoch);}
+        thread.put("capabilities",new JSONObject().put("create",allowed).put("reply",allowed).put("edit",allowed).put("reactions",false).put("replyMode","native"));
+        JSONArray messages=thread.getJSONArray("comments");for(int i=0;i<messages.length();i++){JSONObject item=messages.getJSONObject(i);item.put("canEdit",allowed&&viewer>0&&viewer==item.optLong("authorId",0)&&!item.optBoolean("bodyTruncated")&&!item.optString("body").contains("kicad-review:")).put("canReply",allowed&&item.has("replyDiscussionId"));}
+    }
+    private JSONObject chatWrite(String host,JSONObject request,int epoch)throws Exception {
+        NativeChatRequest input=new NativeChatRequest(request);String repo=repository(request),bearer=credential(host,epoch);if(bearer==null)throw new Failure("Sign in before posting a chat message");
+        if(request.has("annotation")&&!request.getJSONObject("annotation").getJSONObject("anchor").optString("provider").equals("gitlab"))throw new Failure("Annotation provider mismatch");
+        JSONObject user=json(host,"/user",epoch);long viewer=threadId(user,"id");String username=user.getString("username");if(!username.matches("[A-Za-z0-9][A-Za-z0-9_.-]{0,99}"))throw new Failure("Invalid GitLab account identity");
+        JSONObject permitted=policy(host,request,epoch);if(!permitted.getBoolean("allowed"))throw new Failure("Repository policy blocks chat messages");long projectId=permitted.getLong("projectId");
+        String key="chat_"+hash(host+"|"+repo+"|"+viewer+"|"+input.kind+"|"+input.number+"|"+input.mutationId),digest=hash(input.fingerprint(username));String previous=journal.getString(key,null);
+        if(previous!=null){JSONObject receipt=new JSONObject(previous);if(!digest.equals(receipt.optString("digest")))throw new Failure("This chat mutation identifier already belongs to another message");if(receipt.has("result"))return receipt.getJSONObject("result").put("duplicate",true);throw new Failure("The earlier chat write has an unconfirmed outcome; inspect GitLab before retrying");}
+        JSONObject thread=readThread(host,new JSONObject().put("repository",repo).put("kind",input.kind).put("number",input.number),epoch);if(thread.getLong("projectId")!=projectId)throw new Failure("GitLab project identity changed before chat publication");
+        JSONArray comments=thread.getJSONArray("comments");JSONObject target=null;String wanted=input.operation.equals("reply")?input.replyTo:input.messageId;for(int i=0;i<comments.length();i++){JSONObject row=comments.getJSONObject(i);if(wanted.equals(row.getString("id")))target=row;}
+        if(!input.operation.equals("create")&&target==null)throw new Failure("This message is not present in the verified Issue; reload the conversation");
+        String endpoint="/projects/"+projectId+"/issues/"+input.number,path=endpoint,method="POST",parent="";
+        if(input.operation.equals("edit")){
+            if(viewer!=target.optLong("authorId",0)||!input.expectedUpdatedAt.equals(target.getString("updatedAt"))||target.optBoolean("bodyTruncated")||target.optString("body").contains("kicad-review:"))throw new Failure("The message changed, is not yours, or contains a drawing annotation");
+            JSONObject fresh=null;
+            if(target.has("discussionId")){String groupId=target.getString("discussionId");JSONObject group=json(host,endpoint+"/discussions/"+groupId,epoch);if(!groupId.equals(group.optString("id")))throw new Failure("Discussion identity changed before editing");JSONArray notes=group.getJSONArray("notes");if(notes.length()>1000)throw new Failure("Discussion is too large to verify before editing");for(int i=0;i<notes.length();i++){JSONObject row=notes.getJSONObject(i);if(input.messageId.equals(String.valueOf(threadId(row,"id"))))fresh=row;}path+="/discussions/"+groupId+"/notes/"+input.messageId;}
+            else{fresh=json(host,endpoint+"/notes/"+input.messageId,epoch);path+="/notes/"+input.messageId;}
+            if(fresh==null||!String.valueOf(threadId(fresh,"id")).equals(input.messageId)||fresh.optBoolean("system")||fresh.optJSONObject("author")==null||threadId(fresh.getJSONObject("author"),"id")!=viewer||!input.expectedUpdatedAt.equals(fresh.optString("updated_at"))||fresh.optString("body").contains("kicad-review:"))throw new Failure("The message changed before editing; reload it");
+            method="PUT";
+        }else if(input.operation.equals("reply")){
+            String discussion=target.optString("replyDiscussionId",target.optString("discussionId"));if(!discussion.matches("[A-Za-z0-9_-]{1,200}"))throw new Failure("Verified GitLab discussion identity is unavailable");path+="/discussions/"+discussion+"/notes";parent=target.isNull("replyTo")?target.getString("id"):target.getString("replyTo");
+        }else path+=input.kind.equals("discussion")?"/discussions":"/notes";
+        synchronized(this){check(epoch);if(journal.contains(key))throw new Failure("This chat operation is already in progress; inspect the Issue before retrying");claimWrite("publish");if(!journal.edit().putString(key,new JSONObject().put("digest",digest).put("pending",true).toString()).commit())throw new Failure("Could not reserve chat publication");}
+        JSONObject response=new JSONObject(network(host,path,method,new JSONObject().put("body",input.outgoingBody).toString().getBytes(StandardCharsets.UTF_8),bearer,epoch,4*1024*1024));
+        JSONObject message=response;if(input.operation.equals("create")&&input.kind.equals("discussion")){if(!response.optString("id").matches("[A-Za-z0-9_-]{1,200}")||response.optJSONArray("notes")==null||response.getJSONArray("notes").length()!=1)throw new Failure("GitLab did not confirm the discussion");message=response.getJSONArray("notes").getJSONObject(0);}
+        String id=String.valueOf(threadId(message,"id")),updated=message.getString("updated_at");if(input.operation.equals("edit")&&!id.equals(input.messageId)||!threadTime(updated)||message.optJSONObject("author")==null||threadId(message.getJSONObject("author"),"id")!=viewer)throw new Failure("GitLab did not confirm the expected chat message");
+        JSONObject result=new JSONObject().put("provider","gitlab").put("kind",input.kind).put("number",input.number).put("messageId",id).put("updatedAt",updated).put("url",host+"/"+repo+"/-/issues/"+input.number+"#note_"+id).put("replyTo",parent.isEmpty()?JSONObject.NULL:parent);
+        synchronized(this){check(epoch);if(!journal.edit().putString(key,new JSONObject().put("digest",digest).put("result",result).toString()).commit())throw new Failure("Chat accepted but its receipt could not be saved; inspect GitLab before retrying");}return result;
     }
     private static JSONObject issue(JSONObject value) throws Exception {
         JSONObject author=value.optJSONObject("author");return new JSONObject().put("kind","issue").put("id",String.valueOf(value.getLong("id"))).put("number",value.getInt("iid")).put("title",value.optString("title")).put("body",value.optString("description")).put("state",value.optString("state")).put("url",value.optString("web_url")).put("createdAt",value.optString("created_at")).put("updatedAt",value.optString("updated_at")).put("author",author==null?"":author.optString("username"));
@@ -508,7 +554,7 @@ final class GitLabClient {
         if(path.equals("/oauth/token")&&bearer!=null)throw new Failure("Unsupported GitLab OAuth credential");
         if(bearer!=null)connection.setRequestProperty("Authorization","Bearer "+bearer);long deadline=SystemClock.elapsedRealtime()+90000;
         try {
-            if(body!=null){connection.setDoOutput(true);connection.setRequestProperty("Content-Type",contentType);connection.setFixedLengthStreamingMode(body.length);try(OutputStream stream=connection.getOutputStream()){stream.write(body);}}
+            if(body!=null){connection.setDoOutput(true);connection.setRequestProperty("Content-Type",contentType);connection.setFixedLengthStreamingMode(body.length);check(epoch);try(OutputStream stream=connection.getOutputStream()){check(epoch);stream.write(body);}}
             int status=connection.getResponseCode();check(epoch);
             if(status==401||status==400&&path.equals("/oauth/token")){synchronized(this){check(epoch);authExpired=bearer!=null||refreshRecords.containsKey(host);tokens.remove(host);refreshRecords.remove(host);vault(host).clear();}throw new Failure("GitLab sign-in expired or was revoked; sign in again");}
             if(status==403||status==429)throw new Failure("GitLab denied access or rate limited this request");

@@ -24,7 +24,7 @@ if (-not $stepProc.WaitForExit(60000)) {
 if (-not (Test-Path -LiteralPath $stepResult)) { throw 'Native smoke produced no result; inspect the isolated profile logs.' }
 $stepEvidence = Get-Content -LiteralPath $stepResult -Raw | ConvertFrom-Json
 if ($stepEvidence.runId -ne $stepRunId) { throw 'Native smoke result is stale or belongs to another run.' }
-foreach ($stepCheck in @('activated', 'schematicEditorOpened', 'boardEditorOpened', 'stepAssetRead', 'sidecarPersisted', 'sourcesUnchanged')) {
+foreach ($stepCheck in @('activated', 'schematicEditorOpened', 'boardEditorOpened', 'analysisReportOpened', 'stepAssetRead', 'sidecarPersisted', 'sourcesUnchanged')) {
     if ($stepEvidence.$stepCheck -ne $true) { throw "Native smoke did not prove $stepCheck." }
 }
 $stepEvidence | ConvertTo-Json

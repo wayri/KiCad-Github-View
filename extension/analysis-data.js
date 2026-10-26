@@ -87,7 +87,37 @@
   const bodies=value?.bodies;if(Array.isArray(bodies)){const valid=bodies.filter(b=>Array.isArray(b?.mesh?.vertices)&&Array.isArray(b.mesh?.faces)&&b.mesh.vertices.length<=200000&&b.mesh.faces.length<=100000&&b.mesh.vertices.every(v=>Array.isArray(v)&&v.length===3&&v.every(n=>numeric(n)!==null))&&b.mesh.faces.every(f=>Array.isArray(f)&&f.length===3&&f.every(i=>Number.isSafeInteger(i)&&i>=0&&i<b.mesh.vertices.length)));if(valid.length)plots.push({type:'mechanical',title:'Saved mechanical meshes',bodies:valid.slice(0,100).map(b=>({...b,mesh:{...b.mesh,vertices:b.mesh.vertices.map(v=>v.map(numeric))}})),unit:'mm'});}
   return plots;
  }
+ // Explicit Monkey a0 export contracts, projected without traversing render graphs/indexes.
+ function monkeyReport(value){
+  if(!value||typeof value!=='object'||Array.isArray(value)||typeof value.schema!=='string'||!/^kicad_monkey\.(design|netlist)\./.test(value.schema))return null;
+  if(!['kicad_monkey.design.a0','kicad_monkey.netlist.a0'].includes(value.schema))throw Error('Unsupported KiCad Monkey export schema: '+value.schema.slice(0,100));
+  const fail=()=>{throw Error('Invalid KiCad Monkey a0 report. Expected saved components, nets and terminals.');};
+  const record=item=>item&&typeof item==='object'&&!Array.isArray(item);
+  const text=(item,key,required=false)=>{const v=item[key];if(v===undefined&&!required)return '';if(typeof v!=='string'||v.length>16384||required&&!v)fail();return v;};
+  if(value.generator!=='kicad_monkey'||!Array.isArray(value.components)||!Array.isArray(value.nets))fail();
+  if(value.components.length>20000||value.nets.length>20000)throw Error('KiCad Monkey report exceeds 20,000 components or nets. Split the export.');
+  let rows=0;const reserve=()=>{if(++rows>MAX_ROWS)throw Error('KiCad Monkey report exceeds 200,000 table rows. Split the export.');};
+  const components={title:'Components',columns:['Designator','Value','Footprint','Library reference','Description','Sheet'],rows:[]};
+  const parameters={title:'Component properties',columns:['Designator','Property','Value'],rows:[]};
+  for(const item of value.components){
+   if(!record(item))fail();const ref=text(item,'designator',true);reserve();
+   if(item.hierarchy!==undefined&&!record(item.hierarchy))fail();
+   components.rows.push([ref,text(item,'value'),text(item,'footprint'),text(item,'library_ref'),text(item,'description'),item.hierarchy?text(item.hierarchy,'sheet_path'):'']);
+   if(item.parameters!==undefined){if(!record(item.parameters))fail();for(const key of Object.keys(item.parameters)){reserve();if(key.length>16384)fail();parameters.rows.push([ref,key,text(item.parameters,key)]);}}
+  }
+  const nets={title:'Nets',columns:['Name','Net class','Source sheets','Terminal count'],rows:[]};
+  const terminals={title:'Net terminals',columns:['Net','Designator','Pin','Pin name','Pin type'],rows:[]};
+  for(const item of value.nets){
+   if(!record(item)||!Array.isArray(item.terminals))fail();const name=text(item,'name');reserve();
+   if(item.terminals.length>MAX_ROWS-rows)throw Error('KiCad Monkey report exceeds 200,000 table rows. Split the export.');
+   let sheets='';if(item.source_sheets!==undefined){if(!Array.isArray(item.source_sheets)||item.source_sheets.length>1000||item.source_sheets.some(s=>typeof s!=='string'||s.length>16384))fail();sheets=item.source_sheets.join(' · ');if(sheets.length>16384)throw Error('KiCad Monkey net sheet list exceeds the display budget.');}
+   nets.rows.push([name,text(item,'net_class'),sheets,item.terminals.length]);
+   for(const terminal of item.terminals){reserve();if(!record(terminal))fail();terminals.rows.push([name,text(terminal,'designator',true),text(terminal,'pin',true),text(terminal,'pin_name'),text(terminal,'pin_type')]);}
+  }
+  return {kind:'KiCad Monkey saved '+(value.schema.includes('.design.')?'design':'netlist'),tables:[components,nets,terminals,parameters].filter(table=>table.rows.length),plots:[],fields:[{path:'Export schema',value:value.schema},{path:'Generator',value:value.generator},{path:'Components',value:value.components.length},{path:'Nets',value:value.nets.length}],warnings:['Saved KiCad Monkey a0 export; connectivity is reported as supplied, not recomputed or validated against this project. Render graphs, indexes and SVG are not executed or imported.'],savedSource:value};
+ }
  function json(value,path){
+  const monkey=monkeyReport(value);if(monkey)return monkey;
   const result={kind:/\.wbk$/i.test(path)?'KiCad simulation workbook':'Saved analysis report',tables:[],plots:[],fields:[],warnings:[]};let nodes=0;
   const visit=(item,key,depth)=>{
    if(++nodes>MAX_FIELDS||depth>32)return;

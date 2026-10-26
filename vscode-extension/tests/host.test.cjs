@@ -182,6 +182,20 @@ test("webview HTML confines resources and points relative SPIKE loads at package
 });
 
 const scopeOf=(s)=>({repository:s.scope.repository,ref:s.scope.ref,file:s.scope.rootFile});
+test('saved analysis opens in a scoped trusted Results view and rejects traversal, links and foreign close requests',async()=>{
+ const h=harness(),s=await session(h);h.write('reports/design.json','{"schema":"kicad_monkey.design.a0"}');h.write('unsafe/data.json','{}');h.entries.set(Uri.joinPath(h.folder,'unsafe').toString(),{type:65,size:0});
+ h.entries.set('file:///extension/media/analysis-viewer.html',{bytes:new TextEncoder().encode(fs.readFileSync(path.join(__dirname,'../../extension/analysis-viewer.html'),'utf8'))});
+ const panels=[],replies=[];let receive;
+ h.vscode.window.createWebviewPanel=(kind,title,column,options)=>{let onDispose;const panel={kind,title,options,webview:{cspSource:'https://resources.example',asWebviewUri:uri=>({toString:()=>`https://resources.example${uri.path}`}),onDidReceiveMessage:fn=>{receive=fn;return{dispose(){}};},postMessage:reply=>replies.push(reply)},onDidDispose:fn=>{onDispose=fn;},dispose(){this.disposed=true;onDispose?.();}};panels.push(panel);return panel;};
+ let id=0;const open=path=>send(h,s,++id,{type:'open-analysis-viewer',...scopeOf(s),path});
+ for(const path of ['../private.json','reports/script.js','unsafe/data.json'])assert.equal((await open(path)).ok,false);
+ assert.equal(panels.length,0);assert.equal((await send(h,s,++id,{type:'open-analysis-viewer',...scopeOf(s),repository:'other/repo',path:'reports/design.json'})).ok,false);
+ assert.equal((await open('reports/design.json')).ok,true);const panel=panels[0];assert.equal(panel.kind,'kicadVisualReview.analysis');
+ assert.match(panel.webview.html,/analysis-viewer.js/);assert.match(panel.webview.html,/default-src &#39;none&#39;/);assert.doesNotMatch(panel.webview.html,/connect-src [^;]*\*/);
+ const data=JSON.parse(panel.webview.html.match(/globalThis.KiCadVSCodeContext=(\{.*?\});<\/script>/)[1]);assert.equal(data.drawingFile,s.scope.rootFile);assert.equal(new URLSearchParams(data.search).get('file'),'reports/design.json');
+ await receive({channel:h.api._test.CHANNEL,token:data.token,id:1,request:{type:'close-analysis-viewer',repository:s.scope.repository,ref:s.scope.ref,file:'other.json'}});assert.equal(panel.disposed,undefined);assert.equal(replies.at(-1).reply.ok,false);
+ await receive({channel:h.api._test.CHANNEL,token:data.token,id:2,request:{type:'close-analysis-viewer',repository:s.scope.repository,ref:s.scope.ref,file:'reports/design.json'}});assert.equal(panel.disposed,true);
+});
 const annotation=(s,id="note")=>({id,text:"Check this connection",createdAt:"2026-10-04T00:00:00.000Z",updatedAt:"2026-10-04T00:00:00.000Z",
   severity:"major",state:"open",tags:["routing","power"],mentions:[],remoteRefs:[],anchor:{...scopeOf(s),uuid:"native-object",position:{x:1.25,y:2.5}}});
 const sidecarUri=(h)=>Uri.joinPath(h.folder,".kicad-review.json").toString();

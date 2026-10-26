@@ -52,7 +52,7 @@ function find(node, predicate) { return walk(node).find(predicate); }
 function fixture(url, { pull = false, initialHidden = false, delayedCard = false,
   draft = false, draftValue = '', draftTitle = false, titleValue = '',
   draftBody = 'Review note for U3', draftHeading = '[Major] KiCad review: U3',
-  headRepository = 'owner/repo', privatePull=false, gitlabBlob = null, sessionReader=null } = {}) {
+  headRepository = 'owner/repo', privatePull=false, gitlabBlob = null, sessionReader=null, repoDiscovery=null } = {}) {
   const body = new Node('body'), main = new Node('main'); body.append(main);
   let source, card, header, comments, pathNode;
   const makeCard = () => {
@@ -115,6 +115,7 @@ function fixture(url, { pull = false, initialHidden = false, delayedCard = false
       id: 'extension-id', getURL: (name) => `chrome-extension://extension-id/${name}`,
       sendMessage: async (message) => {
         messages.push(message);
+        if(message.type==='repository-detect')return typeof repoDiscovery==='function'?repoDiscovery(message):{ok:true,result:repoDiscovery||{sha:'a'.repeat(40),ref:'main',projects:[]}};
         if (message.type === 'gitlab-merge-request') return {ok:true,result:{base:'a'.repeat(40),head:'b'.repeat(40),headRepository:'fork/sub/board',files:[{file:'design/root.kicad_sch',oldFile:'old.kicad_sch',status:'renamed'}],warnings:[]}};
         if (message.type === 'githubPull') return { ok: true, result: {
           base: 'a'.repeat(40), baseTip:'c'.repeat(40), head: 'b'.repeat(40), headRepository, changedFiles: 1, private:privatePull
@@ -503,4 +504,43 @@ test('background session cancellation is private to its unpredictable read ID an
  ui.send({type:'repository-session-cancel',requestId:'load-'+'c'.repeat(32)});assert.equal(signals[0].aborted,false);
  ui.send({type:'repository-session-cancel',requestId:a});assert.equal(signals[0].aborted,true);assert.equal(signals[1].aborted,false);
  ui.send({type:'repository-session-cancel',requestId:b});await new Promise(r=>setImmediate(r));
+});
+
+test('repository main-page detection offers pinned project selection without hiding repository content',async()=>{
+ const ui=fixture('https://github.com/owner/repo',{repoDiscovery:{sha:'c'.repeat(40),ref:'main',projects:['design/board.kicad_pro','other/second.kicad_pro']}});
+ await new Promise(setImmediate);
+ assert.equal(ui.messages[0].type,'repository-detect');assert.equal(ui.messages[0].ref,'HEAD');
+ const open=find(ui.body,node=>node.tag==='button'&&node.textContent==='Open KiCad project');assert.ok(open);open.click();
+ const frame=find(ui.body,node=>node.tag==='iframe');assert.ok(frame);const query=new URL(frame.src).searchParams;
+ assert.equal(query.get('head'),'c'.repeat(40));assert.equal(query.get('file'),'design/board.kicad_pro');assert.equal(ui.source.hidden,false);
+ assert.equal(walk(ui.body).filter(node=>node.className.startsWith('top')).length,1,'repository picker and preview share one header');
+ assert.equal(walk(ui.body).filter(node=>node.textContent==='Open full viewer').length,1);
+ const picker=find(ui.body,node=>node.tag==='select');picker.value='other/second.kicad_pro';open.click();assert.equal(walk(ui.body).filter(node=>node.tag==='iframe').length,1);
+ assert.equal(new URL(find(ui.body,node=>node.tag==='iframe').src).searchParams.get('file'),'other/second.kicad_pro');
+ assert.equal(walk(ui.body).filter(node=>node.textContent==='Open full viewer').length,1,'replacing the preview removes its external actions');
+ find(ui.body,node=>node.textContent==='Close preview').click();
+ assert.equal(find(ui.body,node=>node.tag==='iframe'),undefined);
+ find(ui.body,node=>node.textContent==='Open visual preview').click();
+ assert.ok(find(ui.body,node=>node.tag==='iframe'),'compact controls retain close and reopen');
+ const host=find(ui.body,node=>node.dataset.kicadVisualReview!==undefined);host.remove();ui.tick();assert.equal(host.isConnected,true,'GitHub same-URL DOM replacement remounts existing prompt');
+});
+
+test('normal repositories do not retain a misleading project action or repeatedly scan',async()=>{
+ const ui=fixture('https://github.com/owner/plain');await new Promise(setImmediate);ui.tick();ui.tick();
+ assert.equal(find(ui.body,node=>node.dataset.kicadVisualReview!==undefined),undefined);assert.equal(ui.messages.filter(message=>message.type==='repository-detect').length,1);
+});
+
+test('repository discovery ignores stale replies and shows access errors without blocking the host page',async()=>{
+ let done;const ui=fixture('https://github.com/owner/repo',{repoDiscovery:()=>new Promise(resolve=>{done=resolve;})});
+ ui.location.href='https://github.com/owner/repo/issues';ui.tick();done({ok:true,result:{sha:'d'.repeat(40),projects:['board.kicad_pro']}});await new Promise(setImmediate);
+ assert.equal(find(ui.body,node=>node.dataset.kicadVisualReview!==undefined),undefined);
+ const denied=fixture('https://github.com/owner/private',{repoDiscovery:()=>Promise.resolve({ok:false,error:'GitHub returned HTTP 403'})});await new Promise(setImmediate);
+ assert.ok(find(denied.body,node=>node.textContent.includes('discovery unavailable')));assert.equal(denied.source.hidden,false);
+});
+
+test('GitLab repository landing prompt carries its exact host and nested namespace',async()=>{
+ const ui=fixture('https://gitlab.com/group/sub/board',{repoDiscovery:{sha:'e'.repeat(40),ref:'main',projects:['design/board.kicad_pro']}});await new Promise(setImmediate);
+ assert.equal(ui.messages[0].provider,'gitlab');assert.equal(ui.messages[0].host,'https://gitlab.com');assert.equal(ui.messages[0].repository,'group/sub/board');
+ find(ui.body,node=>node.textContent==='Open KiCad project').click();const query=new URL(find(ui.body,node=>node.tag==='iframe').src).searchParams;
+ assert.equal(query.get('provider'),'gitlab');assert.equal(query.get('host'),'https://gitlab.com');assert.equal(query.get('head'),'e'.repeat(40));
 });

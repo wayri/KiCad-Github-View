@@ -5,6 +5,50 @@
   const ownerPattern = /^[A-Za-z0-9_.-]+$/;
   const repoPattern = /^[A-Za-z0-9_.-]+$/;
 
+  // Repository landing/tree pages only. Keep this separate from drawing routes.
+  function repositoryRoute(url, {gitlabHosts=[]}={}) {
+    let page;try{page=new URL(url);}catch{return null;}
+    if(page.protocol!=='https:'||page.username||page.password)return null;
+    const parts=page.pathname.split('/').filter(Boolean).map(decodeSegment);
+    if(!parts.every(Boolean))return null;
+    if(page.origin==='https://github.com'){
+      if(!parts.slice(0,2).every(part=>ownerPattern.test(part)))return null;
+      if(parts.length===2)return {kind:'repository',repository:parts.join('/')};
+      if(parts.length>=4&&parts[2]==='tree')return {kind:'repository',repository:parts.slice(0,2).join('/'),tail:parts.slice(3)};
+      return null;
+    }
+    if(page.origin!=='https://gitlab.com'&&!gitlabHosts.includes(page.origin))return null;
+    const split=parts.indexOf('-');
+    if(split<0&&parts.length>=2&&parts.every(part=>ownerPattern.test(part)))return {kind:'repository',provider:'gitlab',host:page.origin,repository:parts.join('/')};
+    if(split>=2&&parts.slice(0,split).every(part=>ownerPattern.test(part))&&parts[split+1]==='tree'&&parts.length>split+2)return {kind:'repository',provider:'gitlab',host:page.origin,repository:parts.slice(0,split).join('/'),tail:parts.slice(split+2)};
+    return null;
+  }
+
+  function repositoryRef(parsedRoute,scripts=[],gitlabData=null){
+    if(!parsedRoute||parsedRoute.kind!=='repository')return null;
+    if(!parsedRoute.tail)return 'HEAD';
+    const tail=parsedRoute.tail.join('/'),matches=[];
+    const add=ref=>{if(typeof ref==='string'&&ref.length<=500&&ref.split('/').every(p=>p&&p!=='.'&&p!=='..')&&!/[\\\x00-\x20\x7f]/.test(ref)&&(tail===ref||tail.startsWith(ref+'/')))matches.push(ref);};
+    if(gitlabData?.projectPath===parsedRoute.repository)add(gitlabData.originalBranch||gitlabData.ref);
+    for(const text of scripts){
+      if(typeof text!=='string'||text.length>5_000_000)continue;
+      let data;try{data=JSON.parse(text);}catch{continue;}
+      const visit=(value,depth)=>{if(!value||typeof value!=='object'||depth>14)return;add(value.refInfo?.name);for(const child of Object.values(value))if(child&&typeof child==='object')visit(child,depth+1);};visit(data,0);
+    }
+    // Slash refs and directory paths require authoritative branch metadata.
+    matches.sort((a,b)=>b.length-a.length);
+    return matches[0]||(parsedRoute.tail.length===1?parsedRoute.tail[0]:null);
+  }
+
+  function detectedProjects(entries){
+    const files=[...new Set((Array.isArray(entries)?entries:[]).filter(item=>item?.type==='blob'&&item.mode!=='120000'&&/\.kicad_(pro|sch|pcb)$/i.test(item.path||'')&&filePath(item.path)).map(item=>item.path))];
+    const projects=files.filter(file=>/\.kicad_pro$/i.test(file));
+    // Offer standalone drawings only in directories without a saved project.
+    const directory=file=>file.includes('/')?file.slice(0,file.lastIndexOf('/')):'';
+    const projectDirs=new Set(projects.map(directory));
+    return [...projects,...files.filter(file=>!/^.*\.kicad_pro$/i.test(file)&&!projectDirs.has(directory(file)))].sort((a,b)=>Number(/\.kicad_pro$/i.test(b))-Number(/\.kicad_pro$/i.test(a))||a.split('/').length-b.split('/').length||a.localeCompare(b)).slice(0,100);
+  }
+
   function route(url, {gitlabHosts = []} = {}) {
     let parsed;
     try { parsed = new URL(url); } catch { return null; }
@@ -125,6 +169,6 @@
     return params;
   }
 
-  root.KiCadGitHub = { route, filePath, embeddedBlobData, blobRequest, viewerParams };
+  root.KiCadGitHub = { route, repositoryRoute, repositoryRef, detectedProjects, filePath, embeddedBlobData, blobRequest, viewerParams };
   if (typeof module === "object" && module.exports) module.exports = root.KiCadGitHub;
 })(typeof globalThis === "object" ? globalThis : this);

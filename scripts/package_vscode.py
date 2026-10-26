@@ -19,6 +19,8 @@ ASSETS = ('analysis-data.js', 'analysis-viewer.html', 'analysis-viewer.css', 'an
     'vendor/spike-board3d.bundle.js', 'vendor/SPIKE-ENGINE-NOTICE.md', 'vendor/THREE-LICENSE',
 )
 ASSETS += ('population-inspection.js','population-photo.js','population-review.js','testpoint-tools.js','photo-alignment.js','component-links.js','photo-review.js','photo-review.css')
+ASSETS += ('compact-surfaces.css','compact-surfaces.js')
+ASSETS += ('workspace-chrome.css','workspace-chrome.js','chat-content.js','chat-panel.js','chat-panel.css')
 ASSETS += ('ui-foundation.css','tool-surfaces.css','gerber-camera.js')
 ASSETS += ('pdf-tools.js','pdf-viewer.html','pdf-viewer.css','pdf-viewer.js','vendor/pdfjs/FILES.json') + tuple('vendor/pdfjs/'+name for name in json.loads((ROOT/'extension/vendor/pdfjs/FILES.json').read_text())['files'])
 ASSETS += ('mention-users.js','repository-explorer.js','repository-explorer.css','layer-colors.js','load-worker-vscode.js')
@@ -27,6 +29,7 @@ BUILD_INPUTS = ('github-review-api.js', 'gitlab-review-api.js', 'step-decoder.js
 ASSETS += ('variant-manager.js', 'bom-import.js', 'bom-viewer.html', 'bom-viewer.js','bom-workspace.js', 'bom-field-table.js', 'bom-viewer.css', 'calculator-tools.js', 'calculator-viewer.html', 'calculator-viewer.js', 'calculator-viewer.css', 'analysis-spatial.js', 'analysis-overlay.js', 'analysis-bom-link.js')
 ASSETS += ('calculator-catalog.js','calculator-visuals.js')
 ASSETS += ('tool-header.css','tool-header.js')
+ASSETS += ('startup-health.js',)
 ASSETS += ('section-pages.js','section-pages.css','board-setup-ui.js','board-setup-ui.css','mobile-sidebar.js','mobile-sidebar.css','testpoint-tools.css','sheet-hierarchy-links.js','responsive-controls.js','phone-polish.css')
 HOST_FILES = ('git-history-tree.js', 'remote-collaboration.js', 'conflict-host.js', 'package.json', 'extension.js', 'webview-bridge.js', 'README.md', 'GUIDE.md', 'icon.png', 'LICENSE.txt')
 README_IMAGES = ('images/schematic-review.jpg', 'images/pcb-inspection.jpg',

@@ -1,6 +1,6 @@
 "use strict";
 // Host-only collaboration. The webview never supplies credentials or destinations.
-const REMOTE_OPERATIONS=new Set(['comment-mention-users','mention-users','comment-policy-status','comment-remote-list','github-thread-read','github-annotations','github-discussion-categories','github-comment-policy','github-publish-comment','github-recover-publication','comment-publish','open-options']);
+const REMOTE_OPERATIONS=new Set(['chat-thread-list','chat-message-write','chat-reaction','comment-mention-users','mention-users','comment-policy-status','comment-remote-list','github-thread-read','github-annotations','github-discussion-categories','github-comment-policy','github-publish-comment','github-recover-publication','comment-publish','open-options']);
 function remoteURL(value){
  if(typeof value!=='string'||value.length>1000)return null;
  let host,path;const ssh=/^git@([^:/]+):(.+)$/.exec(value);
@@ -77,6 +77,9 @@ function createHost(vscode,{sameScope,comments,apiFactory,readCommitted,fetch:fe
   if(message.type==='open-options')return connect(session);
   if(!REMOTE_OPERATIONS.has(message.type))throw Error('Unsupported remote collaboration operation.');
   const write=['github-publish-comment','github-recover-publication','comment-publish'].includes(message.type);
+  const chat=message.type==='chat-message-write';
+  if(chat&&message.annotation){const a=message.annotation.anchor;if(a?.repository!==session.scope.repository||a.ref!==session.scope.ref||!session.paths.has(a.file))throw Error('Chat annotation belongs to another workspace.');await verify(session,ctx);}
+  if(chat)await credential(ctx,ctx.provider==='github');
   if(write||['github-annotations','comment-remote-list'].includes(message.type))await verify(session,ctx);
   if(write){if(!message.comment)throw Error('An explicit review note is required.');const a=message.comment.anchor;if(a?.repository!==session.scope.repository||a.ref!==session.scope.ref||!session.paths.has(a.file))throw Error('Publication anchor belongs to another workspace.');await credential(ctx,ctx.provider==='github');}
   let requests=0,bytes=0,projectId=null;const deadline=Date.now()+120000;
@@ -104,7 +107,16 @@ function createHost(vscode,{sameScope,comments,apiFactory,readCommitted,fetch:fe
   if(['mention-users','comment-mention-users'].includes(message.type)){const mentions=require('./media/mention-users.js').create({authorizationHeaders:async()=>{const value=await credential(ctx,false,session.context.secrets);return value?{Authorization:'Bearer '+value.token}:{};},fetcher:safeFetch});return mentions.lookup({...message,provider:ctx.provider,host:ctx.host,repository:ctx.repository});}
   const api=(apiFactory||require('./media/'+ctx.provider+'-review-host-api.js'))(dependencies);api.hostProjectId=()=>projectId;
   const scope={provider:ctx.provider,...(ctx.provider==='gitlab'?{host:ctx.host}:{}),repository:ctx.repository,ref:ctx.ref,file:mapFile(ctx,file)};
-  if(message.type==='github-thread-read')return api.readThread({...scope,kind:message.kind,number:message.number});
+  if(message.type==='github-thread-read')return api.readThread({...scope,kind:message.kind,number:message.number,includeCapabilities:message.includeCapabilities===true});
+  if(message.type==='chat-thread-list')return api.chatThreadList({...scope,kind:message.kind,page:message.page,cursor:message.cursor});
+  if(message.type==='chat-reaction')throw Error('Chat reactions are not supported by this provider bridge.');
+  if(chat){
+   if(typeof message.clientMutationId!=='string'||!/^[A-Za-z0-9_-]{16,100}$/.test(message.clientMutationId)||!['issue','discussion'].includes(message.thread?.kind)||!Number.isSafeInteger(message.thread?.number)||message.thread.number<1)throw Error('Invalid chat publication identity.');
+   const key=JSON.stringify(['chat',session.scope.boundary.toString(),ctx.provider,ctx.host,ctx.repository,message.thread.kind,message.thread.number,message.clientMutationId]);
+   if(publicationLocks.has(key))throw Error('This chat message is already being sent. Wait before retrying.');
+   publicationLocks.set(key,true);
+   try{const annotation=message.annotation?{...message.annotation,anchor:{...message.annotation.anchor,...scope,file:mapFile(ctx,message.annotation.anchor.file)}}:undefined;return await api.chatMessageWrite({...message,...scope,...(annotation?{annotation}:{})});}finally{publicationLocks.delete(key);}
+  }
   if(['github-comment-policy','comment-policy-status'].includes(message.type))return ctx.provider==='github'?api.commentPolicyStatus(ctx.repository):api.commentPolicyStatus(ctx.host,ctx.repository);
   if(message.type==='github-discussion-categories'){if(ctx.provider!=='github')throw Error('GitLab uses issue discussions.');return (await api.categories(ctx.repository)).categories;}
   const outbound=message.comment?{...message,repository:ctx.repository,provider:ctx.provider,host:ctx.host,comment:{...message.comment,anchor:{...message.comment.anchor,...scope,file:mapFile(ctx,message.comment.anchor.file)}}}:null;

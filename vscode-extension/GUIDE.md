@@ -114,9 +114,11 @@ Labels are presentation overlays: they do not change connectivity or source file
 
 ## Measurements, analytics and validation boundaries
 
-Press **M**, select a start point, and move the pointer for a live distance/angle/X/Y overlay; select the endpoint to pin a distance. Ruler controls also provide angle measurement, snapping and grid spacing. **Alt** bypasses snapping, **Shift** constrains horizontal/vertical movement, and **Escape** exits. Geometry snapping follows visible saved geometry and layer isolation. Measurements work in flipped 2D views; 3D measurement is unavailable.
+Press **M**, select a start point, and move the pointer for a live distance/angle/X/Y overlay; select the endpoint to pin a distance. Ruler controls also provide angle measurement, snapping and grid spacing. **Alt** bypasses snapping, **Shift** constrains horizontal/vertical movement, and **Escape** exits. Geometry snapping follows visible saved geometry and layer isolation. Measurements work in flipped 2D views. Recent measurements retain the last five completed distance/angle results in this session and can reopen their original sheet. In 3D, Measure selects two visible model-surface points and shows distance and XYZ deltas in mm or mils, with five-entry replay history. Endpoints on footprint stand-ins are marked approximate; this measures rendered surfaces, not native clearance or DRC.
 
 Saved board-outline extents are axis-aligned bounds of Edge.Cuts geometry, including detached shapes; they do not validate a closed manufacturable outline. Zone analytics report saved polygon areas, and routing/placement indicators are review candidates rather than native KiCad unrouted counts, DRC or placement validation. File-only schematic net inference has the limitations displayed by the renderer.
+
+Open **Tools → Reports** for KiCad Monkey design/netlist JSON and other saved analysis exports. They open in a dedicated Results tab with searchable data and properties. Workspace, symlink and file-size boundaries still apply.
 
 ERC/DRC controls display **saved reports**. The extension does not run native KiCad ERC/DRC, refill zones, route tracks, edit circuit connectivity, or certify manufacturing readiness.
 

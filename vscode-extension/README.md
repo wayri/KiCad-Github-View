@@ -34,7 +34,7 @@ Open the drawing's **BoM manager**: a full-width table with sticky headers and a
 
 ![KiCad-style BoM field table](https://raw.githubusercontent.com/wayri/kiview-marketplace-assets/7542d75ae3afbfd9444255ddcf330455742672bf/assembly-bom.jpg)
 
-**Testpoints & nets** helps plan probing. Board analytics and saved ERC/DRC reports help review existing design data. Available workspace models can load in the 3D board view.
+**Testpoints & nets** helps plan probing. Board analytics and saved ERC/DRC reports help review existing design data. Available workspace models can load in the 3D board view. Measure works in 2D and between 3D model surfaces, with five-entry session history. **Tools → Reports** opens saved KiCad Monkey design/netlist JSON and analysis data in a native Results tab.
 
 ## Browse files and Git history
 

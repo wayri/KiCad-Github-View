@@ -85,12 +85,13 @@ final class GitHubClient {
     }
     private void check(int epoch) throws IOException {
         NativeLoadOperation.checkCurrent();
+        NativeChatScope.checkCurrent();
         if (!current(epoch) || Thread.currentThread().isInterrupted()) throw new Failure("GitHub request cancelled");
     }
     private synchronized String credential(int epoch) throws IOException { check(epoch); return token; }
 
     static boolean cancellableRead(String action) {
-        return java.util.Arrays.asList("repositories", "notifications", "import", "revision-import", "revision-resolve", "revision-branches", "revision-commits", "repository-tree", "repository-history", "repository-branches", "review-list", "review-categories", "review-thread", "review-read", "review-contributors", "review-policy").contains(action);
+        return java.util.Arrays.asList("repositories", "notifications", "import", "revision-import", "revision-resolve", "revision-branches", "revision-commits", "repository-tree", "repository-history", "repository-branches", "review-list", "chat-thread-list", "review-categories", "review-thread", "review-read", "review-contributors", "review-policy").contains(action);
     }
     JSONObject handleLoad(JSONObject request, int epoch, NativeLoadOperation operation) throws Exception {
         if (!cancellableRead(request.optString("action"))) throw new IllegalArgumentException("Only project reads can be stopped");
@@ -121,6 +122,8 @@ final class GitHubClient {
             case "review-list": return reviewList(request, epoch);
             case "review-categories": return categories(repository(request), epoch);
             case "review-thread": return reviewThread(request, epoch);
+            case "chat-message-write": return chatWrite(request,epoch);
+            case "chat-thread-list": return chatThreadList(request,epoch);
             case "review-publish": return publish(request, epoch);
             case "review-upload": return upload(request, epoch);
             case "review-read": return reviewRead(request, epoch);
@@ -643,8 +646,11 @@ final class GitHubClient {
         if (!who.isEmpty() && !who.matches("[A-Za-z0-9](?:[A-Za-z0-9-]{0,37}[A-Za-z0-9])?")) throw new Failure("Invalid GitHub thread author");
         String created = item.getString(discussion ? "createdAt" : "created_at"), updated = item.getString(discussion ? "updatedAt" : "updated_at");
         if (!created.matches("\\d{4}-\\d\\d-\\d\\dT\\d\\d:\\d\\d:\\d\\d(?:\\.\\d{1,3})?Z") || !updated.matches("\\d{4}-\\d\\d-\\d\\dT\\d\\d:\\d\\d:\\d\\d(?:\\.\\d{1,3})?Z")) throw new Failure("Invalid GitHub thread timestamp");
-        return new JSONObject().put("id", id).put("author", who.isEmpty() ? JSONObject.NULL : who).put("createdAt", created)
-                .put("updatedAt", updated).put("body", body).put("url", url).put("replyTo", parent == null ? JSONObject.NULL : parent);
+        JSONObject result=new JSONObject().put("id", id).put("author", who.isEmpty() ? JSONObject.NULL : who).put("createdAt", created)
+                .put("updatedAt", updated).put("body", body).put("bodyTruncated",encoded.length>limit).put("url", url).put("replyTo", parent == null ? JSONObject.NULL : parent);
+        if(discussion&&item.has("id"))result.put("nodeId",nodeId(item.getString("id"))).put("viewerCanUpdate",item.optBoolean("viewerCanUpdate",false)).put("viewerDidAuthor",item.optBoolean("viewerDidAuthor",false));
+        if(author!=null&&author.has("id"))result.put("authorId",NativeChatRequest.remoteId(author,"id"));
+        return result;
     }
     private JSONObject reviewThread(JSONObject request, int epoch) throws Exception {
         String repo = repository(request), kind = kind(request), url;
@@ -656,7 +662,7 @@ final class GitHubClient {
         if (kind.equals("issue")) {
             JSONObject source = api("/repos/" + repo + "/issues/" + number, epoch, 4 * 1024 * 1024);
             if (source.getInt("number") != number) throw new Failure("GitHub returned a different thread");
-            thread = record(source, false, url, String.valueOf(number), null, budget).put("title", source.getString("title")).put("state", source.getString("state"));
+            thread = record(source, false, url, String.valueOf(number), null, budget).put("title", source.getString("title")).put("state", source.getString("state")).put("locked",source.optBoolean("locked")).put("isPullRequest",source.has("pull_request"));
             int count = source.getInt("comments");
             for (int page = 1; page <= 4 && comments.length() < count && budget[0] < 1024 * 1024; page++) {
                 JSONArray rows = new JSONArray(network("https://api.github.com/repos/" + repo + "/issues/" + number + "/comments?per_page=50&page=" + page, null, credential(epoch), epoch, 4 * 1024 * 1024));
@@ -668,8 +674,8 @@ final class GitHubClient {
             }
             if (count > comments.length()) budget[1] = 1;
         } else {
-            String fields = "id databaseId body createdAt updatedAt author{login}";
-            String query = "query($owner:String!,$name:String!,$number:Int!,$cursor:String){repository(owner:$owner,name:$name){discussion(number:$number){number title closed " + fields + " comments(first:50,after:$cursor){nodes{" + fields + " replies(first:10){nodes{" + fields + "} pageInfo{hasNextPage endCursor}}} pageInfo{hasNextPage endCursor}}}}}";
+            String fields = "id databaseId body createdAt updatedAt author{login} viewerCanUpdate viewerDidAuthor";
+            String query = "query($owner:String!,$name:String!,$number:Int!,$cursor:String){repository(owner:$owner,name:$name){discussion(number:$number){number title closed locked " + fields + " comments(first:50,after:$cursor){nodes{" + fields + " replies(first:10){nodes{" + fields + "} pageInfo{hasNextPage endCursor}}} pageInfo{hasNextPage endCursor}}}}}";
             String[] names = repo.split("/"); String cursor = ""; Set<String> seen = new HashSet<>();
             java.util.ArrayList<JSONObject> replyTasks = new java.util.ArrayList<>(); int requests = 0;
             for (int page = 0; page < 4 && comments.length() < 200 && budget[0] < 1024 * 1024; page++) {
@@ -678,7 +684,7 @@ final class GitHubClient {
                 requests++;
                 if (source.getInt("number") != number) throw new Failure("GitHub returned a different Discussion");
                 if (thread == null) thread = record(source, true, url, String.valueOf(number), null, budget)
-                        .put("title", source.getString("title")).put("state", source.getBoolean("closed") ? "closed" : "open");
+                        .put("title", source.getString("title")).put("state", source.getBoolean("closed") ? "closed" : "open").put("locked",source.getBoolean("locked"));
                 JSONArray rows = source.getJSONObject("comments").getJSONArray("nodes");
                 for (int i = 0; i < rows.length() && comments.length() < 200; i++) {
                     JSONObject row = rows.getJSONObject(i); long id = row.getLong("databaseId"); if (id <= 0) throw new Failure("Invalid Discussion comment identifier");
@@ -723,7 +729,62 @@ final class GitHubClient {
         }
         if (budget[1] != 0) warnings.put("Thread readback was bounded at 200 comments, 10 requests or the text limit. Open GitHub for the complete conversation.");
         check(epoch);
-        return thread.put("kind", kind).put("number", number).put("comments", comments).put("warnings", warnings);
+        thread.put("kind", kind).put("number", number).put("comments", comments).put("warnings", warnings);
+        if(request.optBoolean("includeCapabilities",false))chatCapabilities(thread,repo,kind,epoch);
+        return thread;
+    }
+    private JSONObject chatThreadList(JSONObject request,int epoch)throws Exception {
+        NativeChatRequest.validateScope(request.getString("ref"),request.getString("file"));String repo=repository(request),kind=kind(request);int page=positive(request,"page",1,5);JSONArray threads=new JSONArray();boolean more,truncated=false;String cursor=NativeChatRequest.cursor(request),previousCursor=cursor;if(kind.equals("issue")&&request.has("cursor")&&!request.isNull("cursor"))throw new Failure("Issue discovery does not use a cursor");
+        if(kind.equals("issue")){JSONArray rows=new JSONArray(network("https://api.github.com/repos/"+repo+"/issues?state=all&sort=updated&direction=desc&per_page=20&page="+page,null,credential(epoch),epoch,4*1024*1024));if(rows.length()>20)throw new Failure("Invalid issue page size");for(int i=0;i<rows.length();i++){JSONObject row=rows.getJSONObject(i);if(row.has("pull_request"))continue;int number=positive(row,"number",0,Integer.MAX_VALUE);if(number==0)throw new Failure("Invalid issue number");String updated=row.getString("updated_at");if(!NativeChatRequest.timestamp(updated))throw new Failure("Invalid thread timestamp");threads.put(new JSONObject().put("kind",kind).put("number",number).put("title",NativeChatRequest.summaryTitle(row)).put("state",NativeChatRequest.summaryState(row,false)).put("author",NativeChatRequest.summaryAuthor(row,false)).put("updatedAt",updated).put("url",threadUrl(repo,kind,number)));}more=rows.length()==20&&page<5;truncated=rows.length()==20&&page==5;
+        }else{String[]names=repo.split("/");JSONObject value=graphql("query($owner:String!,$name:String!,$cursor:String){repository(owner:$owner,name:$name){discussions(first:20,after:$cursor,orderBy:{field:UPDATED_AT,direction:DESC}){nodes{number title closed updatedAt author{login}} pageInfo{hasNextPage endCursor}}}}",new JSONObject().put("owner",names[0]).put("name",names[1]).put("cursor",cursor.isEmpty()?JSONObject.NULL:cursor),epoch).getJSONObject("repository").getJSONObject("discussions");JSONArray rows=value.getJSONArray("nodes");if(rows.length()>20)throw new Failure("Invalid Discussion page size");for(int i=0;i<rows.length();i++){JSONObject row=rows.getJSONObject(i);int number=positive(row,"number",0,Integer.MAX_VALUE);String updated=row.getString("updatedAt");if(number==0||!NativeChatRequest.timestamp(updated))throw new Failure("Invalid Discussion summary");threads.put(new JSONObject().put("kind",kind).put("number",number).put("title",NativeChatRequest.summaryTitle(row)).put("state",row.getBoolean("closed")?"closed":"open").put("author",NativeChatRequest.summaryAuthor(new JSONObject().put("user",row.opt("author")),false)).put("updatedAt",updated).put("url",threadUrl(repo,kind,number)));}boolean providerMore=value.getJSONObject("pageInfo").getBoolean("hasNextPage");more=providerMore&&page<5;truncated=providerMore&&page==5;cursor=more?value.getJSONObject("pageInfo").getString("endCursor"):"";if(more&&(cursor.isEmpty()||cursor.length()>1024||hasControl(cursor)||cursor.equals(previousCursor)))throw new Failure("Invalid Discussion pagination");}
+        return new JSONObject().put("threads",threads).put("hasMore",more).put("cursor",cursor).put("nextPage",more?page+1:JSONObject.NULL).put("truncated",truncated);
+    }
+    private void chatCapabilities(JSONObject thread,String repo,String kind,int epoch)throws Exception {
+        boolean allowed=false;String viewer="";long viewerId=0;
+        try{if(credential(epoch)!=null){JSONObject user=api("/user",epoch,1024*1024);viewer=user.getString("login");viewerId=NativeChatRequest.remoteId(user,"id");if(!viewer.matches("[A-Za-z0-9](?:[A-Za-z0-9-]{0,37}[A-Za-z0-9])?"))throw new Failure("Invalid account identity");allowed=policyStatus(repo,epoch).getBoolean("allowed");}}catch(Exception denied){check(epoch);}
+        allowed=allowed&&!thread.optBoolean("locked")&&!thread.optBoolean("isPullRequest");thread.put("capabilities",new JSONObject().put("create",allowed).put("reply",allowed).put("edit",allowed).put("reactions",false).put("replyMode",kind.equals("issue")?"quoted":"native"));
+        JSONArray messages=thread.getJSONArray("comments");for(int i=0;i<messages.length();i++){JSONObject item=messages.getJSONObject(i);boolean own=!viewer.isEmpty()&&viewer.equalsIgnoreCase(item.optString("author"))&&(kind.equals("discussion")?item.optBoolean("viewerDidAuthor"):viewerId>0&&viewerId==item.optLong("authorId",0));item.put("canEdit",allowed&&own&&!item.optBoolean("bodyTruncated")&&(!kind.equals("discussion")||item.optBoolean("viewerCanUpdate")&&item.optBoolean("viewerDidAuthor"))&&!item.optString("body").contains("kicad-review:"));}
+    }
+    private JSONObject chatWrite(JSONObject request,int epoch)throws Exception {
+        NativeChatRequest input=new NativeChatRequest(request);String repo=repository(request);authenticated(epoch);
+        if(request.has("annotation")&&!request.getJSONObject("annotation").getJSONObject("anchor").optString("provider","github").equals("github"))throw new Failure("Annotation provider mismatch");
+        JSONObject user=api("/user",epoch,1024*1024);String viewer=user.getString("login");long viewerId=NativeChatRequest.remoteId(user,"id");if(!viewer.matches("[A-Za-z0-9](?:[A-Za-z0-9-]{0,37}[A-Za-z0-9])?"))throw new Failure("Invalid account identity");
+        if(!policyStatus(repo,epoch).getBoolean("allowed"))throw new Failure("Repository policy blocks chat messages");
+        String key="chat_"+hash(viewerId+"|"+repo.toLowerCase(Locale.ROOT)+"|"+input.kind+"|"+input.number+"|"+input.mutationId),digest=hash(input.fingerprint(viewerId+":"+viewer.toLowerCase(Locale.ROOT)));
+        String saved=reviewReceipts.getString(key,null);if(saved!=null){JSONObject prior=new JSONObject(saved);if(!digest.equals(prior.optString("digest")))throw new Failure("This chat mutation identifier was already used for another message");if(prior.has("result"))return prior.getJSONObject("result").put("duplicate",true);throw new Failure("The earlier chat write has an unconfirmed outcome; inspect GitHub before retrying");}
+        JSONObject thread=reviewThread(new JSONObject().put("repository",repo).put("kind",input.kind).put("number",input.number),epoch),target=null;
+        String targetId=input.operation.equals("reply")?input.replyTo:input.messageId;JSONArray comments=thread.getJSONArray("comments");for(int i=0;i<comments.length();i++){JSONObject row=comments.getJSONObject(i);if(row.getString("id").equals(targetId))target=row;}
+        if(!input.operation.equals("create")&&target==null)throw new Failure("The message is not present in this verified thread; reload the conversation");
+        if(input.operation.equals("edit")&&(!viewer.equalsIgnoreCase(target.optString("author"))||input.kind.equals("issue")&&viewerId!=target.optLong("authorId",0)||!input.expectedUpdatedAt.equals(target.optString("updatedAt"))||target.optBoolean("bodyTruncated")||target.optString("body").contains("kicad-review:")))throw new Failure("The message changed, is not yours, or contains a drawing annotation; reload before editing");
+        String body=input.outgoingBody,parent="",discussionId="",commentNode="";
+        if(input.kind.equals("issue")){
+            JSONObject root=api("/repos/"+repo+"/issues/"+input.number,epoch,4*1024*1024);if(root.optInt("number")!=input.number||root.has("pull_request")||root.optBoolean("locked"))throw new Failure("This Issue cannot accept chat messages");
+            if(input.operation.equals("reply"))body="> Reply to ["+(target.isNull("author")?"message":target.getString("author"))+"]("+target.getString("url")+")\n\n"+body;
+            if(input.operation.equals("edit")){JSONObject fresh=api("/repos/"+repo+"/issues/comments/"+input.messageId,epoch,4*1024*1024);String expected="https://api.github.com/repos/"+repo+"/issues/"+input.number;
+                if(!String.valueOf(NativeChatRequest.remoteId(fresh,"id")).equals(input.messageId)||!expected.equalsIgnoreCase(fresh.optString("issue_url"))||fresh.optJSONObject("user")==null||viewerId!=NativeChatRequest.remoteId(fresh.getJSONObject("user"),"id")||!viewer.equalsIgnoreCase(fresh.getJSONObject("user").optString("login"))||!input.expectedUpdatedAt.equals(fresh.optString("updated_at"))||fresh.optString("body").contains("kicad-review:"))throw new Failure("The message changed or belongs to another Issue");commentNode=nodeId(fresh.getString("node_id"));}
+        }else{
+            String[] names=repo.split("/");JSONObject discussion=graphql("query($owner:String!,$name:String!,$number:Int!){repository(owner:$owner,name:$name){discussion(number:$number){id number locked}}}",new JSONObject().put("owner",names[0]).put("name",names[1]).put("number",input.number),epoch).getJSONObject("repository").getJSONObject("discussion");
+            if(discussion.getInt("number")!=input.number||discussion.getBoolean("locked"))throw new Failure("Discussion is locked or its identity changed");discussionId=nodeId(discussion.getString("id"));if(!discussionId.equals(thread.getString("nodeId")))throw new Failure("Discussion identity changed before publication");
+            if(input.operation.equals("reply")){parent=target.isNull("replyTo")?target.getString("id"):target.getString("replyTo");JSONObject root=null;for(int i=0;i<comments.length();i++){JSONObject row=comments.getJSONObject(i);if(parent.equals(row.getString("id")))root=row;}if(root==null)throw new Failure("Discussion reply root is unavailable");commentNode=nodeId(root.getString("nodeId"));}
+            else if(input.operation.equals("edit")){if(!target.optBoolean("viewerCanUpdate")||!target.optBoolean("viewerDidAuthor"))throw new Failure("Discussion message edit permission is unavailable");commentNode=nodeId(target.getString("nodeId"));JSONObject fresh=graphql("query($id:ID!){node(id:$id){... on DiscussionComment{id databaseId updatedAt body author{login} viewerCanUpdate viewerDidAuthor discussion{id number}}}}",new JSONObject().put("id",commentNode),epoch).getJSONObject("node");if(!commentNode.equals(fresh.optString("id"))||!input.messageId.equals(String.valueOf(fresh.getLong("databaseId")))||!input.expectedUpdatedAt.equals(fresh.optString("updatedAt"))||!fresh.optBoolean("viewerCanUpdate")||!fresh.optBoolean("viewerDidAuthor")||fresh.optJSONObject("author")==null||!viewer.equalsIgnoreCase(fresh.getJSONObject("author").optString("login"))||!discussionId.equals(fresh.getJSONObject("discussion").optString("id"))||fresh.optString("body").contains("kicad-review:"))throw new Failure("Discussion message changed before editing");}
+        }
+        if(body.getBytes(StandardCharsets.UTF_8).length>65536)throw new Failure("Chat reply exceeds the provider body limit");
+        synchronized(this){check(epoch);if(reviewReceipts.contains(key))throw new Failure("This chat operation is already in progress; inspect GitHub before retrying");claimWrite("publish");if(!reviewReceipts.edit().putString(key,new JSONObject().put("digest",digest).put("pending",true).toString()).commit())throw new Failure("Could not reserve chat publication");}
+        JSONObject value;String messageId,updated,url=threadUrl(repo,input.kind,input.number);
+        if(input.kind.equals("issue")){
+            String path="/repos/"+repo+"/issues/"+input.number+"/comments";
+            long id;if(input.operation.equals("edit")){value=graphql("mutation($input:UpdateIssueCommentInput!){updateIssueComment(input:$input){issueComment{id databaseId updatedAt}}}",new JSONObject().put("input",new JSONObject().put("id",commentNode).put("body",body)),epoch).getJSONObject("updateIssueComment").getJSONObject("issueComment");if(!commentNode.equals(value.optString("id")))throw new Failure("GitHub returned another comment identity");id=value.getLong("databaseId");updated=value.getString("updatedAt");}
+            else{value=new JSONObject(networkJson(path,new JSONObject().put("body",body),epoch));id=value.getLong("id");updated=value.getString("updated_at");}
+            if(id<=0||input.operation.equals("edit")&&!input.messageId.equals(String.valueOf(id)))throw new Failure("GitHub did not confirm the expected message");messageId=String.valueOf(id);url+="#issuecomment-"+messageId;
+        }else{
+            JSONObject variables=new JSONObject(),payload=new JSONObject().put("body",body);
+            if(input.operation.equals("edit")){payload.put("commentId",commentNode);variables.put("input",payload);value=graphql("mutation($input:UpdateDiscussionCommentInput!){updateDiscussionComment(input:$input){comment{id databaseId updatedAt}}}",variables,epoch).getJSONObject("updateDiscussionComment").getJSONObject("comment");}
+            else{payload.put("discussionId",discussionId);if(!parent.isEmpty())payload.put("replyToId",commentNode);variables.put("input",payload);value=graphql("mutation($input:AddDiscussionCommentInput!){addDiscussionComment(input:$input){comment{id databaseId updatedAt}}}",variables,epoch).getJSONObject("addDiscussionComment").getJSONObject("comment");}
+            nodeId(value.getString("id"));long id=value.getLong("databaseId");if(id<=0||input.operation.equals("edit")&&!input.messageId.equals(String.valueOf(id)))throw new Failure("GitHub did not confirm the expected Discussion message");messageId=String.valueOf(id);updated=value.getString("updatedAt");url+="#discussioncomment-"+messageId;
+        }
+        if(!NativeChatRequest.timestamp(updated))throw new Failure("GitHub returned an invalid chat timestamp");
+        JSONObject result=new JSONObject().put("provider","github").put("kind",input.kind).put("number",input.number).put("messageId",messageId).put("url",url).put("updatedAt",updated).put("replyTo",input.operation.equals("reply")?(input.kind.equals("discussion")?parent:input.replyTo):JSONObject.NULL);
+        synchronized(this){check(epoch);if(!reviewReceipts.edit().putString(key,new JSONObject().put("digest",digest).put("result",result).toString()).commit())throw new Failure("Message accepted but receipt could not be saved; inspect GitHub before retrying");}return result;
     }
     private JSONObject publish(JSONObject request, int epoch) throws Exception {
         authenticated(epoch);
@@ -946,7 +1007,7 @@ final class GitHubClient {
                 connection.setRequestMethod("POST"); connection.setDoOutput(true);
                 connection.setRequestProperty("Content-Type", contentType);
                 connection.setFixedLengthStreamingMode(bytes.length);
-                try (java.io.OutputStream stream = connection.getOutputStream()) { stream.write(bytes); }
+                check(epoch);try (java.io.OutputStream stream = connection.getOutputStream()) { check(epoch);stream.write(bytes); }
             }
             int status = connection.getResponseCode();
             check(epoch);

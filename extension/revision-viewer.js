@@ -6,7 +6,7 @@
 
   const params=new URLSearchParams(location.search),repository=params.get('repository'),requestedFile=params.get('file');let rootFile=requestedFile,ref=params.get('ref');
 
-  const provider=params.get('provider')||'github',providerContext=provider==='gitlab'?{provider,host:params.get('host')||'https://gitlab.com'}:{};const send=message=>chrome.runtime.sendMessage({...message,...providerContext});
+  const provider=params.get('provider')||'github',providerContext=provider==='gitlab'?{provider,host:params.get('host')||'https://gitlab.com'}:{};const send=message=>chrome.runtime.sendMessage({...message,...providerContext}).then(reply=>{if(reply?.accessIssue)globalThis.KiCadStartupHealth?.showAccessIssue(reply.accessIssue);return reply;});
   if(params.get('workspace')==='1')document.body.dataset.workspace='true';
   const status=document.getElementById('status'),pcb=/\.kicad_pcb$/i.test(rootFile||'');
 
@@ -358,7 +358,7 @@
 
         try{const engine=await load(),modelPaths=await assetPaths();if(disposed)return;pane.hidden=false;canvas.canvas.hidden=true;
 
-          scene=engine.mountBoard3D(pane,files.find(file=>file.path===rootFile).content,{dark,boardPath:rootFile,assetPaths:modelPaths,assetWarnings,loadAsset:modelAssetCache.load,externalInspector:true,onSelect:record=>workspace?.select3D(record),onInspect:record=>workspace?.inspect3D(record),onComment:record=>workspace?.comment3D(record)});
+          scene=engine.mountBoard3D(pane,files.find(file=>file.path===rootFile).content,{dark,boardPath:rootFile,assetPaths:modelPaths,assetWarnings,loadAsset:modelAssetCache.load,externalInspector:true,onMeasurementMode:active=>{$("measureButton").setAttribute("aria-pressed",String(active));$("measurementStatus").textContent=active?"3D measurement: select two model surface points.":"";},onSelect:record=>workspace?.select3D(record),onInspect:record=>workspace?.inspect3D(record),onComment:record=>workspace?.comment3D(record)});
 
           workspace.setScene(scene);syncFloatingLayers();$('drawingLegend').hidden=true;lock(true);mode.setAttribute('aria-pressed','true');if($('renderMode'))$('renderMode').textContent='3D';
 

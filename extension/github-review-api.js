@@ -299,7 +299,7 @@ const KiCadGitHubReviewApi = (() => {
       "GitHub sign-in failed. Check the OAuth App client ID and start again.", true);
   }
 
-  async function request(path, token, body, epoch = authEpoch) {
+  async function request(path, token, body, epoch = authEpoch, method) {
     if (typeof path !== "string" || !path.startsWith("/repos/") && path !== "/graphql" ||
         path.includes("//") || path.includes("..")) throw fail("Invalid GitHub API path.", true);
     await assertCurrentToken(token, epoch);
@@ -308,7 +308,7 @@ const KiCadGitHubReviewApi = (() => {
     let response;
     try {
       response = await fetch(API + path, {
-        method: body === undefined ? "GET" : "POST",
+        method: method || (body === undefined ? "GET" : "POST"),
         headers: { Accept: "application/vnd.github+json", "Content-Type": "application/json",
           "X-GitHub-Api-Version": "2022-11-28", Authorization: `Bearer ${token}` },
         body: body === undefined ? undefined : JSON.stringify(body),
@@ -419,8 +419,8 @@ const KiCadGitHubReviewApi = (() => {
     };
   }
 
-  // Ordinary conversations are read-only and deliberately separate from drawing annotations.
-  async function readThread({repository,ref,file,kind,number,provider}={}) {
+  // Conversation source identifiers are retained for server-verified chat mutations.
+  async function readThread({repository,ref,file,kind,number,provider,includeCapabilities=false}={}) {
     const scope=KiCadReviewComments.normalizeScope({repository,ref,file,provider});
     if(scope.provider==='gitlab'||!['issue','discussion'].includes(kind)||!NUMBER(number))throw fail('Invalid GitHub thread request.',true);
     const [owner,name]=repoParts(repository), session=await readbackSession(kind==='issue');
@@ -443,7 +443,8 @@ const KiCadGitHubReviewApi = (() => {
         if(root)throw fail('GitHub returned invalid thread provenance.',true);
         warn('Some thread comments had invalid provenance and were omitted.');return null;
       }
-      return {id:root?String(number):String(id),author:author?.login||null,createdAt,updatedAt,body:text(v.body),url:root?url:url+(kind==='issue'?`#issuecomment-${id}`:`#discussioncomment-${id}`),replyTo:parentId||null};
+      const body=text(v.body),bodyTruncated=body!==(v.body||'');
+      return {id:root?String(number):String(id),author:author?.login||null,createdAt,updatedAt,body,bodyTruncated,url:root?url:url+(kind==='issue'?`#issuecomment-${id}`:`#discussioncomment-${id}`),replyTo:parentId||null,nodeId:validId(kind==='issue'?v.node_id:v.id)?(kind==='issue'?v.node_id:v.id):null,canEdit:false,canReply:!root,viewerCanUpdate:v.viewerCanUpdate===true,viewerDidAuthor:v.viewerDidAuthor===true};
     };
     const add=(v,parentId)=>{if(comments.length>=200||stopped){stopped=true;return;}const r=record(v,false,parentId);if(r&&!seen.has(r.id)){seen.add(r.id);comments.push(r);}};
     let thread;
@@ -451,7 +452,7 @@ const KiCadGitHubReviewApi = (() => {
       const endpoint=`${API}/repos/${repository}/issues/${number}`;
       const value=await readbackJson(endpoint,session);requests++;
       if(value?.number!==number||!['open','closed'].includes(value.state)||typeof value.title!=='string'||!Number.isSafeInteger(value.comments)||value.comments<0)throw fail('GitHub returned an invalid Issue response.',true);
-      thread={kind,number,title:value.title.slice(0,1024),state:value.state,...record(value,true)};
+      thread={kind,number,title:value.title.slice(0,1024),state:value.state,isPullRequest:!!value.pull_request,locked:value.locked===true,...record(value,true)};
       for(let page=1;comments.length<200&&!stopped&&(page-1)*50<value.comments;page++){
         const values=await readbackJson(`${endpoint}/comments?per_page=50&page=${page}`,session);requests++;
         if(!Array.isArray(values)||values.length>50)throw fail('GitHub returned an invalid Issue comment response.',true);
@@ -460,8 +461,8 @@ const KiCadGitHubReviewApi = (() => {
         if(page>=4){if(value.comments>page*50)stopped=true;break;}
       }
     }else{
-      const fields='id databaseId body createdAt updatedAt author{login}';
-      const query=`query($owner:String!,$name:String!,$number:Int!,$cursor:String){repository(owner:$owner,name:$name){discussion(number:$number){number title closed ${fields} comments(first:50,after:$cursor){nodes{${fields} replies(first:10){nodes{${fields}} pageInfo{hasNextPage endCursor}}} pageInfo{hasNextPage endCursor}}}}}`;
+      const fields='id databaseId body createdAt updatedAt author{login} viewerCanUpdate viewerDidAuthor';
+      const query=`query($owner:String!,$name:String!,$number:Int!,$cursor:String){repository(owner:$owner,name:$name){discussion(number:$number){number title closed locked ${fields} comments(first:50,after:$cursor){nodes{${fields} replies(first:10){nodes{${fields}} pageInfo{hasNextPage endCursor}}} pageInfo{hasNextPage endCursor}}}}}`;
       const replyQuery=`query($id:ID!,$cursor:String){node(id:$id){... on DiscussionComment{replies(first:50,after:$cursor){nodes{${fields}} pageInfo{hasNextPage endCursor}}}}}`;
       const next=(p,previous)=>{if(!p||typeof p.hasNextPage!=='boolean'){warn('Thread pagination was incomplete.');return null;}if(!p.hasNextPage)return null;if(typeof p.endCursor!=='string'||p.endCursor.length>1024||!p.endCursor||/[\x00-\x1f]/.test(p.endCursor)||p.endCursor===previous){warn('Thread pagination was invalid.');return null;}return p.endCursor;};
       const replies=[],cursors=new Set();let cursor=null;
@@ -469,7 +470,7 @@ const KiCadGitHubReviewApi = (() => {
         const result=await readbackJson(API+'/graphql',session,{query,variables:{owner,name,number,cursor}});requests++;
         const value=result.data?.repository?.discussion;
         if(value?.number!==number||typeof value.title!=='string'||typeof value.closed!=='boolean'||!Array.isArray(value.comments?.nodes)||value.comments.nodes.length>50)throw fail('GitHub returned an invalid Discussion response.',true);
-        if(!thread)thread={kind,number,title:value.title.slice(0,1024),state:value.closed?'closed':'open',...record(value,true)};
+        if(!thread)thread={kind,number,title:value.title.slice(0,1024),state:value.closed?'closed':'open',locked:value.locked===true,...record(value,true)};
         for(const v of value.comments.nodes){add(v);if(stopped)break;if(!Array.isArray(v?.replies?.nodes)||v.replies.nodes.length>10){warn('Some Discussion replies were unavailable.');continue;}for(const r of v.replies.nodes)add(r,String(v.databaseId));const r=next(v.replies.pageInfo,null);if(r&&validId(v.id)&&NUMBER(v.databaseId))replies.push({id:v.id,parentId:String(v.databaseId),cursor:r});else if(r)warn('Some Discussion replies had invalid identifiers.');}
         cursor=next(value.comments.pageInfo,cursor);if(cursor&&cursors.has(cursor)){warn('Thread pagination repeated.');cursor=null;}if(cursor)cursors.add(cursor);
       }while(cursor&&!stopped&&requests<10);
@@ -482,7 +483,92 @@ const KiCadGitHubReviewApi = (() => {
       }while(task.cursor);if(stopped)break;}
     }
     if(stopped)warn('Thread readback was truncated at 200 comments, 10 requests or the text limit. Open the remote thread for the complete conversation.');
-    await session.check();return {...thread,comments,warnings};
+    let allowed=false,login=null;
+    if(includeCapabilities&&session.token){try{const policy=await commentPolicyStatus(repository);allowed=policy.allowed===true;login=policy.login||null;}catch{warn('Chat permissions could not be verified.');}}
+    allowed=allowed&&LOGIN.test(login||'')&&!thread.locked&&!thread.isPullRequest;
+    for(const comment of comments)comment.canEdit=allowed&&!!login&&comment.author?.toLowerCase()===login.toLowerCase()&&(kind==='issue'||comment.viewerCanUpdate&&comment.viewerDidAuthor)&&!comment.bodyTruncated&&!comment.body.includes('kicad-review:');
+    await session.check();return {...thread,comments,warnings,capabilities:{create:allowed,reply:allowed,edit:allowed,reactions:false,replyMode:kind==='issue'?'quoted':'native'}};
+  }
+
+  async function chatMessageWrite(message) {
+    if(message?.provider!==undefined&&message.provider!=='github'||message?.host!==undefined&&message.host!=='https://github.com')throw fail('Invalid GitHub chat provider.',true);
+    const {repository,ref,file}=KiCadReviewComments.normalizeScope(message||{}),{kind,number}=message.thread||{};
+    const action=message.action,mutation=message.clientMutationId;
+    if(!['issue','discussion'].includes(kind)||!NUMBER(number)||!['create','reply','edit'].includes(action)||typeof message.body!=='string'||!message.body.trim()||new TextEncoder().encode(message.body).length>60000||typeof mutation!=='string'||!/^[A-Za-z0-9_-]{16,100}$/.test(mutation))throw fail('Invalid chat message request.',true);
+    if(action==='edit'&&(typeof message.messageId!=='string'||typeof message.expectedUpdatedAt!=='string')||action==='reply'&&typeof message.replyTo!=='string')throw fail('A verified message and revision are required.',true);
+    const note=message.annotation?KiCadReviewComments.validateComment(message.annotation):null;
+    if(!note&&message.body.includes('<!-- kicad-review:'))throw fail('Drawing context must use a validated chat annotation.',true);
+    if(note&&(action==='edit'||note.id!==mutation||note.text!==message.body||note.anchor.repository!==repository||note.anchor.ref!==ref||note.anchor.file!==file||note.anchor.provider==='gitlab'||note.threadType!==kind))throw fail('Chat annotation does not match its message and drawing.',true);
+    const key='github-chat:'+JSON.stringify([repository.toLowerCase(),kind,number,mutation]);
+    if(locks.has(key)){try{await locks.get(key);}catch{}return chatMessageWrite(message);}
+    const work=(async()=>{
+      const current=authEpoch,token=await getToken(),policy=await commentPolicyStatus(repository);
+      if(!policy.allowed||!LOGIN.test(policy.login||''))throw fail('Repository policy or account verification blocked this chat message.',true);
+      await assertCurrentToken(token,current);
+      const saved=(await chrome.storage.local.get(key))[key];
+      const fingerprint=JSON.stringify([action,ref,file,message.messageId||null,message.replyTo||null,message.expectedUpdatedAt||null,message.body,note,policy.login.toLowerCase()]);
+      const digest=Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(fingerprint))),b=>b.toString(16).padStart(2,'0')).join('');
+      if(saved){if(saved.digest!==digest)throw fail('This chat request ID already belongs to another message.',true);if(saved.status==='done')return {...saved.result,duplicate:true};throw fail('Previous chat message has an unconfirmed outcome. Inspect GitHub before retrying.');}
+      const thread=await readThread({repository,ref,file,kind,number});
+      if(thread.locked||thread.isPullRequest)throw fail('This thread cannot accept Issue or Discussion chat messages.',true);
+      const target=thread.comments.find(row=>row.id===(action==='edit'?message.messageId:message.replyTo));
+      if(action!=='create'&&!target)throw fail('Message does not belong to the fetched thread or is outside its read limit.',true);
+      if(action==='edit'&&(target.author?.toLowerCase()!==policy.login.toLowerCase()||target.updatedAt!==message.expectedUpdatedAt||kind==='discussion'&&(!target.viewerCanUpdate||!target.viewerDidAuthor)))throw fail('Message ownership or revision changed. Refresh before editing.',true);
+      if(action==='edit'&&(target.bodyTruncated||target.body.includes('kicad-review:')))throw fail('Edit complete drawing annotations on the service to preserve their anchors.',true);
+      await KiCadReviewComments.reservePublication(chrome.storage.local,JSON.stringify(['github','https://github.com']),Date.now());
+      let body=message.body,replyTo=null;
+      if(note){const attachments=note.capture?[await uploadCapture(note,repository,token,current)]:note.attachments;body=KiCadReviewComments.toMarkdown(attachments?{...note,attachments}:note);}
+      if(action==='reply'){
+        replyTo=target.replyTo||target.id;
+        if(kind==='issue')body=`> Reply to [${target.author||'message'}](${target.url})\n\n${body}`;
+      }
+      await assertCurrentToken(token,current);
+      await chrome.storage.local.set({[key]:{status:'pending',digest}});
+      try{
+        let result;
+        if(kind==='issue')result=await request(action==='edit'?`/repos/${repository}/issues/comments/${target.id}`:`/repos/${repository}/issues/${number}/comments`,token,{body},current,action==='edit'?'PATCH':'POST');
+        else{
+          const parent=action==='reply'?thread.comments.find(row=>row.id===replyTo):null;
+          if(!validId(thread.nodeId)||action==='edit'&&!validId(target.nodeId)||action==='reply'&&!validId(parent?.nodeId))throw fail('GitHub did not provide a verified Discussion identifier.',true);
+          const operation=action==='edit'?'updateDiscussionComment':'addDiscussionComment',inputType=action==='edit'?'UpdateDiscussionCommentInput':'AddDiscussionCommentInput';
+          const input=action==='edit'?{commentId:target.nodeId,body,clientMutationId:mutation}:{discussionId:thread.nodeId,body,clientMutationId:mutation,...(parent?{replyToId:parent.nodeId}:{})};
+          const value=await graphql(token,`mutation($input:${inputType}!){${operation}(input:$input){comment{id databaseId updatedAt}}}`,{input},current);
+          result=value.data?.[operation]?.comment;
+        }
+        const id=kind==='issue'?result?.id:result?.databaseId;
+        if(!NUMBER(id)||action==='edit'&&String(id)!==target.id)throw fail('GitHub did not confirm the chat message. Inspect the thread before retrying.');
+        const updatedAt=kind==='issue'?result.updated_at:result.updatedAt;
+        if(typeof updatedAt!=='string'||!/^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d(?:\.\d{1,3})?Z$/.test(updatedAt)||!Number.isFinite(Date.parse(updatedAt)))throw fail('GitHub did not confirm the message revision. Inspect the thread before retrying.');
+        const response={provider:'github',kind,number,messageId:String(id),url:thread.url+(kind==='issue'?`#issuecomment-${id}`:`#discussioncomment-${id}`),updatedAt,replyTo};
+        await chrome.storage.local.set({[key]:{status:'done',digest,result:response}});return response;
+      }catch(error){if(error.definitive)await chrome.storage.local.remove(key);throw error;}
+    })();
+    locks.set(key,work);try{return await work;}finally{locks.delete(key);}
+  }
+
+  async function chatThreadList(message={}) {
+    const {repository,provider}=KiCadReviewComments.normalizeScope(message),{kind,page=1,cursor=null}=message;
+    if(provider==='gitlab'||!['issue','discussion'].includes(kind)||!Number.isSafeInteger(page)||page<1||page>5||cursor!==null&&(typeof cursor!=='string'||!cursor||cursor.length>1024||/[\x00-\x1f\x7f]/.test(cursor))||kind==='issue'&&cursor!==null)throw fail('Invalid chat conversation listing.',true);
+    const session=await readbackSession(kind==='issue'),[owner,name]=repoParts(repository),warnings=[];
+    let rows,hasMore=false,nextCursor=null;
+    if(kind==='issue'){
+      rows=await readbackJson(`${API}/repos/${repository}/issues?state=all&sort=updated&direction=desc&per_page=20&page=${page}`,session);
+      if(!Array.isArray(rows)||rows.length>20)throw fail('GitHub returned an invalid conversation list.',true);
+      hasMore=rows.length===20;rows=rows.filter(row=>!row?.pull_request);
+    }else{
+      const query='query($owner:String!,$name:String!,$cursor:String){repository(owner:$owner,name:$name){discussions(first:20,after:$cursor,orderBy:{field:UPDATED_AT,direction:DESC}){nodes{number title closed updatedAt author{login}} pageInfo{hasNextPage endCursor}}}}';
+      const result=await readbackJson(API+'/graphql',session,{query,variables:{owner,name,cursor}}),connection=result.data?.repository?.discussions;
+      if(!Array.isArray(connection?.nodes)||connection.nodes.length>20||typeof connection.pageInfo?.hasNextPage!=='boolean')throw fail('GitHub returned an invalid Discussion listing.',true);
+      rows=connection.nodes;hasMore=connection.pageInfo.hasNextPage;nextCursor=connection.pageInfo.endCursor;
+      if(hasMore&&(typeof nextCursor!=='string'||!nextCursor||nextCursor.length>1024||/[\x00-\x1f\x7f]/.test(nextCursor)||nextCursor===cursor))throw fail('GitHub returned invalid Discussion pagination.',true);
+    }
+    const threads=[];
+    for(const row of rows){
+      const author=kind==='issue'?row?.user:row?.author,updatedAt=kind==='issue'?row?.updated_at:row?.updatedAt;
+      if(!NUMBER(row?.number)||typeof row.title!=='string'||kind==='issue'&&!['open','closed'].includes(row.state)||kind==='discussion'&&typeof row.closed!=='boolean'||author!==null&&!LOGIN.test(author?.login||'')||typeof updatedAt!=='string'||!/^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d(?:\.\d{1,3})?Z$/.test(updatedAt)||!Number.isFinite(Date.parse(updatedAt))){if(!warnings.length)warnings.push('Some conversations with invalid provenance were omitted.');continue;}
+      threads.push({kind,number:row.number,title:row.title.slice(0,1024),state:kind==='issue'?row.state:row.closed?'closed':'open',author:author?.login||null,updatedAt,url:`https://github.com/${repository}/${kind==='issue'?'issues':'discussions'}/${row.number}`});
+    }
+    await session.check();return {threads,hasMore:hasMore&&page<5,...(hasMore&&page<5?{nextPage:page+1,...(kind==='discussion'?{cursor:nextCursor}:{})}:{}),warnings,...(hasMore&&page===5?{truncated:true}:{})};
   }
 
   async function createPullReader(repository, number) {
@@ -955,7 +1041,7 @@ const KiCadGitHubReviewApi = (() => {
     }
   }
   return { tokenStatus, setToken, clearToken, resetAuth, authorizationHeaders, deviceStatus, startDevice, pollDevice, cancelDevice,
-    commentPolicyStatus, validatePolicy, categories, publish, recoverPublication, publishArgs, validRepository, createAnnotationReader, createPullReader, readDiscussionAnnotations, readThread };
+    commentPolicyStatus, validatePolicy, categories, publish, recoverPublication, publishArgs, validRepository, createAnnotationReader, createPullReader, readDiscussionAnnotations, readThread, chatMessageWrite, chatThreadList };
 })();
 
 if (typeof globalThis === "object") globalThis.KiCadGitHubReviewApi = KiCadGitHubReviewApi;

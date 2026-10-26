@@ -5,6 +5,11 @@
   "use strict";
 
   const finitePoint = p => Number.isFinite(p?.x) && Number.isFinite(p?.y);
+  const schematicPalettes=Object.freeze({
+    dark:Object.freeze({'#000000':'#dce3ed','#840000':'#e8ba83','#a90000':'#e8a5a5','#008400':'#77c8ad','#008484':'#8ebdd8','#000080':'#91b7ec','#a0a0a0':'#667386','#725600':'#a8c8ef'}),
+    light:Object.freeze({'#000000':'#283447','#840000':'#8e4358','#a90000':'#9a4051','#008400':'#217864','#008484':'#2c6f89','#000080':'#3e64a3','#a0a0a0':'#a3adbb','#725600':'#48678f'})
+  });
+  function schematicColor(color,dark){return schematicPalettes[dark?'dark':'light'][String(color).toLowerCase()]||color;}
 
   function arcThrough(a,b,c) {
 
@@ -250,9 +255,9 @@
 
     zoom_to_page(){this.paperVisible=true;const p=this.design?.page||{width:297,height:210};this.viewport.camera.bbox={x:-5,y:-5,w:p.width+10,h:p.height+10};}
 
-    background(){return this.dark?'#101720':'#dfe5e9';}
+    background(){return this.dark?'#151820':'#e7ebf1';}
 
-    paperColor(){return this.dark?'#18242d':'#fffef9';}
+    paperColor(){return this.dark?'#1c2029':'#fdfdff';}
 
     cameraState(){const c=this.viewport.camera;return {x:c.center.x,y:c.center.y,zoom:c.zoom,width:c.width,height:c.height,flipped:c.flipped};}
     prepareMotion(){
@@ -348,7 +353,7 @@
 
     paint(p,style={}){
 
-      const ctx=this.ctx,c=this.viewport.camera;ctx.save();let color=style.color||p.color||'#819baa';if(p.hole)color=this.paperVisible?this.paperColor():this.background();else if(!style.color&&!this.pcb&&this.dark){const map={'#000000':'#ccd6d5','#840000':'#ef827b','#008400':'#73ce91','#000080':'#96b7ea','#a0a0a0':'#657d89'};color=map[color.toLowerCase()]||color;}
+      const ctx=this.ctx,c=this.viewport.camera;ctx.save();let color=style.color||p.color||'#819baa';if(p.hole)color=this.paperVisible?this.paperColor():this.background();else if(!style.color){if(!this.pcb)color=schematicColor(color,this.dark);else if(p.layer&&root.KiCadLayerColors?.reviewColorFor)color=root.KiCadLayerColors.reviewColorFor(p.layer,this.dark);}
 
       ctx.strokeStyle=color;ctx.fillStyle=p.fill==='background'?(this.paperVisible?this.paperColor():this.background()):color;ctx.globalAlpha=Math.max(0,Math.min(1,(Number.isFinite(p.opacity)?p.opacity:1)*(style.opacity??1)));ctx.lineWidth=Math.max(.65,(p.width||.15)*c.zoom);ctx.lineCap='round';ctx.lineJoin='round';
 
@@ -370,7 +375,7 @@
 
   }
 
-  root.KiCadOwnedCanvas={netLabels,Camera,arcThrough,bounds,hitPrimitive,mount:(host,options)=>new Viewport(host,options)};
+  root.KiCadOwnedCanvas={netLabels,Camera,arcThrough,bounds,hitPrimitive,schematicColor,mount:(host,options)=>new Viewport(host,options)};
 
   if(typeof module==='object'&&module.exports)module.exports=root.KiCadOwnedCanvas;
 

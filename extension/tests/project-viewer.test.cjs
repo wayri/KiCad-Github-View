@@ -9,6 +9,7 @@ function runtime(fetchFile,inventoryFiles=null,inventoryError=null,options={}){
  KiCadOwnedCanvas:{mount(host){mounted=new EventTarget();Object.assign(mounted,{canvas:new Element(),viewport:{camera:new(require('../owned-canvas.js').Camera)(800,600)},resize(){},zoom_to_board(){},draw(){this.renderPrimitives?.(this.canvas.getContext(),this.viewport.camera,this);},dispose(){}});mounted.canvas.width=800;mounted.canvas.height=600;return mounted;}},
  chrome:{runtime:{getURL:name=>name,sendMessage:async request=>{requests.push(request);if(request.type==='project-inventory'&&inventoryError)return{ok:false,error:inventoryError};if(request.type==='project-inventory')return{ok:true,result:{snapshotRef:'a'.repeat(40),warnings:[],files:inventoryFiles||[{path:'board.kicad_pro'},{path:'top.gbr'},{path:'bottom.gbr'}]}};try{return{ok:true,result:{path:request.file,content:await fetchFile(request.file)}};}catch(e){return{ok:false,error:e.message};}}}}};
  if(options.vscode)context.KiCadVSCodeContext={search:context.location.search};
+ if(options.engineeringLauncher)context.KiCadEngineeringLauncher=options.engineeringLauncher;
  vm.runInNewContext(fs.readFileSync(path.join(__dirname,'../project-viewer.js'),'utf8'),context);return{get,requests,canvas:()=>mounted,handlers,bodyClasses,parentMessages};
 }
 const gerber='%FSLAX24Y24*%%MOMM*%%ADD10C,1*%D10*X010000Y020000D03*M02*';
@@ -114,9 +115,10 @@ test('saved reports default to inert Analysis with immutable iframe scope and se
  view.get('analysisTab').onclick();assert.equal(view.get('analysisReportList').children.length,6);
 });
 
-test('VS Code analysis shows an actionable limitation without embedding a frame',async()=>{
- const view=runtime(async()=> 'time,V\n0,1',[{path:'board.kicad_pro'},{path:'analysis.csv'}],null,{vscode:true});await tick();
- await view.get('fileTree').children.find(n=>n.textContent==='analysis.csv').onclick();assert.equal(view.get('analysisPanel').hidden,false);assert.match(view.get('analysisPreviewHost').textContent,/browser extension and Android/);assert.equal(view.get('analysisPreviewHost').children.some(n=>n.src),false);
+test('VS Code analysis launches an explicit native Results view without embedding a frame',async()=>{
+ const opened=[],view=runtime(async()=> 'time,V\n0,1',[{path:'board.kicad_pro'},{path:'analysis.csv'}],null,{vscode:true,engineeringLauncher:{open:(page,source)=>opened.push({page,source})}});await tick();
+ await view.get('fileTree').children.find(n=>n.textContent==='analysis.csv').onclick();assert.equal(view.get('analysisPanel').hidden,false);assert.match(view.get('analysisPreviewHost').textContent,/Results tab/);assert.equal(view.get('analysisPreviewHost').children.some(n=>n.src),false);
+ await view.get('analysisPreviewHost').children.find(n=>n.textContent==='Open saved report').onclick();assert.equal(opened[0].page,'analysis-viewer.html');assert.equal(opened[0].source.file,'analysis.csv');assert.equal(opened[0].source.ref,'a'.repeat(40));
 });
 test('project Stop cancels the scoped read and rejects late source activation',async()=>{
  let stop,resolveFile;const loading={indicator:(host,options)=>{stop=options.onStop;return{show(){},hide(){},dispose(){}};}};

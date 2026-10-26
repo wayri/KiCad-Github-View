@@ -25,3 +25,21 @@ body[data-ui-theme=light] .project-warnings{color:#8c551b}
 #fileSearchStatus{font-size:11px;color:var(--muted);margin:6px 0}@media(max-width:760px){.project-tree{width:100%;max-width:none;min-width:0;resize:none}}
 
 #analysisPreviewHost iframe{border:1px solid var(--line);width:100%;height:70vh;min-height:400px}#analysisReportList{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px}
+
+/* Section navigation stays one row; fields get room before navigation grows. */
+.project-app .project-tabs{flex-wrap:nowrap;overflow-x:auto;scrollbar-width:thin;align-items:center}
+.project-app .project-tabs button{flex:0 0 auto;white-space:nowrap}
+.project-app .project-tabs button.icon-caption{flex-direction:row;min-height:34px;gap:6px;padding:6px 10px}
+.project-app .settings-searchbar{gap:8px;flex-wrap:wrap}
+.project-app .settings-searchbar input{flex:1;min-width:160px;min-height:36px}
+.project-app .setting-control{min-width:0}
+.project-app .setting-control input{width:100%;min-width:0}
+@media(max-width:760px){
+ .project-app .settings-categories{display:flex;flex-wrap:nowrap;overflow-x:auto;scrollbar-width:thin;gap:4px}
+ .project-app .settings-categories button{flex:0 0 auto;white-space:nowrap;min-height:44px}
+ .project-app .setting-field{grid-template-columns:minmax(0,1fr);gap:4px;padding:8px 0}
+ .project-app .setting-field label{font-size:12px}
+ .project-app .setting-control input:not([type=checkbox]){min-height:44px;font-size:16px}
+ .project-app .project-tabs button.icon-caption{min-height:44px}
+}
+@media(pointer:coarse){.project-app .project-tabs button.icon-caption,.project-app .setting-info{min-height:44px;min-width:44px}}

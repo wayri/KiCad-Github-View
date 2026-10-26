@@ -64,5 +64,15 @@
  }
  function ruler(a,b,units='mm'){const dx=b.x-a.x,dy=b.y-a.y,distance=Math.hypot(dx,dy),angle=Math.atan2(dy,dx)*180/Math.PI,factor=units==='mil'?1000/25.4:1;return{dx,dy,distance,angle,text:`${(distance*factor).toFixed(3)} ${units} · ΔX ${(dx*factor).toFixed(3)} · ΔY ${(dy*factor).toFixed(3)} · ${angle.toFixed(1)}°`};}
  function angle(a,v,b){if(![a,v,b].every(valid))return null;const ax=a.x-v.x,ay=a.y-v.y,bx=b.x-v.x,by=b.y-v.y;if(Math.hypot(ax,ay)<1e-9||Math.hypot(bx,by)<1e-9)return null;const degrees=Math.atan2(Math.abs(ax*by-ay*bx),ax*bx+ay*by)*180/Math.PI;return{degrees,text:`${degrees.toFixed(1)}°`};}
- root.KiCadReviewTools={papers,area,page,crop,capture,ruler,angle,snap,boardExtents};if(typeof module==='object'&&module.exports)module.exports=root.KiCadReviewTools;
+ function measurementHistory(limit=5){
+  limit=Math.max(1,Math.min(20,Number.isSafeInteger(limit)?limit:5));let rows=[],next=0;
+  const clone=row=>({...row,points:row.points.map(p=>({...p}))});
+  return {add({kind='distance',points,file}){
+   if(!['distance','angle','board'].includes(kind)||typeof file!=='string'||!file||file.length>1024||!Array.isArray(points)||points.length!==(kind==='angle'?3:2)||!points.every(p=>valid(p)&&Math.abs(p.x)<=1e6&&Math.abs(p.y)<=1e6))return null;
+   const value=kind==='angle'?angle(...points):ruler(...points,'mm');if(!value)return null;
+   const key=JSON.stringify([kind,file,points.map(p=>[p.x,p.y])]);if(rows[0]?.key===key)return clone(rows[0]);
+   const row={id:++next,kind,file,points:points.map(p=>({x:p.x,y:p.y})),key};rows.unshift(row);rows.length=Math.min(rows.length,limit);return clone(row);
+  },list(){return rows.map(clone);},clear(){rows=[];}};
+ }
+ root.KiCadReviewTools={papers,area,page,crop,capture,ruler,angle,snap,boardExtents,measurementHistory};if(typeof module==='object'&&module.exports)module.exports=root.KiCadReviewTools;
 })(globalThis);

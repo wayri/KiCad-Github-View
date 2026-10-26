@@ -15,6 +15,7 @@ global.KiCadBrowserData = require('../browser-data.js');
 global.KiCadReviewComments = require('../review-comments.js');
 global.KiCadGitHubReviewApi = require('../github-review-api.js');
 global.KiCadReviewFileStore = { status: async () => ({ connected: false }) };
+global.KiCadEnvironmentDiagnostics = require('../environment-diagnostics.js');
 global.importScripts = () => {};
 global.chrome = {
   runtime: {
@@ -56,6 +57,16 @@ function withFetch(t, handler) {
   global.fetch = handler;
   t.after(() => { global.fetch = before; });
 }
+
+test('worker failures carry sanitized access warnings without treating missing files as organization blocks',async t=>{
+ withFetch(t,async()=>{throw Error('net::ERR_BLOCKED_BY_ADMINISTRATOR SECRET');});
+ const blocked=await message({type:'project',repository:'owner/repo',ref:'main',file:'board.kicad_pcb'});
+ assert.equal(blocked.ok,false);assert.equal(blocked.accessIssue?.kind,'organization-block',blocked.error);assert.equal(blocked.accessIssue.confirmed,true);assert.doesNotMatch(JSON.stringify(blocked.accessIssue),/SECRET/);
+ global.fetch=async()=>{throw TypeError('Failed to fetch');};
+ const network=await message({type:'project',repository:'owner/repo',ref:'main',file:'board.kicad_pcb'});assert.equal(network.accessIssue.kind,'connection');assert.equal(network.accessIssue.confirmed,false);
+ global.fetch=async()=>new Response('',{status:404});
+ const missing=await message({type:'project',repository:'owner/repo',ref:'main',file:'board.kicad_pcb'});assert.equal(missing.ok,false);assert.equal(missing.accessIssue,undefined);
+});
 
 test('schematic project discovery uses one complete repository tree and pins scattered source reads', async t => {
   const sources = new Map([
@@ -1077,6 +1088,20 @@ test('ordinary GitHub thread readback is restricted to extension viewers',async(
  assert.equal(called,0);const result=await message(request);assert.equal(result.ok,true);assert.equal(result.result.number,42);assert.equal(called,1);
 });
 
+test('chat publication is restricted to exact extension viewers and reactions fail explicitly',async(t)=>{
+ let called=0;const before=KiCadGitHubReviewApi.chatMessageWrite;KiCadGitHubReviewApi.chatMessageWrite=async()=>{called++;return{messageId:'12'};};t.after(()=>{KiCadGitHubReviewApi.chatMessageWrite=before;});
+ const request={type:'chat-message-write',repository:'owner/repo',ref:'main',file:'board.kicad_pcb',thread:{kind:'issue',number:42},action:'create',body:'Hello',clientMutationId:'mutation_0123456789'};
+ for(const sender of [options,githubTab(1,'/owner/repo/blob/main/board.kicad_pcb'),{id:'other',url:viewer.url}])assert.notEqual((await message(request,sender)).ok,true);
+ assert.equal(called,0);assert.equal((await message(request)).ok,true);assert.equal(called,1);assert.match((await message({...request,type:'chat-reaction'})).error,/not supported/);
+});
+
+test('chat discovery is restricted to exact extension viewers',async(t)=>{
+ let called=0;const before=KiCadGitHubReviewApi.chatThreadList;KiCadGitHubReviewApi.chatThreadList=async()=>{called++;return{threads:[],hasMore:false};};t.after(()=>{KiCadGitHubReviewApi.chatThreadList=before;});
+ const request={type:'chat-thread-list',repository:'owner/repo',ref:'main',file:'board.kicad_pcb',kind:'issue'};
+ for(const sender of [options,githubTab(1,'/owner/repo/blob/main/board.kicad_pcb'),{id:'other',url:viewer.url}])assert.notEqual((await message(request,sender)).ok,true);
+ assert.equal(called,0);assert.equal((await message(request)).ok,true);assert.equal(called,1);
+});
+
 test('trusted project viewer resolves project settings branches while rejecting unsafe paths',async(t)=>{
  let reads=0;withFetch(t,async url=>{reads++;assert.match(url,/repos\/owner\/board\/commits\/main$/);return new Response(sha('a'));});const args={type:'revision-resolve',repository:'owner/board',ref:'main',file:'design/board.kicad_pro'};const result=await message(args);assert.equal(result.ok,true);assert.equal(result.result.sha,sha('a'));assert.equal((await message({...args,file:'../board.kicad_pro'})).ok,false);assert.equal(reads,1);
 });
@@ -1222,4 +1247,29 @@ test('project inventory and settings reads support Stop and sequential loadId re
   phase='stall';const pending=message({...base,type});await nextTurn();assert.equal((await message({type:'load-cancel',loadId:base.loadId})).result.cancelled,true);assert.match((await pending).error,/cancelled/);
  }
  assert.equal(bodyCancels,2);
+});
+
+test('repository detection resolves default branch and returns only bounded pinned KiCad metadata',async t=>{
+ const urls=[];withFetch(t,async url=>{urls.push(String(url));if(url==='https://api.github.com/repos/owner/board')return json({default_branch:'release/design'});if(url.includes('/git/commits/'))return json({sha:sha('a'),tree:{sha:sha('b')}});if(url.includes('/commits/'))return new Response(sha('a'));if(url.includes('/git/trees/'))return json({sha:sha('b'),truncated:false,tree:[{path:'design/board.kicad_pro',type:'blob',mode:'100644',sha:sha('c')},{path:'design/board.kicad_sch',type:'blob',mode:'100644',sha:sha('d')},{path:'notes.txt',type:'blob',mode:'100644',sha:sha('e')},{path:'link.kicad_pro',type:'blob',mode:'120000',sha:sha('f')}]});throw Error('Unexpected discovery read '+url);});
+ const sender=githubTab(5,'/owner/board'),result=await message({type:'repository-detect',repository:'owner/board',ref:'HEAD'},sender);
+ assert.equal(result.ok,true,result.error);assert.deepEqual(result.result.projects,['design/board.kicad_pro']);assert.equal(result.result.sha,sha('a'));assert.equal(result.result.ref,'release/design');assert.equal(urls.filter(url=>url.includes('/contents/')).length,0);assert.ok(urls.some(url=>url.includes('release%2Fdesign')));
+ for(const bad of [{...sender,frameId:1},{...sender,url:'https://github.com/owner/other'},{...sender,url:'https://github.com/owner/board/issues'},viewer])assert.equal((await message({type:'repository-detect',repository:'owner/board',ref:'HEAD'},bad)).ok,false);
+ const wrongRef=await message({type:'repository-detect',repository:'owner/board',ref:'other'},githubTab(5,'/owner/board/tree/main'));assert.equal(wrongRef.ok,false);assert.match(wrongRef.error,/branch/);
+});
+
+test('repo-main detection can reuse the already-open private GitHub session after API 404',async t=>{
+ const previousQuery=chrome.tabs.query,previousSend=chrome.tabs.sendMessage,seen=[];
+ chrome.tabs.query=async options=>{assert.deepEqual(options.url,['https://github.com/owner/private','https://github.com/owner/private/*']);return [{id:61,url:'https://github.com/owner/private'}];};
+ chrome.tabs.sendMessage=async(id,request)=>{seen.push(request);return {ok:true,result:{sha:sha('f'),items:request.action==='resolve'?[]:request.path===''?[{path:'design',type:'directory'}]:[{path:'design/board.kicad_pro',type:'file'}]}};};
+ t.after(()=>{chrome.tabs.query=previousQuery;chrome.tabs.sendMessage=previousSend;});withFetch(t,async()=>new Response(null,{status:404}));
+ const result=await message({type:'repository-detect',repository:'owner/private',ref:'HEAD'},githubTab(61,'/owner/private'));
+ assert.equal(result.ok,true,result.error);assert.equal(result.result.sha,sha('f'));assert.deepEqual(result.result.projects,['design/board.kicad_pro']);assert.ok(seen.every(item=>!item.token&&!item.url&&!item.cookie));assert.ok(seen.some(item=>item.action==='directory'&&item.ref===sha('f')&&item.path==='design'));
+});
+
+test('environment diagnostics endpoint is options-only and forwards no repository credentials',async t=>{
+ const previous=global.KiCadEnvironmentDiagnostics,manifest=chrome.runtime.getManifest;let checked=0;
+ global.KiCadEnvironmentDiagnostics={check:async options=>{checked++;assert.equal(options.fetch,fetch);assert.equal(options.version,'test-version');assert.equal(Object.keys(options).sort().join(','),'fetch,permissions,version');return {ok:true};}};
+ chrome.runtime.getManifest=()=>({version:'test-version'});t.after(()=>{global.KiCadEnvironmentDiagnostics=previous;chrome.runtime.getManifest=manifest;});
+ for(const sender of [viewer,githubTab(2,'/owner/repo'),{...options,url:options.url+'/other'}])assert.notEqual((await message({type:'viewer-diagnostics'},sender)).ok,true);
+ assert.equal(checked,0);assert.deepEqual((await message({type:'viewer-diagnostics'},options)).result,{ok:true});assert.equal(checked,1);
 });

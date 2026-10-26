@@ -1273,6 +1273,15 @@
  const hexFor=layer=>entries[String(layer)]?.[0]||'#c2c2c2';
  const opacityFor=layer=>entries[String(layer)]?.[1]??1;
  const colorFor=layer=>{const hex=hexFor(layer),a=opacityFor(layer);return a===1?hex:`rgba(${parseInt(hex.slice(1,3),16)},${parseInt(hex.slice(3,5),16)},${parseInt(hex.slice(5,7),16)},${a})`;};
+ // Presentation hues keep the familiar front-red/back-blue identities while
+ // avoiding neon masks and muddy low-contrast copper on each canvas theme.
+ // The native lookup above remains available for source/default comparisons.
+ const reviewDark=Object.freeze({'F.Cu':'#ef827b','B.Cu':'#82aef2','F.SilkS':'#e8dcae','B.SilkS':'#b5c8df','F.Fab':'#b2bbc9','B.Fab':'#8d9ab0','F.CrtYd':'#c59be0','B.CrtYd':'#7bc6cf','Edge.Cuts':'#d6deea','F.Mask':'#b197d7','B.Mask':'#77bdb5','F.Paste':'#d2afa0','B.Paste':'#98c9ce'});
+ const reviewLight=Object.freeze({'F.Cu':'#b9474c','B.Cu':'#3268ae','F.SilkS':'#766126','B.SilkS':'#596a87','F.Fab':'#647086','B.Fab':'#606c83','F.CrtYd':'#8c519e','B.CrtYd':'#257b85','Edge.Cuts':'#465368','F.Mask':'#9279b8','B.Mask':'#4d968a','F.Paste':'#9d796a','B.Paste':'#448b93'});
+ function reviewColorFor(layer,dark=true){
+  const hex=(dark?reviewDark:reviewLight)[String(layer)]||hexFor(layer),alpha=opacityFor(layer);
+  return alpha===1?hex:`rgba(${parseInt(hex.slice(1,3),16)},${parseInt(hex.slice(3,5),16)},${parseInt(hex.slice(5,7),16)},${alpha})`;
+ }
  function fabricationLayer(role){
   const text=String(role||'').toLowerCase(),bottom=/bottom|\bbot\b/.test(text),side=bottom?'B.':'F.';
   if(/drill|plated/.test(text))return null;
@@ -1282,7 +1291,7 @@
   if(/silk|legend/.test(text))return side+'SilkS';
   if(/paste/.test(text))return side+'Paste';return null;
  }
- const api=Object.freeze({entries,hexFor,opacityFor,colorFor,fabricationLayer});root.KiCadLayerColors=api;
+ const api=Object.freeze({entries,hexFor,opacityFor,colorFor,reviewColorFor,fabricationLayer});root.KiCadLayerColors=api;
  if(typeof module==='object'&&module.exports)module.exports=api;
 })(globalThis);
 

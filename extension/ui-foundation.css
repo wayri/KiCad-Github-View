@@ -31,7 +31,7 @@ body.kiview-tool a{color:var(--accent)}
 body.kiview-pdf #viewport{background:var(--surface)}
 /* The PDF page itself stays white; these rules target only the surrounding UI. */
 @media(max-width:720px),(pointer:coarse){
- :is(body.kiview-tool,body.android-home,body[data-viewer]) :is(button:not(.pin),select,input:not([type=checkbox]):not([type=radio]):not([type=range]),summary){min-height:44px!important}
+ :where(body.kiview-tool,body.android-home,body[data-viewer]) :where(button:not(.pin),select,input:not([type=checkbox]):not([type=radio]):not([type=range]),summary){min-height:44px!important}
  :is(body.kiview-tool,body.android-home,body[data-viewer]) button.icon-only{min-width:44px!important}
  body.kiview-tool :is(button,input,select,textarea){font-size:14px}
  body.kiview-tool input:is([type=search],[type=text],[type=password],[type=number]){font-size:16px}
@@ -73,3 +73,22 @@ body.bom-tool #closeParts,body.gerber-tool :is(#closePanel,#closeAnalysisPanel){
 
 body[data-viewer] #drawingTools .ui-icon{width:20px;height:20px;flex-basis:20px}
 @media(max-width:720px),(pointer:coarse){body[data-viewer] #frameControls button{min-width:44px;height:44px;padding:0 8px}}
+
+/* A full-page settings section must not stretch a few fields over the viewport. */
+body[data-viewer] #viewerSettings{align-content:start;grid-auto-rows:max-content;gap:12px}
+body[data-viewer] #viewerSettings>.hint{margin-top:10px;margin-bottom:0}
+body[data-viewer] #viewerSettings>label{max-width:880px;margin-top:0;margin-bottom:0}
+body[data-viewer] #viewerSettings>.settings-grid{max-width:880px;margin-top:0;margin-bottom:0;gap:10px 16px}
+body[data-viewer] #viewerSettings>label.check{display:flex;align-items:center;gap:8px;min-height:32px}
+body[data-viewer] #viewerSettings .check input{width:18px;min-width:18px;height:18px;min-height:18px;margin:0;flex:none}
+body[data-viewer] #viewerSettings :is(select,input:not([type=checkbox])){font-size:13px;min-height:36px;padding:6px 10px}
+body[data-viewer] #viewerSettings .review-page-settings{max-width:880px;margin-top:4px}
+body[data-viewer] .property-searchbar{border-bottom:1px solid var(--line);margin-bottom:8px}
+body[data-viewer] .property-group dd{line-height:1.5;overflow-wrap:anywhere;user-select:text}
+@media(max-width:720px),(pointer:coarse){
+ body[data-viewer] #viewerSettings :is(select,input:not([type=checkbox])){min-height:44px;font-size:16px}
+ body[data-viewer] #viewerSettings>label.check{min-height:44px}
+ body[data-viewer] .property-group dl{grid-template-columns:minmax(0,1fr)}
+ body[data-viewer] .property-group dt{padding-bottom:2px;border-bottom:0;font-size:11px}
+ body[data-viewer] .property-group dd{padding-top:2px}
+}

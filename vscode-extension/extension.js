@@ -7,7 +7,7 @@ const VIEW = "kicadVisualReview.viewer", CHANNEL = "kicad-vscode:v1";
 const MAX_FILE = 8 * 1024 * 1024, MAX_PROJECT = 24 * 1024 * 1024;
 const MAX_MESSAGE = 1024 * 1024, MAX_FILES = 32;
 const MAX_SIDECAR=4*1024*1024,liveSessions=new Set(),pairTargets=new Map();
-const OPERATIONS = new Set(["repository-tree", "repository-history", "repository-branches", "preview-project-html", "project-inventory", "project-file", "open-project-file", "open-project-overview", "rule-report", "project-search-files", "open-project-drawing", "project", "repo-model-index", "repo-asset", "pair-selection", "comments-changed", "comment-list", "comment-save", "comment-delete", "storage-get", "storage-set", "open-comment-draft", "github-annotations"]);
+const OPERATIONS = new Set(["open-analysis-viewer", "close-analysis-viewer", "repository-tree", "repository-history", "repository-branches", "preview-project-html", "project-inventory", "project-file", "open-project-file", "open-project-overview", "rule-report", "project-search-files", "open-project-drawing", "project", "repo-model-index", "repo-asset", "pair-selection", "comments-changed", "comment-list", "comment-save", "comment-delete", "storage-get", "storage-set", "open-comment-draft", "github-annotations"]);
 const sharedReviewComments=require('./media/review-comments.js');
 const remoteCollaboration=require('./remote-collaboration.js').createHost(vscode,{sameScope,comments:sharedReviewComments});
 OPERATIONS.add('repository-open-file');
@@ -428,6 +428,17 @@ async function openOverview(session){
   const project={files:session.files,scope:session.scope,history:session.history},overview=createSession(session.uri,project,session.context);overview.overview=true;overview.post=message=>panel.webview.postMessage(message);
   const receiver=panel.webview.onDidReceiveMessage(message=>handleMessage(message,overview,reply=>panel.webview.postMessage(reply)));panel.onDidDispose(()=>{overview.disposed=true;liveSessions.delete(overview);receiver.dispose();});panel.webview.html=await htmlFor(panel.webview,session.context,overview);return {opened:true};
 }
+async function openAnalysis(request,session){
+  assertScope(request,session);
+  if(typeof request.path!=='string'||!/\.(json|csv|tsv|wbk|raw|txt|html?)$/i.test(request.path))throw Error('Choose a supported saved analysis report.');
+  await readProjectFile(request.path,session); // Enforce the existing workspace, symlink and byte boundaries.
+  const panel=vscode.window.createWebviewPanel('kicadVisualReview.analysis','Results: '+request.path.split('/').at(-1),vscode.ViewColumn.Beside,{enableScripts:true,localResourceRoots:[vscode.Uri.joinPath(session.context.extensionUri,'media'),session.context.extensionUri]});
+  const view=createSession(session.uri,{files:session.files,scope:session.scope,history:session.history},session.context);
+  view.analysisPath=request.path;view.closeAnalysis=()=>panel.dispose();view.post=message=>panel.webview.postMessage(message);
+  const receiver=panel.webview.onDidReceiveMessage(message=>handleMessage(message,view,reply=>panel.webview.postMessage(reply)));
+  panel.onDidDispose(()=>{view.disposed=true;liveSessions.delete(view);receiver.dispose();});
+  try{panel.webview.html=await htmlFor(panel.webview,session.context,view);}catch(error){panel.dispose();throw error;}return{opened:true};
+}
 // Working-tree inventory and immutable historical inventory are distinct.
 // Git executable/root identity always comes from the official VS Code Git API.
 const GIT_SHA=/^[0-9a-f]{40}(?:[0-9a-f]{24})?$/i;
@@ -601,6 +612,11 @@ async function dispatch(request,session) {
   if(request.type==='repository-tree')return repositoryTree(request,session);
   if(request.type==='repository-history')return repositoryHistory(request,session);
   if(request.type==='repository-branches')return repositoryBranches(request,session);
+  if(request.type==='open-analysis-viewer')return openAnalysis(request,session);
+  if(request.type==='close-analysis-viewer'){
+    if(!session.analysisPath||request.repository!==session.scope.repository||request.ref!==session.scope.ref||request.file!==session.analysisPath)throw Error('Report close belongs to another view.');
+    session.closeAnalysis();return{closed:true};
+  }
   if(['preview-project-html','project-inventory','project-file','open-project-file','open-project-overview'].includes(request.type)){
     if(request.repository!==session.scope.repository||request.ref!==session.scope.ref)throw new Error('Project request belongs to another workspace.');
     if(request.type==='project-inventory')return projectInventory(session);
@@ -689,11 +705,11 @@ function handleMessage(message,session,post) {
   const result=storageQueue.then(run,run);storageQueue=result.catch(()=>{});return result;
 }
 async function htmlFor(webview,context,session) {
-  const media=vscode.Uri.joinPath(context.extensionUri,"media"),templateUri=vscode.Uri.joinPath(media,session.overview||!safePath(session.scope.rootFile)?"project-viewer.html":"revision-viewer.html");
+  const media=vscode.Uri.joinPath(context.extensionUri,"media"),templateUri=vscode.Uri.joinPath(media,session.analysisPath?"analysis-viewer.html":session.overview||!safePath(session.scope.rootFile)?"project-viewer.html":"revision-viewer.html");
   let html=new TextDecoder().decode(await vscode.workspace.fs.readFile(templateUri));
   const nonce=secret(),resource=(name)=>webview.asWebviewUri(vscode.Uri.joinPath(media,...name.split("/"))).toString();
   const collaboration=session.history?null:await remoteCollaboration.publicContext(session);
-  const contextData={...(collaboration?{collaboration}:{}),historical:!!session.history,canOpenHistorical:true,token:session.token,loadWorkerUrl:resource("load-worker-vscode.js"),stepWorkerUrl:resource("step-worker-vscode.js"),stepWasmUrl:resource("vendor/occt/occt-import-js.wasm"),search:new URLSearchParams({repository:session.scope.repository,ref:session.scope.ref,file:session.scope.rootFile}).toString()};
+  const contextData={...(collaboration?{collaboration}:{}),drawingFile:session.scope.rootFile,historical:!!session.history,canOpenHistorical:true,token:session.token,loadWorkerUrl:resource("load-worker-vscode.js"),stepWorkerUrl:resource("step-worker-vscode.js"),stepWasmUrl:resource("vendor/occt/occt-import-js.wasm"),search:new URLSearchParams({repository:session.scope.repository,ref:session.scope.ref,file:session.analysisPath||session.scope.rootFile}).toString()};
   const bootstrap=JSON.stringify(contextData).replace(/</g,"\\u003c").replace(/\u2028/g,"\\u2028").replace(/\u2029/g,"\\u2029");
   const csp=`default-src 'none'; script-src 'nonce-${nonce}' ${webview.cspSource} 'wasm-unsafe-eval'; style-src ${webview.cspSource} 'unsafe-inline'; img-src ${webview.cspSource} data: blob: ${collaboration?(collaboration.provider==='github'?'https://github.com/user-attachments/':collaboration.host+'/'+collaboration.repository+'/uploads/ '+collaboration.host+'/-/project/') : ''}; font-src ${webview.cspSource}; connect-src ${resource('load-worker-vscode.js')} ${resource('step-worker-vscode.js')} ${resource('vendor/occt/occt-import-js.wasm')}; worker-src blob:; base-uri ${webview.cspSource}; frame-src ${resource('terms.html')};`;
   html=html.replace(/(src|href)="([^"#:]+)"/g,(match,attr,name)=>`${attr}="${escaped(resource(name))}"`);

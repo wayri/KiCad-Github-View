@@ -3,14 +3,16 @@
 (() => {
   const parse = globalThis.KiCadGitHub;
   const CSS = `
-    :host{all:initial;display:block;color-scheme:light dark;font:13px/1.45 system-ui,-apple-system,Segoe UI,sans-serif;color:#e8edf0}
+    :host{all:initial;display:block;color-scheme:inherit;font:13px/1.45 system-ui,-apple-system,Segoe UI,sans-serif;color:#e8edf0}
     *{box-sizing:border-box}button{font:inherit;cursor:pointer}button:focus-visible{outline:2px solid #61d9a5;outline-offset:2px}
     .shell{background:#101820;border:1px solid #32424a;border-radius:8px;margin:12px 0 18px;overflow:hidden;min-width:0}
-    .top{display:flex;gap:12px;align-items:center;justify-content:space-between;padding:12px 16px;border-bottom:1px solid #32424a;flex-wrap:wrap}
-    .title{font-size:15px;font-weight:700;overflow-wrap:anywhere}.badge{font-size:11px;color:#a7bac1}.controls{display:flex;gap:6px;flex-wrap:wrap;align-items:center}
+    .top{display:flex;gap:8px;align-items:center;justify-content:space-between;padding:3px 8px;border-bottom:1px solid #32424a;flex-wrap:wrap;min-height:34px}
+    .title{font-size:12px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}.badge{font-size:11px;color:#a7bac1}.controls{display:flex;gap:4px;flex-wrap:wrap;align-items:center}
+    .repository-bar{flex-wrap:nowrap}.repository-bar>.title{flex:0 0 auto}.repository-bar>.controls{flex:1;min-width:0;flex-wrap:nowrap}.repository-bar select{flex:1;min-width:80px;max-width:520px;width:0;text-overflow:ellipsis}.repository-bar button{white-space:nowrap}.repository-actions{display:flex;gap:4px;align-items:center}.shell.embedded-panel{margin:0;border:0;border-radius:0}.controls button,.controls select{min-height:28px;font-size:11px!important;padding:3px 7px!important}
+    @media(max-width:760px){.repository-bar{overflow-x:auto}.repository-bar>.controls{flex:1 0 auto}.repository-bar select{width:150px;min-width:100px}.repository-bar>.title{display:none}}@media(pointer:coarse){.controls button,.controls select{min-height:40px}}
     .controls button,.controls select,.pages button,.action,.menu button{border:1px solid #3b505a;border-radius:6px;padding:5px 9px;background:#1d2b33;color:#e8edf0;font:inherit}
     .controls button:hover,.controls select:hover,.pages button:hover,.action:hover,.menu button:hover{border-color:#77d6ad}.controls button.active,.pages button.active{background:#246344;border-color:#72d9a3}
-    .status{padding:9px 16px;color:#a8b9c0}.status.error{color:#ffb2b2}.status:empty{display:none}
+    .status{padding:9px 16px;color:#a8b9c0}.status.error{color:#ffb2b2}.status.error::before{content:'!';display:inline-grid;place-items:center;width:18px;height:18px;margin-right:7px;border-radius:50%;background:#c53040;color:#fff;font-weight:800}.status:empty{display:none}
     .body{display:grid;grid-template-columns:170px minmax(0,1fr);min-height:450px}.pages{border-right:1px solid #32424a;padding:10px;display:flex;flex-direction:column;gap:5px;max-height:70vh;overflow:auto}
     .pages button{text-align:left;overflow-wrap:anywhere}.main{min-width:0;padding:12px}.main>.controls{margin-bottom:10px}.viewport-row{display:flex;gap:8px}.viewport{position:relative;flex:1;min-width:0;height:70vh;min-height:450px;background:#fff;border:1px solid #475760;border-radius:7px;overflow:hidden;touch-action:none;cursor:grab}
     .viewport.pcb-dark{background:#121c27;border-color:#425567}.viewport:active{cursor:grabbing}.stage{position:absolute;transform-origin:0 0}.stage img,.stage canvas{position:absolute;inset:0;width:100%;height:100%;display:block}.grid-overlay{position:absolute;inset:0;pointer-events:none;z-index:2}.crosshair{position:absolute;inset:0;pointer-events:none;z-index:4}.crosshair::before,.crosshair::after{content:"";position:absolute;background:rgba(0,135,102,.7)}.crosshair::before{left:0;right:0;top:var(--cursor-y);height:1px}.crosshair::after{top:0;bottom:0;left:var(--cursor-x);width:1px}.pcb-dark .crosshair::before,.pcb-dark .crosshair::after{background:rgba(130,235,191,.7)}.marker{position:absolute;width:11px;height:11px;transform:translate(-50%,-50%);border:1.5px solid #078453;border-radius:50%;background:#d8ffbe;box-shadow:0 0 0 2px #fff8;padding:0;z-index:3;opacity:.8}.marker.selected{background:#ffda68;border-color:#aa5700;opacity:1}.marker:hover{transform:translate(-50%,-50%) scale(1.35);opacity:1}
@@ -19,6 +21,7 @@
     .details{border-top:1px solid #32424a;padding:11px 16px}.details h3{font-size:14px;margin:0 0 7px}.details dl{display:grid;grid-template-columns:max-content 1fr;gap:4px 12px;margin:0;max-height:210px;overflow:auto}.details dt{color:#a7bac1}.details dd{margin:0;overflow-wrap:anywhere}
     .menu{position:fixed;z-index:2147483647;background:#18242c;border:1px solid #739487;padding:5px;box-shadow:0 8px 24px #0008;display:grid;min-width:150px;gap:4px}.menu button{text-align:left}
     .list{display:flex;flex-wrap:wrap;gap:6px;padding:12px}.hint{color:#b6c4c7;padding:0 12px 12px;margin:0}.action{margin:8px}.code-toggle{padding:4px 9px}
+    .shell{background:light-dark(#fff,#1e2128);border-color:light-dark(#d9dee7,#343944);color:light-dark(#252c38,#e6e9ef)}.top{border-color:light-dark(#d9dee7,#343944)}.controls button,.controls select{background:light-dark(#f4f5f8,#292d36);border-color:light-dark(#d9dee7,#343944);color:inherit}.controls button.active{background:light-dark(#e6eefb,#293c59);border-color:light-dark(#b9cceb,#526c91);color:inherit}.controls button:hover,.controls select:hover{border-color:light-dark(#336ac2,#91b9ff)}.status:not(.error){color:light-dark(#616d80,#9ca5b5)}
     [hidden]{display:none!important}@media(max-width:760px){.body{grid-template-columns:1fr}.pages{flex-direction:row;border-right:0;border-bottom:1px solid #32424a;max-height:none}.pages button{white-space:nowrap}.viewport{height:55vh;min-height:280px}.viewport-row{flex-direction:column}}
   `;
   let currentUrl = "", mount = null, sequence = 0, checkTimer = null, focusPending = false;
@@ -26,7 +29,7 @@
 
   function request(type, extra = {}) {
     return chrome.runtime.sendMessage({ type, ...extra }).then((reply) => {
-      if (!reply?.ok) throw new Error(reply?.error || "The extension could not retrieve GitHub data.");
+      if (!reply?.ok) throw Object.assign(new Error(reply?.accessIssue?[reply.accessIssue.title,reply.accessIssue.message,reply.accessIssue.action].join(' '):reply?.error || "The extension could not retrieve GitHub data."),{accessIssue:reply?.accessIssue});
       return reply.result;
     });
   }
@@ -89,6 +92,7 @@
   function disposePanel(view, owner = mount) {
     if (!view) return;
     if (view.hiddenTarget) view.hiddenTarget.hidden = view.originalHidden;
+    view.externalControls?.remove();
     view.host.remove();
     const index = owner?.panels?.indexOf(view) ?? -1;
     if (index >= 0) owner.panels.splice(index, 1);
@@ -102,7 +106,7 @@
       mount = null;
     }
   }
-  function panelFor(requestBody, target, label, autoLoad = true, card = null) {
+  function panelFor(requestBody, target, label, autoLoad = true, card = null, controlsHost = null) {
     const view = mountBefore(target, card);
     const pageUrl = location.href.split("#")[0];
     const top = element("div", "top"), title = element("div", "title", label), controls = element("div", "controls");
@@ -120,9 +124,14 @@
       showCode.textContent = showingCode ? "Show visual" : "Show source";
     });
     showCode.hidden = !original;
-    controls.append(button("Refresh", "", () => load()), button("Open full viewer", "", () => window.open(viewerURL, "_blank", "noopener")), showCode);
+    if (!controlsHost) controls.append(button("Refresh", "", () => load()));
+    controls.append(button("Open full viewer", "", () => window.open(viewerURL, "_blank", "noopener")), showCode);
     controls.append(button('Close preview','',()=>{runId++;loaded=false;showingCode=false;if(original)original.hidden=view.originalHidden;content.hidden=false;content.replaceChildren(button('Open visual preview','action',load));showCode.textContent='Show source';setStatus(status,'');}));
-    top.append(title, controls); view.box.append(top, status, content);
+    if (controlsHost) {
+      controls.className = 'controls repository-actions';
+      controlsHost.append(controls); view.externalControls = controls;
+      view.box.classList.add('embedded-panel'); view.box.append(status, content);
+    } else { top.append(title, controls); view.box.append(top, status, content); }
     view.hiddenTarget = original;
     async function load() {
       const token = sequence, run = ++runId;
@@ -161,6 +170,35 @@
       mount.panels[0].host.scrollIntoView({ block: "start" });
       focusPending = false;
     }
+  }
+  async function activateRepository(route,token){
+    const scripts=[...document.querySelectorAll('script[type="application/json"]')].map(node=>node.textContent);
+    const app=document.querySelector('#js-view-blob-app,#js-repository-blob-header-app,#js-repository-tree');
+    const ref=parse.repositoryRef(route,scripts,app?.dataset);
+    const top=mountBefore(document.querySelector('main')),owner={kind:'repository',host:top.host,panels:[],empty:false};mount=owner;
+    const heading=element('div','top repository-bar'),controls=element('div','controls'),status=element('div','status','Checking this repository for KiCad projects…'),slot=element('div');
+    const refresh=button('Check again','',()=>{if(mount!==owner)return;clearMount();activateRepository(route,sequence);});
+    const repositoryTitle=element('div','title','KiCad projects');
+    heading.append(repositoryTitle,controls);controls.append(refresh);top.box.append(heading,status,slot);
+    if(!ref){setStatus(status,'Select the repository root or refresh this branch page to identify its exact branch.',true);return;}
+    try{
+      const result=await request('repository-detect',{repository:route.repository,ref,...(route.provider?{provider:route.provider,host:route.host}:{})});
+      if(token!==sequence||mount!==owner)return;
+      if(!/^[a-f0-9]{40}$/i.test(result?.sha||'')||!Array.isArray(result.projects))throw Error('Repository discovery did not return a pinned revision.');
+      const files=result.projects.filter(file=>typeof file==='string'&&parse.filePath(file)&&/\.kicad_(pro|sch|pcb)$/i.test(file));
+      if(!files.length){if(result.truncated){setStatus(status,'No KiCad project found in this partial repository listing. Additional folders may contain projects. Open a KiCad file directly or connect your account for a fuller listing.');return;}owner.empty=true;top.host.remove();return;}
+      const picker=element('select');picker.setAttribute('aria-label','KiCad project or standalone drawing');
+      for(const file of files){const option=element('option','',file);option.value=file;picker.append(option);}picker.value=files[0];
+      const open=button('Open KiCad project','active',()=>{
+        if(mount!==owner||!files.includes(picker.value))return;
+        for(const panel of [...owner.panels])disposePanel(panel,owner);
+        owner.panels.push(panelFor({repository:route.repository,file:picker.value,head:result.sha,...(route.provider?{provider:route.provider,host:route.host}:{})},null,picker.value,true,slot,controls));
+      });controls.prepend(picker,open);
+      setStatus(status,`${files.length} KiCad ${files.length===1?'entry':'entries'} · ${result.ref||ref} · ${result.sha.slice(0,10)}${result.truncated?' · Partial listing: additional projects may exist.':''}`);
+      repositoryTitle.textContent=`KiCad · ${files.length}`;
+      repositoryTitle.title=status.textContent; picker.title=status.textContent;
+      status.hidden=!result.truncated;
+    }catch(error){if(token===sequence&&mount===owner)setStatus(status,'KiCad project discovery unavailable: '+error.message+'. Check access in extension settings, then retry.',true);}
   }
   async function activateMerge(route,token){
     const pageUrl=location.href.split('#')[0],target=document.querySelector('main');if(!target)return;
@@ -302,7 +340,8 @@
   function check() {
     maybeClaimCommentDraft();
     const url = location.href.split("#")[0];
-    const route = parse.route(url,{gitlabHosts:location.origin!=='https://github.com'?[location.origin||new URL(url).origin]:[]});
+    const routeOptions={gitlabHosts:location.origin!=='https://github.com'?[location.origin||new URL(url).origin]:[]};
+    const route = parse.route(url,routeOptions)||parse.repositoryRoute(url,routeOptions);
     if (url !== currentUrl) { clearMount(); currentUrl = url; if (route?.kind !== "blob") focusPending = false; }
     if (mount?.kind === "pull" && route?.kind === "pull") {
       if (!mount.host.isConnected) {
@@ -310,6 +349,10 @@
         if (main?.parentNode) main.parentNode.insertBefore(mount.host, main);
       }
       reconcilePullCards(mount);
+      return;
+    }
+    if(mount?.kind==='repository'&&route?.kind==='repository'){
+      if(!mount.empty&&!mount.host.isConnected){const main=document.querySelector('main');if(main?.parentNode)main.parentNode.insertBefore(mount.host,main);}
       return;
     }
     if(mount?.kind==='merge'&&route?.kind==='merge'){
@@ -327,7 +370,8 @@
     }
     if (!route || mount) return;
     const token = sequence;
-    if (route.kind === "merge") activateMerge(route,token);
+    if (route.kind === "repository") activateRepository(route,token);
+    else if (route.kind === "merge") activateMerge(route,token);
     else if (route.kind === "blob") activateBlob(route, token);
     else activatePull(route, token);
   }

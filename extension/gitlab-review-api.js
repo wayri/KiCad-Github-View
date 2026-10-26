@@ -304,7 +304,7 @@ const KiCadGitLabReviewApi = (() => {
     } catch (error) { if (error.definitive) await chrome.storage.local.remove(key); throw error; }
   }
   // Issue discussions include ordinary notes and DiscussionNotes omitted by the Notes API.
-  async function readThread({host,repository,ref,file,kind='issue',number,provider='gitlab'}={}) {
+  async function readThread({host,repository,ref,file,kind='issue',number,provider='gitlab',includeCapabilities=false}={}) {
     host=validateHost(host);repository=repositoryPath(repository);
     KiCadReviewComments.normalizeScope({provider,host,repository,ref,file});
     if(provider!=='gitlab'||!['issue','discussion'].includes(kind)||!Number.isSafeInteger(number)||number<1)throw fail('Invalid GitLab thread request.',true);
@@ -330,11 +330,12 @@ const KiCadGitLabReviewApi = (() => {
         if(root)throw fail('GitLab returned invalid thread provenance.',true);
         warn('Some thread comments had invalid provenance and were omitted.');return null;
       }
-      return {id:String(value.id),author:author?.username||null,createdAt:value.created_at,updatedAt:value.updated_at,body:text(root?value.description:value.body),url:root?url:`${url}#note_${value.id}`,replyTo,...(discussionId?{discussionId}:{})};
+      const source=root?value.description:value.body,body=text(source),bodyTruncated=body!==(source||'');
+      return {id:String(value.id),author:author?.username||null,createdAt:value.created_at,updatedAt:value.updated_at,body,bodyTruncated,url:root?url:`${url}#note_${value.id}`,replyTo,canEdit:false,canReply:!!discussionId,...(discussionId?{discussionId}:{})};
     };
     const issue=await request(host,endpoint,options);
     if(issue?.iid!==number||issue.project_id!==project.id||!['opened','closed'].includes(issue.state)||typeof issue.title!=='string')throw fail('GitLab returned an invalid Issue identity.',true);
-    const thread={provider:'gitlab',host,repository,kind:'issue',number,title:issue.title.slice(0,1024),state:issue.state==='opened'?'open':'closed',...record(issue,true)};
+    const thread={provider:'gitlab',host,repository,projectId:project.id,kind:'issue',number,title:issue.title.slice(0,1024),state:issue.state==='opened'?'open':'closed',...record(issue,true)};
     for(let page=1;page<=8&&!stopped;page++){
       const groups=await request(host,`${endpoint}/discussions?per_page=100&page=${page}`,options);
       if(!Array.isArray(groups)||groups.length>100)throw fail('GitLab returned invalid issue discussions.',true);
@@ -345,7 +346,7 @@ const KiCadGitLabReviewApi = (() => {
           if(note?.system===true)continue;
           if(comments.length>=200||stopped){stopped=true;break;}
           const entry=record(note,false,group.individual_note?null:parent,group.individual_note?null:group.id);
-          if(entry){if(!parent)parent=entry.id;if(!seen.has(entry.id)){seen.add(entry.id);comments.push(entry);}}
+          if(entry){entry.replyDiscussionId=group.id;entry.canReply=true;if(!parent)parent=entry.id;if(!seen.has(entry.id)){seen.add(entry.id);comments.push(entry);}}
         }
         if(stopped)break;
       }
@@ -354,9 +355,81 @@ const KiCadGitLabReviewApi = (() => {
     }
     if(stopped)warn('Thread readback was truncated at 200 comments, 10 requests or the text limit. Open GitLab for the complete conversation.');
     if(epoch(host)!==current)throw fail('GitLab account changed or signed out.',true);
-    return {...thread,comments,warnings};
+    let allowed=false,login=null;
+    if(includeCapabilities&&token){try{const policy=await commentPolicyStatus(host,repository,project.id);allowed=policy.allowed===true;login=policy.login||null;}catch{warn('Chat permissions could not be verified.');}}
+    for(const comment of comments)comment.canEdit=allowed&&!!login&&comment.author?.toLowerCase()===login.toLowerCase()&&!comment.bodyTruncated&&!comment.body.includes('kicad-review:');
+    if(epoch(host)!==current)throw fail('GitLab account changed or signed out.',true);
+    return {...thread,comments,warnings,capabilities:{create:allowed,reply:allowed,edit:allowed,reactions:false,replyMode:'native'}};
   }
-  return { validateHost, validatePolicy, authStatus, tokenStatus: authStatus, setToken, clearToken, resetAuth, authorizationHeaders, setClientId, startOAuth, commentPolicyStatus, publish, readThread };
+  async function chatMessageWrite(message) {
+    if(message?.provider!==undefined&&message.provider!=='gitlab')throw fail('Invalid GitLab chat provider.',true);
+    const host=validateHost(message?.host),repository=repositoryPath(message?.repository),scope=KiCadReviewComments.normalizeScope({...message,provider:'gitlab',host,repository});
+    const {kind,number}=message.thread||{},action=message.action,mutation=message.clientMutationId;
+    if(!['issue','discussion'].includes(kind)||!Number.isSafeInteger(number)||number<1||!['create','reply','edit'].includes(action)||typeof message.body!=='string'||!message.body.trim()||new TextEncoder().encode(message.body).length>60000||typeof mutation!=='string'||!/^[A-Za-z0-9_-]{16,100}$/.test(mutation))throw fail('Invalid chat message request.',true);
+    if(action==='edit'&&(typeof message.messageId!=='string'||typeof message.expectedUpdatedAt!=='string')||action==='reply'&&typeof message.replyTo!=='string')throw fail('A verified message and revision are required.',true);
+    const note=message.annotation?KiCadReviewComments.validateComment(message.annotation):null;
+    if(!note&&message.body.includes('<!-- kicad-review:'))throw fail('Drawing context must use a validated chat annotation.',true);
+    if(note&&(action==='edit'||note.id!==mutation||note.text!==message.body||note.anchor.repository!==repository||note.anchor.ref!==scope.ref||note.anchor.file!==scope.file||note.anchor.provider!=='gitlab'||note.anchor.host!==host||note.threadType!==kind))throw fail('Chat annotation does not match its message and drawing.',true);
+    const key='gitlab-chat:'+JSON.stringify([host,repository,kind,number,mutation]);
+    if(locks.has(key)){try{await locks.get(key);}catch{}return chatMessageWrite(message);}
+    const work=(async()=>{
+      const current=epoch(host),headers=await authorizationHeaders(host),token=headers.Authorization?.slice(7),options={token,expectedEpoch:current};
+      if(!token)throw fail('Sign in to this GitLab host before posting.',true);
+      const project=await request(host,`/api/v4/projects/${encodeURIComponent(repository)}`,options);
+      if(project?.path_with_namespace!==repository||!Number.isSafeInteger(project.id)||project.id<1)throw fail('GitLab returned another project identity.',true);
+      const policy=await commentPolicyStatus(host,repository,project.id);
+      if(!policy.allowed||!policy.login)throw fail('Repository policy or account verification blocked this chat message.',true);
+      const fingerprint=JSON.stringify([action,scope.ref,scope.file,message.messageId||null,message.replyTo||null,message.expectedUpdatedAt||null,message.body,note,policy.login.toLowerCase()]);
+      const digest=Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(fingerprint))),b=>b.toString(16).padStart(2,'0')).join('');
+      const saved=(await chrome.storage.local.get(key))[key];
+      if(saved){if(saved.digest!==digest)throw fail('This chat request ID already belongs to another message.',true);if(saved.status==='done')return {...saved.result,duplicate:true};throw fail('Previous chat message has an unconfirmed outcome. Inspect GitLab before retrying.');}
+      const thread=await readThread({...scope,host,kind,number});
+      if(thread.projectId!==project.id)throw fail('GitLab project changed during chat preflight.',true);
+      const target=thread.comments.find(row=>row.id===(action==='edit'?message.messageId:message.replyTo));
+      if(action!=='create'&&!target)throw fail('Message does not belong to the fetched thread or is outside its read limit.',true);
+      if(action==='edit'&&(target.author?.toLowerCase()!==policy.login.toLowerCase()||target.updatedAt!==message.expectedUpdatedAt))throw fail('Message ownership or revision changed. Refresh before editing.',true);
+      if(action==='edit'&&(target.bodyTruncated||target.body.includes('kicad-review:')))throw fail('Edit complete drawing annotations on the service to preserve their anchors.',true);
+      if(action==='reply'&&!target.replyDiscussionId)throw fail('This GitLab note has no verified reply discussion.',true);
+      let body=message.body;
+      await KiCadReviewComments.reservePublication(chrome.storage.local,JSON.stringify(['gitlab',host]),Date.now());
+      if(note){
+        if((note.capture||note.attachments?.length)&&project.visibility!=='public'&&project.enforce_auth_checks_on_uploads!==true)throw fail('Private GitLab image uploads require authenticated media access. Remove the screenshot or enable the project setting.',true);
+        const attachments=note.capture?[await uploadCapture(note,host,repository,project.id,token,current)]:note.attachments?.map(value=>checkedAttachment(value,host,repository,project.id));
+        body=KiCadReviewComments.toMarkdown(attachments?.length?{...note,attachments}:note);
+      }
+      if(epoch(host)!==current)throw fail('GitLab account changed or signed out.',true);
+      await chrome.storage.local.set({[key]:{status:'pending',digest}});
+      try{
+        const endpoint=`/api/v4/projects/${project.id}/issues/${number}`;
+        const path=action==='create'?`${endpoint}/discussions`:action==='reply'?`${endpoint}/discussions/${target.replyDiscussionId}/notes`:target.discussionId?`${endpoint}/discussions/${target.discussionId}/notes/${target.id}`:`${endpoint}/notes/${target.id}`;
+        const value=await request(host,path,{...options,method:action==='edit'?'PUT':'POST',body:{body}}),result=action==='create'?value.notes?.[0]:value;
+        if(!Number.isSafeInteger(result?.id)||result.id<1||action==='edit'&&String(result.id)!==target.id)throw fail('GitLab did not confirm the chat message. Inspect the thread before retrying.');
+        if(typeof result.updated_at!=='string'||!/^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d(?:\.\d{1,9})?Z$/.test(result.updated_at)||!Number.isFinite(Date.parse(result.updated_at)))throw fail('GitLab did not confirm the message revision. Inspect the thread before retrying.');
+        const response={provider:'gitlab',kind,number,messageId:String(result.id),url:`${host}/${repository}/-/issues/${number}#note_${result.id}`,updatedAt:result.updated_at,replyTo:action==='reply'?(target.replyTo||target.id):null};
+        await chrome.storage.local.set({[key]:{status:'done',digest,result:response}});return response;
+      }catch(error){if(error.definitive)await chrome.storage.local.remove(key);throw error;}
+    })();
+    locks.set(key,work);try{return await work;}finally{locks.delete(key);}
+  }
+  async function chatThreadList(message={}) {
+    const host=validateHost(message.host),repository=repositoryPath(message.repository),{kind,page=1}=message;
+    KiCadReviewComments.normalizeScope({...message,provider:'gitlab',host,repository});
+    if(message.provider!==undefined&&message.provider!=='gitlab'||!['issue','discussion'].includes(kind)||!Number.isSafeInteger(page)||page<1||page>5||message.cursor!==undefined&&message.cursor!==null)throw fail('Invalid chat conversation listing.',true);
+    if(kind==='discussion')return {threads:[],hasMore:false,supported:false,warnings:['GitLab conversations are listed under Issues.']};
+    const current=epoch(host),headers=await authorizationHeaders(host),options={token:headers.Authorization?.slice(7),expectedEpoch:current};
+    const project=await request(host,`/api/v4/projects/${encodeURIComponent(repository)}`,options);
+    if(project?.path_with_namespace!==repository||!Number.isSafeInteger(project.id)||project.id<1)throw fail('GitLab returned another project identity.',true);
+    const rows=await request(host,`/api/v4/projects/${project.id}/issues?state=all&scope=all&order_by=updated_at&sort=desc&per_page=20&page=${page}`,options);
+    if(!Array.isArray(rows)||rows.length>20)throw fail('GitLab returned an invalid conversation listing.',true);
+    const threads=[],warnings=[];
+    for(const row of rows){const author=row?.author,updatedAt=row?.updated_at;
+      if(!Number.isSafeInteger(row?.iid)||row.iid<1||row.project_id!==project.id||typeof row.title!=='string'||!['opened','closed'].includes(row.state)||author!==null&&!/^[A-Za-z0-9][A-Za-z0-9_.-]{0,99}$/.test(author?.username||'')||typeof updatedAt!=='string'||!/^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d(?:\.\d{1,9})?Z$/.test(updatedAt)||!Number.isFinite(Date.parse(updatedAt))){if(!warnings.length)warnings.push('Some conversations with invalid provenance were omitted.');continue;}
+      threads.push({kind:'issue',number:row.iid,title:row.title.slice(0,1024),state:row.state==='opened'?'open':'closed',author:author?.username||null,updatedAt,url:`${host}/${repository}/-/issues/${row.iid}`});
+    }
+    if(epoch(host)!==current)throw fail('GitLab account changed or signed out.',true);
+    const more=rows.length===20;return {threads,hasMore:more&&page<5,...(more&&page<5?{nextPage:page+1}:{}),warnings,...(more&&page===5?{truncated:true}:{})};
+  }
+  return { validateHost, validatePolicy, authStatus, tokenStatus: authStatus, setToken, clearToken, resetAuth, authorizationHeaders, setClientId, startOAuth, commentPolicyStatus, publish, readThread, chatMessageWrite, chatThreadList };
 })();
 if (typeof globalThis === "object") globalThis.KiCadGitLabReviewApi = KiCadGitLabReviewApi;
 if (typeof module === "object" && module.exports) module.exports = KiCadGitLabReviewApi;

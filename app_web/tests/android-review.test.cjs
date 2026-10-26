@@ -41,3 +41,41 @@ test('Commit comparison snapshots pin refs, deduplicate downloads and reject sta
  await assert.rejects(cache.get('main'),/immutable/);active=null;await assert.rejects(cache.get(ref),/active project changed/);
  let release;active=original;const interrupted=snapshots.create(original,()=>active,()=>new Promise(r=>release=r),local.validate);const request=interrupted.get(ref);active=null;release({repository:'owner/board',sha:ref,project:{files:original.files}});await assert.rejects(request,/active project changed/);
 });
+
+test('native chat bridge maps actions without colliding with provider dispatch and passes read capabilities',async()=>{
+ const sent=[],api=create(project(),async request=>{sent.push(request);return{messageId:'7'};},comments,store());
+ const message={type:'chat-message-write',repository:'owner/board',ref:sha,file:'design/board.kicad_sch',thread:{kind:'issue',number:42},action:'reply',body:'Plain reply',replyTo:'6',clientMutationId:'chat_mutation_123456789'};
+ assert.equal((await api.send(message)).ok,true);assert.equal(sent[0].type,'chat-message-write');assert.equal(sent[0].messageAction,'reply');assert.equal(sent[0].action,undefined);assert.equal(sent[0].replyTo,'6');
+ await api.send({type:'github-thread-read',repository:'owner/board',ref:sha,file:message.file,kind:'issue',number:42,includeCapabilities:true});assert.equal(sent[1].type,'review-thread');assert.equal(sent[1].includeCapabilities,true);assert.equal(sent[1].ref,sha);
+ const before=sent.length;for(const mutation of [{ref:'d'.repeat(40)},{file:'other.kicad_sch'},{repository:'other/repo'},{thread:{kind:'pull',number:42}},{clientMutationId:'tiny'}])assert.equal((await api.send({...message,...mutation})).ok,false);assert.equal(sent.length,before);
+});
+test('native chat annotations bind original text and rendered marker to the same source scope',async()=>{
+ const sent=[],api=create(project(),async request=>{sent.push(request);return{messageId:'7'};},comments,store()),id='chat_annotation_123456789';
+ const annotation=comments.validateComment({...note(),id,threadType:'issue'}),message={type:'chat-message-write',repository:'owner/board',ref:sha,file:annotation.anchor.file,thread:{kind:'issue',number:42},action:'create',body:annotation.text,clientMutationId:id,annotation};
+ assert.equal((await api.send(message)).ok,true);assert.equal(sent[0].body,annotation.text);assert.match(sent[0].renderedBody,/<!-- kicad-review:v1 /);assert.equal(comments.fromMarkdown(sent[0].renderedBody)[0].id,id);
+ assert.equal((await api.send({...message,body:'Different message'})).ok,false);assert.equal((await api.send({...message,action:'edit',messageId:'7',expectedUpdatedAt:time})).ok,false);assert.equal(sent.length,1);
+});
+test('native chat discovery normalizes null cursor and rejects foreign scope or wrong provider pagination',async()=>{
+ const sent=[],api=create(project(),async request=>{sent.push(request);return{threads:[],hasMore:false};},comments,store());
+ const message={type:'chat-thread-list',repository:'owner/board',ref:sha,file:'design/board.kicad_sch',kind:'issue',page:1,cursor:null};assert.equal((await api.send(message)).ok,true);assert.equal(sent[0].cursor,undefined);assert.equal(sent[0].type,'chat-thread-list');
+ for(const mutation of [{page:6},{cursor:'next'},{ref:'main'},{kind:'pull'}])assert.equal((await api.send({...message,...mutation})).ok,false);assert.equal(sent.length,1);
+});
+test('GitLab chat refreshes authentication before scoped transport and aborts on failed preflight',async()=>{
+ const sent=[],api=create(project(true),async request=>{sent.push(request);return{connected:true};},comments,store());
+ const scope={repository:'group/sub/board',ref:sha,file:'design/board.kicad_sch'};
+ const write={type:'chat-message-write',...scope,thread:{kind:'issue',number:42},action:'create',body:'Plain message',clientMutationId:'native_auth_test_00001'};
+ for(const message of [{type:'chat-thread-list',...scope,kind:'issue'},{type:'github-thread-read',...scope,kind:'issue',number:42,includeCapabilities:true},write])assert.equal((await api.send(message)).ok,true);
+ assert.deepEqual(sent.map(m=>m.type),['auth-status','chat-thread-list','auth-status','thread','auth-status','chat-message-write']);
+ const failed=[],blocked=create(project(true),async request=>{failed.push(request.type);throw Error('Sign-in refresh failed');},comments,store());
+ assert.equal((await blocked.send(write)).ok,false);assert.deepEqual(failed,['auth-status']);
+ const capture={mime:'image/png',dataUrl:'data:image/png;base64,iVBORw0KGgo=',width:1,height:1},annotation={...note(true),id:write.clientMutationId,text:write.body,threadType:'issue',capture};
+ const upload=[],withCapture=create(project(true),async request=>{upload.push(request.type);if(request.type==='upload')throw Error('Synthetic upload stop');return{connected:true};},comments,store());
+ assert.equal((await withCapture.send({...write,annotation})).ok,false);assert.deepEqual(upload,['auth-status','upload']);
+});
+for(const provider of ['github','gitlab'])test('Android trusted runtime routes '+provider+' chat discovery and writes through the remote adapter',async()=>{
+ const requests=[],info={repository:provider==='github'?'owner/board':'team/sub/board',sha,...(provider==='gitlab'?{provider,host:'https://gitlab.example'}:{})},p={id:'chat-runtime',...(provider==='gitlab'?{remote:info}:{github:info}),files:project().files},top={KiCadAndroidProject:p,KiCadAndroid:{ensureSnapshots(){}},KiCadAndroidRevisionCache:{get:async()=>p},KiCadReviewComments:comments,KiCadAndroidGitHub:{request(){}},KiCadAndroidGitLab:{request(){}}};
+ const context={AbortController,URL,URLSearchParams,location:{search:'?ref='+sha,href:'https://appassets.androidplatform.net/assets/viewer/pcb-viewer.html'},top,localStorage:store(),document:{addEventListener(){}},KiCadAndroidLocal:{transport:()=>({send(){throw Error('Chat must not enter local file transport');}})},KiCadAndroidRemote:{create:()=>({send:async message=>{requests.push(message);return{ok:true,result:{accepted:true}};}})}};context.window=context;
+ require('node:vm').runInNewContext(require('node:fs').readFileSync('android-app/web/runtime.js','utf8'),context);
+ for(const type of ['chat-thread-list','chat-message-write'])assert.equal((await context.chrome.runtime.sendMessage({type,repository:info.repository,ref:sha,file:p.files[0].path,...(provider==='gitlab'?{provider,host:info.host}:{})})).ok,true);
+ assert.equal(requests.length,2);assert.equal((await context.chrome.runtime.sendMessage({type:'chat-message-write',repository:'foreign/project',ref:sha,file:p.files[0].path})).ok,false);assert.equal(requests.length,2);
+});

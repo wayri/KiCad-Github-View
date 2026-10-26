@@ -25,7 +25,7 @@ test('home separates project entry and dynamically mounted tools without duplica
  assert.equal(tools.children[0],calculator);assert.equal(opening.children[0],source);source.onclick();calculator.onclick();assert.equal(opened,11);
 });
 
-test('drawing tools keep primary actions visible and preserve secondary controls in collapsed sections',()=>{
+test('drawing tools group Design, Inspect and Review while preserving handlers and late actions',()=>{
  const nodes=new Map();
  class Node{
   constructor(tag='div'){this.tagName=tag;this.children=[];this.dataset={};this.className='';this.classList={contains:c=>this.className.split(' ').includes(c),add:c=>{this.className+=' '+c;}};}
@@ -44,14 +44,18 @@ test('drawing tools keep primary actions visible and preserve secondary controls
  const document={readyState:'loading',getElementById:id=>nodes.get(id),createElement:tag=>new Node(tag),addEventListener(){}};
  const context={document};vm.runInNewContext(fs.readFileSync('android-app/web/adaptive-ui.js','utf8'),context);
  context.KiCadAndroidUI.organizeDrawingTools();context.KiCadAndroidUI.organizeDrawingTools();
- assert.deepEqual(drawing.children,[assembly,checks]);assert.equal(markers.parentElement.parentElement.id,'androidToolGroup-display');assert.equal(grid.parentElement,markers.parentElement);assert.equal(highlights.parentElement.parentElement.id,'androidToolGroup-highlight');assert.equal(highlights.checked,true);assert.equal(presentation.parentElement.parentElement.id,'androidToolGroup-more');
- for(const id of ['display','highlight','navigation','more'])assert.equal(nodes.get('androidToolGroup-'+id).open,undefined);
+ assert.deepEqual(drawing.children,[checks,assembly]);assert.equal(markers.parentElement.parentElement.id,'androidToolGroup-display');assert.equal(grid.parentElement,markers.parentElement);assert.equal(highlights.parentElement.parentElement.id,'androidToolGroup-highlight');assert.equal(highlights.checked,true);assert.equal(presentation.parentElement.parentElement.id,'androidToolGroup-highlight');
+ for(const id of ['display','more'])assert.equal(nodes.get('androidToolGroup-'+id).open,false);
+ for(const id of ['highlight','navigation'])assert.equal(nodes.get('androidToolGroup-'+id).open,true);
+ assert.equal(content.children[0].id,'androidToolGroup-navigation','Design precedes the Inspect tool grid');
+ assert.equal(nodes.get('androidPrimaryToolsHeading').textContent,'Inspect');
  for(const action of [groupHighlight,unselect,clear]){assert.equal(action.parentElement,highlights.parentElement);assert.ok(action.querySelector('.button-label'),'secondary selection actions retain visible names');}
  assert.equal(toolbar.children.length,0,'secondary selection controls leave the canvas toolbar');
  assert.equal(navigation.parentElement.parentElement.id,'androidToolGroup-navigation');
  assert.equal(analytics.parentElement.parentElement.id,'androidToolGroup-more');
- assert.equal(nodes.get('androidToolGroup-highlight').children[0].textContent,'Selection');
- assert.equal(nodes.get('androidToolGroup-more').children[0].textContent,'Engineering & utilities');
+ assert.equal(nodes.get('androidToolGroup-highlight').children[0].textContent,'Review');
+ assert.equal(nodes.get('androidToolGroup-navigation').children[0].textContent,'Design');
+ assert.equal(nodes.get('androidToolGroup-more').children[0].textContent,'More tools');
  assembly.onclick();markers.onclick();assert.equal(calls,2);const calculator=control('openCalculators');context.KiCadAndroidUI.organizeDrawingTools();assert.equal(calculator.parentElement,analytics.parentElement);assert.equal(content.children.length,6);
  assert.equal(groupHighlight.children.length,1,'observer passes do not duplicate captions');
  const sidebar=control('phoneSidebarToggle',toolbar),fit=control('androidFitDrawing',toolbar),measure=control('androidMeasure',toolbar),originalMeasure=control('measureButton');
@@ -59,6 +63,13 @@ test('drawing tools keep primary actions visible and preserve secondary controls
  assert.deepEqual(toolbar.children,[sidebar],'late measurement and Fit cannot displace More from the phone toolbar');
  assert.equal(fit.parentElement.parentElement.id,'androidToolGroup-navigation');assert.equal(measure.parentElement,drawing);assert.equal(originalMeasure.hidden,true,'one visible measurement action retains the shared implementation');
  assert.equal(measure.children.length,1,'late action receives exactly one readable caption');measure.onclick();fit.onclick();assert.equal(calls,4);
+ const reports=control('openSavedReports'),three=control('mode3d'),layers=control('androidRailLayers',toolbar);
+ context.KiCadAndroidUI.organizeDrawingTools();context.KiCadAndroidUI.organizeDrawingTools();
+ for(const action of [reports,three,layers]){assert.equal(action.parentElement,drawing);assert.equal(action.children.length,1);action.onclick();}
+ assert.equal(drawing.children[0],measure,'Measure remains the first inspection action after late controls mount');
+ assert.equal(reports.querySelector('.button-label').textContent,'Reports');assert.equal(layers.querySelector('.button-label').textContent,'Layers');
+ assert.equal(calls,7,'original Reports, 3D and Layers controllers survive regrouping');
+ assert.equal(toolbar.children.length,1,'secondary tools cannot refill the drawing rail');
 });
 
 test('short landscape windows use phone drawers while tablets retain expanded panes',()=>{
@@ -156,3 +167,4 @@ test('Back closes the all-sheets overview before navigating a parent sheet',()=>
  assert.equal(context.KiCadAndroidUI.handleBack(),true);assert.equal(parentVisits,1);
  assert.equal(context.KiCadAndroidUI.handleBack(),false);
 });
+test('Android Back closes conversation options before the conversation panel',()=>{let menu=true,closed=false;const pane={hidden:false,getClientRects:()=>[{width:390,height:600}]},nodes=new Map([['commentsSidebar',pane],['closeComments',{click(){closed=true;pane.hidden=true;}}]]),document={readyState:'loading',getElementById:id=>nodes.get(id),addEventListener(){},querySelectorAll:()=>[]};const context={document,KiCadChatDraft:{closeMenus(){if(menu){menu=false;return true;}return false;}}};vm.runInNewContext(fs.readFileSync('android-app/web/adaptive-ui.js','utf8'),context);assert.equal(context.KiCadAndroidUI.handleBack(),true);assert.equal(closed,false);assert.equal(menu,false);assert.equal(context.KiCadAndroidUI.handleBack(),true);assert.equal(closed,true);});
