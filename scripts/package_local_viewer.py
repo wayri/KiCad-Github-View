@@ -18,7 +18,7 @@ def payload(root=ROOT):
     excluded = {'manifest.json', 'options.html', 'options.js', 'credential-vault.js',
                 'credential-vault-host.html', 'credential-vault-host.js', 'credential-vault-worker.js',
                 'github-review-api.js', 'gitlab-review-api.js', 'gitlab-hosts.js', 'gitlab-options.js',
-                'gitlab-provider.js', 'mention-users.js', 'review-file-settings.js'}
+                'gitlab-provider.js', 'mention-users.js', 'review-file-settings.js', 'environment-options.js'}
     names = sorted((names - excluded) | {'parsing.js'})
     result = {'web/' + name: (root / 'extension' / name).read_bytes() for name in names}
     result['web/local-assets.json'] = (json.dumps({'files': [name for name in names if name != 'LICENSE.txt']}, indent=2) + '\n').encode()
