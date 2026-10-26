@@ -2,7 +2,7 @@
 
 Open saved KiCad projects, inspect schematics and layouts, and record review or assembly findings without a KiCad installation. Design sources are read-only during ordinary viewing. Review notes, assembly progress and variants are separate data; the VS Code conflict resolver is an explicit exception that can write a resolved drawing after confirmation.
 
-This guide describes the current source capabilities. Older GitHub preview downloads may not include every control; check the release notes and the installed version. Host differences are called out below.
+For the illustrated Android, VS Code and Chrome walkthrough, start with the [main repository user guide](../USER-GUIDE.md). This reference describes current source capabilities; check the release notes and installed version. Host differences are called out below.
 
 Start with the [installation guide](INSTALL.md) for Android, Windows, Linux and macOS. Check the [KiCad compatibility matrix](KICAD-COMPATIBILITY.md) before reviewing a new file format. Recognized KiCad 8, 9 and 10 constructs use the shared viewer; coverage is narrower for 8/9, and newer constructs may display warnings or incomplete previews.
 
@@ -109,7 +109,7 @@ Use **Review** / **Comments** to anchor a note to a drawing object, position or 
 
 In the browser and supported app flows, GitHub Issues/Discussions and GitLab issues/issue-discussion threads require authorized account access. GitLab issue discussions are not standalone GitHub-style Discussions. Remote history/readback differs by host; use the [comments guide](COMMENTS.md) and [Git host matrix](GIT-HOSTS.md) for exact scope. Local state changes do not automatically close remote issues.
 
-VS Code writes annotations to a `.kicad-review.json` sidecar. Inspect it in Source Control and commit it with normal Git tools to share it; this host does not publish notes to GitHub/GitLab. Assembly drafts use separate local storage.
+VS Code writes annotations to a `.kicad-review.json` sidecar. Inspect it in Source Control and commit it with normal Git tools to share it. In a trusted local checkout with a matching supported Git remote, connect an account to read conversations and explicitly publish supported notes and screenshots to GitHub/GitLab. Pinned annotation publication/readback requires the displayed sources to match committed Git blobs. Assembly drafts use separate local storage.
 
 Use portable review export/import to transfer supported notes, BoM metadata, variants and 2D view/measurement state. Open matching source drawings on the destination first: import checks paths and content fingerprints. Portable reviews do not include CAD sources, original photos, model files, credentials or entire remote conversations. Export is explicit transfer, not device synchronization.
 

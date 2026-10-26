@@ -10,7 +10,7 @@ Explore schematics and PCB layouts, follow nets, measure geometry, work through 
 [![Desktop](https://img.shields.io/badge/desktop-Windows%20%7C%20Linux%20%7C%20macOS-555)](docs/INSTALL.md)
 [![KiCad formats](https://img.shields.io/badge/KiCad-8%20%7C%209%20%7C%2010-314CB0)](docs/KICAD-COMPATIBILITY.md)
 
-[User guide](docs/USER-GUIDE.md) | [Installation](docs/INSTALL.md) | [Release notes](https://github.com/wayri/KiCad-Github-View/releases) | [Report an issue](https://github.com/wayri/KiCad-Github-View/issues) | [Contact support](mailto:support@sigharmonic.com)
+[Illustrated user guide](USER-GUIDE.md) | [Installation](docs/INSTALL.md) | [Release notes](https://github.com/wayri/KiCad-Github-View/releases) | [Report an issue](https://github.com/wayri/KiCad-Github-View/issues) | [Contact support](mailto:support@sigharmonic.com)
 
 ## Downloads
 
@@ -39,9 +39,11 @@ Compare preview downloads with [SHA256SUMS.txt](https://github.com/wayri/KiCad-G
 
 ## Get started
 
+**[Open the illustrated Android, VS Code and Chrome user guide](USER-GUIDE.md)** — setup, everyday workflows, Git reviews, fabrication files and saved results, with screenshots.
+
 1. Install an edition using the [platform instructions](docs/INSTALL.md).
 2. Open a local project folder with its sheets and model files, or open a supported GitHub/GitLab file page. Public projects need no account connection; private access requires authorization.
-3. Select a part or net, open **Explorer**, **Inspect**, or **Review**, and follow the [user guide](docs/USER-GUIDE.md).
+3. Select a part or net, open **Explorer**, **Inspect**, or **Review**, and follow the [illustrated user guide](USER-GUIDE.md).
 
 Local browser file/folder viewing works offline once the extension is installed. Repository access, sign-in and publishing need a network connection. Folder import preserves relative paths better than selecting a single drawing.
 
@@ -229,7 +231,7 @@ Source designs are ordinarily read-only. Explicit conflict-resolution actions in
 ## Documentation and development
 
 - [Installation for Windows, Linux, macOS and Android](docs/INSTALL.md)
-- [User guide](docs/USER-GUIDE.md) and [VS Code illustrated guide](vscode-extension/GUIDE.md)
+- [Illustrated user guide](USER-GUIDE.md) and [VS Code illustrated guide](vscode-extension/GUIDE.md)
 - [Offline local workspace and optional KiCad launcher](docs/LOCAL-VIEWER.md)
 - [Build and repository map](docs/DEVELOPMENT.md)
 - [Security and private reports](SECURITY.md)
