@@ -17,6 +17,37 @@ test('Native GitHub bridge maps actions, ignores stale replies and propagates ex
  const expired=api.request({type:'import',repository:'owner/private'});api.reply(sent[1].id,{ok:false,error:'Expired',authExpired:true});await assert.rejects(expired,e=>e.authExpired===true);
  const cancelled=api.request({type:'import'});api.cancel('import');await assert.rejects(cancelled,/cancelled/);api.reply(sent[2].id,{ok:true,result:'late'});assert.equal(timers.size,0);
 });
+test('Stop cancels only its native read request, rejects promptly and ignores late delivery',async()=>{
+ const prior=global.KiCadLoading,tracked=[],sent=[],cancelled=[],timers=new Map();let serial=0;
+ global.KiCadLoading={track:(promise,stage,options)=>{tracked.push({stage,options});return promise;}};
+ const api=bridge(()=>({githubRequest:(id,message)=>sent.push({id,message}),cancelGithubRequest:id=>cancelled.push(id)}),{setTimeout:fn=>{timers.set(++serial,fn);return serial;},clearTimeout:id=>timers.delete(id)});
+ try{
+  const first=api.request({type:'import',repository:'team/first'}),second=api.request({type:'repository-tree',repository:'team/second'});
+  const rejected=assert.rejects(first,error=>error.name==='AbortError'&&error.cancelled===true);
+  tracked[0].options.onStop();await rejected;
+  assert.deepEqual(cancelled,[sent[0].id]);assert.equal(timers.size,1);
+  api.reply(sent[0].id,{ok:true,result:{project:'stale'}});
+  api.reply(sent[1].id,{ok:true,result:{tree:['valid']}});assert.deepEqual(await second,{tree:['valid']});assert.equal(timers.size,0);
+  tracked[0].options.onStop();assert.equal(cancelled.length,1,'stale Stop cannot cancel another request');
+ }finally{api.close();global.KiCadLoading=prior;}
+});
+test('writes and authorization never offer loading Stop, and older native bridges offer no fake cancellation',async()=>{
+ const prior=global.KiCadLoading,tracked=[],sent=[],cancelled=[];
+ global.KiCadLoading={track:(promise,stage,options)=>{tracked.push(options);return promise;}};
+ const api=bridge(()=>({githubRequest:(id,message)=>sent.push({id,message}),cancelGithubRequest:id=>cancelled.push(id)}),{setTimeout:()=>1,clearTimeout(){}});
+ try{
+  for(const type of ['review-publish','review-upload','publish','upload','token-connect','oauth-start']){const task=api.request({type});assert.equal(tracked.at(-1)?.onStop,undefined);api.reply(sent.at(-1).id,{ok:true,result:{}});await task;}
+  const before=tracked.length,auth=api.request({type:'device-start'});assert.equal(tracked.length,before);api.reply(sent.at(-1).id,{ok:true,result:{}});await auth;
+  const old=bridge(()=>({githubRequest:(id,message)=>sent.push({id,message})}),{setTimeout:()=>1,clearTimeout(){}});
+  const read=old.request({type:'import'});assert.equal(tracked.at(-1)?.onStop,undefined);old.reply(sent.at(-1).id,{ok:true,result:{}});await read;old.close();assert.deepEqual(cancelled,[]);
+ }finally{api.close();global.KiCadLoading=prior;}
+});
+test('only a live accepted primary import acknowledges native project delivery',async()=>{
+ const sent=[],accepted=[],api=bridge(()=>({githubRequest:(id,message)=>sent.push({id,message}),cancelGithubRequest(){},acceptGithubRequest:id=>accepted.push(id)}),{setTimeout:()=>1,clearTimeout(){}});
+ const cancelled=api.request({type:'import'});api.cancel('import');await assert.rejects(cancelled,/cancelled/);api.reply(sent.at(-1).id,{ok:true,result:{project:{}}});assert.deepEqual(accepted,[]);
+ const revision=api.request({type:'revision-import'});api.reply(sent.at(-1).id,{ok:true,result:{project:{}}});await revision;assert.deepEqual(accepted,[]);
+ const primary=api.request({type:'import'});api.reply(sent.at(-1).id,{ok:true,result:{project:{}}});await primary;assert.deepEqual(accepted,[sent.at(-1).id]);
+});
 test('GitHub source transport stays pinned to repository and commit',async()=>{
  const sha='b'.repeat(40),project=local.validate({id:'fixture',github:{repository:'owner/private',sha},files:[{path:'nested/root.kicad_sch',content:'(kicad_sch)'}]});
  const api=local.transport(project,store());assert.equal(api.scope,'owner/private');assert.equal(api.ref,sha);

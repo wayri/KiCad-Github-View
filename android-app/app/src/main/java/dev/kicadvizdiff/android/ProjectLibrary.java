@@ -341,7 +341,7 @@ final class ProjectLibrary {
     }
     private String readEncrypted(File file, long limit) throws Exception { return readEncrypted(new AtomicFile(file), limit); }
     private String readEncrypted(AtomicFile source, long limit) throws Exception {
-        try (InputStream input = source.openRead()) {
+        try (InputStream input = NativeLoadOperation.input(source.openRead())) {
             if (source.getBaseFile().length() > limit + 1024 * 1024) throw new IOException("Offline copy exceeds size limit");
             byte[] header = new byte[16]; int offset = 0;
             while (offset < header.length) { int count = input.read(header, offset, header.length - offset); if (count < 0) throw new IOException("Truncated offline copy"); offset += count; }

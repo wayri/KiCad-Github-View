@@ -30,15 +30,16 @@ function viewer(parameters, read) {
   const elements = new Map();
   const get = (id) => { if (!elements.has(id)) elements.set(id, new Element()); return elements.get(id); };
   get('changesPanel').hidden = true; get('changeFilter').value = 'all';
-  const calls = [], listeners = new Map(), parentMessages=[],parent={postMessage:(message,origin)=>parentMessages.push({message,origin})};
-  vm.runInNewContext(source, { URL, URLSearchParams, Number, Map, Set, Promise, parent,
+  const timers=new Set();const calls = [], listeners = new Map(), parentMessages=[],parent={postMessage:(message,origin)=>parentMessages.push({message,origin})};
+  vm.runInNewContext(source, { URL, URLSearchParams, Number, Map, Set, Promise, parent,crypto:require('node:crypto').webcrypto,
+    setTimeout:(fn,ms)=>{const timer={fn,ms};timers.add(timer);return timer;},clearTimeout:timer=>timers.delete(timer),
     KiCadGitHub: require('../parsing.js'), KiCadBrowserData: data, KiCadDesignDiff: diff, KiCadViewState: viewState, KiCadPairedReview:pairedReview,
     location: { search: '?'+new URLSearchParams(parameters) },
     matchMedia: () => ({ matches: true }), addEventListener: (name, callback) => {const all=listeners.get(name)||[];all.push(callback);listeners.set(name,all);},
     chrome: { runtime: { getURL: (name) => 'chrome-extension://test-id/'+name,
       sendMessage: async (message) => { calls.push(message); return read(message); } } },
     document: { getElementById: get, createElement: (tag) => new Element(tag) } });
-  return { get, calls, parent, parentMessages, message: (event) => listeners.get('message').forEach(callback=>callback(event)), click: (text) => get('toolbar').children.find((node) => node.textContent === text).click() };
+  return { get, calls, parent, parentMessages,expire:()=>{for(const timer of [...timers])timer.fn();},pagehide:()=>listeners.get('pagehide')?.forEach(fn=>fn()), message: (event) => listeners.get('message').forEach(callback=>callback(event)), click: (text) => get('toolbar').children.find((node) => node.textContent === text).click() };
 }
 const parameters = {repository:'wayri/board', headRepository:'fork/board', file:'new.kicad_sch',
   oldFile:'old.kicad_sch', base:'a'.repeat(40), head:'b'.repeat(40)};
@@ -279,4 +280,33 @@ test('Project tab cancels a delayed split lookup',async()=>{
 test('GitHub branch is resolved once before main, companion and project reads',async()=>{
  const sha='d'.repeat(40),view=viewer({repository:'wayri/board',head:'main',file:'board.kicad_pcb',pairedFile:'root.kicad_sch'},message=>({ok:true,result:message.type==='revision-resolve'?{sha}:{files:[]}}));assert.equal(view.get('headDrawing').children.length,0);await tick();assert.equal(view.calls.filter(m=>m.type==='revision-resolve').length,1);
  for(const id of ['headDrawing','pairDrawing'])assert.equal(new URL(view.get(id).children[0].src).searchParams.get('ref'),sha);view.get('workspaceTabs').children.find(b=>b.textContent==='Project').click();assert.equal(new URL(view.get('projectWorkspace').children[0].src).searchParams.get('ref'),sha);
+});
+
+
+test('outer viewer Stop cancels moving-ref resolution and ignores its late result; Retry uses a fresh scope',async()=>{
+ const pending=[];let ready=false;
+ const view=viewer({repository:'wayri/board',head:'main',file:'board.kicad_pcb'},message=>message.type==='load-cancel'?{ok:true,result:{cancelled:true}}:ready?{ok:true,result:{sha:'d'.repeat(40)}}:new Promise(resolve=>pending.push(resolve)));
+ await tick();const first=view.calls[0];assert.equal(first.type,'revision-resolve');assert.match(first.loadId,/^[a-f0-9]{32}$/);
+ view.get('outerLoadStop-start').click();await tick();assert.equal(view.calls.at(-1).type,'load-cancel');assert.equal(view.calls.at(-1).loadId,first.loadId);assert.match(view.get('status').textContent,/stopped/);
+ pending[0]({ok:true,result:{sha:'e'.repeat(40)}});await tick();assert.equal(view.get('headDrawing').children.length,0);
+ ready=true;view.get('outerLoadRetry-start').click();await tick();assert.equal(view.get('headDrawing').children.length,1);assert.ok(view.get('headDrawing').children[0].src.includes('ref='+'d'.repeat(40)));assert.notEqual(view.calls.at(-1).loadId,first.loadId);
+});
+test('outer viewer inventory Stop prevents late navigation and Retry repeats requested workspace',async()=>{
+ const pending=[];let ready=false;const view=viewer({...parameters,base:''},message=>message.type==='load-cancel'?{ok:true}:ready?{ok:true,result:{files:[{path:'board.kicad_pcb'}]}}:new Promise(resolve=>pending.push(resolve)));
+ view.get('workspaceTabs').children.find(n=>n.textContent==='Layout').click();await tick();assert.equal(view.calls[0].type,'project-inventory');
+ view.get('outerLoadStop-inventory').click();await tick();pending[0]({ok:true,result:{files:[{path:'stale.kicad_pcb'}]}});await tick();assert.equal(view.get('pairDrawing').children.length,0);
+ ready=true;view.get('outerLoadRetry-inventory').click();await tick();assert.equal(view.get('pairDrawing').children.length,1);assert.ok(view.get('pairDrawing').children[0].src.includes('file=board.kicad_pcb'));
+});
+test('outer comparison Stop cancels both scopes, ignores late results and can retry',async()=>{
+ const pending=[];let ready=false;const view=viewer(parameters,message=>message.type==='load-cancel'?{ok:true}:ready?{ok:true,result:[{path:message.file,content:sch('1k')}]}:new Promise(resolve=>pending.push(resolve)));
+ view.click('Changes');await tick();const reads=view.calls.filter(m=>m.type==='project');assert.equal(reads.length,2);assert.notEqual(reads[0].loadId,reads[1].loadId);
+ view.get('outerLoadStop-changes').click();await tick();assert.equal(view.calls.filter(m=>m.type==='load-cancel').length,2);
+ for(const resolve of pending)resolve({ok:true,result:[]});await tick();assert.match(view.get('changeCount').textContent,/stopped/);assert.equal(view.get('changeList').children.length,0);
+ ready=true;view.get('outerLoadRetry-changes').click();await tick();assert.match(view.get('changeCount').textContent,/0 added/);
+});
+test('outer request deadline and page exit cancel pending work without requiring a backend reply',async()=>{
+ for(const exit of [false,true]){
+  const view=viewer({repository:'wayri/board',head:'main',file:'board.kicad_pcb'},()=>new Promise(()=>{}));await tick();if(exit)view.pagehide();else view.expire();await tick();
+  assert.equal(view.calls.filter(m=>m.type==='load-cancel').length,1);assert.equal(view.get('headDrawing').children.length,0);assert.match(view.get('status').textContent,exit?/stopped/:/2 minutes/);
+ }
 });

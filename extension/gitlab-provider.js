@@ -1,7 +1,7 @@
 /* GitLab transport, bound to one explicitly authorized HTTPS origin. */
 ((root) => {
   'use strict';
-  function forHost(host='https://gitlab.com',{sessionRead}={}){
+  function forHost(host='https://gitlab.com',{sessionRead,signal}={}){
     const parsed=new URL(host);if(parsed.protocol!=='https:'||parsed.username||parsed.password||parsed.search||parsed.hash||parsed.pathname!=='/')throw new Error('Invalid GitLab host.');host=parsed.origin;
   const MIB=1024*1024, SHA=/^[a-f0-9]{40}$/i;
   const validRepository=value=>typeof value==='string'&&value.length<=300&&/^[A-Za-z0-9_.-]+(?:\/[A-Za-z0-9_.-]+)+$/.test(value)&&value.split('/').every(p=>p!=='.'&&p!=='..');
@@ -10,17 +10,21 @@
   function endpoint(repository){if(!validRepository(repository))throw new Error('Invalid GitLab repository.');return host+'/api/v4/projects/'+encodeURIComponent(repository)+'/repository';}
   async function response(url,limit=4*MIB){
     if(new URL(url).origin!==host||!url.startsWith(host+'/api/v4/projects/'))throw new Error('Invalid GitLab API endpoint.');
-    const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),60000);
+    if(signal?.aborted)throw Error('Project loading cancelled.');
+    const controller=new AbortController(),abort=()=>controller.abort(),timer=setTimeout(()=>controller.abort(),60000);
+    signal?.addEventListener('abort',abort,{once:true});
     try{const headers=await root.KiCadGitLabReviewApi?.authorizationHeaders(host);const result=await fetch(url,{...(headers&&Object.keys(headers).length?{headers}:{}),credentials:'omit',cache:'no-store',redirect:'error',signal:controller.signal});
       if([401,403,404].includes(result.status)&&sessionRead){const session=await sessionRead(url,limit);if(session)return session;}
       if(result.status===404)return null;
       if(!result.ok)throw new Error(`GitLab returned HTTP ${result.status}; check the server, repository access and GitLab connection in extension settings.`);
       if(Number(result.headers.get('content-length'))>limit)throw new Error('GitLab response exceeds its size limit.');
       const reader=result.body.getReader(),chunks=[];let length=0;
-      while(true){const {done,value}=await reader.read();if(done)break;length+=value.length;if(length>limit){await reader.cancel();throw new Error('GitLab response exceeds its size limit.');}chunks.push(value);}
+      const cancelBody=()=>reader.cancel().catch(()=>{});controller.signal.addEventListener('abort',cancelBody,{once:true});if(controller.signal.aborted)cancelBody();
+      try{while(true){const {done,value}=await reader.read();if(done)break;length+=value.length;if(length>limit){await reader.cancel();throw new Error('GitLab response exceeds its size limit.');}chunks.push(value);}}finally{controller.signal.removeEventListener('abort',cancelBody);}
+      if(controller.signal.aborted)throw Error(signal?.aborted?'Project loading cancelled.':'GitLab retrieval timed out.');
       const bytes=new Uint8Array(length);let offset=0;for(const chunk of chunks){bytes.set(chunk,offset);offset+=chunk.length;}
       return {bytes,next:result.headers.get('x-next-page')||'',link:result.headers.get('link')||''};
-    }catch(error){if(error.name==='AbortError')throw new Error('GitLab retrieval timed out.');throw error;}finally{clearTimeout(timer);}
+    }catch(error){if(error.name==='AbortError')throw new Error('GitLab retrieval timed out.');throw error;}finally{clearTimeout(timer);signal?.removeEventListener('abort',abort);}
   }
   async function json(url){const result=await response(url);if(!result)throw new Error('GitLab resource was not found or access is unavailable.');return {...result,value:JSON.parse(new TextDecoder().decode(result.bytes))};}
   async function file(repository,ref,path){scope(repository,ref,path);const result=await response(`${endpoint(repository)}/files/${encodeURIComponent(path)}/raw?ref=${encodeURIComponent(ref)}`,root.KiCadBrowserData.fileByteLimit(path));return result?new TextDecoder().decode(result.bytes):null;}

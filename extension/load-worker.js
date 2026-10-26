@@ -1,6 +1,6 @@
 /* Bundled parser worker: no repository requests, credentials or dynamic code. */
 'use strict';
-importScripts('design-diff.js','design-model.js','file-compatibility.js','worksheet.js','schematic-renderer.js','pcb-renderer.js','net-model.js','project-settings.js');
+importScripts('design-diff.js','design-model.js','file-compatibility.js','worksheet.js','schematic-renderer.js','layer-colors.js','pcb-renderer.js','net-model.js','project-settings.js');
 onmessage=event=>{
   try{
     const {job,payload}=event.data||{};let result;

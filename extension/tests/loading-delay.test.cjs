@@ -9,7 +9,7 @@ function runtime(){
  return{api:context.KiCadLoading,body,advance,timers};
 }
 test('300 ms delay prevents flashes and stage updates do not restart the delay',()=>{
- const r=runtime(),ui=r.api.indicator(r.body),pane=r.body.children[0];ui.show('Reading');r.advance(299);assert.equal(pane.hidden,true);ui.show('Parsing');r.advance(1);assert.equal(pane.hidden,false);assert.equal(pane.children[1].children[1].textContent,'Parsing');r.advance(250);assert.equal(pane.children[1].children[2].textContent,'0.6 s');ui.hide();assert.equal(pane.hidden,true);assert.equal(r.timers.size,0);
+ const r=runtime(),ui=r.api.indicator(r.body),pane=r.body.children[0];ui.show('Reading');r.advance(299);assert.equal(pane.hidden,true);ui.show('Parsing');r.advance(1);assert.equal(pane.hidden,false);assert.equal(pane.children[1].children[1].textContent,'Parsing');r.advance(1000);assert.equal(pane.children[1].children[2].textContent,'1 s');ui.hide();assert.equal(pane.hidden,true);assert.equal(r.timers.size,0);
  ui.show('Fast');r.advance(200);ui.hide();r.advance(300);assert.equal(pane.hidden,true);assert.equal(r.timers.size,0);
 });
 test('overlapping operations stay visible until all settle, including failure',async()=>{

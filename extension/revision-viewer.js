@@ -10,8 +10,14 @@
   if(params.get('workspace')==='1')document.body.dataset.workspace='true';
   const status=document.getElementById('status'),pcb=/\.kicad_pcb$/i.test(rootFile||'');
 
-  const loading=globalThis.KiCadLoading?.indicator(document.body);
   const loadController=typeof AbortController==='function'?new AbortController():null;
+  const loadId=globalThis.crypto?.randomUUID?.()||('load-'+Date.now().toString(36)+'-'+Math.random().toString(36).slice(2));
+  const remoteLoad=!globalThis.KiCadLocalRuntime&&(!globalThis.KiCadVSCodeContext||globalThis.KiCadAndroidRuntime);
+  let loadFinished=false;
+  const stopLoading=(message='Loading stopped.')=>{if(loadFinished||loadController?.signal.aborted)return;loadController?.abort(Object.assign(new Error(message),{name:'AbortError'}));};
+  const loading=globalThis.KiCadLoading?.indicator(document.body,{onStop:()=>stopLoading()});
+  function loadWait(promise){return new Promise((resolve,reject)=>{const signal=loadController?.signal,abort=()=>reject(signal?.reason||Object.assign(Error('Loading stopped.'),{name:'AbortError'}));if(signal?.aborted){abort();return;}signal?.addEventListener('abort',abort,{once:true});Promise.resolve(promise).then(value=>{signal?.removeEventListener('abort',abort);signal?.aborted?abort():resolve(value);},error=>{signal?.removeEventListener('abort',abort);reject(error);});});}
+  const loadSend=message=>{const pending=send({...message,...(remoteLoad?{loadId}:{})});const signal=loadController?.signal,abort=()=>{if(remoteLoad)void send({type:'load-cancel',loadId}).catch(()=>{});};signal?.addEventListener('abort',abort,{once:true});return loadWait(pending).finally(()=>signal?.removeEventListener('abort',abort));};
   let sheetOverview=null,compatibilityUI=null;
   let dark=pcb,workspace=null,canvas=null,scene=null,modelAssetCache=null,disposed=false,applying=false,crossApplying=false,lastView='',lastFile='';
 
@@ -31,9 +37,10 @@
 
     const kind=document.body.dataset.viewer;if(kind&&kind!=='auto'&&kind!==(pcb?'pcb':'schematic'))throw new Error('This file belongs in the other dedicated viewer.');
 
-    if(!globalThis.KiCadVSCodeContext&&!/^[a-f0-9]{40}$/i.test(ref)){const resolved=await send({type:'revision-resolve',repository,ref,file:rootFile});if(!resolved?.ok||!/^[a-f0-9]{40}$/i.test(resolved.result?.sha||''))throw new Error(resolved?.error||'Git revision could not be resolved.');ref=resolved.result.sha;}
+    loading?.show('Resolving drawing revision…');
+    if(!globalThis.KiCadVSCodeContext&&!/^[a-f0-9]{40}$/i.test(ref)){const resolved=await loadSend({type:'revision-resolve',repository,ref,file:rootFile});if(!resolved?.ok||!/^[a-f0-9]{40}$/i.test(resolved.result?.sha||''))throw new Error(resolved?.error||'Git revision could not be resolved.');ref=resolved.result.sha;}
     loading?.show('Fetching drawing files and discovering sheets…');
-    const reply=await send({type:'project',repository,ref,file:rootFile});
+    const reply=await loadSend({type:'project',repository,ref,file:rootFile});
 
     if(!reply?.ok)throw new Error(reply?.error||'Could not retrieve the KiCad project.');
 
@@ -47,8 +54,9 @@
 
     let preferences={uiTheme:pcb?'dark':'light',drawingTheme:pcb?'dark':'light',rulerUnits:'mm',acceleration:'auto'};
 
-    try{const stored=await chrome.storage?.local?.get(preferenceKey),value=stored?.[preferenceKey];if(value&&['dark','light'].includes(value.uiTheme)&&['dark','light'].includes(value.drawingTheme)&&['mm','mil'].includes(value.rulerUnits))preferences=value;}catch{}
+    try{const stored=await loadWait(chrome.storage?.local?.get(preferenceKey)),value=stored?.[preferenceKey];if(value&&['dark','light'].includes(value.uiTheme)&&['dark','light'].includes(value.drawingTheme)&&['mm','mil'].includes(value.rulerUnits))preferences=value;}catch{}
 
+    if(loadController?.signal.aborted)throw loadController.signal.reason;
     dark=preferences.drawingTheme==='dark';document.body.dataset.uiTheme=preferences.uiTheme;
 
     // buildProject enforces source/file/project limits before the geometry parser runs.
@@ -62,7 +70,7 @@
       return {model,design,nets};
     };
     const prepared=globalThis.KiCadLoading?await KiCadLoading.run('drawing',{files,rootFile:initialFile,pcb},prepare,{signal:loadController?.signal,onStage:stage=>loading.show(stage)}):prepare();
-    if(disposed)return;
+    if(disposed)return;if(loadController?.signal.aborted)throw loadController.signal.reason;
     if(prepared.rules)Object.defineProperty(prepared.model,'_rules',{value:new Map(prepared.rules)});
 
     if($('refBadge')){$('refBadge').textContent=ref.length>20?ref.slice(0,17)+'…':ref;$('refBadge').title=ref;}
@@ -216,7 +224,7 @@
 
     loading?.show('Displaying drawing…');
     await globalThis.KiCadLoading?.paint();
-    if(disposed)return;
+    if(disposed)return;if(loadController?.signal.aborted)throw loadController.signal.reason;
     workspace=KiCadReviewWorkspace.mount({initialModel:prepared.model,initialDesign:prepared.design,initialNetModel:prepared.nets,files,repository,provider,host:providerContext.host,ref,rootFile,pcb,pairedFile:params.get('pairedFile')||undefined,getCanvas:()=>canvas,currentFile,focus,openSheet,getRulerUnits:()=>preferences.rulerUnits,
 
       getDesigns:()=>designs,updateDiagnostics,onOverviewHighlights:()=>sheetOverview?.refresh(),
@@ -399,6 +407,7 @@
 
   addEventListener('pagehide',()=>{disposed=true;loadController?.abort();loading?.dispose();modelAssetCache?.clear();sheetOverview?.dispose();compatibilityUI?.dispose();workspace?.dispose();scene?.dispose();canvas?.dispose();});
 
-  start().catch(error=>{loading?.hide();if(disposed)return;status.textContent=error.message;status.classList.add('error');if(!status.isConnected)$('drawingHost').append(status);});
+  const deadline=setTimeout(()=>stopLoading('Loading stopped after 5 minutes. Retry or open a smaller project.'),300000);
+  start().catch(error=>{loading?.hide();if(disposed)return;workspace?.dispose();canvas?.dispose();$('frameControls').hidden=true;status.textContent=loadController?.signal.aborted?(loadController.signal.reason?.message||'Loading stopped.'):error.message;if(error.name!=='AbortError')status.classList.add('error');const retry=document.createElement('button');retry.type='button';retry.textContent='Retry loading';retry.onclick=()=>location.reload();status.append(retry);if(!status.isConnected)$('drawingHost').append(status);}).finally(()=>{loadFinished=true;clearTimeout(deadline);});
 
 })();

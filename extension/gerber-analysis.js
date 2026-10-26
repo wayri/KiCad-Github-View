@@ -9,7 +9,7 @@
   const name=String(path).split(/[\\/]/).pop().toLowerCase();
   const names={gtl:'Top copper',gbl:'Bottom copper',gts:'Top solder mask',gbs:'Bottom solder mask',gto:'Top silkscreen',gbo:'Bottom silkscreen',gtp:'Top paste',gbp:'Bottom paste',gko:'Board outline',drl:'Drill',xln:'Drill'};
   const ext=name.split('.').pop();let inferred=names[ext];
-  if(!inferred){const m=/(?:^|[-_.])(f|b)[-_.]?(cu|mask|silks|silkscreen|paste)(?:[-_.]|$)/.exec(name);if(m)inferred=(m[1]==='f'?'Top':'Bottom')+' '+({cu:'copper',mask:'solder mask',silks:'silkscreen',silkscreen:'silkscreen',paste:'paste'}[m[2]]);else if(/edge[-_.]?cuts|outline/.test(name))inferred='Board outline';else if(model.format==='excellon')inferred='Drill';}
+  if(!inferred){const m=/(?:^|[-_.])(f|b)[-_.]?(cu|mask|silks|silkscreen|paste)(?:[-_.]|$)/.exec(name);if(m)inferred=(m[1]==='f'?'Top':'Bottom')+' '+({cu:'copper',mask:'solder mask',silks:'silkscreen',silkscreen:'silkscreen',paste:'paste'}[m[2]]);else if(/(?:^|[-_.])in(\d+)[-_.]?cu(?:[-_.]|$)/.test(name))inferred='Inner copper '+/(?:^|[-_.])in(\d+)[-_.]?cu(?:[-_.]|$)/.exec(name)[1];else if(/edge[-_.]?cuts|outline/.test(name))inferred='Board outline';else if(model.format==='excellon')inferred='Drill';}
   return {name:inferred||'Unknown layer',source:inferred?'filename':'unknown'};
  }
  const finite=n=>typeof n==='number'&&Number.isFinite(n);

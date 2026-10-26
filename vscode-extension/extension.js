@@ -1,5 +1,6 @@
 "use strict";
-// Same source runs in desktop and web extension hosts. No Node I/O or processes.
+// Same source runs in desktop and web hosts. Immutable local Git object I/O is
+// loaded lazily only in trusted desktop workspaces with the official Git API.
 const vscode = require("vscode");
 const projectPaths=require("./media/parsing.js");
 const VIEW = "kicadVisualReview.viewer", CHANNEL = "kicad-vscode:v1";
@@ -7,6 +8,10 @@ const MAX_FILE = 8 * 1024 * 1024, MAX_PROJECT = 24 * 1024 * 1024;
 const MAX_MESSAGE = 1024 * 1024, MAX_FILES = 32;
 const MAX_SIDECAR=4*1024*1024,liveSessions=new Set(),pairTargets=new Map();
 const OPERATIONS = new Set(["repository-tree", "repository-history", "repository-branches", "preview-project-html", "project-inventory", "project-file", "open-project-file", "open-project-overview", "rule-report", "project-search-files", "open-project-drawing", "project", "repo-model-index", "repo-asset", "pair-selection", "comments-changed", "comment-list", "comment-save", "comment-delete", "storage-get", "storage-set", "open-comment-draft", "github-annotations"]);
+const sharedReviewComments=require('./media/review-comments.js');
+const remoteCollaboration=require('./remote-collaboration.js').createHost(vscode,{sameScope,comments:sharedReviewComments});
+OPERATIONS.add('repository-open-file');
+for(const operation of remoteCollaboration.operations)OPERATIONS.add(operation);
 let storageQueue=Promise.resolve();
 const safePath = (path) => typeof path === "string" && path.length <= 500 && /\.kicad_(sch|pcb)$/i.test(path) &&
   !path.startsWith("/") && path.split("/").every((p) => p && p !== "." && p !== ".." && !/[\\\x00-\x1f\x7f:]/.test(p));
@@ -131,13 +136,13 @@ function assertScope(request,session) {
   if(request.repository!==session.scope.repository || request.ref!==session.scope.ref || !session.paths.has(request.file))
     throw new Error("Request belongs to another workspace or drawing.");
 }
-function validateComment(note,session=null) {
+function validateComment(note,session=null,bindSession=session) {
   if(!note || typeof note!=="object" || typeof note.id!=="string" || !/^[A-Za-z0-9_-]{1,100}$/.test(note.id) ||
     typeof note.text!=="string" || !note.text.trim() || note.text.length>4000 ||
     !["info","minor","major","critical"].includes(note.severity || "info") ||
     !validTimestamp(note.createdAt))
     throw new Error("Invalid local review annotation.");
-  const allowed=new Set(["id","text","severity","createdAt","updatedAt","anchor","tags","state","remoteRefs","capture","mentions","threadType"]);
+  const allowed=new Set(["id","text","severity","createdAt","updatedAt","anchor","tags","state","remoteRefs","capture","mentions","threadType","attachments"]);
   if(Object.keys(note).some((key)=>!allowed.has(key)))throw new Error("Annotation has unsupported fields; preserve it in the sidecar before upgrading.");
   if(!note.anchor || typeof note.anchor.repository!=="string" || !/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(note.anchor.repository) ||
     note.anchor.repository.split("/").some((p)=>[".",".."].includes(p)) || typeof note.anchor.ref!=="string" ||
@@ -145,8 +150,8 @@ function validateComment(note,session=null) {
     note.anchor.ref.endsWith("/") || !safePath(note.anchor.file))throw new Error("Invalid annotation scope.");
   if(session)assertScope(note.anchor,session);
   const anchor={repository:note.anchor.repository,ref:note.anchor.ref,file:note.anchor.file};
-  if(Object.keys(note.anchor).some((key)=>!["repository","ref","file","uuid","objectId","reference","kind","position","area","variant"].includes(key)))throw new Error("Annotation anchor has unsupported fields.");
-  for(const [name,limit] of [["uuid",200],["objectId",200],["reference",100],["kind",80],["variant",100]]) {
+  if(Object.keys(note.anchor).some((key)=>!["repository","ref","file","uuid","objectId","reference","netName","kind","position","area","variant"].includes(key)))throw new Error("Annotation anchor has unsupported fields.");
+  for(const [name,limit] of [["uuid",200],["objectId",200],["reference",100],["netName",500],["kind",80],["variant",100]]) {
     const item=note.anchor[name];if(item==null || item==="")continue;
     if(typeof item!=="string" || item.length>limit || /[\x00-\x1f\x7f]/.test(item))throw new Error("Invalid annotation anchor.");anchor[name]=item;
   }
@@ -183,10 +188,12 @@ function validateComment(note,session=null) {
   for(const raw of inputMentions) {
     if(typeof raw!=="string")throw new Error("Invalid annotation mention.");
     const login=raw.startsWith("@")?raw.slice(1):raw;
-    if(!/^[A-Za-z0-9](?:[A-Za-z0-9-]{0,37}[A-Za-z0-9])?$/.test(login))throw new Error("Invalid annotation mention.");
+    if(!(bindSession?.remoteBinding?.provider==='gitlab'?/^[A-Za-z0-9_][A-Za-z0-9_.-]{0,254}$/:/^[A-Za-z0-9](?:[A-Za-z0-9-]{0,37}[A-Za-z0-9])?$/).test(login))throw new Error("Invalid annotation mention.");
     const key=login.toLowerCase();if(!mentionKeys.has(key)){mentions.push(login);mentionKeys.add(key);}
   }
+  const shared=bindSession?.remoteBinding?.provider==='gitlab'?sharedReviewComments.forWorkspace({repository:bindSession.scope.repository,ref:bindSession.scope.ref,file:note.anchor.file},{...bindSession.remoteBinding,file:note.anchor.file}).validateComment(note):sharedReviewComments.validateComment(note);
   const refs=remoteRefs.map((remote)=> {
+    if(remote?.provider==='gitlab')return shared.remoteRefs.find(r=>r.url===remote.url);
     if(!remote || !["issue","discussion"].includes(remote.kind) || typeof remote.repository!=="string" ||
       !/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(remote.repository) || remote.repository.split("/").some((p)=>[".",".."].includes(p)) ||
       !Number.isSafeInteger(remote.number) || remote.number<=0 || !validTimestamp(remote.publishedAt) ||
@@ -198,7 +205,7 @@ function validateComment(note,session=null) {
     return clone(remote);
   });
   return {id:note.id,text:note.text.trim(),createdAt:note.createdAt,updatedAt,severity:note.severity || "info",anchor,
-    tags:[...new Set(tags.map((tag)=>tag.trim()))],state,mentions,...(threadType?{threadType}:{}),remoteRefs:refs,...(capture ? {capture} : {})};
+    tags:[...new Set(tags.map((tag)=>tag.trim()))],state,mentions,...(threadType?{threadType}:{}),remoteRefs:refs,...(capture ? {capture} : {}),...(shared.attachments?.length?{attachments:shared.attachments}:{})};
 }
 function pngSignature(payload) {
   const alphabet="ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/",bytes=[];let bits=0,count=0;
@@ -212,17 +219,18 @@ function validTimestamp(value) {
   return typeof value==="string" && /^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d(?:\.\d{1,3})?Z$/.test(value) &&
     Number.isFinite(Date.parse(value)) && new Date(value).toISOString().slice(0,19)===value.slice(0,19);
 }
-function validateSidecar(data) {
+function validateSidecar(data,session=null) {
   if(!data || data.schemaVersion!==1 || !Array.isArray(data.annotations) || data.annotations.length>1000 ||
     Object.keys(data).some((key)=>!["schemaVersion","annotations"].includes(key)))throw new Error("Unsupported .kicad-review.json schema; expected schemaVersion 1 and annotations.");
   const seen=new Set(),annotations=data.annotations.map((note)=> {
-    const normalized=validateComment(note),key=JSON.stringify([normalized.anchor.repository,normalized.anchor.ref,normalized.anchor.file,normalized.id]);
+    const normalized=validateComment(note,null,session),key=JSON.stringify([normalized.anchor.repository,normalized.anchor.ref,normalized.anchor.file,normalized.id]);
     if(seen.has(key))throw new Error("Duplicate annotation identity in .kicad-review.json.");seen.add(key);return normalized;
   });
   return {schemaVersion:1,annotations};
 }
 const equalBytes=(a,b)=>a===null || b===null ? a===b : a.length===b.length && a.every((value,index)=>value===b[index]);
 async function readSidecar(session) {
+  if(!session.history&&!session.remoteBinding)await remoteCollaboration.publicContext(session);
   const uri=vscode.Uri.joinPath(session.scope.boundary,".kicad-review.json");
   try {
     const stat=await vscode.workspace.fs.stat(uri);
@@ -230,14 +238,14 @@ async function readSidecar(session) {
     if(stat.size>MAX_SIDECAR)throw new Error("Review sidecar exceeds 4 MiB.");
     const bytes=await vscode.workspace.fs.readFile(uri);
     if(bytes.length>MAX_SIDECAR)throw new Error("Review sidecar exceeds 4 MiB.");
-    return {uri,bytes:bytes.slice(),data:validateSidecar(JSON.parse(new TextDecoder("utf-8",{fatal:true}).decode(bytes)))};
+    return {uri,bytes:bytes.slice(),data:validateSidecar(JSON.parse(new TextDecoder("utf-8",{fatal:true}).decode(bytes)),session)};
   } catch(error) {
     if(["FileNotFound","EntryNotFound"].includes(error.code))return {uri,bytes:null,data:{schemaVersion:1,annotations:[]}};
     throw error;
   }
 }
 async function writeSidecar(session,before,data) {
-  const validated=validateSidecar(data);
+  const validated=validateSidecar(data,session);
   validated.annotations.sort((a,b)=>JSON.stringify([a.anchor.repository,a.anchor.ref,a.anchor.file,a.id]).localeCompare(JSON.stringify([b.anchor.repository,b.anchor.ref,b.anchor.file,b.id])));
   const bytes=new TextEncoder().encode(JSON.stringify(validated,null,2)+"\n");
   if(bytes.length>MAX_SIDECAR)throw new Error("Review sidecar exceeds 4 MiB; no annotations were written.");
@@ -271,7 +279,7 @@ function createSession(uri,project,context,token=secret()) {
   const storageKey=`kicad-visual-review:${uri.toString()}`;
   const session={uri,scope:project.scope,files:project.files,paths:new Set(project.files.map((f)=>f.path)),context,token,lastId:0,disposed:false,
     storageKey,variantKey:JSON.stringify(["kicad-review-variants",project.scope.repository,project.scope.rootFile]),
-    preferencesKey:JSON.stringify(["kicad-review-preferences",project.scope.repository,project.scope.rootFile]),assetRequests:0,assetBytes:0,eventId:0};
+    preferencesKey:JSON.stringify(["kicad-review-preferences",project.scope.repository,project.scope.rootFile]),assetRequests:0,assetBytes:0,eventId:0,...(project.history?{history:project.history}:{})};
   liveSessions.add(session);return session;
 }
 function validPairSelection(value) {
@@ -320,6 +328,7 @@ async function loadRepoAsset(request,session) {
   if(request.repository!==session.scope.repository || request.ref!==session.scope.ref)throw new Error("Model asset belongs to another workspace or revision.");
   if(session.assetRequests>=32)throw new Error("Model assets exceed the 32-request session limit.");session.assetRequests++;
   if(!safeAssetPath(request.file))throw new Error("Unsupported or unsafe model asset path.");
+  if(session.history){const bytes=await historicalBytes(session,request.file);session.assetBytes+=bytes.byteLength;if(session.assetBytes>32*1024*1024)throw Error('Model assets exceed the 32 MiB session limit.');return{base64:encodeBase64(bytes),mediaType:/\.(step|stp)$/i.test(request.file)?'model/step':/\.glb$/i.test(request.file)?'model/gltf-binary':'model/vrml'};}
   const parts=request.file.split("/"),target=vscode.Uri.joinPath(session.scope.boundary,...parts);
   if(!sameScope(target,session.scope.boundary))throw new Error("Model asset escapes the workspace.");
   for(let i=1;i<parts.length;i++) {
@@ -339,6 +348,7 @@ async function loadRepoAsset(request,session) {
 }
 async function repoModelIndex(request,session){
   if(request.repository!==session.scope.repository||request.ref!==session.scope.ref)throw Error('Model discovery belongs to another workspace or revision.');
+  if(session.history){const tree=await historicalInventory(session);return{paths:tree.entries.filter(e=>e.kind==='file'&&safeAssetPath(e.path)).map(e=>e.path).slice(0,2000),snapshotRef:session.history.sha,warnings:tree.warnings};}
   const candidates=await vscode.workspace.findFiles({baseUri:session.scope.boundary,pattern:'**/*'},'**/{.git,node_modules,__pycache__}/**',5001),paths=[],warnings=[];
   if(candidates.length>5000)warnings.push('Workspace model discovery reached 5000 files; library path matching may be incomplete.');
   const prefix=session.scope.boundary.path.replace(/\/$/,'')+'/';
@@ -359,6 +369,7 @@ async function repoModelIndex(request,session){
 }
 async function searchProjectFiles(request,session) {
   assertScope(request,session);
+  if(session.history){const tree=await historicalInventory(session),files=[],seen=new Set(),settings=[],warnings=[...tree.warnings],budget={files:0,bytes:0};let bytes=0;const drawings=tree.entries.filter(e=>e.kind==='file'&&safePath(e.path));for(const item of drawings){if(seen.has(item.path))continue;if(files.length>=MAX_FILES||budget.files>=MAX_FILES)break;const project=await loadHistoricalProject({...session.scope,rootFile:item.path},session.history,budget);for(const file of project.files){if(seen.has(file.path))continue;bytes+=new TextEncoder().encode(file.content).byteLength;if(files.length>=MAX_FILES||bytes>MAX_PROJECT)throw Error('Saved project search exceeds the 32-file / 24 MiB limit.');seen.add(file.path);files.push(file);session.paths.add(file.path);}}for(const item of tree.entries.filter(e=>e.kind==='file'&&/\.kicad_pro$/i.test(e.path)).slice(0,8)){const content=new TextDecoder('utf-8',{fatal:true}).decode(await historicalBytes(session,item.path,1024*1024));settings.push({path:item.path,content});}if(drawings.length>files.length)warnings.push('Saved project search is limited to 32 drawings.');return{files,settings,warnings,snapshotRef:session.history.sha,totalDrawings:drawings.length};}
   const candidates=await vscode.workspace.findFiles({baseUri:session.scope.boundary,pattern:"**/*.{kicad_sch,kicad_pcb}"},"**/{.git,node_modules}/**",201);
   const safe=candidates.filter(uri=>sameScope(uri,session.scope.boundary)).map(uri=>({uri,path:uri.path.slice(session.scope.boundary.path.replace(/\/$/,"").length+1)})).filter(item=>safePath(item.path)).sort((a,b)=>a.path.localeCompare(b.path));
   safe.sort((a,b)=>(b.path===session.scope.rootFile?1:0)-(a.path===session.scope.rootFile?1:0));
@@ -388,11 +399,13 @@ async function searchProjectFiles(request,session) {
 }
 async function readProjectFile(path,session){
   if(!projectPaths.filePath(path))throw new Error('Unsupported project file path.');
+  if(session.history)return{path,content:new TextDecoder('utf-8',{fatal:true}).decode(await historicalBytes(session,path))};
   const uri=vscode.Uri.joinPath(session.scope.boundary,...path.split('/'));if(!sameScope(uri,session.scope.boundary))throw new Error('Project file escapes workspace.');
   const parts=path.split('/');for(let i=1;i<=parts.length;i++){const stat=await vscode.workspace.fs.stat(vscode.Uri.joinPath(session.scope.boundary,...parts.slice(0,i)));if(stat.type&vscode.FileType.SymbolicLink)throw new Error('Symbolic-link project files are excluded.');if(i===parts.length&&stat.size>MAX_FILE)throw new Error('Project file exceeds 8 MiB.');}
   const bytes=await vscode.workspace.fs.readFile(uri);if(bytes.byteLength>MAX_FILE)throw new Error('Project file exceeds 8 MiB.');return {path,content:new TextDecoder('utf-8',{fatal:true}).decode(bytes)};
 }
 async function projectInventory(session){
+  if(session.history){const tree=await historicalInventory(session),files=tree.entries.filter(e=>e.kind==='file'&&projectPaths.filePath(e.path));return{files:files.slice(0,1000).map(({path,size})=>({path,size})),snapshotRef:session.history.sha,warnings:[...tree.warnings,...(files.length>1000?['First 1000 saved project files shown.']:[])]};}
   const candidates=await vscode.workspace.findFiles({baseUri:session.scope.boundary,pattern:'**/*'},'**/{.git,node_modules,__pycache__}/**',5001),files=[],warnings=[];
   if(candidates.length>5000)warnings.push('Workspace discovery reached 5000 files; project structure may be incomplete.');
   const prefix=session.scope.boundary.path.replace(/\/$/,'')+'/';
@@ -412,12 +425,11 @@ function openStaticHTML(source,path){
 }
 async function openOverview(session){
   const panel=vscode.window.createWebviewPanel('kicadVisualReview.project','KiCad Project Review',vscode.ViewColumn.Beside,{enableScripts:true,localResourceRoots:[vscode.Uri.joinPath(session.context.extensionUri,'media'),session.context.extensionUri]});
-  const project={files:session.files,scope:session.scope},overview=createSession(session.uri,project,session.context);overview.overview=true;overview.post=message=>panel.webview.postMessage(message);
+  const project={files:session.files,scope:session.scope,history:session.history},overview=createSession(session.uri,project,session.context);overview.overview=true;overview.post=message=>panel.webview.postMessage(message);
   const receiver=panel.webview.onDidReceiveMessage(message=>handleMessage(message,overview,reply=>panel.webview.postMessage(reply)));panel.onDidDispose(()=>{overview.disposed=true;liveSessions.delete(overview);receiver.dispose();});panel.webview.html=await htmlFor(panel.webview,session.context,overview);return {opened:true};
 }
-// Repository browsing remains provider-only: the built-in Git extension owns Git.
-// The public Git API exposes history, not ls-tree; inventory is explicitly the
-// working tree and never invents committed blob identities or executable modes.
+// Working-tree inventory and immutable historical inventory are distinct.
+// Git executable/root identity always comes from the official VS Code Git API.
 const GIT_SHA=/^[0-9a-f]{40}(?:[0-9a-f]{24})?$/i;
 const BROWSE_LIMIT=10000,BROWSE_PAGE=200;
 function browsePath(value,rootAllowed=false){return typeof value==='string'&&value.length<=1000&&(rootAllowed&&value===''||value.length>0&&!value.startsWith('/')&&value.split('/').length<=64&&value.split('/').every(part=>part&&part!=='.'&&part!=='..'&&part.toLowerCase()!=='.git'&&!/[\\:\x00-\x1f\x7f]/.test(part)));}
@@ -430,25 +442,63 @@ async function browseGit(session,request){
   const warnings=[];
   if(vscode.workspace.isTrusted!==true)return{repo:null,sha:null,warnings:['Git history is unavailable in Restricted Mode; workspace file inventory remains read-only.']};
   if(session.scope.boundary.scheme!=='file')return{repo:null,sha:null,warnings:['This virtual workspace does not expose native Git history; showing provider file inventory.']};
-  let repo=null;
+  let repo=null,gitPath=null;
   try{
     const extension=vscode.extensions?.getExtension('vscode.git');
     if(extension){const exports=extension.isActive?extension.exports:await extension.activate();
       if(vscode.workspace.isTrusted!==true)return{repo:null,sha:null,warnings:['Workspace trust changed; native Git browsing was stopped.']};
       const api=exports.getAPI(1);
-      repo=(api.repositories||[]).filter(item=>item.rootUri?.scheme==='file'&&sameScope(session.uri,item.rootUri)).sort((a,b)=>b.rootUri.path.length-a.rootUri.path.length)[0]||null;}
+      gitPath=api.git?.path;
+      const sourceUri=session.history?vscode.Uri.joinPath(session.scope.boundary,...session.scope.rootFile.split('/')):session.uri;
+      repo=(api.repositories||[]).filter(item=>item.rootUri?.scheme==='file'&&sameScope(sourceUri,item.rootUri)).sort((a,b)=>b.rootUri.path.length-a.rootUri.path.length)[0]||null;}
   }catch{warnings.push('The VS Code Git provider is unavailable.');}
   if(!repo){warnings.push('No local Git repository is available for this workspace.');return{repo:null,sha:null,warnings};}
   const identity=repo.rootUri.toString();
   if(request.refresh||session.repositoryPin?.root!==identity)session.repositoryPin=null;
-  let sha=request.sha||session.repositoryPin?.sha||repo.state?.HEAD?.commit;
+  let sha=request.sha||session.history?.sha||session.repositoryPin?.sha||repo.state?.HEAD?.commit;
   if(!GIT_SHA.test(sha||'')){warnings.push('This Git repository has no saved HEAD commit.');return{repo,sha:null,warnings};}
   sha=sha.toLowerCase();
   if(request.sha&&sha!==session.repositoryPin?.sha&&sha!==(repo.state?.HEAD?.commit||'').toLowerCase()){
     if(typeof repo.getCommit!=='function')throw Error('The Git provider cannot verify the requested commit.');
     const commit=await repo.getCommit(sha);if(vscode.workspace.isTrusted!==true)return{repo:null,sha:null,warnings:['Workspace trust changed; native Git browsing was stopped.']};if(commit?.hash?.toLowerCase()!==sha)throw Error('The requested commit is unavailable in this repository.');
   }
-  session.repositoryPin={root:identity,sha};return{repo,sha,warnings};
+  session.repositoryPin={root:identity,sha};return{repo,sha,warnings,gitPath};
+}
+async function historyContext(session,sha){
+  if(session.history)return !sha||sha===session.history.sha?session.history:{...session.history,sha,inventory:null};
+  const git=await browseGit(session,{sha});
+  if(!git.repo||!git.sha||typeof git.gitPath!=='string'||!git.repo.rootUri.fsPath)throw Error('Saved Git trees require a trusted desktop repository with a configured Git executable. No working files were substituted.');
+  if(session.scope.boundary.toString()!==git.repo.rootUri.toString()&&!sameScope(session.scope.boundary,git.repo.rootUri))throw Error('Open the Git repository itself as a workspace folder to browse its saved files. No working files were substituted.');
+  const prefix=session.scope.boundary.path.slice(git.repo.rootUri.path.replace(/\/$/,'').length).replace(/^\//,'');
+  if(prefix&&!browsePath(prefix))throw Error('Saved workspace scope is invalid.');
+  const reader=require('./git-history-tree.js').createGitHistoryReader({gitPath:git.gitPath,rootPath:git.repo.rootUri.fsPath,isTrusted:()=>vscode.workspace.isTrusted===true});
+  return{reader,sha:git.sha,prefix};
+}
+async function historicalBytes(session,path,maxBytes=MAX_FILE){
+  if(!browsePath(path))throw Error('Invalid saved file path.');
+  const history=session.history;if(!history)throw Error('Saved revision context is missing.');
+  return(await history.reader.read({sha:history.sha,path:history.prefix?history.prefix+'/'+path:path,maxBytes})).bytes;
+}
+async function historicalInventory(session){
+  const history=session.history;if(!history)throw Error('Saved revision context is missing.');
+  if(!history.inventory)history.inventory=history.reader.inventory({sha:history.sha,directory:history.prefix}).then(result=>({...result,entries:result.entries.map(e=>({...e,path:history.prefix?e.path.slice(history.prefix.length+1):e.path}))})).catch(error=>{history.inventory=null;throw error;});
+  if(vscode.workspace.isTrusted!==true||session.disposed)throw Error('Saved Git browsing requires an active trusted workspace.');return history.inventory;
+}
+async function loadHistoricalProject(scope,history,budget={files:0,bytes:0}){
+  const pending=[scope.rootFile],seen=new Set(),files=[],warnings=[],stub={scope,history};let total=0;
+  while(pending.length){const path=pending.shift();if(seen.has(path))continue;if(seen.size>=MAX_FILES||budget.files>=MAX_FILES)throw Error('Saved project exceeds the 32-sheet read limit.');seen.add(path);const bytes=await historicalBytes(stub,path);budget.files++;budget.bytes+=bytes.byteLength;if((total+=bytes.byteLength)>MAX_PROJECT||budget.bytes>MAX_PROJECT)throw Error('Saved project exceeds the 24 MiB source limit.');const content=new TextDecoder('utf-8',{fatal:true}).decode(bytes);files.push({path,content});if(/\.kicad_sch$/i.test(path))for(const name of sheetFiles(content)){const child=childPath(path,name);if(child)pending.push(child);else warnings.push('Excluded an out-of-workspace saved sheet reference.');}}
+  return{scope,files,warnings,history};
+}
+async function openHistoricalFile(request,session){
+  browseScope({...request,file:session.scope.rootFile},session);
+  if(!GIT_SHA.test(request.sha||'')||!projectPaths.filePath(request.path))throw Error('Select a saved commit and a supported project file.');
+  const history=await historyContext(session,request.sha.toLowerCase()),scope={...session.scope,rootFile:request.path,ref:history.sha};
+  const project=await loadHistoricalProject(scope,history),uri=vscode.Uri.joinPath(scope.boundary,...request.path.split('/')).with({query:'kiview-commit='+history.sha});
+  const panel=vscode.window.createWebviewPanel(VIEW,'Saved '+request.path.split('/').at(-1)+' · '+history.sha.slice(0,8),vscode.ViewColumn.Beside,{enableScripts:true,localResourceRoots:[session.context.extensionUri]});
+  const saved=createSession(uri,project,session.context);saved.post=message=>panel.webview.postMessage(message);
+  const receiver=panel.webview.onDidReceiveMessage(message=>handleMessage(message,saved,reply=>panel.webview.postMessage(reply)));panel.onDidDispose(()=>{saved.disposed=true;liveSessions.delete(saved);receiver.dispose();});
+  try{panel.webview.html=await htmlFor(panel.webview,saved.context,saved);}catch(error){saved.disposed=true;liveSessions.delete(saved);panel.dispose();throw error;}
+  return{opened:true,sha:history.sha,workingTree:false};
 }
 function browseStatus(repo,boundary){
   const result=new Map(),labels=['modified','added','deleted','renamed','copied','modified','deleted','untracked','ignored','added','renamed','type-changed','conflicted','conflicted','conflicted','conflicted','conflicted','conflicted','conflicted'];
@@ -465,6 +515,7 @@ async function repositoryTree(request,session){
   const lazy=request.directory!==undefined,directory=lazy?request.directory:'';
   if(!browsePath(directory,true))throw Error('Invalid repository directory.');
   const page=request.page===undefined?1:request.page;if(!Number.isSafeInteger(page)||page<1||page>50||!lazy&&page!==1)throw Error('Invalid repository tree page.');
+  if(request.sha||session.history){const history=await historyContext(session,request.sha?.toLowerCase()),tree=lazy?await history.reader.tree({sha:history.sha,directory:[history.prefix,directory].filter(Boolean).join('/'),recursive:false,page}):{...await history.reader.inventory({sha:history.sha,directory:history.prefix}),treeRef:history.sha,hasMore:false,nextPage:null,truncated:false};return{...tree,repository:session.scope.repository,ref:session.scope.ref,directory:lazy?directory:null,canOpenHistorical:true,entries:tree.entries.map(e=>({...e,path:history.prefix?e.path.slice(history.prefix.length+1):e.path}))};}
   const git=await browseGit(session,request),warnings=[...git.warnings,'File inventory is the working tree; Git object hashes and file modes are not available from this provider.'],boundary=session.scope.boundary,statuses=browseStatus(git.repo,boundary),entries=new Map();
   let truncated=false;
   const warn=value=>{if(!warnings.includes(value)&&warnings.length<20)warnings.push(value);};
@@ -544,6 +595,9 @@ async function repositoryHistory(request,session){
 }
 async function dispatch(request,session) {
   const state=session.context.workspaceState,key=session.storageKey;
+  if(session.history){if(vscode.workspace.isTrusted!==true)throw Error('Saved Git browsing requires workspace trust.');if(remoteCollaboration.operations.has(request.type)||['comment-save','comment-delete','open-comment-draft','comments-changed'].includes(request.type))throw Error('Saved commit viewers are read-only; remote publication and workspace annotations are disabled.');if(request.type==='comment-list'){assertScope(request,session);return[];}}
+  if(remoteCollaboration.operations.has(request.type))return remoteCollaboration.dispatch(request,session);
+  if(request.type==='repository-open-file')return openHistoricalFile(request,session);
   if(request.type==='repository-tree')return repositoryTree(request,session);
   if(request.type==='repository-history')return repositoryHistory(request,session);
   if(request.type==='repository-branches')return repositoryBranches(request,session);
@@ -554,17 +608,19 @@ async function dispatch(request,session) {
     const path=request.file;const result=await readProjectFile(path,session);
     if(request.type==='project-file')return result;
     if(request.type==='preview-project-html'){if(!/\.html?$/i.test(path))throw Error('HTML preview requires an HTML file.');return openStaticHTML(result.content,path);}
+    if(session.history)return openHistoricalFile({...request,path,sha:session.history.sha},session);
     await vscode.commands.executeCommand('vscode.openWith',vscode.Uri.joinPath(session.scope.boundary,...path.split('/')),VIEW,vscode.ViewColumn.Beside);return {opened:true};
   }
   if(request.type==="rule-report") {
     assertScope(request,session);const path=request.reportPath;
     if(typeof path!=='string'||path.length>500||!path.endsWith('.json')||path.startsWith('/')||path.split('/').some(p=>!p||p==='.'||p==='..'||/[\\:\x00-\x1f\x7f]/.test(p)))throw new Error('Invalid workspace report path.');
+    if(session.history)return{path,content:new TextDecoder('utf-8',{fatal:true}).decode(await historicalBytes(session,path,4*1024*1024))};
     const uri=vscode.Uri.joinPath(session.scope.boundary,...path.split('/'));if(!sameScope(uri,session.scope.boundary))throw new Error('Report escapes workspace.');
     const parts=path.split('/');for(let i=1;i<=parts.length;i++){const stat=await vscode.workspace.fs.stat(vscode.Uri.joinPath(session.scope.boundary,...parts.slice(0,i)));if(stat.type&vscode.FileType.SymbolicLink)throw new Error('Symbolic-link reports are excluded.');if(i===parts.length&&stat.size>4*1024*1024)throw new Error('Rule report exceeds 4 MiB.');}
     const bytes=await vscode.workspace.fs.readFile(uri);if(bytes.byteLength>4*1024*1024)throw new Error('Rule report exceeds 4 MiB.');return {content:new TextDecoder('utf-8',{fatal:true}).decode(bytes),path};
   }
   if(request.type==="project-search-files")return searchProjectFiles(request,session);
-  if(request.type==="open-project-drawing"){assertScope(request,session);await vscode.commands.executeCommand("vscode.openWith",vscode.Uri.joinPath(session.scope.boundary,...request.file.split("/")),VIEW,vscode.ViewColumn.Beside);return {opened:true};}
+  if(request.type==="open-project-drawing"){assertScope(request,session);if(session.history)return openHistoricalFile({...request,path:request.file,sha:session.history.sha},session);await vscode.commands.executeCommand("vscode.openWith",vscode.Uri.joinPath(session.scope.boundary,...request.file.split("/")),VIEW,vscode.ViewColumn.Beside);return {opened:true};}
   if(request.type==="repo-model-index")return repoModelIndex(request,session);
   if(request.type==="repo-asset")return loadRepoAsset(request,session);
   if(request.type==="pair-selection")return relaySelection(request.selection,session);
@@ -597,7 +653,7 @@ async function dispatch(request,session) {
   }
   const snapshot=await annotationSnapshot(session),notes=snapshot.data.annotations;
   if(request.type==="comment-save") {
-    const note=validateComment(request.comment),scope=note.anchor;
+    const note=validateComment(request.comment,null,session),scope=note.anchor;
     if(!session.paths.has(scope.file))throw new Error("Annotation belongs to another drawing.");
     if(notes.filter((n)=>n.id===note.id&&n.anchor.file===scope.file).length>1)throw new Error("Annotation identity is ambiguous across saved provenance; no changes were written.");
     const existing=notes.findIndex((n)=>n.id===note.id && n.anchor.file===scope.file);
@@ -636,13 +692,18 @@ async function htmlFor(webview,context,session) {
   const media=vscode.Uri.joinPath(context.extensionUri,"media"),templateUri=vscode.Uri.joinPath(media,session.overview||!safePath(session.scope.rootFile)?"project-viewer.html":"revision-viewer.html");
   let html=new TextDecoder().decode(await vscode.workspace.fs.readFile(templateUri));
   const nonce=secret(),resource=(name)=>webview.asWebviewUri(vscode.Uri.joinPath(media,...name.split("/"))).toString();
-  const contextData={token:session.token,stepWorkerUrl:resource("step-worker-vscode.js"),stepWasmUrl:resource("vendor/occt/occt-import-js.wasm"),search:new URLSearchParams({repository:session.scope.repository,ref:session.scope.ref,file:session.scope.rootFile}).toString()};
+  const collaboration=session.history?null:await remoteCollaboration.publicContext(session);
+  const contextData={...(collaboration?{collaboration}:{}),historical:!!session.history,canOpenHistorical:true,token:session.token,loadWorkerUrl:resource("load-worker-vscode.js"),stepWorkerUrl:resource("step-worker-vscode.js"),stepWasmUrl:resource("vendor/occt/occt-import-js.wasm"),search:new URLSearchParams({repository:session.scope.repository,ref:session.scope.ref,file:session.scope.rootFile}).toString()};
   const bootstrap=JSON.stringify(contextData).replace(/</g,"\\u003c").replace(/\u2028/g,"\\u2028").replace(/\u2029/g,"\\u2029");
-  const csp=`default-src 'none'; script-src 'nonce-${nonce}' ${webview.cspSource} 'wasm-unsafe-eval'; style-src ${webview.cspSource} 'unsafe-inline'; img-src ${webview.cspSource} data: blob:; font-src ${webview.cspSource}; connect-src ${resource('step-worker-vscode.js')} ${resource('vendor/occt/occt-import-js.wasm')}; worker-src blob:; base-uri ${webview.cspSource}; frame-src ${resource('terms.html')};`;
+  const csp=`default-src 'none'; script-src 'nonce-${nonce}' ${webview.cspSource} 'wasm-unsafe-eval'; style-src ${webview.cspSource} 'unsafe-inline'; img-src ${webview.cspSource} data: blob: ${collaboration?(collaboration.provider==='github'?'https://github.com/user-attachments/':collaboration.host+'/'+collaboration.repository+'/uploads/ '+collaboration.host+'/-/project/') : ''}; font-src ${webview.cspSource}; connect-src ${resource('load-worker-vscode.js')} ${resource('step-worker-vscode.js')} ${resource('vendor/occt/occt-import-js.wasm')}; worker-src blob:; base-uri ${webview.cspSource}; frame-src ${resource('terms.html')};`;
   html=html.replace(/(src|href)="([^"#:]+)"/g,(match,attr,name)=>`${attr}="${escaped(resource(name))}"`);
   html=html.replace("<head>",`<head><meta http-equiv="Content-Security-Policy" content="${escaped(csp)}"><base href="${escaped(resource(""))}/"><script nonce="${nonce}">globalThis.KiCadVSCodeContext=${bootstrap};</script><script nonce="${nonce}" src="${escaped(webview.asWebviewUri(vscode.Uri.joinPath(context.extensionUri,"webview-bridge.js")).toString())}"></script>`);
+  if(collaboration)html=html.replace("<head>","<head><style>.github-draft-action{display:none!important}</style>");
+  if(!collaboration){
   html=html.replace(/(<section id="commentsPane"[^>]*>\s*<h2>[^<]*<\/h2>\s*<p class="hint">)[\s\S]*?(<\/p>)/,"$1Annotations are stored in the workspace Git-trackable .kicad-review.json. GitHub publishing and remote annotations are unavailable here; export notes to share them. Read status belongs to this VS Code webview user.$2");
   html=html.replace("<head>","<head><style>.github-comment-controls>label:not(:last-of-type),#loadCategories,#reviewSettings,#refreshGitHub,#refreshCommentPolicy,#commentPolicyStatus,.github-draft-action,.github-publish-action{display:none!important}</style>");
+  }
+  if(session.history)html=html.replace('<head>','<head><style>.github-comment-controls,.github-comment-actions,#commentForm{display:none!important}</style>').replace('Annotations are stored in the workspace Git-trackable .kicad-review.json. GitHub publishing and remote annotations are unavailable here; export notes to share them. Read status belongs to this VS Code webview user.','Saved commit '+escaped(session.history.sha)+'. This viewer is read-only; workspace annotations and remote publication are disabled.');
   return html;
 }
 async function conflictHTML(webview,context,session) {
@@ -744,4 +805,4 @@ function activate(context) {
   }));
 }
 function deactivate() {pairTargets.clear();}
-module.exports={activate,deactivate,_test:{projectScope,sameScope,childPath,loadProject,createSession,handleMessage,htmlFor,conflictHTML,staticHTML,validateSidecar,readSidecar,writeSidecar,CHANNEL,MAX_FILE,MAX_PROJECT}};
+module.exports={activate,deactivate,_test:{remoteCollaboration,projectScope,sameScope,childPath,loadProject,createSession,handleMessage,htmlFor,conflictHTML,staticHTML,validateSidecar,readSidecar,writeSidecar,CHANNEL,MAX_FILE,MAX_PROJECT}};

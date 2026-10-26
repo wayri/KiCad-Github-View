@@ -20,12 +20,28 @@
  function filter(items,mode,query){const q=String(query||'').trim().toLowerCase();return items.filter(item=>(mode!=='starred'||item.starred)&&(mode!=='offline'||item.offline)&&(!q||[item.name,item.repository,item.host].join(' ').toLowerCase().includes(q))).sort((a,b)=>Number(b.starred)-Number(a.starred)||b.updated-a.updated);}
  function recent(items,limit=6){return items.filter(item=>Number(item.lastOpened)>0).slice().sort((a,b)=>b.lastOpened-a.lastOpened||String(a.id).localeCompare(String(b.id))).slice(0,limit);}
  function availability(item){if(item.temporary)return item.expiresAt<=Date.now()?'Temporary \u00b7 expired':'Temporary \u00b7 expires '+new Date(item.expiresAt).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'});const online=['github','gitlab'].includes(item.provider);return online?(item.offline?'Online \u00b7 available offline':'Online'):(item.offline?'Offline only':'Offline only \u00b7 reopen file to continue');}
- function bridge(native,later=root.setTimeout,clear=root.clearTimeout){let next=0;const pending=new Map();return{
-  request:message=>{const promise=new Promise((resolve,reject)=>{if(!native()?.libraryRequest)return reject(Error('Project library requires the updated Android app.'));if(pending.size>=4)return reject(Error('Wait for the current library operation.'));
-   const id=++next,timer=later(()=>{pending.delete(id);reject(Error('Project library operation timed out. Reopen the library to check its status.'));},600000);pending.set(id,{resolve,reject,timer});try{native().libraryRequest(id,message);}catch{clear(timer);pending.delete(id);reject(Error('Project library is unavailable.'));}});return root.KiCadLoading?.track?root.KiCadLoading.track(promise,'Loading saved projects...'):promise;},
-  reply:(id,value)=>{const task=pending.get(id);if(!task||typeof value?.ok!=='boolean')return;pending.delete(id);clear(task.timer);value.ok?task.resolve(value.result):task.reject(Error(value.error||'Library operation failed.'));},
-  close:()=>{for(const task of pending.values()){clear(task.timer);task.reject(Error('Library closed.'));}pending.clear();}
- };}
+ function bridge(native,later=root.setTimeout,clear=root.clearTimeout){
+  let next=0;const pending=new Map();
+  function cancel(id,error=Object.assign(Error('Project opening cancelled.'),{name:'AbortError',cancelled:true})){
+   const task=pending.get(id);if(!task)return false;
+   if(task.canStop){try{native().cancelLibraryRequest(id);}catch{}}
+   pending.delete(id);clear(task.timer);task.reject(error);return true;
+  }
+  return{request:message=>{
+   let requestId;const canStop=message.action==='open'&&typeof native()?.cancelLibraryRequest==='function';
+   const promise=new Promise((resolve,reject)=>{
+    if(!native()?.libraryRequest)return reject(Error('Project library requires the updated Android app.'));
+    if(pending.size>=4)return reject(Error('Wait for the current library operation.'));
+    const id=++next;requestId=id;const timer=later(()=>cancel(id,Error('Project library operation timed out. Reopen the library to check its status.')),600000);
+    pending.set(id,{resolve,reject,timer,canStop,action:message.action});
+    try{native().libraryRequest(id,message);}catch{clear(timer);pending.delete(id);reject(Error('Project library is unavailable.'));}
+   });
+   const options=canStop&&pending.has(requestId)?{onStop:()=>cancel(requestId)}:undefined;
+   return root.KiCadLoading?.track?root.KiCadLoading.track(promise,'Loading saved projects...',options):promise;
+  },reply:(id,value)=>{const task=pending.get(id);if(!task||typeof value?.ok!=='boolean')return;pending.delete(id);clear(task.timer);if(value.ok&&task.action==='open'&&value.result?.project&&typeof native()?.acceptLibraryRequest==='function'){try{native().acceptLibraryRequest(id);root.KiCadAndroid?.receiveProject(value.result.project);}catch(error){task.reject(error);return;}}value.ok?task.resolve(value.result):task.reject(Error(value.error||'Library operation failed.'));},
+  close:()=>{for(const[id]of pending)cancel(id,Error('Library closed.'));}};
+ }
+
  root.KiCadAndroidLibraryCore={metadata,projectName,sourceLabel,lastAccess,filter,recent,availability,bridge};if(typeof module==='object'&&module.exports){module.exports=root.KiCadAndroidLibraryCore;return;}
  const api=bridge(()=>root.AndroidKiCad),d=root.document,make=(tag,text)=>{const n=d.createElement(tag);if(text!==undefined)n.textContent=text;return n;};
  let items=[],mode='all',busy=false;

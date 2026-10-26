@@ -30,3 +30,8 @@ test('login pages, unrelated redirects, invalid UTF8 and oversized bodies fail v
  const api=create({location:{href:'https://github.com/owner/private'},fetch:async()=>response(new Uint8Array([255]),'https://raw.githubusercontent.com/owner/private/'+sha+'/board.kicad_pcb')});
  await assert.rejects(api.read({repository:repo,ref:sha,action:'file',path:'board.kicad_pcb',limit:1024}),/encoded data/);
 });
+test('session Stop aborts its raw fetch and cancels a stalled response body',async()=>{
+ const controller=new AbortController();let cancelled=0,transportSignal;
+ const api=create({location:{href:'https://github.com/owner/private'},signal:controller.signal,fetch:async(url,init)=>{transportSignal=init.signal;const r=new Response(new ReadableStream({start(){},cancel(){cancelled++;}}));Object.defineProperty(r,'url',{value:'https://raw.githubusercontent.com/owner/private/'+sha+'/board.kicad_pcb'});return r;}});
+ const pending=api.read({repository:repo,ref:sha,action:'file',path:'board.kicad_pcb',limit:1024});await new Promise(r=>setImmediate(r));controller.abort();await assert.rejects(pending,/cancelled/);assert.equal(cancelled,1);assert.equal(transportSignal.aborted,true);
+});

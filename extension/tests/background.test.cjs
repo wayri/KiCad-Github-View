@@ -1180,3 +1180,46 @@ test('repository branch metadata works without a drawing file and retains sender
  const result=await message({type:'repository-branches',repository:'owner/board',ref:sha('a')});assert.equal(result.ok,true);assert.equal(result.result.branches[0].name,'feature/pcb');assert.match(urls[0],/branches\?per_page=100&page=1$/);
  const before=urls.length;assert.equal((await message({type:'repository-branches',repository:'../bad',ref:sha('a')})).ok,false);assert.equal((await message({type:'repository-branches',repository:'owner/board',ref:sha('a')},options)).ok,false);assert.equal(urls.length,before);
 });
+const nextTurn=()=>new Promise(resolve=>setImmediate(resolve));
+test('Stop aborts only the exact viewer document load, cancels stalled body and rejects late success',async t=>{
+ const bodies=[],signals=[];withFetch(t,async(url,init)=>{signals.push(init.signal);return new Response(new ReadableStream({start(){},cancel(){bodies.push(url);}}));});
+ const request={type:'revision-resolve',repository:'owner/board',ref:'main',file:'board.kicad_pcb',loadId:'cancel-test'};
+ const senderA={...viewer,tab:{id:81},frameId:0,documentId:'a'},senderB={...senderA,documentId:'b'};
+ const a=message(request,senderA),b=message(request,senderB);await nextTurn();
+ assert.equal((await message({type:'load-cancel',loadId:'cancel-test'},{...senderA,frameId:1})).result.cancelled,false);
+ assert.equal((await message({type:'load-cancel',loadId:'cancel-test'},options)).ok,false);
+ assert.equal((await message({type:'load-cancel',loadId:'cancel-test'},senderA)).result.cancelled,true);
+ assert.match((await a).error,/cancelled/);assert.equal(bodies.length,1);assert.equal(signals[1].aborted,false);
+ await message({type:'load-cancel',loadId:'cancel-test'},senderB);assert.match((await b).error,/cancelled/);assert.equal(bodies.length,2);
+ assert.equal((await message({type:'load-cancel',loadId:'cancel-test'},senderA)).result.cancelled,false);
+});
+test('cancellable reads reject malformed identifiers, duplicates and auth/write tagging',async t=>{
+ let reads=0;withFetch(t,async(url,init)=>{reads++;return new Promise((resolve,reject)=>init.signal.addEventListener('abort',()=>reject(new DOMException('Aborted','AbortError')),{once:true}));});
+ const request={type:'revision-resolve',repository:'owner/board',ref:'main',file:'board.kicad_pcb',loadId:'one'};
+ const first=message(request);await nextTurn();assert.equal((await message(request)).ok,false);
+ for(const change of [{loadId:'bad space'},{loadId:''},{type:'github-auth-clear'},{type:'github-publish-comment'}])assert.equal((await message({...request,...change})).ok,false);
+ assert.equal(reads,1);await message({type:'load-cancel',loadId:'one'});assert.match((await first).error,/cancelled/);
+});
+test('Stop propagates to a logged-in website session read without affecting other tab requests',async t=>{
+ const originalQuery=chrome.tabs.query,originalSend=chrome.tabs.sendMessage;let read,release;const sent=[];
+ chrome.tabs.query=async()=>[{id:22,url:'https://github.com/owner/board/tree/main'}];
+ chrome.tabs.sendMessage=async(tab,message)=>{sent.push({tab,...message});if(message.type==='github-session-read'){read=message;return new Promise(r=>release=r);}if(message.type==='repository-session-cancel'){release({ok:false,error:'cancelled'});return{ok:true};}};
+ t.after(()=>{chrome.tabs.query=originalQuery;chrome.tabs.sendMessage=originalSend;});withFetch(t,async()=>new Response('',{status:403}));
+ const pending=message({type:'revision-resolve',repository:'owner/board',ref:'main',file:'board.kicad_pcb',loadId:'session-test'});await nextTurn();assert.ok(read.requestId);
+ await message({type:'load-cancel',loadId:'session-test'});assert.match((await pending).error,/cancelled/);assert.equal(sent.at(-1).type,'repository-session-cancel');assert.equal(sent.at(-1).requestId,read.requestId);assert.equal(sent.length,2);
+});
+test('Stop cancels PCB body download and prevents all later project hierarchy reads',async t=>{
+ let reads=0,cancelled=0;withFetch(t,async()=>{reads++;return new Response(new ReadableStream({start(){},cancel(){cancelled++;}}));});
+ const pending=message({type:'project',repository:'owner/board',ref:sha('a'),file:'board.kicad_pcb',loadId:'pcb-body'});await nextTurn();
+ await message({type:'load-cancel',loadId:'pcb-body'});assert.match((await pending).error,/cancelled/);await nextTurn();assert.equal(reads,1);assert.equal(cancelled,1);
+});
+test('project inventory and settings reads support Stop and sequential loadId reuse',async t=>{
+ let phase='complete',bodyCancels=0;
+ withFetch(t,async(url,init)=>{if(phase==='complete')return new Response(sha('a'));return new Response(new ReadableStream({start(){},cancel(){bodyCancels++;}}));});
+ const base={repository:'owner/board',ref:'main',file:'board.kicad_pcb',loadId:'sequential'};
+ assert.equal((await message({...base,type:'revision-resolve'})).ok,true);
+ for(const type of ['project-inventory','project-file']){
+  phase='stall';const pending=message({...base,type});await nextTurn();assert.equal((await message({type:'load-cancel',loadId:base.loadId})).result.cancelled,true);assert.match((await pending).error,/cancelled/);
+ }
+ assert.equal(bodyCancels,2);
+});

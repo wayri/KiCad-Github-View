@@ -58,3 +58,11 @@ test('GitLab analysis page can read pinned report source but cannot use write to
  const result=await message({type:'project-file',...scope},sender);assert.equal(result.ok,true,result.error);assert.equal(result.result.content,'time,V\n0,1');
  for(const type of ['comment-save','comment-delete','comment-publish','project']){const reply=await message({type,...scope},sender);assert.equal(reply.ok,false);assert.match(reply.error,/only read/);}
 });
+
+
+test('full GitLab thread reads route only from viewers to the matching approved provider',async t=>{
+ const previous=global.KiCadGitLabReviewApi,calls=[];global.KiCadGitLabReviewApi={readThread:async request=>{calls.push(request);return{kind:'issue',number:42,comments:[]};}};t.after(()=>global.KiCadGitLabReviewApi=previous);
+ const scope={type:'github-thread-read',provider:'gitlab',host:'https://gitlab.com',repository:'group/board',ref:'main',file:'board.kicad_pcb',kind:'discussion',number:42};
+ assert.equal((await message(scope)).result.kind,'issue');assert.equal(calls.length,1);assert.equal(calls[0].host,'https://gitlab.com');
+ assert.equal((await message(scope,tab)).ok,false);assert.equal((await message({...scope,host:'https://evil.invalid'})).ok,false);assert.equal(calls.length,1);
+});

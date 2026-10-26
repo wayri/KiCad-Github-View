@@ -9,7 +9,8 @@ import fzstd from "../vendor/fzstd/fzstd.js";
 import "../embedded-models.js";
 import "../step-decoder.js";
 import { parseKicadBoard } from "@spike/boardParser";
-import { layerThreeColor } from "@spike/layerPalette";
+import "../layer-colors.js";
+const layerThreeColor = name => Number.parseInt(globalThis.KiCadLayerColors.hexFor(name).slice(1), 16);
 import { trackCapsuleDimensions } from "@spike/trackGeometry";
 import { viewportSceneIdentity } from "@spike/viewportScenePolicy";
 import { populationMask, uniqueComponentIndexes } from "./componentState.mjs";
@@ -172,7 +173,7 @@ export function mountBoard3D(container, source, options = {}) {
     new THREE.LineBasicMaterial({ color: 0x8ce4bc, transparent: true, opacity: .68 }));
   edges.position.z = bottom; boardGroup.add(edges);
 
-  for (const [layer, color] of [["F.Cu", 0xdf6d67], ["B.Cu", 0x6899ed]]) {
+  for (const [layer, color] of [["F.Cu", layerThreeColor("F.Cu")], ["B.Cu", layerThreeColor("B.Cu")]]) {
     const z = layer === "F.Cu" ? top + .025 : bottom - .025;
     const tracks = board.tracks.filter((item) => item.layer === layer);
     const trackMesh = makeInstanced(groupFor(layer), new THREE.PlaneGeometry(1, 1),

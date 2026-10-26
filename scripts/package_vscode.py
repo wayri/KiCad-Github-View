@@ -21,14 +21,14 @@ ASSETS = ('analysis-data.js', 'analysis-viewer.html', 'analysis-viewer.css', 'an
 ASSETS += ('population-inspection.js','population-photo.js','population-review.js','testpoint-tools.js','photo-alignment.js','component-links.js','photo-review.js','photo-review.css')
 ASSETS += ('ui-foundation.css','tool-surfaces.css','gerber-camera.js')
 ASSETS += ('pdf-tools.js','pdf-viewer.html','pdf-viewer.css','pdf-viewer.js','vendor/pdfjs/FILES.json') + tuple('vendor/pdfjs/'+name for name in json.loads((ROOT/'extension/vendor/pdfjs/FILES.json').read_text())['files'])
-ASSETS += ('repository-explorer.js','repository-explorer.css')
+ASSETS += ('mention-users.js','repository-explorer.js','repository-explorer.css','layer-colors.js','load-worker-vscode.js')
 ASSETS += ('engineering-launcher.js', 'review-handoff.js', 'local-runtime.js')
-BUILD_INPUTS = ('step-decoder.js', 'step-worker.js', 'vendor/occt/occt-import-js.js')
+BUILD_INPUTS = ('github-review-api.js', 'gitlab-review-api.js', 'step-decoder.js', 'step-worker.js', 'vendor/occt/occt-import-js.js')
 ASSETS += ('variant-manager.js', 'bom-import.js', 'bom-viewer.html', 'bom-viewer.js','bom-workspace.js', 'bom-field-table.js', 'bom-viewer.css', 'calculator-tools.js', 'calculator-viewer.html', 'calculator-viewer.js', 'calculator-viewer.css', 'analysis-spatial.js', 'analysis-overlay.js', 'analysis-bom-link.js')
 ASSETS += ('calculator-catalog.js','calculator-visuals.js')
 ASSETS += ('tool-header.css','tool-header.js')
 ASSETS += ('section-pages.js','section-pages.css','board-setup-ui.js','board-setup-ui.css','mobile-sidebar.js','mobile-sidebar.css','testpoint-tools.css','sheet-hierarchy-links.js','responsive-controls.js','phone-polish.css')
-HOST_FILES = ('conflict-host.js', 'package.json', 'extension.js', 'webview-bridge.js', 'README.md', 'GUIDE.md', 'icon.png', 'LICENSE.txt')
+HOST_FILES = ('git-history-tree.js', 'remote-collaboration.js', 'conflict-host.js', 'package.json', 'extension.js', 'webview-bridge.js', 'README.md', 'GUIDE.md', 'icon.png', 'LICENSE.txt')
 README_IMAGES = ('images/schematic-review.jpg', 'images/pcb-inspection.jpg',
                  'images/assembly-bom.jpg', 'images/visual-merge-conflict.jpg',
                  'images/open-viewer-command.jpg', 'images/copper-net-names.jpg')
@@ -42,6 +42,23 @@ def adapt_entry(source: bytes) -> bytes:
     return source.replace(original, b'new URLSearchParams(globalThis.KiCadVSCodeContext?.search ?? location.search)')
 
 
+def host_review_factory(source: bytes, provider: str) -> bytes:
+    text = source.decode('utf-8')
+    symbol = 'KiCadGitHubReviewApi' if provider == 'github' else 'KiCadGitLabReviewApi'
+    start = '  async function readCredential() {' if provider == 'github' else '  async function credential(host) {'
+    end = '  async function tokenStatus() {' if provider == 'github' else '  function validToken(token) {'
+    if text.count(start) != 1 or text.count(end) != 1:
+        raise ValueError('Review credential adapter changed; review host integration.')
+    a, b = text.index(start), text.index(end)
+    replacement = ('  async function readCredential() { return dependencies.credential(); }\n' if provider == 'github'
+                   else '  async function credential(host) { return dependencies.credential(validateHost(host)); }\n')
+    text = text[:a] + replacement + text[b:]
+    text = text[:text.index('if (typeof globalThis === "object") globalThis.' + symbol)]
+    return ('"use strict";\n// Generated from shared review API; secrets are supplied only by the VS Code host.\n'
+            'module.exports=function(dependencies){\nconst {chrome,fetch,crypto,KiCadReviewComments}=dependencies;\n'
+            + text + '\nreturn ' + symbol + ';\n};\n').encode('utf-8')
+
+
 def prepare_media(root: Path = ROOT) -> dict[str, bytes]:
     for name in (*ASSETS, *BUILD_INPUTS):
         if not (root / 'extension' / name).is_file():
@@ -52,6 +69,11 @@ def prepare_media(root: Path = ROOT) -> dict[str, bytes]:
     expected_worker = worker_builder.bundle(root)
     if (root / 'extension/step-worker-vscode.js').read_bytes() != expected_worker:
         raise ValueError('STEP worker bundle is stale; run scripts/build_step_worker.py.')
+    load_spec = importlib.util.spec_from_file_location('build_load_worker', Path(__file__).with_name('build_load_worker.py'))
+    load_builder = importlib.util.module_from_spec(load_spec)
+    load_spec.loader.exec_module(load_builder)
+    if (root / 'extension/load-worker-vscode.js').read_bytes() != load_builder.bundle(root):
+        raise ValueError('Preparation worker bundle is stale; run scripts/build_load_worker.py.')
     payload, hashes = {}, {}
     destination = root / 'vscode-extension' / 'media'
     for name in ASSETS:
@@ -66,6 +88,13 @@ def prepare_media(root: Path = ROOT) -> dict[str, bytes]:
         payload[f'extension/media/{name}'] = content
         hashes[name] = {'sourceSha256': hashlib.sha256(source).hexdigest(),
                         'packagedSha256': hashlib.sha256(content).hexdigest()}
+    for provider in ('github', 'gitlab'):
+        source = (root / 'extension' / f'{provider}-review-api.js').read_bytes()
+        content = host_review_factory(source, provider)
+        name = f'{provider}-review-host-api.js'
+        (destination / name).write_bytes(content)
+        payload[f'extension/media/{name}'] = content
+        hashes[name] = {'sourceSha256': hashlib.sha256(source).hexdigest(), 'packagedSha256': hashlib.sha256(content).hexdigest()}
     inventory = (json.dumps({'format': 1, 'assets': hashes}, indent=2, sort_keys=True) + '\n').encode()
     (destination / 'shared-assets.json').write_bytes(inventory)
     payload['extension/media/shared-assets.json'] = inventory

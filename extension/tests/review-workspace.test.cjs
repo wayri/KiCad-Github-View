@@ -63,9 +63,9 @@ function workspaceRuntime(respond=async()=>[], hooks={}){
     KiCadViewState:require('../view-state.js'),KiCadBomManager:require('../bom-manager.js'),KiCadReviewHandoff:hooks.handoff,KiCadEngineeringLauncher:hooks.engineeringLauncher,KiCadCommentCompose:{...require('../comment-compose.js'),...(hooks.compose||{})},KiCadReviewTools:require('../review-tools.js'),KiCadDesignModel:require('../design-model.js'),KiCadNetModel:require('../net-model.js'),KiCadReviewComments:require('../review-comments.js'),KiCadBrowserData:require('../browser-data.js'),KiCadOwnedCanvas:require('../owned-canvas.js'),
     top:hooks.top||{},KiCadRatsnest:require('../ratsnest.js'),KiCadTestpointTools:hooks.testpointTools,KiCadPhotoReview:hooks.photoReview,KiCadComponentLinks:require('../component-links.js'),KiCadPairedReview:require('../paired-review.js'),KiCadBomAnalytics:require('../bom-analytics.js'),
     chrome:{storage:{local:hooks.chromeStorage||{get:async()=>({}),set:async()=>{}}},runtime:{sendMessage:async message=>({ok:true,result:await respond(message)})}},setTimeout,clearTimeout,URL,Blob};
-  if(hooks.android)context.KiCadAndroidRuntime=true;
+  if(hooks.android){context.KiCadAndroidRuntime=true;context.KiCadAndroidOnline=hooks.androidOnline!==false;}
   if(hooks.localRuntime)context.KiCadLocalRuntime=true;
-  if(hooks.vscode)context.KiCadVSCodeContext={};
+  if(hooks.vscode)context.KiCadVSCodeContext=typeof hooks.vscode==='object'?hooks.vscode:{};
   if(hooks.navigation){Object.assign(context,{KiCadProjectSearch:require('../project-search.js'),KiCadRuleReports:require('../rule-reports.js'),KiCadDesignDiff:diff,KiCadPCBRenderer:require('../pcb-renderer.js'),KiCadSchematicRenderer:require('../schematic-renderer.js')});vm.runInNewContext(fs.readFileSync(path.join(__dirname,'../review-navigation.js'),'utf8'),context);get('ruleSeverity').value='all';get('showRuleMarkers').checked=true;}
   canvas.setNetHighlights=(nets,options)=>{canvas.highlightNets=nets;canvas.netHighlight=nets[0]||null;canvas.netPrimitives=new Set(nets.flatMap(n=>n.primitives||[]));canvas.highlightMode=options.mode;};
   vm.runInNewContext(fs.readFileSync(path.join(__dirname,'../review-workspace.js'),'utf8'),context);
@@ -437,7 +437,7 @@ test('standalone viewer never offers current PR and VS Code remote collaboration
 });
 
 test('Android local projects explain phone repository collaboration without extension-only messaging',async()=>{
- const calls=[];const view=workspaceRuntime(async m=>{calls.push(m);return[];},{android:true,vscode:true});view.load();await new Promise(resolve=>setImmediate(resolve));view.get('showGitHub').click();
+ const calls=[];const view=workspaceRuntime(async m=>{calls.push(m);return[];},{android:true,androidOnline:false,vscode:true});view.load();await new Promise(resolve=>setImmediate(resolve));view.get('showGitHub').click();
  const message=view.get('githubAvailability').textContent;
  assert.match(message,/Library and accounts/);assert.match(message,/open the repository/);assert.doesNotMatch(message,/extension|VS Code/);
  assert.equal(view.get('githubAvailableControls').hidden,true);assert.equal(calls.some(m=>m.type==='comment-policy-status'),false);
@@ -1172,4 +1172,14 @@ test('schematic quick testpoints highlight symbol geometry and retain named sour
 test('quick testpoint highlighting caps the overlay without hiding searchable testpoints',()=>{
  const source='(kicad_pcb '+Array.from({length:201},(_,i)=>`(footprint "TestPoint" (layer "F.Cu") (at ${i} 0) (uuid "probe-${i}") (property "Reference" "TP${i+1}") (pad "1" smd circle (at 0 0) (size 1 1) (layers "F.Cu") (uuid "pad-${i}")))`).join(' ')+')';
  const view=workspaceRuntime(undefined,{source,testpointTools:require('../testpoint-tools.js')});view.load();view.get('highlightTestpoints').click();assert.match(view.get('highlightSummary').textContent,/200 testpoints/);assert.match(view.get('reviewNotice').textContent,/first 200 of 201/);const owners=new Set([...view.canvas.netPrimitives].map(p=>p.ownerUuid||p.uuid));assert.equal(owners.size,200);view.get('filterTestpoints').click();assert.equal(view.get('objectCount').textContent,'201 objects');view.workspace.dispose();
+});
+
+for(const provider of ['github','gitlab'])test(provider+' thread reader stays enabled on online Android with the shared source bridge',async()=>{
+ const calls=[],host=provider==='gitlab'?'https://gitlab.com':undefined,view=workspaceRuntime(async m=>{calls.push(m);return m.type==='github-thread-read'?{kind:'issue',number:4,title:'Review',state:'closed',url:provider==='gitlab'?'https://gitlab.com/wayri/fixture/-/issues/4':'https://github.com/wayri/fixture/issues/4',author:'reviewer',createdAt:'2026-10-01T00:00:00Z',body:'Ordinary issue body',comments:[{id:'n1',body:'A normal reply',author:'other',createdAt:'2026-10-02T00:00:00Z'}],warnings:[]}:[];},{provider,host,android:true,androidOnline:true,vscode:{search:'?local-source'}});
+ view.load();assert.equal(view.get('commentThreadReader').hidden,false);view.get('commentThreadNumber').value='4';await view.get('commentThreadLoad').click();assert.match(view.get('commentThreadMessages').textContent,/Ordinary issue body/);assert.match(view.get('commentThreadMessages').textContent,/A normal reply/);assert.match(view.get('commentThreadMessages').textContent,/closed/);assert.equal(calls.find(m=>m.type==='github-thread-read').kind,'issue');assert.equal(calls.some(m=>m.type==='github-publish-comment'),false);
+});
+test('offline Android hides remote thread controls',()=>{const view=workspaceRuntime(undefined,{android:true,androidOnline:false,vscode:{search:'?local'}});assert.equal(view.get('commentThreadReader').hidden,true);});
+for(const provider of ['github','gitlab'])test(provider+' thread reading in bound VS Code retains local transport scope',async()=>{
+ const calls=[],collaboration={provider,host:provider==='gitlab'?'https://gitlab.com':'https://github.com',repository:'real/project',ref:'a'.repeat(40),prefix:''},view=workspaceRuntime(async m=>{calls.push(m);return m.type==='github-thread-read'?{kind:'issue',number:2,title:'Remote',state:'open',url:collaboration.host+'/real/project/'+(provider==='gitlab'?'-/issues/':'issues/')+'2',author:'reviewer',createdAt:'2026-10-01T00:00:00Z',body:'Remote conversation',comments:[],warnings:[]}:[];},{vscode:{collaboration},repository:'local/workspace',ref:'workspace'});
+ view.load();assert.equal(view.get('commentThreadReader').hidden,false);view.get('commentThreadNumber').value='2';await view.get('commentThreadLoad').click();assert.match(view.get('commentThreadMessages').textContent,/Remote conversation/);const request=calls.find(m=>m.type==='github-thread-read');assert.equal(request.repository,'local/workspace');assert.equal(request.ref,'workspace');if(provider==='gitlab')assert.equal(request.host,'https://gitlab.com');
 });

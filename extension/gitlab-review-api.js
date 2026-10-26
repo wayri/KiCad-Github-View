@@ -303,7 +303,60 @@ const KiCadGitLabReviewApi = (() => {
       await chrome.storage.local.set({ [key]: { status: "done", remoteRef,...(attachments?.length?{attachments}:{}) } }); return { remoteRef,...(attachments?.length?{attachments}:{}) };
     } catch (error) { if (error.definitive) await chrome.storage.local.remove(key); throw error; }
   }
-  return { validateHost, validatePolicy, authStatus, tokenStatus: authStatus, setToken, clearToken, resetAuth, authorizationHeaders, setClientId, startOAuth, commentPolicyStatus, publish };
+  // Issue discussions include ordinary notes and DiscussionNotes omitted by the Notes API.
+  async function readThread({host,repository,ref,file,kind='issue',number,provider='gitlab'}={}) {
+    host=validateHost(host);repository=repositoryPath(repository);
+    KiCadReviewComments.normalizeScope({provider,host,repository,ref,file});
+    if(provider!=='gitlab'||!['issue','discussion'].includes(kind)||!Number.isSafeInteger(number)||number<1)throw fail('Invalid GitLab thread request.',true);
+    const current=epoch(host),headers=await authorizationHeaders(host),token=headers.Authorization?.slice(7),options={token,expectedEpoch:current};
+    if(epoch(host)!==current)throw fail('GitLab account changed or signed out.',true);
+    const warnings=[],comments=[],seen=new Set();let bytes=0,stopped=false;
+    const warn=text=>{if(!warnings.includes(text))warnings.push(text);};
+    const text=value=>{
+      if(value===null||value===undefined)return '';
+      if(typeof value!=='string')throw fail('GitLab returned invalid thread text.',true);
+      const encoded=new TextEncoder().encode(value),available=Math.min(65536,Math.max(0,1024*1024-bytes));
+      if(encoded.length>available)warn('Thread text was truncated at 64 KiB per entry or 1 MiB total.');
+      const result=new TextDecoder().decode(encoded.slice(0,available),{stream:true});bytes+=new TextEncoder().encode(result).length;
+      if(bytes>=1024*1024-3)stopped=true;return result;
+    };
+    const timestamp=value=>typeof value==='string'&&/^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d(?:\.\d{1,9})?Z$/.test(value)&&Number.isFinite(Date.parse(value));
+    const project=await request(host,`/api/v4/projects/${encodeURIComponent(repository)}`,options);
+    if(project?.path_with_namespace!==repository||!Number.isSafeInteger(project.id)||project.id<1)throw fail('GitLab returned another project identity.',true);
+    const endpoint=`/api/v4/projects/${project.id}/issues/${number}`,url=`${host}/${repository}/-/issues/${number}`;
+    const record=(value,root=false,replyTo=null,discussionId=null)=>{
+      const author=value?.author;
+      if(!value||!Number.isSafeInteger(value.id)||value.id<1||!timestamp(value.created_at)||!timestamp(value.updated_at)||author!==null&&!/^[A-Za-z0-9][A-Za-z0-9_.-]{0,99}$/.test(author?.username||'')||typeof (root?value.description:value.body)!=='string'&&(root?value.description:value.body)!==null){
+        if(root)throw fail('GitLab returned invalid thread provenance.',true);
+        warn('Some thread comments had invalid provenance and were omitted.');return null;
+      }
+      return {id:String(value.id),author:author?.username||null,createdAt:value.created_at,updatedAt:value.updated_at,body:text(root?value.description:value.body),url:root?url:`${url}#note_${value.id}`,replyTo,...(discussionId?{discussionId}:{})};
+    };
+    const issue=await request(host,endpoint,options);
+    if(issue?.iid!==number||issue.project_id!==project.id||!['opened','closed'].includes(issue.state)||typeof issue.title!=='string')throw fail('GitLab returned an invalid Issue identity.',true);
+    const thread={provider:'gitlab',host,repository,kind:'issue',number,title:issue.title.slice(0,1024),state:issue.state==='opened'?'open':'closed',...record(issue,true)};
+    for(let page=1;page<=8&&!stopped;page++){
+      const groups=await request(host,`${endpoint}/discussions?per_page=100&page=${page}`,options);
+      if(!Array.isArray(groups)||groups.length>100)throw fail('GitLab returned invalid issue discussions.',true);
+      for(const group of groups){
+        if(!group||typeof group.individual_note!=='boolean'||typeof group.id!=='string'||!/^[A-Za-z0-9_-]{1,200}$/.test(group.id)||!Array.isArray(group.notes)||group.notes.length>1000){warn('Some discussion groups were invalid and omitted.');continue;}
+        let parent=null;
+        for(const note of group.notes){
+          if(note?.system===true)continue;
+          if(comments.length>=200||stopped){stopped=true;break;}
+          const entry=record(note,false,group.individual_note?null:parent,group.individual_note?null:group.id);
+          if(entry){if(!parent)parent=entry.id;if(!seen.has(entry.id)){seen.add(entry.id);comments.push(entry);}}
+        }
+        if(stopped)break;
+      }
+      if(groups.length<100)break;
+      if(page===8)stopped=true;
+    }
+    if(stopped)warn('Thread readback was truncated at 200 comments, 10 requests or the text limit. Open GitLab for the complete conversation.');
+    if(epoch(host)!==current)throw fail('GitLab account changed or signed out.',true);
+    return {...thread,comments,warnings};
+  }
+  return { validateHost, validatePolicy, authStatus, tokenStatus: authStatus, setToken, clearToken, resetAuth, authorizationHeaders, setClientId, startOAuth, commentPolicyStatus, publish, readThread };
 })();
 if (typeof globalThis === "object") globalThis.KiCadGitLabReviewApi = KiCadGitLabReviewApi;
 if (typeof module === "object" && module.exports) module.exports = KiCadGitLabReviewApi;

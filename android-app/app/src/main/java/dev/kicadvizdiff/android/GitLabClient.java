@@ -48,6 +48,7 @@ final class GitLabClient {
         catch (IOException error) { throw new Failure(error.getMessage()); }
     }
     private void check(int epoch) throws IOException {
+        NativeLoadOperation.checkCurrent();
         if (!current(epoch)||Thread.currentThread().isInterrupted()) throw new Failure("GitLab request cancelled");
     }
     static String validateHost(String host) throws Exception {
@@ -77,8 +78,13 @@ final class GitLabClient {
         }
         String client=record.getString("clientId"),refresh=record.getString("refreshToken");
         byte[] body=("client_id="+encode(client)+"&refresh_token="+encode(refresh)+"&grant_type=refresh_token&redirect_uri="+encode("kicadvizdiff://gitlab-oauth")).getBytes(StandardCharsets.UTF_8);
-        JSONObject refreshed=new JSONObject(network(host,"/oauth/token","POST",body,null,epoch,65536,"application/x-www-form-urlencoded"));
-        saveOAuth(host,client,refreshed,epoch);synchronized(this){check(epoch);return tokens.get(host);}
+        // Refresh tokens may rotate server-side: Stop must finish persisting that rotation,
+        // then discard the stopped read, rather than leaving the account unusable.
+        try(NativeLoadOperation.AuthenticationScope authentication=NativeLoadOperation.preserveAuthentication()) {
+            JSONObject refreshed=new JSONObject(network(host,"/oauth/token","POST",body,null,epoch,65536,"application/x-www-form-urlencoded"));
+            saveOAuth(host,client,refreshed,epoch);
+        }
+        synchronized(this){check(epoch);return tokens.get(host);}
     }
     private synchronized void saveOAuth(String host,String client,JSONObject result,int epoch)throws Exception {
         check(epoch);String access=result.getString("access_token"),refresh=result.getString("refresh_token");
@@ -115,6 +121,13 @@ final class GitLabClient {
         byte[] body=("client_id="+encode(client)+"&code="+encode(code)+"&grant_type=authorization_code&redirect_uri="+encode("kicadvizdiff://gitlab-oauth")+"&code_verifier="+encode(verifier)).getBytes(StandardCharsets.UTF_8);
         JSONObject result=new JSONObject(network(host,"/oauth/token","POST",body,null,epoch,65536,"application/x-www-form-urlencoded"));
         JSONObject connected=connectToken(host,result.getString("access_token"),epoch);saveOAuth(host,client,result,epoch);return connected;
+    }
+    static boolean cancellableRead(String action) {
+        return java.util.Arrays.asList("repositories", "import", "revision-import", "revision-resolve", "revision-branches", "revision-commits", "repository-tree", "repository-history", "repository-branches", "policy", "threads", "thread", "contributors").contains(action);
+    }
+    JSONObject handleLoad(JSONObject request, int epoch, NativeLoadOperation operation) throws Exception {
+        if (!cancellableRead(request.optString("action"))) throw new IllegalArgumentException("Only project reads can be stopped");
+        try (NativeLoadOperation.Scope scope = operation.enter()) { return handle(request, epoch); }
     }
     JSONObject handle(JSONObject request,int epoch) throws Exception {
         check(epoch); String host=validateHost(request.optString("host","https://gitlab.com"));
@@ -158,16 +171,7 @@ final class GitLabClient {
                 JSONArray threads=new JSONArray();for(int i=0;i<values.length();i++) threads.put(issue(values.getJSONObject(i)));
                 return new JSONObject().put("threads",threads).put("hasMore",values.length()==100);
             }
-            case "thread": {
-                String root=project(request)+"/issues/"+number(request);
-                JSONObject result=issue(json(host,root,epoch));JSONArray comments=new JSONArray(),warnings=new JSONArray();
-                for(int page=1;page<=5;page++) {
-                    JSONArray notes=array(host,root+"/notes?per_page=100&page="+page+"&sort=asc",epoch);
-                    for(int i=0;i<notes.length();i++){JSONObject note=notes.getJSONObject(i);if(note.optBoolean("system",false))continue;JSONObject author=note.optJSONObject("author");long id=note.getLong("id");comments.put(new JSONObject().put("id",String.valueOf(id)).put("author",author==null?"":author.optString("username")).put("createdAt",note.optString("created_at")).put("updatedAt",note.optString("updated_at")).put("body",note.optString("body")).put("url",result.getString("url")+"#note_"+id));}
-                    if(notes.length()<100)break;if(page==5)warnings.put("Only the first 500 issue notes are shown");
-                }
-                result.put("comments",comments).put("warnings",warnings);return result;
-            }
+            case "thread": return readThread(host,request,epoch);
             case "contributors": {
                 JSONArray users=new JSONArray(),warnings=new JSONArray();String query=request.optString("query","").toLowerCase(Locale.ROOT);if(query.length()>100||controls(query))throw new Failure("Invalid people query");
                 if(credential(host,epoch)==null)return new JSONObject().put("users",users).put("warnings",warnings.put("Sign in to discover GitLab project members"));
@@ -179,6 +183,66 @@ final class GitLabClient {
             case "upload":return upload(host,request,epoch);
             default:throw new Failure("Unsupported GitLab request");
         }
+    }
+    private JSONObject readThread(String host,JSONObject request,int epoch)throws Exception {
+        String repository=repository(request),kind=request.optString("kind","issue");int number=number(request);
+        if(!Arrays.asList("issue","discussion").contains(kind))throw new Failure("Invalid GitLab thread kind");
+        long deadline=SystemClock.elapsedRealtime()+90000;
+        JSONObject project=json(host,project(request),epoch);long projectId=threadId(project,"id");
+        if(!repository.equals(project.optString("path_with_namespace")))throw new Failure("GitLab returned another project identity");
+        String endpoint="/projects/"+projectId+"/issues/"+number,url=host+"/"+repository+"/-/issues/"+number;
+        JSONObject value=json(host,endpoint,epoch);
+        if(value.optInt("iid")!=number||value.optDouble("iid")!=number||threadId(value,"project_id")!=projectId||!Arrays.asList("opened","closed").contains(value.optString("state"))||!(value.opt("title") instanceof String))throw new Failure("GitLab returned an invalid Issue identity");
+        ThreadText text=new ThreadText();JSONObject result=threadRecord(value,true,null,null,url,text);
+        result.put("provider","gitlab").put("host",host).put("repository",repository).put("kind","issue").put("number",number).put("title",value.getString("title").substring(0,Math.min(1024,value.getString("title").length()))).put("state",value.getString("state").equals("opened")?"open":"closed");
+        JSONArray comments=new JSONArray();Set<String> seen=new HashSet<>();
+        for(int page=1;page<=8&&!text.stopped;page++) {
+            check(epoch);if(SystemClock.elapsedRealtime()>deadline)throw new Failure("GitLab thread read timed out");
+            JSONArray groups=array(host,endpoint+"/discussions?per_page=100&page="+page,epoch);
+            for(int i=0;i<groups.length();i++) {
+                JSONObject group=groups.optJSONObject(i);JSONArray notes=group==null?null:group.optJSONArray("notes");
+                if(group==null||!(group.opt("individual_note") instanceof Boolean)||!group.optString("id").matches("[A-Za-z0-9_-]{1,200}")||notes==null||notes.length()>1000){text.warn("Some discussion groups were invalid and omitted.");continue;}
+                String parent=null;
+                for(int n=0;n<notes.length();n++) {
+                    JSONObject note=notes.optJSONObject(n);if(note!=null&&note.optBoolean("system"))continue;
+                    if(comments.length()>=200||text.stopped){text.stopped=true;break;}
+                    JSONObject entry=threadRecord(note,false,group.getBoolean("individual_note")?null:parent,group.getBoolean("individual_note")?null:group.getString("id"),url,text);
+                    if(entry!=null){String id=entry.getString("id");if(parent==null)parent=id;if(seen.add(id))comments.put(entry);}
+                }
+                if(text.stopped)break;
+            }
+            if(groups.length()<100)break;if(page==8)text.stopped=true;
+        }
+        if(text.stopped)text.warn("Thread readback was truncated at 200 comments, 10 requests or the text limit. Open GitLab for the complete conversation.");
+        check(epoch);return result.put("comments",comments).put("warnings",text.warnings);
+    }
+    private static long threadId(JSONObject value,String key)throws Exception {
+        Object raw=value==null?null:value.opt(key);long id=raw instanceof Number?((Number)raw).longValue():0;
+        if(id<1||id>9007199254740991L||((Number)raw).doubleValue()!=id)throw new Failure("GitLab returned an invalid thread identifier");return id;
+    }
+    private static boolean threadTime(String value) {
+        if(!value.matches("\\d{4}-\\d\\d-\\d\\dT\\d\\d:\\d\\d:\\d\\d(?:\\.\\d{1,9})?Z"))return false;
+        try{java.time.Instant.parse(value);return true;}catch(Exception invalid){return false;}
+    }
+    private static final class ThreadText {
+        int bytes;boolean stopped;final JSONArray warnings=new JSONArray();
+        void warn(String value){for(int i=0;i<warnings.length();i++)if(value.equals(warnings.optString(i)))return;warnings.put(value);}
+        String take(Object value)throws Exception {
+            if(value==JSONObject.NULL)return "";if(!(value instanceof String))throw new Failure("GitLab returned invalid thread text");
+            byte[] raw=((String)value).getBytes(StandardCharsets.UTF_8);int limit=Math.min(raw.length,Math.min(65536,Math.max(0,1024*1024-bytes)));
+            if(raw.length>limit)warn("Thread text was truncated at 64 KiB per entry or 1 MiB total.");
+            String result;while(true){try{result=StandardCharsets.UTF_8.newDecoder().decode(ByteBuffer.wrap(raw,0,limit)).toString();break;}catch(CharacterCodingException partial){limit--;if(limit<0)throw partial;}}
+            bytes+=limit;if(bytes>=1024*1024-3)stopped=true;return result;
+        }
+    }
+    private static JSONObject threadRecord(JSONObject value,boolean root,String replyTo,String discussionId,String url,ThreadText text)throws Exception {
+        try {
+            long id=threadId(value,"id");JSONObject author=value.optJSONObject("author");Object rawAuthor=value.opt("author");
+            String created=value.optString("created_at"),updated=value.optString("updated_at");
+            if(!threadTime(created)||!threadTime(updated)||rawAuthor!=JSONObject.NULL&&(author==null||!author.optString("username").matches("[A-Za-z0-9][A-Za-z0-9_.-]{0,99}")))throw new Failure("GitLab returned invalid thread provenance");
+            JSONObject entry=new JSONObject().put("id",String.valueOf(id)).put("author",author==null?JSONObject.NULL:author.getString("username")).put("createdAt",created).put("updatedAt",updated).put("body",text.take(value.opt(root?"description":"body"))).put("url",root?url:url+"#note_"+id).put("replyTo",replyTo==null?JSONObject.NULL:replyTo);
+            if(discussionId!=null)entry.put("discussionId",discussionId);return entry;
+        }catch(Exception invalid){if(root)throw new Failure("GitLab returned invalid thread provenance");text.warn("Some thread comments had invalid provenance and were omitted.");return null;}
     }
     private static JSONObject issue(JSONObject value) throws Exception {
         JSONObject author=value.optJSONObject("author");return new JSONObject().put("kind","issue").put("id",String.valueOf(value.getLong("id"))).put("number",value.getInt("iid")).put("title",value.optString("title")).put("body",value.optString("description")).put("state",value.optString("state")).put("url",value.optString("web_url")).put("createdAt",value.optString("created_at")).put("updatedAt",value.optString("updated_at")).put("author",author==null?"":author.optString("username"));
@@ -393,7 +457,7 @@ final class GitLabClient {
         String path=root+"/repository/blobs/"+identity+"/raw";
         URL url=new URL(host+"/api/v4"+path);
         if(!url.getProtocol().equals("https")||url.getUserInfo()!=null||!url.getHost().equals(new URI(host).getHost())||url.getPort()!=-1)throw new Failure("Unsupported GitLab endpoint");
-        String bearer=credential(host,epoch);HttpsURLConnection connection=connections.open(url);
+        String bearer=credential(host,epoch);HttpsURLConnection connection=connections.open(url); NativeLoadOperation.track(connection);
         connection.setInstanceFollowRedirects(false);connection.setConnectTimeout(15000);connection.setReadTimeout(20000);connection.setUseCaches(false);
         connection.setRequestProperty("Accept","application/octet-stream");connection.setRequestProperty("User-Agent","Pocket-KiVi-Android");
         if(bearer!=null)connection.setRequestProperty("Authorization","Bearer "+bearer);
@@ -405,7 +469,7 @@ final class GitLabClient {
             if(status==404)throw new Failure("Project or revision unavailable; check private project access",404);
             if(status<200||status>=300)throw new Failure("GitLab request failed (HTTP "+status+")");
             long declared=connection.getContentLengthLong();if(declared>DiskProjectStore.FILE_LIMIT)throw new Failure("Downloaded projects support up to 256 MiB per file");
-            try(InputStream input=connection.getInputStream();OutputStream output=new FileOutputStream(target)) {
+            try(InputStream input=NativeLoadOperation.input(connection.getInputStream());OutputStream output=new FileOutputStream(target)) {
                 byte[] buffer=new byte[65536];int n;
                 while((n=input.read(buffer))!=-1) {check(epoch);if(SystemClock.elapsedRealtime()>deadline)throw new Failure("Repository download timed out");
                     if(n>DiskProjectStore.FILE_LIMIT-written)throw new Failure("Downloaded projects support up to 256 MiB per file");
@@ -417,7 +481,7 @@ final class GitLabClient {
             try(InputStream input=new FileInputStream(target)) {byte[] buffer=new byte[65536];int n;while((n=input.read(buffer))!=-1){check(epoch);digest.update(buffer,0,n);}}
             StringBuilder actual=new StringBuilder();for(byte b:digest.digest())actual.append(String.format(Locale.ROOT,"%02x",b&255));
             if(!actual.toString().equals(identity))throw new Failure("Repository blob identity mismatch");
-        } finally {connection.disconnect();}
+        } finally {NativeLoadOperation.untrack(connection); connection.disconnect();}
     }
     private static String repository(JSONObject request) throws Exception {
         String value=request.getString("repository");if(value.length()>300||!value.matches("[A-Za-z0-9_.-]+(?:/[A-Za-z0-9_.-]+)+"))throw new Failure("Invalid GitLab project path");
@@ -440,7 +504,7 @@ final class GitLabClient {
     private byte[] networkBytes(String host,String path,String method,byte[] body,String bearer,int epoch,int limit,String contentType)throws Exception {
         check(epoch);host=validateHost(host);if(!path.startsWith("/projects/")&&!path.equals("/user")&&!path.startsWith("/projects?")&&!path.equals("/oauth/token"))throw new Failure("Unsupported GitLab endpoint");
         URL url=new URL(host+(path.equals("/oauth/token")?"":"/api/v4")+path);if(!url.getProtocol().equals("https")||url.getUserInfo()!=null||!url.getHost().equals(new URI(host).getHost())||url.getPort()!=-1)throw new Failure("Unsupported GitLab endpoint");
-        HttpsURLConnection connection=connections.open(url);connection.setInstanceFollowRedirects(false);connection.setConnectTimeout(15000);connection.setReadTimeout(20000);connection.setUseCaches(false);connection.setRequestProperty("Accept","application/json");connection.setRequestProperty("User-Agent","KiCadVizDiff-Android");connection.setRequestMethod(method);
+        HttpsURLConnection connection=connections.open(url); NativeLoadOperation.track(connection);connection.setInstanceFollowRedirects(false);connection.setConnectTimeout(15000);connection.setReadTimeout(20000);connection.setUseCaches(false);connection.setRequestProperty("Accept","application/json");connection.setRequestProperty("User-Agent","KiCadVizDiff-Android");connection.setRequestMethod(method);
         if(path.equals("/oauth/token")&&bearer!=null)throw new Failure("Unsupported GitLab OAuth credential");
         if(bearer!=null)connection.setRequestProperty("Authorization","Bearer "+bearer);long deadline=SystemClock.elapsedRealtime()+90000;
         try {
@@ -451,9 +515,9 @@ final class GitLabClient {
             if(status==404)throw new Failure("Project or revision unavailable; check private project access",404);
             if(status<200||status>=300)throw new Failure("GitLab request failed (HTTP "+status+")");
             if(connection.getContentLengthLong()>limit){if(path.matches("/projects/.*/repository/blobs/[a-f0-9]{40}/raw"))throw new DownloadRequired();throw new Failure("GitLab response exceeds import limits");}
-            try(InputStream stream=connection.getInputStream();ByteArrayOutputStream output=new ByteArrayOutputStream()) {
+            try(InputStream stream=NativeLoadOperation.input(connection.getInputStream());ByteArrayOutputStream output=new ByteArrayOutputStream()) {
                 byte[] buffer=new byte[32768];int n;while((n=stream.read(buffer))!=-1){check(epoch);if(SystemClock.elapsedRealtime()>deadline)throw new Failure("GitLab request timed out");if(n>limit-output.size()){if(path.matches("/projects/.*/repository/blobs/[a-f0-9]{40}/raw"))throw new DownloadRequired();throw new Failure("GitLab response exceeds import limits");}output.write(buffer,0,n);}return output.toByteArray();
             }
-        } finally {connection.disconnect();}
+        } finally {NativeLoadOperation.untrack(connection); connection.disconnect();}
     }
 }

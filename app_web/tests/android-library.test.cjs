@@ -27,6 +27,24 @@ test('library bridge correlates replies, rejects errors, and fails without nativ
  const bad=api.request({action:'open',id:'abc'});api.reply(request.id,{ok:false,error:'Copy unavailable'});await assert.rejects(bad,/Copy unavailable/);
  await assert.rejects(bridge(()=>null).request({action:'list'}),/updated Android/);
 });
+test('library Stop cancels the exact opening request and never advertises cancelling saved-data writes',async()=>{
+ const prior=global.KiCadLoading,tracked=[],sent=[],cancelled=[];
+ global.KiCadLoading={track:(promise,stage,options)=>{tracked.push(options);return promise;}};
+ const api=bridge(()=>({libraryRequest:(id,message)=>sent.push({id,message}),cancelLibraryRequest:id=>cancelled.push(id)}),()=>1,()=>{});
+ try{
+  const opening=api.request({action:'open',id:'first'}),other=api.request({action:'open',id:'second'});
+  const rejected=assert.rejects(opening,error=>error.name==='AbortError');tracked[0].onStop();await rejected;assert.deepEqual(cancelled,[sent[0].id]);
+  api.reply(sent[0].id,{ok:true,result:{stale:true}});api.reply(sent[1].id,{ok:true,result:{opened:true}});assert.deepEqual(await other,{opened:true});
+  for(const action of ['save','remove','remove-offline','clear-temporary','star','list','temporary-settings']){const job=api.request({action});assert.equal(tracked.at(-1)?.onStop,undefined);api.reply(sent.at(-1).id,{ok:true,result:{}});await job;}
+ }finally{api.close();global.KiCadLoading=prior;}
+});
+test('accepted library opens acknowledge before rendering and cancelled replies never render',async()=>{
+ const previous=global.KiCadAndroid,events=[],sent=[];global.KiCadAndroid={receiveProject:project=>events.push(['render',project.id])};
+ const api=bridge(()=>({libraryRequest:(id,message)=>sent.push(id),cancelLibraryRequest(){},acceptLibraryRequest:id=>events.push(['accept',id])}),()=>1,()=>{});
+ try{const first=api.request({action:'open'}),id=sent.at(-1);api.reply(id,{ok:true,result:{project:{id:'accepted'}}});await first;assert.deepEqual(events,[['accept',id],['render','accepted']]);
+ const stale=api.request({action:'open'}),old=sent.at(-1);api.close();await assert.rejects(stale,/closed/);api.reply(old,{ok:true,result:{project:{id:'stale'}}});assert.equal(events.length,2);
+ }finally{global.KiCadAndroid=previous;}
+});
 test('temporary library metadata and source indicators never imply permanent offline storage',()=>{
  const expiresAt=Date.now()+3600000,meta=metadata({temporary:true,diskBacked:true,offline:true,libraryId:'a'.repeat(64),expiresAt,github:{repository:'wayri/Marble',sha:'a'.repeat(40)},files:[{path:'board.kicad_pcb'}]});
  assert.equal(meta.temporary,true);assert.equal(meta.expiresAt,expiresAt);assert.equal(meta.provider,'github');assert.match(availability(meta),/^Temporary · expires/);assert.equal(availability({...meta,expiresAt:Date.now()-1}),'Temporary · expired');

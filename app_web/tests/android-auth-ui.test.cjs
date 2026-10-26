@@ -8,6 +8,14 @@ function ui(){
  return {node,context,requests,reply,event:(name,detail)=>handlers.get(name)?.({detail})};
 }
 const flush=async()=>{for(let i=0;i<5;i++)await Promise.resolve();};
+test('stopping an import preserves the active signed-in project and drops its late response',async()=>{
+ const u=ui(),tracked=[],cancelled=[];u.reply('auth-status',{connected:true,login:'alice'});await flush();
+ u.context.AndroidKiCad.cancelGithubRequest=id=>cancelled.push(id);u.context.KiCadLoading={track:(promise,stage,options)=>{tracked.push(options);return promise;}};
+ const existing={id:'retained'};let received=0;u.context.KiCadAndroidProject=existing;u.context.KiCadAndroid={receiveProject(){received++;}};
+ const task=u.context.KiCadAndroidGitHub.openProject({repository:'team/next'}),request=u.requests.at(-1);
+ tracked.at(-1).onStop();await task;u.context.KiCadAndroidGitHub.reply(request.id,{ok:true,result:{sha:'a'.repeat(40),project:{id:'late'}}});await flush();
+ assert.deepEqual(cancelled,[request.id]);assert.equal(received,0);assert.equal(u.context.KiCadAndroidProject,existing);assert.equal(u.node('githubSignIn').textContent,'Sign out');assert.equal(u.node('githubAdd').disabled,false);assert.equal(u.node('githubSpinner').hidden,true);assert.match(u.node('githubStatus').textContent,/cancelled/);
+});
 test('sign-in launches authorization automatically and native completion updates buttons and account immediately',async()=>{
  const u=ui();u.reply('auth-status',{connected:false});await flush();const starting=u.node('githubSignIn').onclick();u.reply('device-start',{userCode:'ABCD-1234',interval:5});await starting;
  assert.equal(u.node('githubDevice').hidden,false);assert.equal(u.node('githubSignIn').disabled,true);assert.equal(u.node('githubCode').textContent,'ABCD-1234');assert.equal(u.requests.at(-1).action,'open-verification');assert.ok(!u.requests.some(r=>r.action==='device-poll'));

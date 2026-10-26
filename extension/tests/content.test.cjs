@@ -52,7 +52,7 @@ function find(node, predicate) { return walk(node).find(predicate); }
 function fixture(url, { pull = false, initialHidden = false, delayedCard = false,
   draft = false, draftValue = '', draftTitle = false, titleValue = '',
   draftBody = 'Review note for U3', draftHeading = '[Major] KiCad review: U3',
-  headRepository = 'owner/repo', privatePull=false, gitlabBlob = null } = {}) {
+  headRepository = 'owner/repo', privatePull=false, gitlabBlob = null, sessionReader=null } = {}) {
   const body = new Node('body'), main = new Node('main'); body.append(main);
   let source, card, header, comments, pathNode;
   const makeCard = () => {
@@ -76,7 +76,7 @@ function fixture(url, { pull = false, initialHidden = false, delayedCard = false
   if (draft) addDraftFields();
   let listener, interval, intersection, mutation;
   const messages = [];
-  const location = { href: url };
+  const location = { href: url,origin:new URL(url).origin };
   const document = {
     body, documentElement: body,
     createElement: (tag) => new Node(tag),
@@ -131,6 +131,7 @@ function fixture(url, { pull = false, initialHidden = false, delayedCard = false
       onMessage: { addListener: (fn) => { listener = fn; } }
     } }
   };
+  context.AbortController=AbortController;if(sessionReader)context.KiCadGitHubSessionReader=sessionReader;
   context.globalThis = context;
   vm.runInNewContext(fs.readFileSync(path.join(__dirname, '../content.js'), 'utf8'), context);
   const send = (message, sender = { id: 'extension-id' }) => {
@@ -490,4 +491,16 @@ test('GitLab historical diff routes stay unchanged rather than silently using la
  const url='https://gitlab.com/group/sub/board/-/merge_requests/7/diffs';
  assert.equal(parse.route(url).kind,'merge');assert.equal(parse.route(url+'?diff_id=42'),null);assert.equal(parse.route(url+'?start_sha=old'),null);
  assert.equal(parse.route('https://gitlab.example.org/group/sub/board/-/merge_requests/7/diffs'),null);
+});
+
+
+test('background session cancellation is private to its unpredictable read ID and rejects website senders',async()=>{
+ const signals=[],reader={create:({signal})=>({read:()=>{signals.push(signal);return new Promise((resolve,reject)=>signal.addEventListener('abort',()=>reject(Error('cancelled')),{once:true}));}})};
+ const ui=fixture('https://github.com/owner/repo',{sessionReader:reader});
+ const a='load-'+'a'.repeat(32),b='load-'+'b'.repeat(32);
+ ui.send({type:'github-session-read',requestId:a});ui.send({type:'github-session-read',requestId:b});assert.equal(signals.length,2);
+ ui.send({type:'repository-session-cancel',requestId:a},{id:'extension-id',tab:{id:9}});assert.equal(signals[0].aborted,false);
+ ui.send({type:'repository-session-cancel',requestId:'load-'+'c'.repeat(32)});assert.equal(signals[0].aborted,false);
+ ui.send({type:'repository-session-cancel',requestId:a});assert.equal(signals[0].aborted,true);assert.equal(signals[1].aborted,false);
+ ui.send({type:'repository-session-cancel',requestId:b});await new Promise(r=>setImmediate(r));
 });

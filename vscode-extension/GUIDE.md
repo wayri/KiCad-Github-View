@@ -11,6 +11,8 @@ Screenshots show the installed extension with the public KiCad 10 PIC Programmer
 - [Start a review](#start-a-review)
 - [All use cases](#what-you-can-do)
 - [Assembly, variants and testpoints](#assembly-variants-and-testpoints)
+- [Files and saved Git revisions](#files-and-saved-git-revisions)
+- [GitHub and GitLab collaboration](#github-and-gitlab-collaboration)
 - [Resolve Git conflicts](#resolve-git-conflicts-visually)
 - [Copper net names](#copper-net-names)
 - [Measurements and validation limits](#measurements-analytics-and-validation-boundaries)
@@ -46,6 +48,8 @@ The viewer reads a saved snapshot. Close and reopen it after editing a drawing o
 | Inspect project configuration | Browse project files and saved settings, net classes, constraints, layer details and available physical stackup using read-only forms and tables. |
 | Inspect fabrication outputs | Open supported Gerber and Excellon drill files; overlay available layers, adjust color/opacity, focus a layer and measure the rendered geometry. |
 | Inspect board shape and component models | Open the shared SPIKE 3D board view; load supported footprint model files available inside the workspace. |
+| Read a past committed design | Browse a commit's pinned file tree and open supported drawings as read-only snapshots without checking out or replacing working files. |
+| Collaborate on a GitHub or GitLab review | Load a selected thread, read ordinary comments and replies, and explicitly publish anchored notes with optional screenshots through host-held credentials. |
 | Record actionable review findings | Anchor notes to drawings, objects, positions or areas; use severity, tags and open/resolved/wont-fix states, with optional bounded PNG captures. |
 | Continue a review on another device | Export/import a portable review containing notes, BoM metadata, variants and the current 2D view/measurement. Import checks drawing paths and content fingerprints against the destination. |
 | Match an assembly photo to the saved board | Import top/bottom board photos into **Photo & AR review**, align four known component centers, and select markers to inspect matching saved components. Assisted population checks require reviewed fitted/empty reference photos. |
@@ -66,6 +70,26 @@ Variant overrides affect the review and its BoM/DNP overlays, not the original K
 For bring-up, **Testpoints & nets** provides a searchable table of candidate testpoints and saved net relationships, with navigation back to the drawing and CSV export. Classification and connectivity depend on the saved design data; verify critical probing decisions against the physical board.
 
 ![BoM field table and assembly review in VS Code](https://raw.githubusercontent.com/wayri/kiview-marketplace-assets/ac9b48f4bcc7ec3bfd050191d83d68109c14eaa5/assembly-bom.jpg)
+
+## Files and saved Git revisions
+
+Open **Repository** to browse working files, status colours, branches and commit messages. Choose **Browse files** on a commit to switch to its immutable file tree, then open a supported drawing. Native Git and workspace trust are required. The saved drawing and supported linked resources come from that commit; unavailable objects do not fall back to working files.
+
+A historical snapshot is read-only: it does not check out a branch, replace local files, edit the workspace review sidecar or publish remote comments. Return to the working drawing for annotation and assembly work. The conflict resolver described below remains a separate marker-based workflow.
+
+## GitHub and GitLab collaboration
+
+1. Open a trusted local checkout with a matching GitHub or GitLab remote, then open the saved drawing in KiView.
+2. In **Review**, open the account/settings control. GitHub uses VS Code's native sign-in and repository consent, without a manually copied token or device code. For GitLab, enter a token with the required API permissions for the exact host identified by the remote; it stays in VS Code SecretStorage.
+3. Under **View comments**, choose Issue or Discussion, enter the thread number and select **Load thread**. The original message, ordinary comments and reply relationships appear as text. GitLab discussions are grouped conversations within an existing issue.
+4. Select **Reply** to prepare an anchored draft, or create a new issue note. Check its destination, text and optional screenshot, then explicitly choose **Comment** or **Publish**. Saving a draft does not post it. Provider permissions, repository comment policy and screenshot access rules still apply.
+5. Choose **Load thread** again to read later activity. Local open/resolved/skipped/wont-fix states do not close issues or update existing remote posts.
+
+Pinned annotation readback and publication compare the displayed design against raw committed Git blobs. Commit dirty source and reopen the drawing before those operations; ordinary thread reading remains available. Reopen after changing the remote or HEAD. Credentials never enter the webview or sidecar, and source designs are not changed by collaboration. Confirmed uploads/publications retain receipts; uncertain results block automatic retry.
+
+Annotation refresh is distinct from conversation reading: it places only validated revision/file markers on drawings. Without a selected GitHub thread, VS Code scans at most five recent issue conversations; choose a specific issue or Discussion for targeted readback. GitLab marker readback requires an existing issue number. Thread readers are bounded and report incomplete results. Private image previews can additionally require access to the provider website.
+
+Restricted Mode, unmatched remotes and historical snapshots do not publish. There is no notification feed, full issue inbox, live subscription or GitLab merge-request comment publication. Virtual workspaces can still inspect provider-supplied files, but this native Git collaboration path requires a supported local checkout.
 
 ## Resolve Git conflicts visually
 
@@ -114,7 +138,7 @@ Previous workspace-state notes remain intact. Run **KiCad: Import Previous Works
 
 ## VS Code and companion-app capabilities
 
-This listing describes the VS Code host. It does not publish notes to GitHub/GitLab, retrieve remote issues/discussions or offer arbitrary Git revision comparisons. Use your normal Git tools to commit and share sidecars.
+This listing describes the VS Code host. Trusted native Git checkouts support the remote collaboration and read-only historical snapshots described above. The marker-conflict resolver is separate from historical viewing. Use your normal Git tools to commit and share sidecars; KiView does not automatically commit or push.
 
 The browser extension and Android app provide additional standalone engineering tools: the PDF viewer, calculator/circuit catalog, imported BoM/iBOM workspace, saved simulation-results viewer and dedicated Gerber analyzer. Those standalone pages cannot currently open in VS Code. VS Code includes its drawing BoM manager, saved board analytics, inline Gerber/drill review and static HTML preview; interactive iBOM is unavailable here.
 
@@ -171,4 +195,4 @@ For support, include your VS Code version, extension version, exact error and a 
 
 Recognized KiCad 8, 9 and 10 constructs use the shared viewer; native reference fixtures use KiCad 10 and 8/9 coverage is narrower. Newer versions open as warned previews. [Full compatibility matrix](https://github.com/wayri/kiview-marketplace-assets/blob/main/COMPATIBILITY.md).
 
-[Chrome companion guide](https://github.com/wayri/kiview-marketplace-assets/blob/main/CHROME-HOME.md): local projects and supported GitHub/GitLab pages. Chrome Web Store publication is pending. Each edition works independently; portable exports transfer supported review state.
+[Chrome companion guide](https://github.com/wayri/kiview-marketplace-assets/blob/main/CHROME-HOME.md): local projects and supported GitHub/GitLab pages. Available package and store versions may differ. Each edition works independently; portable exports transfer supported review state.

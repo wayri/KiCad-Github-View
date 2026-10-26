@@ -10,13 +10,40 @@ function library(storage){
  const list=()=>{try{const items=JSON.parse(storage.getItem(key)||'[]');if(!Array.isArray(items))return[];return items.filter(v=>{try{return repository(v.repository)===v.repository&&typeof v.ref==='string'&&v.ref.length<=200&&!/[\x00-\x1f]/.test(v.ref);}catch{return false;}}).slice(0,100);}catch{return[];}};
  return{list,save:item=>{const value={repository:repository(item.repository),ref:String(item.ref||'').slice(0,200),sha:/^[a-f0-9]{40}$/.test(item.sha)?item.sha:'',private:Boolean(item.private)};if(/[\x00-\x1f]/.test(value.ref))throw Error('Invalid branch.');const items=list().filter(v=>v.repository!==value.repository||v.ref!==value.ref);items.unshift(value);storage.setItem(key,JSON.stringify(items.slice(0,100)));},remove:item=>storage.setItem(key,JSON.stringify(list().filter(v=>v.repository!==item.repository||v.ref!==item.ref)))};
 }
+const cancellableReads=new Set(['repositories','notifications','import','revision-import','revision-resolve','revision-branches','revision-commits','repository-tree','repository-history','repository-branches','review-list','review-categories','review-thread','review-read','review-contributors','review-policy','policy','threads','thread','contributors']);
 function bridge(native,{setTimeout:later=root.setTimeout,clearTimeout:clear=root.clearTimeout}={}){
  let next=0;const pending=new Map();
- return{request:message=>{const promise=new Promise((resolve,reject)=>{
-  if(typeof native()?.githubRequest!=='function'){reject(Error('GitHub requires the updated Android app.'));return;}if(pending.size>=8){reject(Error('Wait for the current GitHub request.'));return;}
-  const id=++next,timer=later(()=>{pending.delete(id);reject(Error('GitHub request timed out. Try again.'));},message.type.endsWith('import')?(message.downloadLarge?2100000:600000):message.type==='token-connect'?300000:60000);pending.set(id,{resolve,reject,timer,type:message.type});try{const {type,...fields}=message;native().githubRequest(id,{...fields,action:type});}catch(error){clear(timer);pending.delete(id);reject(Error('GitHub native connection unavailable.'));}
- });const backgroundAuth=['auth-status','device-start','device-poll','device-cancel','open-verification','open-verification-mobile','copy-device-code','sign-out'].includes(message.type);return !backgroundAuth&&root.KiCadLoading?.track?root.KiCadLoading.track(promise,message.host?'Loading GitLab...':'Loading GitHub...'):promise;},reply:(id,response)=>{if(!Number.isSafeInteger(id)||!pending.has(id)||!response||typeof response.ok!=='boolean')return;const item=pending.get(id);pending.delete(id);clear(item.timer);response.ok?item.resolve(response.result):item.reject(Object.assign(Error(response.error||'GitHub request failed.'),{authExpired:Boolean(response.authExpired)}));},cancel:type=>{for(const [id,item] of pending){if(item.type!==type)continue;clear(item.timer);item.reject(Error('GitHub request cancelled.'));pending.delete(id);}},close:()=>{for(const item of pending.values()){clear(item.timer);item.reject(Error('GitHub view closed.'));}pending.clear();}};
+ const abortError=()=>Object.assign(Error('Project loading cancelled.'),{name:'AbortError',cancelled:true});
+ function cancelRequest(id,error=abortError()){
+  const item=pending.get(id);if(!item)return false;
+  if(item.canStop){try{native().cancelGithubRequest(id);}catch{}}
+  pending.delete(id);clear(item.timer);item.signal?.removeEventListener?.('abort',item.abort);item.reject(error);return true;
+ }
+ return{request:(message,options={})=>{
+  let requestId;const canStop=cancellableReads.has(message.type)&&typeof native()?.cancelGithubRequest==='function';
+  const promise=new Promise((resolve,reject)=>{
+   if(typeof native()?.githubRequest!=='function'){reject(Error('GitHub requires the updated Android app.'));return;}
+   if(pending.size>=8){reject(Error('Wait for the current GitHub request.'));return;}
+   if(cancellableReads.has(message.type)&&options.signal?.aborted){reject(abortError());return;}
+   const id=++next;requestId=id;
+   const timer=later(()=>cancelRequest(id,Error('GitHub request timed out. Try again.')),message.type.endsWith('import')?(message.downloadLarge?2100000:600000):message.type==='token-connect'?300000:60000);
+   const signal=cancellableReads.has(message.type)?options.signal:null,abort=()=>cancelRequest(id);
+   pending.set(id,{resolve,reject,timer,type:message.type,canStop,signal,abort});signal?.addEventListener?.('abort',abort,{once:true});
+   try{const {type,...fields}=message;native().githubRequest(id,{...fields,action:type});}
+   catch{clear(timer);pending.delete(id);signal?.removeEventListener?.('abort',abort);reject(Error('GitHub native connection unavailable.'));}
+  });
+  const backgroundAuth=['auth-status','device-start','device-poll','device-cancel','open-verification','open-verification-mobile','copy-device-code','sign-out'].includes(message.type);
+  const loadingOptions=canStop&&pending.has(requestId)?{onStop:()=>cancelRequest(requestId)}:undefined;
+  return !backgroundAuth&&root.KiCadLoading?.track?root.KiCadLoading.track(promise,message.host?'Loading GitLab...':'Loading GitHub...',loadingOptions):promise;
+ },reply:(id,response)=>{
+  if(!Number.isSafeInteger(id)||!pending.has(id)||!response||typeof response.ok!=='boolean')return;
+  const item=pending.get(id);pending.delete(id);clear(item.timer);item.signal?.removeEventListener?.('abort',item.abort);
+  if(response.ok&&item.type==='import'&&response.result?.project&&typeof native()?.acceptGithubRequest==='function'){try{native().acceptGithubRequest(id);}catch{item.reject(Error('Project delivery could not be accepted.'));return;}}
+  response.ok?item.resolve(response.result):item.reject(Object.assign(Error(response.error||'GitHub request failed.'),{authExpired:Boolean(response.authExpired)}));
+ },cancel:type=>{for(const[id,item]of pending)if(item.type===type)cancelRequest(id,Object.assign(Error('GitHub request cancelled.'),{name:'AbortError',cancelled:true}));},
+ close:()=>{for(const[id]of pending)cancelRequest(id,Error('GitHub view closed.'));}};
 }
+
 function chooseDownload(result,document=root.document){return new Promise(resolve=>{const dialog=document.createElement('dialog'),section=document.createElement('section');section.className='android-sheet-content';const title=document.createElement('h2');title.textContent='Download large project?';const text=document.createElement('p');text.textContent='This project needs '+Math.ceil(result.bytes/1048576)+' MiB. Choose a permanent offline copy or a temporary copy for your selected duration (30 minutes to 6 hours). The temporary copy remains available in Downloads for that period, after which the app automatically removes it. It cannot be reopened after expiry; Android may delay physical cleanup while the app is inactive. Downloads use unencrypted private app storage. Large drawings can still need substantial memory.';const finish=value=>{dialog.close();dialog.remove();resolve(value);};const cancel=document.createElement('button');cancel.textContent='Cancel';cancel.onclick=()=>finish(null);const download=document.createElement('button');download.textContent='Download and keep';download.onclick=()=>finish('keep');const temporary=document.createElement('button');temporary.textContent='Temporary download';temporary.onclick=()=>finish('temporary');section.append(title,text,download,temporary,cancel);dialog.append(section);dialog.addEventListener('cancel',event=>{event.preventDefault();finish(null);});document.body.append(dialog);dialog.showModal();});}
 root.KiCadAndroidGitHubCore={repository,library,bridge,chooseDownload};if(typeof module==='object'&&module.exports){module.exports=root.KiCadAndroidGitHubCore;return;}
 const api=bridge(()=>root.AndroidKiCad),saved=library(localStorage),$=id=>document.getElementById(id);root.KiCadAndroidGitHub={reply:api.reply,request:api.request,openProject:importProject};

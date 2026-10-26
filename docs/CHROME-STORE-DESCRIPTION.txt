@@ -1,0 +1,65 @@
+Review KiCad designs directly in your browser.
+
+KiCad Visual Review brings schematics, PCB layouts and engineering review tools to Chrome. Open a local project or inspect files on GitHub and GitLab without installing KiCad. Use it for design reviews, assembly checks and understanding changes between revisions.
+
+OPEN AND EXPLORE
+
+• Open local files or a project folder, including nested sheets and available model assets. Local review works offline and does not require an account.
+• View supported KiCad files on GitHub, GitLab.com and explicitly configured self-hosted GitLab servers.
+• Browse repository folders, branches and commit messages with a colour-coded commit ancestry graph.
+• Use parallel schematic and layout views, search, cross-highlighting and hideable controls. Stop a pending load and retry when needed.
+
+INSPECT SCHEMATICS AND PCBS
+
+• Explore component fields, nets, hierarchical sheets and PCB layers.
+• Measure 2D geometry, highlight nets and testpoints, and display readable copper net names.
+• Inspect board geometry and supported linked or embedded 3D component models when their assets can be resolved.
+• Use KiCad Default layer colours and highlight DNP/DNI components.
+
+BOM AND ASSEMBLY
+
+• Review parts in a field table with search, filters and grouping by value, footprint or other available fields.
+• Track assembly progress, review variants and population status, and export the visible BoM as CSV.
+• Import supported InteractiveHtmlBom and WayriCAD BoM Studio exports.
+• Align top/bottom board photographs with saved component positions for assisted assembly review. Population suggestions require reference photos and manual confirmation.
+
+REVIEW AND COLLABORATE
+
+• Compare saved design revisions visually and inspect object-level changes.
+• Add component, point or area notes with severity, tags and local review states. Keep drafts local or explicitly publish them through an authorized account.
+• Read GitHub issue and Discussion conversations, including ordinary comments and replies. Read GitLab issue bodies and grouped discussion replies inside the viewer.
+• Create GitHub issues and supported PR comments or Discussions. On GitLab, create issues and post comments or discussion threads within existing issues.
+• Include supported drawing captures with published reviews. Export/import supported review state between compatible KiView clients.
+
+ENGINEERING TOOLS
+
+• View supported Gerber/drill files and PDFs.
+• Inspect board metrics, including trace lengths and saved zone polygon areas, and display imported ERC/DRC findings.
+• Explore interactive engineering calculators and circuit illustrations.
+• Open supported saved WayriCAD quickTherm, quickPI and quickSI exports. Inspect plots, data, probes and spatial overlays when the export contains the required results and coordinates.
+
+GET STARTED
+
+1. Install and pin the extension.
+2. Click its icon, then open your files or project folder. Alternatively, visit a supported KiCad file on GitHub or GitLab.
+3. Open the inspection, BoM or review tools for your task. Connect an account when authorized private access or publication is needed.
+
+COMPATIBILITY AND LIMITS
+
+Recognized KiCad 8, 9 and 10 .kicad_sch and .kicad_pcb constructs are supported within documented limits. KiCad 10 has native-reference fixtures; 8/9 coverage is narrower. Newer versions may open with warnings. Legacy .sch/.brd files are not advertised as supported.
+
+Ordinary viewing does not edit source designs. This extension does not run native KiCad ERC/DRC or simulation solvers. Rendering, models and imported results depend on supported formats and available data. GitLab merge-request comment publication is not supplied. Local review states do not automatically close remote issues. This is an independent product, not an official KiCad, GitHub or GitLab extension.
+
+VS CODE COMPANION
+
+Review beside your source code with the companion VS Code extension, including its visual Git conflict resolver:
+https://marketplace.visualstudio.com/items?itemName=wayri.kicad-visual-review
+
+Each edition works independently. Feature availability differs by host; portable review exports transfer supported state, not complete projects or account sessions.
+
+PROJECT, LICENSE AND SUPPORT
+
+GitHub: https://github.com/wayri/KiCad-Github-View
+Support: support@sigharmonic.com
+
+Copyright 2026 Yawar B (wayri). Source-available license. Paid software distribution and monetized hosted access require written permission. Third-party terms remain applicable. Your designs and outputs remain yours.

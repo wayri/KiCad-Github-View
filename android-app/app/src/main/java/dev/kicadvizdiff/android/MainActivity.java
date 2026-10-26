@@ -60,6 +60,52 @@ public final class MainActivity extends Activity {
 
     private final ExecutorService importExecutor = Executors.newSingleThreadExecutor();
     private final AtomicInteger importGeneration = new AtomicInteger();
+    private static final class ReadTicket {
+        final NativeLoadOperation operation = new NativeLoadOperation();
+        final boolean opensProject;
+        JSONObject project; String host; boolean isPrivate;
+        ReadTicket(boolean opensProject) { this.opensProject = opensProject; }
+    }
+    // Accessed only on the main thread; cancellation closes I/O on a separate executor.
+    private final java.util.Map<Integer,ReadTicket> githubReads = new java.util.HashMap<>();
+    private final java.util.Map<Integer,ReadTicket> gitlabReads = new java.util.HashMap<>();
+    private final java.util.Map<Integer,ReadTicket> libraryReads = new java.util.HashMap<>();
+    private ReadTicket localRead;
+    private int pendingProjectLoadId = -1;
+    private ReadTicket beginRead(java.util.Map<Integer,ReadTicket> reads,int id,boolean opens) {
+        if(reads.size()>=64 || reads.containsKey(id)) throw new IllegalArgumentException("Too many pending reads");
+        ReadTicket ticket=new ReadTicket(opens); reads.put(id,ticket); return ticket;
+    }
+    private void cancelRead(java.util.Map<Integer,ReadTicket> reads,int id) {
+        ReadTicket ticket=reads.remove(id); if(ticket!=null)ticket.operation.cancel();
+    }
+    private void acceptRead(java.util.Map<Integer,ReadTicket> reads,int id) {
+        ReadTicket ticket=reads.get(id);
+        if(ticket==null||ticket.project==null||!trustedPage()||!ticket.operation.accept())return;
+        reads.remove(id);recordProject(ticket.project,ticket.host,ticket.isPrivate);
+    }
+    private void stopProjectLoads() {
+        if(localRead!=null){localRead.operation.cancel();localRead=null;pendingProject=null;pendingProjectLoadId=-1;importGeneration.incrementAndGet();}
+        for(java.util.Map<Integer,ReadTicket> reads:java.util.Arrays.asList(githubReads,gitlabReads,libraryReads)) {
+            java.util.Iterator<ReadTicket> pending=reads.values().iterator();
+            while(pending.hasNext()){ReadTicket ticket=pending.next();if(ticket.opensProject){ticket.operation.cancel();pending.remove();}}
+        }
+    }
+    private void cancelAllReads() {
+        stopProjectLoads();
+        for(java.util.Map<Integer,ReadTicket> reads:java.util.Arrays.asList(githubReads,gitlabReads,libraryReads)) {
+            for(ReadTicket ticket:reads.values())ticket.operation.cancel();reads.clear();
+        }
+    }
+    private boolean deliverRead(java.util.Map<Integer,ReadTicket> reads,int id,ReadTicket ticket,JSONObject result,String error,String host) {
+        if(ticket==null)return true;
+        if(reads.get(id)!=ticket||ticket.operation.cancelled())return false;
+        if(error==null&&ticket.opensProject&&result!=null&&result.optJSONObject("project")!=null){
+            ticket.project=result.optJSONObject("project");ticket.host=host;ticket.isPrivate=result.optBoolean("private");
+        }else reads.remove(id);
+        return true;
+    }
+
     private WebView webView;
     private boolean pageReady;
     private boolean backPending;
@@ -216,6 +262,7 @@ public final class MainActivity extends Activity {
 
             @Override
             public void onPageStarted(WebView view, String url, Bitmap favicon) {
+                if(pageReady)cancelAllReads();
                 clearCameraRequest(true);
                 pageReady = false;
                 if (webFileCallback != null) { webFileCallback.onReceiveValue(null); webFileCallback = null; }
@@ -235,7 +282,7 @@ public final class MainActivity extends Activity {
                 }
                 view.evaluateJavascript(
                     "(function(){var transport=window.NativeKiCadBridge;var host={};" +
-                    "['openFiles','openFolder','downloadProject','openRepositorySource','composeReport','setPresentation','exportCandidateProject','exportText','libraryRequest','githubRequest','gitlabRequest'].forEach(function(name){" +
+                    "['openFiles','openFolder','downloadProject','openRepositorySource','composeReport','setPresentation','exportCandidateProject','exportText','libraryRequest','githubRequest','gitlabRequest','cancelGithubRequest','cancelGitlabRequest','cancelLibraryRequest','cancelProjectLoad','acceptGithubRequest','acceptGitlabRequest','acceptLibraryRequest','acceptProjectLoad'].forEach(function(name){" +
                     "host[name]=function(){transport.postMessage(JSON.stringify({method:name,args:Array.from(arguments)}));};});" +
                     "Object.defineProperty(window,'NativeKiCadHost',{value:Object.freeze(host),writable:false,configurable:false});})()", null);
                 view.evaluateJavascript(
@@ -248,6 +295,14 @@ public final class MainActivity extends Activity {
                         "downloadProject:function(){NativeKiCadHost.downloadProject()}," +
                         "exportCandidateProject:function(value){NativeKiCadHost.exportCandidateProject(JSON.stringify(value))}," +
                         "exportText:function(name,text,mime){NativeKiCadHost.exportText(name,text,mime)}," +
+                        "cancelGithubRequest:function(id){NativeKiCadHost.cancelGithubRequest(id)}," +
+                        "cancelGitlabRequest:function(id){NativeKiCadHost.cancelGitlabRequest(id)}," +
+                        "cancelLibraryRequest:function(id){NativeKiCadHost.cancelLibraryRequest(id)}," +
+                        "cancelProjectLoad:function(){NativeKiCadHost.cancelProjectLoad()}," +
+                        "acceptGithubRequest:function(id){NativeKiCadHost.acceptGithubRequest(id)}," +
+                        "acceptGitlabRequest:function(id){NativeKiCadHost.acceptGitlabRequest(id)}," +
+                        "acceptLibraryRequest:function(id){NativeKiCadHost.acceptLibraryRequest(id)}," +
+                        "acceptProjectLoad:function(id){NativeKiCadHost.acceptProjectLoad(id)}," +
                         "libraryRequest:function(id,message){NativeKiCadHost.libraryRequest(id,JSON.stringify(message))}," +
                         "githubRequest:function(id,message){NativeKiCadHost.githubRequest(id,JSON.stringify(message))}," +
                         "gitlabRequest:function(id,message){NativeKiCadHost.gitlabRequest(id,JSON.stringify(message))}});" +
@@ -494,6 +549,14 @@ public final class MainActivity extends Activity {
             case "setPresentation": if (args.length() == 1 && args.get(0) instanceof Boolean) api.setPresentation(args.getBoolean(0)); break;
             case "exportCandidateProject": if (args.length() == 1 && args.get(0) instanceof String) api.exportCandidateProject(args.getString(0)); break;
             case "exportText": if (args.length() == 3 && args.get(0) instanceof String && args.get(1) instanceof String && args.get(2) instanceof String) api.exportText(args.getString(0), args.getString(1), args.getString(2)); break;
+            case "cancelProjectLoad": if(args.length()==0)api.cancelProjectLoad();break;
+            case "cancelGithubRequest": if(args.length()==1&&args.get(0) instanceof Number&&args.getDouble(0)==args.getInt(0)&&args.getInt(0)>=0)api.cancelGithubRequest(args.getInt(0));break;
+            case "cancelGitlabRequest": if(args.length()==1&&args.get(0) instanceof Number&&args.getDouble(0)==args.getInt(0)&&args.getInt(0)>=0)api.cancelGitlabRequest(args.getInt(0));break;
+            case "cancelLibraryRequest": if(args.length()==1&&args.get(0) instanceof Number&&args.getDouble(0)==args.getInt(0)&&args.getInt(0)>=0)api.cancelLibraryRequest(args.getInt(0));break;
+            case "acceptGithubRequest": if(args.length()==1&&args.get(0) instanceof Number&&args.getDouble(0)==args.getInt(0)&&args.getInt(0)>=0)api.acceptGithubRequest(args.getInt(0));break;
+            case "acceptGitlabRequest": if(args.length()==1&&args.get(0) instanceof Number&&args.getDouble(0)==args.getInt(0)&&args.getInt(0)>=0)api.acceptGitlabRequest(args.getInt(0));break;
+            case "acceptLibraryRequest": if(args.length()==1&&args.get(0) instanceof Number&&args.getDouble(0)==args.getInt(0)&&args.getInt(0)>=0)api.acceptLibraryRequest(args.getInt(0));break;
+            case "acceptProjectLoad": if(args.length()==1&&args.get(0) instanceof Number&&args.getDouble(0)==args.getInt(0)&&args.getInt(0)>=0)api.acceptProjectLoad(args.getInt(0));break;
             case "libraryRequest": case "githubRequest": case "gitlabRequest":
                 if (args.length() != 2 || !(args.get(0) instanceof Number) || !(args.get(1) instanceof String)
                         || args.getDouble(0) != args.getInt(0) || args.getInt(0) < 0) return;
@@ -507,6 +570,19 @@ public final class MainActivity extends Activity {
     }
 
     private final class NativeBridge {
+        public void cancelGithubRequest(int id){runOnUiThread(()->{if(trustedPage())cancelRead(githubReads,id);});}
+        public void cancelGitlabRequest(int id){runOnUiThread(()->{if(trustedPage())cancelRead(gitlabReads,id);});}
+        public void cancelLibraryRequest(int id){runOnUiThread(()->{if(trustedPage())cancelRead(libraryReads,id);});}
+        public void cancelProjectLoad(){runOnUiThread(()->{if(trustedPage())stopProjectLoads();});}
+        public void acceptGithubRequest(int id){runOnUiThread(()->acceptRead(githubReads,id));}
+        public void acceptGitlabRequest(int id){runOnUiThread(()->acceptRead(gitlabReads,id));}
+        public void acceptLibraryRequest(int id){runOnUiThread(()->acceptRead(libraryReads,id));}
+        public void acceptProjectLoad(int id){runOnUiThread(()->{
+            if(trustedPage()&&localRead!=null&&id==importGeneration.get()&&localRead.project!=null&&localRead.operation.accept()){
+                recordProject(localRead.project,null,false);localRead=null;
+            }
+        });}
+
         public void openRepositorySource(String url) {
             if (url == null || url.length() > 4096) return;
             runOnUiThread(() -> {
@@ -552,8 +628,7 @@ public final class MainActivity extends Activity {
                         github.reset(); clearCopiedGitHubCode();
                         githubImportGeneration.incrementAndGet();
                     } else if (action.equals("device-cancel")) { github.cancelDevice(); clearCopiedGitHubCode(); }
-                    else if (action.equals("import")) github.cancelRequests();
-                gitlab.cancelRequests();
+
                     final int epoch = github.generation();
                     if (action.equals("copy-device-code")) {
                         if(!copyGitHubCode()) throw new IllegalArgumentException();
@@ -565,13 +640,15 @@ public final class MainActivity extends Activity {
                         return;
                     }
                     if (action.equals("token-connect")) { showTokenDialog(id, epoch); return; }
-                    final int importEpoch = action.equals("import") ? githubImportGeneration.incrementAndGet() : -1;
-                    if (action.equals("import")) importGeneration.incrementAndGet();
+                    final boolean opens=action.equals("import");
+                    if(opens)stopProjectLoads();
+                    final ReadTicket read=GitHubClient.cancellableRead(action)?beginRead(githubReads,id,action.equals("import")):null;
+                    final int importEpoch = -1;
                     providerRequestGuard.execute(githubExecutor, () -> {
-                        try { JSONObject result = github.handle(request, epoch); githubReply(id, epoch, importEpoch, result, null);
+                        try { JSONObject result = read==null?github.handle(request, epoch):github.handleLoad(request,epoch,read.operation); githubReply(id, epoch, importEpoch, result, null, read);
                             if (action.equals("device-start") || action.equals("auth-status")) runOnUiThread(MainActivity.this::checkGitHubLogin);
                         }
-                        catch (Exception error) { githubReply(id, epoch, importEpoch, null, githubError(error)); }
+                        catch (Exception error) { githubReply(id, epoch, importEpoch, null, githubError(error),read); }
                     });
                 } catch (Exception error) {
                     githubReply(id, github.generation(), -1, null, "Invalid GitHub request or browser unavailable");
@@ -588,12 +665,12 @@ public final class MainActivity extends Activity {
                     String action = request.getString("action");
                     String host = GitLabClient.validateHost(request.optString("host", "https://gitlab.com"));
                     if (action.equals("sign-out") || action.equals("token-connect") || action.equals("oauth-start")) { purgeProject(host); gitlab.reset(host); }
-                    else if (action.equals("import")) {
-                        gitlab.cancelRequests(); github.cancelRequests();
-                        githubImportGeneration.incrementAndGet(); importGeneration.incrementAndGet();
-                    }
+
                     final int epoch = gitlab.generation();
                     if (action.equals("token-connect")) { showGitLabTokenDialog(id, host, epoch); return; }
+                    final boolean opens=action.equals("import");
+                    if(opens)stopProjectLoads();
+                    final ReadTicket read=GitLabClient.cancellableRead(action)?beginRead(gitlabReads,id,action.equals("import")):null;
                     providerRequestGuard.execute(gitlabExecutor, () -> {
                         try {
                             JSONObject result;
@@ -602,16 +679,14 @@ public final class MainActivity extends Activity {
                                 final String uri = result.getString("authorizationUri");
                                 runOnUiThread(() -> { if (gitlab.current(epoch) && !destroyed) openBrowser(Uri.parse(uri)); });
                                 result = new JSONObject().put("pending", true);
-                            } else result = gitlab.handle(request, epoch);
+                            } else result = read==null?gitlab.handle(request, epoch):gitlab.handleLoad(request,epoch,read.operation);
                             final JSONObject imported = result;
                             runOnUiThread(() -> {
-                                if (trustedPage() && gitlab.current(epoch) && action.equals("import"))
-                                    recordProject(imported.optJSONObject("project"), host, imported.optBoolean("private"));
-                                gitlabReply(id, epoch, imported, null);
+                                gitlabReply(id, epoch, imported, null,read,host);
                             });
                         } catch (Exception error) {
-                            runOnUiThread(() -> { if (gitlab.current(epoch) && gitlab.authExpired()) purgeProject(host); });
-                            gitlabReply(id, epoch, null, gitlabError(error));
+                            runOnUiThread(() -> { if (gitlab.current(epoch) && (read==null||!read.operation.cancelled()) && gitlab.authExpired()) purgeProject(host); });
+                            gitlabReply(id, epoch, null, gitlabError(error),read,host);
                         }
                     });
                 } catch (Exception ignored) { gitlabReply(id, gitlab.generation(), null, "Invalid GitLab connection request"); }
@@ -682,26 +757,24 @@ public final class MainActivity extends Activity {
                     webView.evaluateJavascript("document.getElementById('viewer').src='about:blank';window.KiCadAndroidProject=null;window.KiCadAndroidRevisionCache=null;window.KiCadAndroid.showHome();",null);
                 }
                 final boolean opening = request.optString("action").equals("open");
+                if(opening)stopProjectLoads();
                 final int openEpoch = opening ? importGeneration.incrementAndGet() : -1;
-                if (opening) { github.cancelRequests(); gitlab.cancelRequests(); githubImportGeneration.incrementAndGet(); }
+                final ReadTicket read=opening?beginRead(libraryReads,id,true):null;
                 importExecutor.execute(() -> {
                     try {
-                        JSONObject result = projectLibrary.handle(request, project);
+                        JSONObject result;
+                        if(read==null)result=projectLibrary.handle(request,project);
+                        else try(NativeLoadOperation.Scope scope=read.operation.enter()){result=projectLibrary.handle(request,project);}
                         runOnUiThread(() -> {
                             if (!trustedPage()) return;
                             if (opening) {
                                 if (openEpoch != importGeneration.get()) { libraryReply(id, null, "Project opening was superseded by another selection"); return; }
-                                JSONObject offline = result.optJSONObject("project");
-                                if (offline != null) {
-                                    recordProject(offline, null, false);
-                                    pendingProject = offline.toString(); deliverPendingProject();
-                                    result.remove("project");
-                                }
+                                if(!deliverRead(libraryReads,id,read,result,null,null))return;
                             }
                             libraryReply(id, result, null);
                         });
                     } catch (Exception error) {
-                        libraryReply(id, null, error instanceof IllegalArgumentException ? error.getMessage() : "Unable to update project library. Check available storage and retry.");
+                        runOnUiThread(()->{if(deliverRead(libraryReads,id,read,null,"error",null))libraryReply(id, null, error instanceof IllegalArgumentException ? error.getMessage() : "Unable to update project library. Check available storage and retry.");});
                     }
                 });
             });
@@ -766,9 +839,11 @@ public final class MainActivity extends Activity {
     private static String gitlabError(Exception error) {
         return error instanceof GitLabClient.Failure && error.getMessage() != null ? error.getMessage() : "Unable to complete GitLab request; check server and permissions";
     }
-    private void gitlabReply(int id,int epoch,JSONObject result,String error) {
+    private void gitlabReply(int id,int epoch,JSONObject result,String error){gitlabReply(id,epoch,result,error,null,null);}
+    private void gitlabReply(int id,int epoch,JSONObject result,String error,ReadTicket read,String host) {
         runOnUiThread(() -> {
             if (!trustedPage() || !gitlab.current(epoch)) return;
+            if(!deliverRead(gitlabReads,id,read,result,error,host))return;
             try {
                 JSONObject reply=new JSONObject().put("ok",error==null);
                 if(error==null)reply.put("result",result);else reply.put("error",error).put("authExpired",gitlab.authExpired());
@@ -798,13 +873,13 @@ public final class MainActivity extends Activity {
                 ? error.getMessage() : "Unable to complete GitHub request; check the repository and sign-in";
     }
 
-    private void githubReply(int id, int epoch, int importEpoch, JSONObject result, String error) {
+    private void githubReply(int id,int epoch,int importEpoch,JSONObject result,String error){githubReply(id,epoch,importEpoch,result,error,null);}
+    private void githubReply(int id, int epoch, int importEpoch, JSONObject result, String error,ReadTicket read) {
         runOnUiThread(() -> {
             if (!trustedPage() || !github.current(epoch)
                     || (importEpoch >= 0 && importEpoch != githubImportGeneration.get())) return;
+            if(!deliverRead(githubReads,id,read,result,error,"https://github.com"))return;
             if (error != null && github.authExpired()) purgeProject("https://github.com");
-            if (error == null && importEpoch >= 0 && result != null)
-                recordProject(result.optJSONObject("project"), "https://github.com", result.optBoolean("private"));
             try {
                 JSONObject reply = new JSONObject().put("ok", error == null);
                 if (error == null) reply.put("result", result);
@@ -1143,13 +1218,12 @@ public final class MainActivity extends Activity {
     private void importSource(Uri uri, boolean folder) { importSource(uri,folder,null); }
 
     private void importSource(Uri uri, boolean folder, Boolean temporary) {
-        github.cancelRequests();
-                gitlab.cancelRequests();
-        githubImportGeneration.incrementAndGet();
+        stopProjectLoads();
         final int generation = importGeneration.incrementAndGet();
-        sendLoading("Opening " + (folder ? "folder" : "file") + "ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¦");
+        final ReadTicket read=new ReadTicket(true);localRead=read;
+        sendLoading("Opening " + (folder ? "folder" : "file") + "...",generation);
         importExecutor.execute(() -> {
-            try {
+            try (NativeLoadOperation.Scope scope=read.operation.enter()) {
                 JSONObject project = temporary == null ? ProjectImporter.read(
                         getContentResolver(), getCacheDir(), uri, folder,
                         () -> generation != importGeneration.get() || destroyed) : ProjectImporter.readDisk(
@@ -1162,13 +1236,16 @@ public final class MainActivity extends Activity {
                 String json = project.toString();
                 runOnUiThread(() -> {
                     if (generation != importGeneration.get() || destroyed) return;
-                    recordProject(project, null, false);
+                    if(read.operation.cancelled()||localRead!=read)return;
+                    read.project=project;
+                    pendingProjectLoadId=generation;
                     pendingProject = json;
                     deliverPendingProject();
                 });
             } catch (Exception error) {
                 runOnUiThread(() -> {
-                    if (generation != importGeneration.get() || destroyed) return;
+                    if (generation != importGeneration.get() || destroyed || read.operation.cancelled()) return;
+                    localRead=null;
                     String message = error.getMessage() == null ? "Unable to open project" : error.getMessage();
                     if(temporary == null && (message.contains("32 MiB") || message.contains("96 MiB") || message.equals("File or project size limit exceeded"))) {
                         sendLoading("Large project: choose how to open it.");
@@ -1191,9 +1268,13 @@ public final class MainActivity extends Activity {
         if (!trustedPage() || pendingProject == null) return;
         String json = pendingProject;
         pendingProject = null;
-        webView.evaluateJavascript("window.KiCadAndroid.receiveProject(" + json + ");", null);
+        int loadId=pendingProjectLoadId;pendingProjectLoadId=-1;
+        webView.evaluateJavascript("window.KiCadAndroid.receiveProject(" + json + (loadId>=0?",{loadId:"+loadId+"}":"") + ");", null);
     }
 
+    private void sendLoading(String message,int loadId) {
+        if(trustedPage())webView.evaluateJavascript("window.KiCadAndroid?.setLoading("+JSONObject.quote(message)+",{canStop:true,loadId:"+loadId+"});",null);
+    }
     private void sendLoading(String message) {
         if (trustedPage()) {
             webView.evaluateJavascript("if(window.KiCadAndroid&&window.KiCadAndroid.setLoading)" +
@@ -1238,6 +1319,7 @@ public final class MainActivity extends Activity {
 
     @Override
     protected void onDestroy() {
+        cancelAllReads();
         clearCameraRequest(true);
         destroyed = true;
         if (foldTracker != null && foldListening) foldTracker.removeWindowLayoutInfoListener(foldListener);

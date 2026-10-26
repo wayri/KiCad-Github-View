@@ -2,6 +2,9 @@
 
 // Pure validation and interchange helpers. Nothing here posts to GitHub.
 const KiCadReviewComments = (() => {
+  // All bound views share the existing publication lock; binding is validation context only.
+  const publicationReservations = new Map();
+  function create(binding = null) {
   const FORMAT = "kicad-visual-review-comments";
   const MAX_IMPORT = 1024 * 1024;
   const REPOSITORY = /^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/;
@@ -77,6 +80,16 @@ const KiCadReviewComments = (() => {
     if(anchor.area!==undefined){const {x,y,width,height}=anchor.area||{};if(![x,y,width,height].every(Number.isFinite)||width<=0||height<=0||width>1e6||height>1e6||[x,y,x+width,y+height].some(n=>Math.abs(n)>1e6))throw new Error('Invalid comment area.');result.area={x,y,width,height};}
     return result;
   }
+  function forWorkspace(localScope, remoteScope) {
+    const local=normalizeScope(localScope),remote=normalizeScope(remoteScope);
+    if(local.repository!=='local/workspace'||localScope.provider!==undefined||localScope.host!==undefined||remote.provider!=='gitlab')throw new Error('Invalid workspace collaboration binding.');
+    return create(Object.freeze({local:Object.freeze({...local}),remote:Object.freeze({...remote})}));
+  }
+  function collaborationScope(anchor) {
+    const scope=normalizeScope(anchor);
+    if(binding&&anchor.provider===undefined&&anchor.host===undefined&&scope.repository===binding.local.repository&&scope.ref===binding.local.ref)return binding.remote;
+    return scope;
+  }
   function validateComment(comment) {
     if (!comment || typeof comment !== "object") throw new Error("Invalid review comment.");
     if (typeof comment.id !== "string" || !ID.test(comment.id)) throw new Error("Invalid comment id.");
@@ -100,6 +113,7 @@ const KiCadReviewComments = (() => {
     const updatedAt=comment.updatedAt??comment.createdAt;
     if(typeof updatedAt!=="string"||updatedAt.length>40||!/^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d(?:\.\d{1,3})?Z$/.test(updatedAt)||!Number.isFinite(Date.parse(updatedAt))||new Date(updatedAt).toISOString().slice(0,19)!==updatedAt.slice(0,19))throw new Error("Invalid annotation update time.");
     if (Date.parse(updatedAt) < Date.parse(comment.createdAt)) throw new Error("Comment update time precedes creation time.");
+    const collaboration=collaborationScope(comment.anchor);
     const inputMentions = comment.mentions ?? [];
     if (!Array.isArray(inputMentions) || inputMentions.length > 20) throw new Error("Invalid annotation mentions.");
     const mentions = [];
@@ -107,7 +121,7 @@ const KiCadReviewComments = (() => {
     for (const raw of inputMentions) {
       if (typeof raw !== "string") throw new Error("Invalid annotation mention.");
       const login = raw.startsWith("@") ? raw.slice(1) : raw;
-      if (!(comment.anchor?.provider==='gitlab'?/^[A-Za-z0-9_][A-Za-z0-9_.-]{0,254}$/:MENTION).test(login)) throw new Error("Invalid annotation mention.");
+      if (!(collaboration.provider==='gitlab'?/^[A-Za-z0-9_][A-Za-z0-9_.-]{0,254}$/:MENTION).test(login)) throw new Error("Invalid annotation mention.");
       const key = login.toLowerCase();
       if (!mentionKeys.has(key)) { mentions.push(login); mentionKeys.add(key); }
     }
@@ -115,14 +129,14 @@ const KiCadReviewComments = (() => {
     if(!Array.isArray(remoteRefs)||remoteRefs.length>20)throw new Error("Too many GitHub references.");
     const refs=remoteRefs.map(remote=>{
       if (remote?.provider === 'gitlab') {
-        const host=gitlabHost(remote.host),anchor=normalizeScope(comment.anchor);
+        const host=gitlabHost(remote.host),anchor=collaboration;
         if(anchor.provider!=='gitlab'||anchor.host!==host||remote.repository!==anchor.repository||!['issue','discussion'].includes(remote.kind)||!Number.isSafeInteger(remote.number)||remote.number<1)throw new Error('Invalid GitLab annotation reference.');
         let url;try{url=new URL(remote.url);}catch{throw new Error('Invalid GitLab reference URL.');}
         if(url.origin!==host||url.username||url.password||url.search||url.pathname!==`/${remote.repository}/-/issues/${remote.number}`||(url.hash&&!/^#note_[0-9]+$/.test(url.hash)))throw new Error('Invalid GitLab reference URL.');
         if(typeof remote.publishedAt!=='string'||!/^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d(?:\.\d{1,3})?Z$/.test(remote.publishedAt)||!Number.isFinite(Date.parse(remote.publishedAt)))throw new Error('Invalid GitLab publication time.');
         return {provider:'gitlab',host,kind:remote.kind,repository:remote.repository,number:remote.number,url:url.href,publishedAt:remote.publishedAt};
       }
-      if(comment.anchor?.provider==='gitlab')throw new Error('GitHub thread references cannot be attached to GitLab notes.');
+      if(collaboration.provider==='gitlab')throw new Error('GitHub thread references cannot be attached to GitLab notes.');
       if(!remote||!["issue","discussion"].includes(remote.kind)||typeof remote.repository!=="string"||!REPOSITORY.test(remote.repository)||remote.repository.split("/").some(p=>p==="."||p==="..")||!Number.isSafeInteger(remote.number)||remote.number<1)throw new Error("Invalid GitHub annotation reference.");
       let url;try{url=new URL(remote.url);}catch{throw new Error("Invalid GitHub reference URL.");}
       if(url.origin!=="https://github.com"||url.username||url.password||url.search||url.pathname!==`/${remote.repository}/${remote.kind==="issue"?"issues":"discussions"}/${remote.number}`||(url.hash&&!/^#(?:issuecomment|discussioncomment)-[0-9]+$/.test(url.hash)))throw new Error("Invalid GitHub reference URL.");
@@ -135,7 +149,7 @@ const KiCadReviewComments = (() => {
     const attachments=comment.attachments??[];
     if(!Array.isArray(attachments)||attachments.length>4)throw new Error('Invalid screenshot attachments.');
     const validatedAttachments=attachments.map(validateAttachment);
-    const scope=normalizeScope(comment.anchor);
+    const scope=collaboration;
     if(validatedAttachments.some(a=>scope.provider==='gitlab'?a.provider!=='gitlab'||a.host!==scope.host||a.repository!==scope.repository:a.provider!=='github'))throw new Error('Screenshot attachment belongs to another provider, host or project.');
     return { ...(threadType?{threadType}:{}), id: comment.id, text: comment.text.trim(), createdAt: comment.createdAt, updatedAt, severity, state, tags:[...new Set(tags.map(tag=>tag.trim()))],mentions,remoteRefs:refs,...(capture?{capture}:{}),...(validatedAttachments.length?{attachments:validatedAttachments}:{}),
       anchor: normalizeAnchor(comment.anchor) };
@@ -306,7 +320,6 @@ const KiCadReviewComments = (() => {
   }
   // Persist reservations before network writes; failures also consume the attempt.
   // This limits this installation, not independent bots using the provider directly.
-  const publicationReservations = new Map();
   async function reservePublication(storage, scope, now = Date.now()) {
     if (!storage || typeof scope !== 'string' || scope.length > 512 || !Number.isSafeInteger(now) || now < 0) throw Error('Invalid publication safety context.');
     const key = 'kivi:publication-budget:' + scope;
@@ -327,8 +340,10 @@ const KiCadReviewComments = (() => {
     publicationReservations.set(key,work);
     try { await work; } finally { if (publicationReservations.get(key) === work) publicationReservations.delete(key); }
   }
-  return { normalizeScope, normalizeAnchor, validateComment, validateAttachment, toMarkdown, fromMarkdown, parseSidecar, serializeSidecar,
+  return { forWorkspace, normalizeScope, normalizeAnchor, validateComment, validateAttachment, toMarkdown, fromMarkdown, parseSidecar, serializeSidecar,
     reservePublication, exportComments, parseComments, receiptKey, isUnread, commentType, createdDateRange, sortAndFilter };
+  }
+  return create();
 })();
 
 if (typeof globalThis === "object") globalThis.KiCadReviewComments = KiCadReviewComments;

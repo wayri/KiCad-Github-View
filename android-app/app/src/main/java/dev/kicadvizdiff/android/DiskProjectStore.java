@@ -114,6 +114,7 @@ final class DiskProjectStore {
                 long created=System.currentTimeMillis();int minutes=new TemporaryProjectSettings(context).durationMinutes();
                 project.put("temporary",true).put("createdAt",created).put("durationMinutes",minutes).put("expiresAt",created+minutes*60000L);
             }
+            NativeLoadOperation.checkCurrent();if(Thread.currentThread().isInterrupted())throw new IOException("Import cancelled");
             writeManifest(staging,project);complete=true;stagingMarker.delete();
             scheduleCleanup();
             return project;

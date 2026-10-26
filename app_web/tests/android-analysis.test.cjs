@@ -20,6 +20,24 @@ function shell(){
  const nodes=new Map();const get=id=>{if(!nodes.has(id))nodes.set(id,{value:'',hidden:true,children:[],addEventListener(name,fn){this[name]=fn;},removeAttribute(name){delete this[name];},replaceChildren(){this.children=[];this.value='';},append(node){this.children.push(node);if(!this.value)this.value=node.value;}});return nodes.get(id);};
  const loading=[],context={URLSearchParams,Event,KiCadAndroidLocal:local,document:{getElementById:get,createElement:()=>({})},dispatchEvent(){},KiCadAndroidUI:{loading:text=>loading.push(text)}};context.window=context;vm.runInNewContext(fs.readFileSync(require.resolve('../../android-app/web/index.js'),'utf8'),context);return{context,get,loading};
 }
+test('native project Stop requires an explicit cancellable read and stale controls cannot stop a later load',()=>{
+ const {context,get}=shell(),loading=[];let cancelled=0;
+ context.AndroidKiCad={cancelProjectLoad(){cancelled++;}};context.KiCadAndroidUI.loading=(text,options)=>loading.push({text,options});
+ const existing={id:'existing',files:[]};context.KiCadAndroidProject=existing;
+ context.KiCadAndroid.setLoading('Saving export');assert.equal(loading.at(-1).options.onStop,undefined);
+ context.KiCadAndroid.setLoading('Opening first',{canStop:true});const first=loading.at(-1).options.onStop;
+ context.KiCadAndroid.setLoading('Opening second',{canStop:true});first();assert.equal(cancelled,0);
+ const stop=loading.at(-1).options.onStop;stop();stop();assert.equal(cancelled,1);assert.equal(context.KiCadAndroidProject,existing);assert.equal(get('importStatus').textContent,'Project loading cancelled.');assert.equal(loading.at(-1).text,null);
+ context.KiCadAndroid.setLoading('Opening third',{canStop:true});const done=loading.at(-1).options.onStop;context.KiCadAndroid.receiveError('Read failed');done();assert.equal(cancelled,1);
+ delete context.AndroidKiCad.cancelProjectLoad;context.KiCadAndroid.setLoading('Older app',{canStop:true});assert.equal(loading.at(-1).options.onStop,undefined);
+});
+test('local native delivery requires the current uncancelled load ID before acknowledgment',()=>{
+ const {context}=shell(),accepted=[],loading=[];context.AndroidKiCad={cancelProjectLoad(){},acceptProjectLoad:id=>accepted.push(id)};context.KiCadAndroidUI.loading=(text,options)=>loading.push({text,options});
+ const existing={id:'retained'};context.KiCadAndroidProject=existing;
+ context.KiCadAndroid.setLoading('Opening old',{canStop:true,loadId:5});loading.at(-1).options.onStop();context.KiCadAndroid.receiveProject({id:'stale',files:[]},{loadId:5});assert.equal(context.KiCadAndroidProject,existing);assert.deepEqual(accepted,[]);
+ context.KiCadAndroid.setLoading('Opening current',{canStop:true,loadId:6});context.KiCadAndroid.receiveProject({id:'stale',files:[]},{loadId:5});assert.deepEqual(accepted,[]);
+ context.KiCadAndroid.receiveProject({id:'current',files:[{path:'board.kicad_pcb',content:'(kicad_pcb)'}]},{loadId:6});assert.deepEqual(accepted,[6]);assert.equal(context.KiCadAndroidProject.id,'current');
+});
 test('Android opens standalone reports in the packaged viewer and keeps immutable project scope',async()=>{
  const {context,get,loading}=shell(),path='reports/simulation.csv';
  context.KiCadAndroid.receiveProject({id:'report',files:[{path,content:'time,V\n0,1'}]});

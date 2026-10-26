@@ -30,13 +30,8 @@
   const PI = Math.PI;
   const toRadians = (degrees) => degrees * PI / 180;
   const round = (n) => Math.round(n * 1e8) / 1e8;
-  const COLOR = {
-    "F.Cu": "#c74237", "B.Cu": "#285ac1", "F.SilkS": "#e9e6d5", "B.SilkS": "#c5d1ef",
-    "F.Fab": "#a87754", "B.Fab": "#8275a0", "F.CrtYd": "#c59442", "B.CrtYd": "#747abc",
-    "F.Mask": "#9d53a0", "B.Mask": "#7952aa", "F.Paste": "#b1b5bc", "B.Paste": "#8e98aa",
-    "Edge.Cuts": "#d7c568", "Dwgs.User": "#90b4a1", "Cmts.User": "#7c9ab0"
-  };
-  const colorFor = (layer) => COLOR[layer] || (layer.endsWith(".Cu") ? "#ba8850" : "#a3adb1");
+  const Palette=root.KiCadLayerColors||(typeof module==='object'&&module.exports?require('./layer-colors.js'):null);
+  const colorFor = layer => Palette.colorFor(layer);
   const paperSizes = { A0: [1189, 841], A1: [841, 594], A2: [594, 420], A3: [420, 297], A4: [297, 210], A5: [210, 148],
     A: [279.4, 215.9], B: [431.8, 279.4], C: [558.8, 431.8], D: [863.6, 558.8], E: [1117.6, 863.6],
     USLetter: [279.4, 215.9], USLegal: [355.6, 215.9], USLedger: [431.8, 279.4] };

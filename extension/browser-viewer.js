@@ -14,6 +14,31 @@
   const toolbar = $("toolbar"), comparison = $("comparison");
   const frames = new Map(), views = new Map();
   const pendingSelections=new Map();
+  const outerLoads=new Map(),loadRows=new Map();
+  function loadOperation(key,label,work,retry){
+    const previous=outerLoads.get(key);if(previous)previous.stop('Loading replaced.');
+    let row=loadRows.get(key);if(!row){row=element('span');row.className='outer-load-controls';row.setAttribute('role','status');row.setAttribute('aria-live','polite');row.setAttribute('style','order:-1;flex:0 0 auto');loadRows.set(key,row);$('projectTools').append(row);}row.replaceChildren();row.hidden=false;
+    const text=element('span',label+'… '),stop=element('button','Stop loading'),again=element('button','Retry');
+    stop.type=again.type='button';stop.id='outerLoadStop-'+key;again.id='outerLoadRetry-'+key;again.hidden=true;again.addEventListener('click',()=>{row.hidden=true;retry();});row.append(text,stop,again);
+    let cancelled=false,rejectStop;const ids=new Set(),stopped=new Promise((resolve,reject)=>{rejectStop=reject;});
+    const state={stop(message='Loading stopped.'){
+      if(cancelled)return;cancelled=true;clearTimeout(timer);
+      for(const loadId of ids)send({type:'load-cancel',loadId}).catch(()=>{});
+      text.textContent=message+' ';stop.hidden=true;again.hidden=false;rejectStop(Error(message));
+    }};
+    const timer=setTimeout(()=>state.stop('Loading timed out after 2 minutes.'),120000);timer?.unref?.();
+    outerLoads.set(key,state);stop.addEventListener('click',()=>state.stop());
+    const check=()=>{if(cancelled)throw Error('Loading stopped.');};
+    async function read(message){
+      check();const loadId=crypto.randomUUID().replaceAll('-','');ids.add(loadId);
+      try{const reply=await Promise.race([send({...message,loadId}),stopped]);check();return reply;}
+      finally{ids.delete(loadId);}
+    }
+    let operation;try{operation=work(read,check);}catch(error){operation=Promise.reject(error);}
+    return Promise.race([operation,stopped]).then(result=>{check();row.hidden=true;return result;},error=>{if(!cancelled)state.stop(error.message||String(error));throw error;}).finally(()=>{clearTimeout(timer);if(outerLoads.get(key)===state)outerLoads.delete(key);});
+  }
+  addEventListener('pagehide',()=>{for(const state of outerLoads.values())state.stop('Loading stopped.');});
+
   let linked = Boolean(request.base && !["added", "removed"].includes(request.status));
   let manualMode = false, changes = null, loading = null;
   let pairedFile=null,crossLinked=true,pairEpoch=0;
@@ -29,7 +54,7 @@
     if(!$('projectWorkspace').children.length){const frame=element('iframe');frame.title='Project settings and constraints';frame.src=chrome.runtime.getURL('project-viewer.html')+'?'+new URLSearchParams({repository:request.headRepository,ref:request.head,file:entryFile,projectOnly:'1',...providerContext});$('projectWorkspace').append(frame);}
     markWorkspace('project');$('changesPanel').hidden=true;
   }
-  async function inventory(){if(!inventoryPromise)inventoryPromise=send({type:'project-inventory',repository:request.headRepository,ref:request.head,file:entryFile}).then(reply=>{if(!reply?.ok)throw Error(reply?.error||'Could not discover project drawings.');if(!Array.isArray(reply.result?.files)||reply.result.files.length>20000)throw Error('Invalid project inventory.');return reply.result;}).catch(error=>{inventoryPromise=null;throw error;});return inventoryPromise;}
+  async function inventory(retry){if(!inventoryPromise)inventoryPromise=loadOperation('inventory','Finding project drawings',read=>read({type:'project-inventory',repository:request.headRepository,ref:request.head,file:entryFile}),retry).then(reply=>{if(!reply?.ok)throw Error(reply?.error||'Could not discover project drawings.');if(!Array.isArray(reply.result?.files)||reply.result.files.length>20000)throw Error('Invalid project inventory.');return reply.result;}).catch(error=>{inventoryPromise=null;throw error;});return inventoryPromise;}
   function displayDrawing(path){
     if(isDrawing(request.file)&&path!==request.file&&isBoard(path)===isBoard(request.file)){
       location.assign(chrome.runtime.getURL('browser-viewer.html')+'?'+new URLSearchParams({repository:request.headRepository,head:request.head,file:path,...providerContext}));return;
@@ -45,7 +70,7 @@
     if(isDrawing(request.file)&&isBoard(request.file)===wantsBoard){displayDrawing(request.file);return;}
     if(pairedFile&&isBoard(pairedFile)===wantsBoard){displayDrawing(pairedFile);return;}
     status('Finding '+(wantsBoard?'PCB layouts':'schematic root sheets')+'…');
-    try{const result=await inventory();if(epoch!==tabEpoch)return;
+    try{const result=await inventory(()=>chooseWorkspace(name));if(epoch!==tabEpoch)return;
       const choices=result.files.map(file=>file.path).filter(path=>isDrawing(path)&&isBoard(path)===wantsBoard);
       const stem=entryFile.replace(/\.kicad_[^.]+$/i,'');const matching=choices.filter(path=>path.replace(/\.kicad_[^.]+$/i,'')===stem);
       const path=matching.length===1?matching[0]:choices.length===1?choices[0]:null;
@@ -243,24 +268,24 @@
     }
     if (!visible.length) list.append(element("p", changes.changes.length ? "No changes match this filter." : "No saved drawing objects changed."));
   }
-  async function project(repository, ref, file, absent) {
+  async function project(repository, ref, file, absent,read=send) {
     if (absent) return [];
-    const reply = await send({ type: "project", repository, ref, file });
+    const reply = await read({ type: "project", repository, ref, file });
     if (!reply?.ok) throw new Error(reply?.error || "Could not load saved KiCad objects.");
     return reply.result;
   }
   function loadChanges() {
     if (loading) return loading;
     $("changeCount").textContent = "Comparing saved KiCad objects…";
-    loading = (async () => {
+    loading = loadOperation('changes','Comparing saved objects',async(read,check) => {
       const [base, head] = await Promise.all([
-        project(request.repository, request.base, request.oldFile, request.status === "added"),
-        project(request.headRepository, request.head, request.file, request.status === "removed")
+        project(request.repository, request.base, request.oldFile, request.status === "added",read),
+        project(request.headRepository, request.head, request.file, request.status === "removed",read)
       ]);
-      const normalized = base.map((file) => ({ ...file, path: file.path === request.oldFile ? request.file : file.path }));
+      check();const normalized = base.map((file) => ({ ...file, path: file.path === request.oldFile ? request.file : file.path }));
       changes = globalThis.KiCadDesignDiff.compareProjects(normalized, head);
       renderChanges();
-    })().catch((error) => {
+    },()=>loadChanges()).catch((error) => {
       $("changeCount").textContent = error.message || String(error);
       loading = null;
     });
@@ -278,11 +303,13 @@
       status("The Git host file location is invalid or incomplete."); return;
     }
     if(provider==='gitlab'||(!globalThis.KiCadVSCodeContext&&[request.head,request.base].some(ref=>ref&&!/^[a-f0-9]{40}$/i.test(ref)))){
+      await loadOperation('start','Resolving Git revision',async(read,check)=>{
       for(const side of ['head',...(request.base?['base']:[])]){
         if(provider!=='gitlab'&&/^[a-f0-9]{40}$/i.test(request[side]))continue;
-        const reply=await send({type:'revision-resolve',repository:side==='base'?request.repository:request.headRepository,ref:request[side],file:side==='base'?request.oldFile:request.file});
-        if(!reply?.ok||!/^[a-f0-9]{40}$/i.test(reply.result?.sha||''))throw new Error(reply?.error||'Git revision could not be resolved.');request[side]=reply.result.sha;
+        const reply=await read({type:'revision-resolve',repository:side==='base'?request.repository:request.headRepository,ref:request[side],file:side==='base'?request.oldFile:request.file});
+        if(!reply?.ok||!/^[a-f0-9]{40}$/i.test(reply.result?.sha||''))throw new Error(reply?.error||'Git revision could not be resolved.');check();request[side]=reply.result.sha;
       }
+      },()=>start().catch(error=>status(error.message,true)));
     }
     $("filename").textContent = request.file;
     $("reviewHeader").dataset.compact=String(!request.base);comparison.dataset.blob=String(!request.base);$("reviewFooter").hidden=!request.base;

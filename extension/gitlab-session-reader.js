@@ -33,9 +33,11 @@
     if(endpoint.includes('/commits/')){if(!pathOK(decodeURIComponent(endpoint.split('/').at(-1))))throw Error('Invalid GitLab revision.');}
     return target.href;
   }
-  function create({fetch:fetcher=root.fetch,location=root.location}={}) {
+  function create({fetch:fetcher=root.fetch,location=root.location,signal}={}) {
     async function read(message) {
-      const url=validate(message,location),controller=new AbortController(),timer=setTimeout(()=>controller.abort(),30000);
+      if(signal?.aborted)throw Error('Project loading cancelled.');
+      const url=validate(message,location),controller=new AbortController(),abort=()=>controller.abort(),timer=setTimeout(()=>controller.abort(),30000);
+      signal?.addEventListener('abort',abort,{once:true});
       try {
         const response=await fetcher(url,{method:'GET',credentials:'same-origin',cache:'no-store',redirect:'error',signal:controller.signal});
         if(response.status===404)return null;
@@ -43,13 +45,15 @@
         if(/text\/html/i.test(response.headers.get('content-type')||''))throw Error('GitLab returned a login page instead of project data.');
         if(Number(response.headers.get('content-length'))>message.limit){await response.body?.cancel();throw Error('GitLab session response exceeds its size limit.');}
         const reader=response.body.getReader(),chunks=[];let count=0;
-        while(true){const {done,value}=await reader.read();if(done)break;count+=value.length;if(count>message.limit){await reader.cancel();throw Error('GitLab session response exceeds its size limit.');}chunks.push(value);}
+        const cancel=()=>reader.cancel().catch(()=>{});controller.signal.addEventListener('abort',cancel,{once:true});if(controller.signal.aborted)cancel();
+        try{while(true){const {done,value}=await reader.read();if(done)break;count+=value.length;if(count>message.limit){await reader.cancel();throw Error('GitLab session response exceeds its size limit.');}chunks.push(value);}}finally{controller.signal.removeEventListener('abort',cancel);}
+        if(controller.signal.aborted)throw Error('Project loading cancelled.');
         const bytes=new Uint8Array(count);let offset=0;for(const chunk of chunks){bytes.set(chunk,offset);offset+=chunk.length;}
         let binary='';for(let i=0;i<bytes.length;i+=8192)binary+=String.fromCharCode(...bytes.subarray(i,i+8192));
         const next=response.headers.get('x-next-page')||'';
         if(next&&!/^[1-9][0-9]{0,3}$/.test(next))throw Error('Invalid GitLab pagination metadata.');
         return {base64:btoa(binary),next,link:/rel="next"/.test(response.headers.get('link')||'')?'<next>; rel="next"':''};
-      } finally {clearTimeout(timer);}
+      } finally {clearTimeout(timer);signal?.removeEventListener('abort',abort);}
     }
     return {read};
   }

@@ -167,8 +167,12 @@ Connected GitHub and GitLab projects expose repository metadata using the
 client's existing authorization. Listings are bounded and show warnings when
 truncated; expand folders to fetch additional contents. Browsing another
 revision does not check out or modify files. VS Code uses its built-in Git
-provider for history and displays working files with status colours; historical
-committed file trees are not available through that API. Restricted workspaces
+provider for history and working-file status colours. With native Git available,
+select a commit and choose Browse files to inspect its saved tree. Opening a file
+creates a separate read-only viewer pinned to that commit, including saved sheets
+and model assets. It never replaces working files. Historical viewers do not write
+workspace annotations or publish remotely. Open a nested repository directly when
+its ancestor folder is the workspace. Restricted workspaces
 and plain file imports show available files and explain unavailable history.
 
 
@@ -178,3 +182,51 @@ Selected parts use a clean edge outline with no triangle diagonals. Cross-select
 combines a component body, model meshes and matching pads into one component
 boundary. Outlines respect scene depth so hidden edges do not show through the
 board. Clearing selection removes the outline without changing model materials.
+
+
+### KiCad layer colours
+
+PCB objects and layer swatches use the KiCad Default palette: front copper red,
+back copper blue, distinct inner copper layers, and matching silkscreen, mask,
+paste, fabrication, courtyard, outline and user-layer colours. Solder mask and
+paste retain their default colour alpha. The same palette supplies recognized
+Gerber layer roles and the 3D copper preview; model-provided material colours and
+intentional review/net-class overrides are retained. This is the built-in default
+palette, not an import of a user-customized KiCad colour theme.
+
+Palette reference: [KiCad built-in colour themes](https://docs.kicad.org/doxygen/builtin__color__themes_8h_source.html).
+
+
+### Stop a load
+
+Select **Stop** on a loading surface to cancel that read or import. Preparation
+workers terminate, pending read results are discarded, and stopped initial
+drawings offer **Retry loading**. Opening another file cancels the previous
+preparation. The existing project and sign-in are retained. Publishing, uploads
+and saved-library writes do not show Stop because a remote write cannot be
+rolled back by cancelling the screen. Shared snapshot downloads continue when
+another view still needs them. VS Code can stop preparation and stop waiting for
+a source read; its public filesystem API cannot abort an already issued host read.
+Elapsed time uses hours and minutes for long jobs. Initial drawing waits are
+bounded; use a smaller project or retry if the timeout message appears.
+
+
+### Read and reply to issue conversations
+
+In Chrome, Android or a trusted VS Code Git checkout, open **Review → Comments →
+View comments**. Choose Issue (or a GitHub Discussion), enter its number and select
+**Load thread**. The reader shows the issue body, ordinary comments, grouped replies,
+authors, dates and remote open/closed state. GitLab Discussions belong to an issue;
+the reader uses that issue's number. Bounded loading reports omitted/truncated data.
+
+Use **Reply** to prepare an anchored draft, review its existing-thread destination
+and explicitly publish. A local review state such as skipped/resolved is separate
+from the provider's open/closed issue state. The viewer does not provide a complete
+notification inbox or live synchronization.
+
+For VS Code, use the account/settings control in Comments. GitHub uses VS Code's
+native account consent; GitLab uses an exact-host token prompt backed by
+SecretStorage. The workspace must be trusted and have a supported, unambiguous
+Git remote. Thread reading can work on a changed drawing; publishing and pinned
+annotation readback require its displayed sources to match raw committed Git
+objects. Commit changes and reopen if the source-verification check rejects them.

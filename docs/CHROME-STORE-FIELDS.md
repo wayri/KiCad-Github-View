@@ -1,6 +1,6 @@
-# Chrome Web Store — copy/paste fields (0.12.58)
+# Chrome Web Store — copy/paste fields (0.12.61)
 
-Upload only the extension ZIP as the package, not this folder or a VSIX. The uploaded title/summary come from the manifest. Use description.txt for the Description field.
+Upload only the extension ZIP as the package, not this folder or a VSIX. The uploaded title/summary come from the manifest. Use [CHROME-STORE-DESCRIPTION.txt](CHROME-STORE-DESCRIPTION.txt) for the Description field; the upload folder also includes it as description.txt. Its headings and bullet lists are plain text, without Markdown syntax.
 
 ## Store listing
 
@@ -62,6 +62,8 @@ Limited-use certifications: the extension is intended not to sell user data, use
 5. Open a public supported drawing, for example https://github.com/BerkeleyLab/Marble/blob/a426777d92c0f22a546d4740b419a3937e0c1f90/design/Marble.kicad_pcb, and inspect the inline viewer and Show source action.
 6. Account connection/private access/publication are optional. Do not publish test content to a third-party repository. Provide a separate least-privilege test account only if needed through Google's private reviewer fields; do not put passwords/tokens in this document.
 7. Native KiCad checks/solvers are not run. Imported results are saved data, not fresh simulations.
+8. During a repository read or drawing preparation, choose Stop loading. Check that the stopped view offers Retry and that late results do not reopen the drawing. Stop does not cancel publishing or other writes.
+9. PCB layers use KiCad Default colours, including distinct internal copper layers and mask/paste opacity. Custom KiCad colour themes are not imported.
 
 ## Distribution and submission
 

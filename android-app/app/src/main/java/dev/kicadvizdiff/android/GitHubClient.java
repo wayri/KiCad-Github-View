@@ -84,10 +84,18 @@ final class GitHubClient {
         catch (IOException error) { throw new Failure(error.getMessage()); }
     }
     private void check(int epoch) throws IOException {
+        NativeLoadOperation.checkCurrent();
         if (!current(epoch) || Thread.currentThread().isInterrupted()) throw new Failure("GitHub request cancelled");
     }
     private synchronized String credential(int epoch) throws IOException { check(epoch); return token; }
 
+    static boolean cancellableRead(String action) {
+        return java.util.Arrays.asList("repositories", "notifications", "import", "revision-import", "revision-resolve", "revision-branches", "revision-commits", "repository-tree", "repository-history", "repository-branches", "review-list", "review-categories", "review-thread", "review-read", "review-contributors", "review-policy").contains(action);
+    }
+    JSONObject handleLoad(JSONObject request, int epoch, NativeLoadOperation operation) throws Exception {
+        if (!cancellableRead(request.optString("action"))) throw new IllegalArgumentException("Only project reads can be stopped");
+        try (NativeLoadOperation.Scope scope = operation.enter()) { return handle(request, epoch); }
+    }
     JSONObject handle(JSONObject request, int epoch) throws Exception {
         check(epoch);
         switch (request.getString("action")) {
@@ -358,7 +366,7 @@ final class GitHubClient {
         return new JSONObject().put("entries", entries).put("truncated", omitted);
     }
     private void downloadFile(String repository, String sha, String path, java.io.File target, long size, boolean isPrivate, int epoch, long projectDeadline) throws Exception {
-        HttpsURLConnection connection = connections.open(downloadUrl(repository,sha,path,size,isPrivate));
+        HttpsURLConnection connection = connections.open(downloadUrl(repository,sha,path,size,isPrivate)); NativeLoadOperation.track(connection);
         connection.setInstanceFollowRedirects(false); connection.setUseCaches(false); connection.setConnectTimeout(15000); connection.setReadTimeout(30000);
         connection.setRequestProperty("Accept", "application/vnd.github.raw+json"); connection.setRequestProperty("User-Agent", "KiCadVizDiff-Android");
         String bearer = credential(epoch); if(isPrivate && bearer!=null) connection.setRequestProperty("Authorization", "Bearer "+bearer);
@@ -367,11 +375,11 @@ final class GitHubClient {
             if(status!=200) throw new Failure("Large-file download failed (HTTP "+status+"); check sign-in and repository access");
             long expected=connection.getContentLengthLong(); if(expected>=0 && expected!=size) throw new Failure("Large-file download size mismatch");
             long total=0, deadline=Math.min(projectDeadline,SystemClock.elapsedRealtime()+15*60*1000L);
-            try(InputStream input=connection.getInputStream(); java.io.OutputStream output=new java.io.FileOutputStream(target)) {
+            try(InputStream input=NativeLoadOperation.input(connection.getInputStream()); java.io.OutputStream output=new java.io.FileOutputStream(target)) {
                 byte[] buffer=new byte[65536]; int n; while((n=input.read(buffer))!=-1) { check(epoch); if(SystemClock.elapsedRealtime()>deadline || n>size-total) throw new Failure("Large-file download size or time limit exceeded"); output.write(buffer,0,n); total+=n; }
             }
             if(total!=size) throw new Failure("Large-file download was incomplete");
-        } finally { connection.disconnect(); }
+        } finally { NativeLoadOperation.untrack(connection); connection.disconnect(); }
     }
     static URL downloadUrl(String repository, String sha, String path, long size, boolean isPrivate) throws Exception {
         if (!repository.matches("[A-Za-z0-9][A-Za-z0-9-]{0,38}/[A-Za-z0-9_.-]{1,100}") || repository.endsWith("/.") || repository.endsWith("/..")) throw new IOException("Invalid repository");
@@ -924,7 +932,7 @@ final class GitHubClient {
                 || (!url.getHost().equals("api.github.com") && !(url.getHost().equals("uploads.github.com") && bearer != null && body != null
                 && url.getPath().equals("/user-attachments/assets")) && !(url.getHost().equals("github.com") && bearer == null && body != null
                 && (url.getPath().equals("/login/device/code") || url.getPath().equals("/login/oauth/access_token"))))) throw new Failure("Unsupported GitHub endpoint");
-        HttpsURLConnection connection = connections.open(url);
+        HttpsURLConnection connection = connections.open(url); NativeLoadOperation.track(connection);
         connection.setInstanceFollowRedirects(false);
         connection.setConnectTimeout(15000); connection.setReadTimeout(20000); connection.setUseCaches(false);
         connection.setRequestProperty("Accept", "application/json");
@@ -956,7 +964,7 @@ final class GitHubClient {
             if (status == 404) throw new Missing();
             if (status == 403 || status == 429) {
                 String message = "";
-                try (InputStream errorStream = connection.getErrorStream()) {
+                try (InputStream errorStream = NativeLoadOperation.input(connection.getErrorStream())) {
                     if (errorStream != null) { byte[] bytes = new byte[4096]; int n = errorStream.read(bytes);
                         if (n > 0) message = new JSONObject(new String(bytes, 0, n, StandardCharsets.UTF_8)).optString("message"); }
                 } catch (Exception ignored) { /* Headers remain authoritative; never expose remote response text. */ }
@@ -971,7 +979,7 @@ final class GitHubClient {
             }
             if (status < 200 || status >= 300) throw new Failure("GitHub request failed (HTTP " + status + ")");
             if (connection.getContentLengthLong() > limit) throw new Failure("GitHub response exceeds import limits");
-            try (InputStream stream = connection.getInputStream(); ByteArrayOutputStream output = new ByteArrayOutputStream()) {
+            try (InputStream stream = NativeLoadOperation.input(connection.getInputStream()); ByteArrayOutputStream output = new ByteArrayOutputStream()) {
                 byte[] buffer = new byte[32768]; int n;
                 while ((n = stream.read(buffer)) != -1) {
                     check(epoch);
@@ -982,6 +990,6 @@ final class GitHubClient {
                 return StandardCharsets.UTF_8.newDecoder().onMalformedInput(CodingErrorAction.REPORT)
                         .onUnmappableCharacter(CodingErrorAction.REPORT).decode(ByteBuffer.wrap(output.toByteArray())).toString();
             }
-        } finally { connection.disconnect(); }
+        } finally { NativeLoadOperation.untrack(connection); connection.disconnect(); }
     }
 }

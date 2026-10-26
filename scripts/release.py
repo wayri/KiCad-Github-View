@@ -122,6 +122,7 @@ def audit_packages(chrome: Path, native: Path, root: Path = ROOT):
     with zipfile.ZipFile(native) as archive:
         expected_native = ({f'extension/media/{name}' for name in native_builder.ASSETS} |
                            {f'extension/{name}' for name in native_builder.HOST_FILES} |
+                           {f'extension/media/{provider}-review-host-api.js' for provider in ('github', 'gitlab')} |
                            {'extension/media/shared-assets.json', 'extension.vsixmanifest', '[Content_Types].xml'})
         if set(archive.namelist()) != expected_native:
             raise ValueError('VSIX archive inventory differs from audited source inventory.')
@@ -133,6 +134,11 @@ def audit_packages(chrome: Path, native: Path, root: Path = ROOT):
         for name in native_builder.HOST_FILES:
             if archive.read(f'extension/{name}') != (root / 'vscode-extension' / name).read_bytes():
                 raise ValueError(f'VSIX host/source mismatch: {name}')
+        for provider in ('github', 'gitlab'):
+            name = f'{provider}-review-host-api.js'
+            expected_bytes = native_builder.host_review_factory((root / 'extension' / f'{provider}-review-api.js').read_bytes(), provider)
+            if archive.read(f'extension/media/{name}') != expected_bytes:
+                raise ValueError(f'VSIX generated host/source mismatch: {name}')
     return {'chromeFiles': len(expected), 'sharedVSCodeAssets': len(native_builder.ASSETS)}
 
 

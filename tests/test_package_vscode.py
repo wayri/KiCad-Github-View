@@ -33,7 +33,7 @@ class PackageVSCodeTests(unittest.TestCase):
             with zipfile.ZipFile(builder.package(root)) as archive:
                 expected = ({f'extension/{name}' for name in builder.HOST_FILES} |
                             {f'extension/media/{name}' for name in builder.ASSETS} |
-                            {'extension/media/shared-assets.json', '[Content_Types].xml', 'extension.vsixmanifest'})
+                            {'extension/media/github-review-host-api.js','extension/media/gitlab-review-host-api.js','extension/media/shared-assets.json', '[Content_Types].xml', 'extension.vsixmanifest'})
                 self.assertEqual(set(archive.namelist()), expected)
                 manifest = json.loads(archive.read('extension/package.json'))
                 self.assertEqual(manifest['main'], manifest['browser'])

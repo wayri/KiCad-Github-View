@@ -340,17 +340,26 @@
   addEventListener("turbo:load", check);
   addEventListener("pjax:end", check);
   addEventListener("page:change", check);
+  const repositorySessionLoads=new Map();
   chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     if (sender.id !== chrome.runtime.id || !message || typeof message !== "object") return false;
+    if(message.type==='repository-session-cancel'){
+      if(sender.tab||typeof message.requestId!=='string')return false;
+      const controller=repositorySessionLoads.get(message.requestId);controller?.abort();sendResponse({ok:true});return false;
+    }
+    function sessionRead(reader){
+      const id=message.requestId;
+      if(id!==undefined&&(typeof id!=='string'||!/^load-[a-f0-9]{32}$/.test(id)||repositorySessionLoads.has(id)||repositorySessionLoads.size>=32)){sendResponse({ok:false,error:'Invalid session read identifier.'});return true;}
+      const controller=new AbortController();if(id)repositorySessionLoads.set(id,controller);
+      reader.create({signal:controller.signal}).read(message).then(result=>sendResponse({ok:true,result}),error=>sendResponse({ok:false,error:error.message})).finally(()=>{if(id)repositorySessionLoads.delete(id);});return true;
+    }
     if (message.type === 'github-session-read') {
       if(sender.tab || location.origin!=='https://github.com' || !globalThis.KiCadGitHubSessionReader)return false;
-      globalThis.KiCadGitHubSessionReader.create().read(message).then(result=>sendResponse({ok:true,result}),error=>sendResponse({ok:false,error:error.message}));
-      return true;
+      return sessionRead(globalThis.KiCadGitHubSessionReader);
     }
     if (message.type === 'gitlab-session-read') {
       if(sender.tab || location.origin==='https://github.com' || !globalThis.KiCadGitLabSessionReader)return false;
-      globalThis.KiCadGitLabSessionReader.create().read(message).then(result=>sendResponse({ok:true,result}),error=>sendResponse({ok:false,error:error.message}));
-      return true;
+      return sessionRead(globalThis.KiCadGitLabSessionReader);
     }
     if (message.type === "viewerContext") {
       const route = parse.route(location.href,{gitlabHosts:location.origin!=="https://github.com"?[location.origin]:[]});

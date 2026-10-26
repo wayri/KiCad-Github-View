@@ -6,12 +6,13 @@ The browser extension embeds read-only viewers in supported repository file page
 | --- | --- | --- | --- |
 | Schematic and PCB selection, properties and hierarchy | Public and authorized private file reads | Public and authorized private project reads, including subgroup namespaces | Saved local files |
 | Project setup and supported repository-linked models | Yes | Yes, credentials bound to the selected server | Yes |
-| Branch/commit visual comparison | Yes | Yes | Not yet |
+| Branch/commit visual comparison | Yes | Yes | Pinned historical snapshots and marker-conflict comparison |
 | Inline PR / merge-request review | Public and authorized private GitHub pull-request file cards | Current merge-request Changes page selector (development after v0.12.9) | Not applicable |
 | Local annotations and review JSON export | Yes | Yes, isolated by provider and server | Git-tracked sidecar |
 | Existing browser login for private reads | Open matching GitHub tab; drawing/text reads, with API account needed for history and binary assets | Open matching project tab on approved server; source, history, comparison and binary asset reads | Not applicable |
-| Account and remote review publication | Issues, PR comments and GitHub Discussions | New issues, comments and discussion threads within existing issues | Local sidecar only |
-| Annotation marker readback | Public and authorized private Issue/PR markers; selected Discussion bodies/comments/replies | Markers on a selected issue, with authorized private access | Sidecar reads |
+| Account and remote review publication | Issues, PR comments and GitHub Discussions | New issues, comments and discussion threads within existing issues | Matching Git remote: GitHub native sign-in; GitLab exact-host SecretStorage token |
+| Annotation marker readback | Public and authorized private Issue/PR markers; selected Discussion bodies/comments/replies | Markers on a selected issue, with authorized private access | Sidecar plus remote readback after committed-source verification |
+| Ordinary conversation reading | Selected Issue or Discussion body, comments and replies | Selected issue body, ordinary notes and grouped discussion replies | Same provider readers through the trusted host |
 | Self-hosted hostnames | Enterprise not implemented | Explicit HTTPS origin permission required; URL subpaths unsupported | Host-independent local files |
 
 ## GitLab accounts and servers
@@ -42,9 +43,21 @@ Provider, authenticated self-hosted worker and SPA navigation tests pass. A loca
 
 Choose **Review → Comments** to create a part, point or area note. Choose **Issue** for a new issue or an existing issue note. Choose **Discussion** for a discussion thread within an existing issue; GitLab has no standalone GitHub-style Discussion categories. Set the existing issue number when required, preview the formatted Markdown, and choose **Post to GitLab** or **Publish to GitLab**. Saving a draft never posts automatically. Successful publication records its link; uncertain results block automatic retries to avoid duplicates.
 
-The GitLab collaboration tab can load validated annotation markers from a selected existing issue. It reads the issue description and at most 500 notes; only markers matching the server, project, revision and drawing become annotations. Ordinary comments are not converted into drawing notes. Full conversation history, replies and notifications remain on GitLab. PNG captures can be uploaded with the explicitly previewed publication through the connected account, subject to private-media authentication policy. Local state changes do not close issues or synchronize remote edits.
+In **View comments**, enter the existing issue number and choose **Load thread** to read its original message, ordinary comments and grouped discussion replies. This reader is available in Chrome, Android and VS Code. It is bounded to 200 comments and 1 MiB of displayed text; warnings point to GitLab when results are incomplete. **Reply** prepares a draft for that issue; publication still requires an explicit **Comment** or **Publish** action. Reload manually to see later changes.
 
-Owners may provide `.kicad-review-policy.json` on the default branch. Malformed or unverifiable policy blocks publication. Use `all`, `collaborators` or `allowlist` as appropriate; contributors-only checks fail closed without verifiable account membership or an explicit allowlist because commit emails do not establish account identity. Provider permissions remain authoritative. GitLab notes use local storage/export rather than the connected GitHub sidecar workflow.
+Annotation readback is separate: only validated markers matching the server, project, revision and drawing become drawing notes. Ordinary conversation messages stay in the thread reader. There is no full issue inbox, notification feed or live subscription. PNG captures can be uploaded with the explicitly previewed publication through the connected account, subject to private-media authentication policy. Local state changes do not close issues or synchronize remote edits.
+
+Owners may provide `.kicad-review-policy.json` on the default branch. Malformed or unverifiable policy blocks publication. Use `all`, `collaborators` or `allowlist` as appropriate; contributors-only checks fail closed without verifiable account membership or an explicit allowlist because commit emails do not establish account identity. Provider permissions remain authoritative. Browser GitLab notes use local storage/export rather than the connected GitHub sidecar workflow. VS Code uses its workspace review sidecar for both providers.
+
+## VS Code accounts and saved Git revisions
+
+Open a trusted local Git checkout with a matching GitHub or GitLab remote. In **Review**, open the account/settings control. GitHub uses VS Code's native account consent with repository access; no device code or manually copied token is required in this host. GitLab asks for a token for the exact server identified by the checkout's remote and stores it in VS Code SecretStorage. Browser and Android account sessions are separate.
+
+Choose Issue or Discussion, enter a number and select **Load thread**. GitLab discussions belong to an existing issue. To post, create or reply to a note, check the destination and screenshot, then explicitly choose **Comment** or **Publish**. Repository policy and account permissions apply. Credentials stay in the extension host and never enter the webview or review sidecar.
+
+Pinned annotation readback and publication require displayed source to match the raw committed Git blobs. Dirty drawings must be committed and reopened first; ordinary thread reading remains available. A changed remote or HEAD requires reopening the viewer. Restricted Mode and unbound projects retain local inspection without remote collaboration.
+
+In **Repository**, choose a commit and **Browse files** to inspect its immutable file tree. Supported saved drawings open as read-only snapshots using that commit's source and linked assets; this does not check out a branch or replace working files. Native Git and workspace trust are required. Historical snapshots disable workspace annotation writes and remote publication. Missing objects or unavailable Git support produce an explicit error rather than substituting current working files.
 
 ## Boundaries and validation
 

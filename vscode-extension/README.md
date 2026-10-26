@@ -38,7 +38,7 @@ Open the drawing's **BoM manager**: a full-width table with sticky headers and a
 
 ## Browse files and Git history
 
-Open **Repository** from the drawing tools to browse working files, status colours, branches and the commit graph. Expand a commit for its message, author, date and parents. Refresh follows current HEAD; older pages stay pinned. The built-in Git provider supplies history when available; historical committed file trees are not exposed by its public API.
+Open **Repository** from the drawing tools to browse working files, status colours, branches and the commit graph. Expand a commit for its message, author, date and parents. Refresh follows current HEAD; older pages stay pinned. Choose **Browse files** on a commit to inspect its pinned file tree and open supported drawings as read-only saved snapshots. Native Git and workspace trust are required; working files and the checked-out branch stay unchanged.
 
 ## Compare a Git conflict
 
@@ -53,6 +53,10 @@ This accepts a whole side across the file; it is not a per-object merger. Saving
 ## Keep and share review notes
 
 Use **Review** to add findings. Notes live in `.kicad-review.json`; commit that sidecar with your normal Git tools. Portable review exports carry supported notes, BoM metadata, variants and 2D view state between compatible viewers.
+
+With a matching Git remote in a trusted checkout, open the Review account control to connect: GitHub uses VS Code native sign-in; GitLab tokens stay in SecretStorage for the exact remote host. Select Issue or Discussion, enter a number and choose **Load thread** to read its body, comments and replies. GitLab discussions belong to issues.
+
+Create a draft or choose **Reply**, review the destination and optional screenshot, then explicitly select **Comment** or **Publish**. Pinned annotation readback and publication verify the displayed source against committed Git blobs; commit dirty drawings and reopen first. Historical snapshots remain read-only. Notifications, a full issue inbox and GitLab merge-request posting are not included.
 
 ## Guide and limits
 

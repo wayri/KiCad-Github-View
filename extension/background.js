@@ -10,16 +10,49 @@ function mentionUsers(message){
 const SHA = /^[0-9a-f]{40}$/i;
 const REPOSITORY = /^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/;
 
+// Only explicitly tagged, owned-viewer read operations participate in cancellation.
+const projectLoads=new Map();
+function loadKey(sender,id){return JSON.stringify([sender.id,sender.tab?.id??null,sender.frameId??0,sender.documentId??null,sender.url,id]);}
+function loadIdValid(id){return typeof id==='string'&&/^[A-Za-z0-9._:-]{1,100}$/.test(id);}
+function checkLoad(signal){if(signal?.aborted)throw Error('Project loading cancelled.');}
+function linkedReadController(signal){
+  checkLoad(signal);const controller=new AbortController(),abort=()=>controller.abort();
+  signal?.addEventListener('abort',abort,{once:true});
+  return {controller,dispose:()=>signal?.removeEventListener('abort',abort)};
+}
+async function cancellableProject(message,signal){
+ const {repository,ref,file}=message;
+ if(message.type==='project-inventory')return projectInventory(repository,ref,file,signal);
+ if(message.type==='project-file')return projectFile(repository,ref,file,signal);
+ revisionScope(repository,ref,file);
+ if(message.type==='revision-resolve')return revisionResolve(repository,ref,file,signal);
+ const read=(repo,sha,path)=>githubFile(repo,sha,path,signal);
+ const directory=(repo,sha,path)=>githubDirectory(repo,sha,path,false,signal);
+ try{
+  if(/\.kicad_sch$/i.test(file)){
+   const snapshot=await githubSchematicSnapshot(repository,ref,signal);checkLoad(signal);
+   return await KiCadBrowserData.loadProject(repository,snapshot.sha,file,read,directory,'github',()=>githubSchematicInventory(repository,snapshot.sha,snapshot.treeSha,signal));
+  }
+  return await KiCadBrowserData.loadProject(repository,ref,file,read,directory);
+ }catch(error){checkLoad(signal);if(!/HTTP (401|403|404)|rate limit/i.test(error.message))throw error;return githubSessionProject(repository,ref,file,error,signal);}
+}
 // Reads remain in an isolated content script on the already-open repository tab.
 // Cookies and signed raw URLs never enter extension messages or storage.
-async function githubSessionRead(repository,ref,action,path='',limit=8*1024*1024) {
-  if(!validRepository(repository)||!KiCadBrowserData.validRef(ref))throw Error('Invalid GitHub session location.');
+async function sessionLoadMessage(tabId,message,signal){
+ checkLoad(signal);const requestId='load-'+crypto.randomUUID().replaceAll('-','');
+ const abort=()=>{chrome.tabs.sendMessage(tabId,{type:'repository-session-cancel',requestId},{frameId:0}).catch(()=>{});};
+ signal?.addEventListener('abort',abort,{once:true});
+ try{const result=await chrome.tabs.sendMessage(tabId,{...message,...(signal?{requestId}:{})},{frameId:0});checkLoad(signal);return result;}
+ finally{signal?.removeEventListener('abort',abort);}
+}
+async function githubSessionRead(repository,ref,action,path='',limit=8*1024*1024,signal) {
+  checkLoad(signal);if(!validRepository(repository)||!KiCadBrowserData.validRef(ref))throw Error('Invalid GitHub session location.');
   if(!chrome.tabs?.query)return null;
   const tabs=await chrome.tabs.query({url:`https://github.com/${repository}/*`});
   for(const tab of tabs.slice(0,8)) {
     let url;try{url=new URL(tab.url);}catch{continue;}
     if(url.origin!=='https://github.com'||url.pathname.split('/').slice(1,3).join('/').toLowerCase()!==repository.toLowerCase())continue;
-    let reply;try{reply=await chrome.tabs.sendMessage(tab.id,{type:'github-session-read',repository,ref,action,path,limit:Math.min(limit,32*1024*1024)},{frameId:0});}catch{continue;}
+    let reply;try{reply=await sessionLoadMessage(tab.id,{type:'github-session-read',repository,ref,action,path,limit:Math.min(limit,32*1024*1024)},signal);}catch{checkLoad(signal);continue;}
     if(!reply?.ok)continue;
     const result=reply.result;
     if(action==='file') {
@@ -30,23 +63,23 @@ async function githubSessionRead(repository,ref,action,path='',limit=8*1024*1024
   }
   return null;
 }
-async function githubSessionProject(repository,ref,file,originalError) {
-  const snapshot=await githubSessionRead(repository,ref,'resolve');
+async function githubSessionProject(repository,ref,file,originalError,signal) {
+  const snapshot=await githubSessionRead(repository,ref,'resolve','',8*1024*1024,signal);
   if(!snapshot)throw originalError;
   return KiCadBrowserData.loadProject(repository,snapshot.sha,file,async(repo,sha,path)=>{
-    const result=await githubSessionRead(repo,sha,'file',path,KiCadBrowserData.fileByteLimit(path));
+    const result=await githubSessionRead(repo,sha,'file',path,KiCadBrowserData.fileByteLimit(path),signal);
     return result?.content??null;
   },async(repo,sha,directory)=>{
-    const result=await githubSessionRead(repo,sha,'directory',directory);
+    const result=await githubSessionRead(repo,sha,'directory',directory,8*1024*1024,signal);
     if(!result)throw Error('GitHub session directory unavailable. Keep the repository tab open.');
     return result.items.filter(item=>item.type==='file'&&/\.kicad_sch$/i.test(item.path)).map(item=>item.path);
   });
 }
-async function githubSessionInventory(repository,ref,originalError,acceptPath=KiCadGitHub.filePath) {
-  const snapshot=await githubSessionRead(repository,ref,'resolve');if(!snapshot)throw originalError;
+async function githubSessionInventory(repository,ref,originalError,acceptPath=KiCadGitHub.filePath,signal) {
+  const snapshot=await githubSessionRead(repository,ref,'resolve','',8*1024*1024,signal);if(!snapshot)throw originalError;
   const pending=[''],files=[],warnings=[];let directories=0;
   while(pending.length&&directories<64&&files.length<1000) {
-    const directory=pending.shift(),result=await githubSessionRead(repository,snapshot.sha,'directory',directory);directories++;
+    const directory=pending.shift(),result=await githubSessionRead(repository,snapshot.sha,'directory',directory,8*1024*1024,signal);directories++;
     if(!result)throw Error('GitHub session tree unavailable. Keep the repository tab open or connect GitHub.');
     for(const item of result.items) {
       if(typeof item.path!=='string'||item.path.length>500||item.path.split('/').slice(0,-1).join('/')!==directory||item.path.split('/').some(p=>!p||p==='.'||p==='..'||/[\\:\x00-\x1f\x7f]/.test(p)))throw Error('Unsafe GitHub session tree.');
@@ -120,8 +153,8 @@ function githubReadError(response) {
   return new Error(`GitHub returned HTTP ${response.status}.`);
 }
 
-async function githubResponse(url, headers = {}) {
-  const controller = new AbortController();
+async function githubResponse(url, headers = {}, signal) {
+  const {controller,dispose} = linkedReadController(signal);
   const timeout = setTimeout(() => controller.abort(), 30000);
   try {
     const response = await fetch(url, {
@@ -134,22 +167,23 @@ async function githubResponse(url, headers = {}) {
   } catch (error) {
     if (error.name === "AbortError") throw new Error("GitHub file retrieval timed out.");
     throw error;
-  } finally { clearTimeout(timeout); }
+  } finally { clearTimeout(timeout); dispose(); }
 }
 
-async function githubJson(url) {
-  const response = await githubResponse(url, { Accept: "application/vnd.github+json" });
+async function githubJson(url,signal) {
+  if(signal)return githubDiscoveryJson(url,16*1024*1024,signal);
+  const response = await githubResponse(url, { Accept: "application/vnd.github+json" },signal);
   if (!response) throw new Error("GitHub returned HTTP 404: this resource may be missing or your extension account may lack private repository access. GitHub website sign-in does not sign the extension in. Check the path/revision and connect a token with access to this repository in extension settings.");
   return response.json();
 }
 
-async function githubFile(repository, ref, path) {
+async function githubFile(repository, ref, path, signal) {
   if (!KiCadBrowserData.validRepository(repository) || !KiCadBrowserData.validRef(ref) ||
       typeof path !== "string" || !path || path.startsWith("/") || path.split("/").some(part => !part || part === "." || part === ".." || /[\\:\x00-\x1f\x7f]/.test(part))) throw new Error("Invalid GitHub file location.");
   const limit = KiCadBrowserData.fileByteLimit(path);
   const encoded = path.split("/").map(encodeURIComponent).join("/");
   const url = `https://api.github.com/repos/${repository}/contents/${encoded}?ref=${encodeURIComponent(ref)}`;
-  const controller = new AbortController(), timeout = setTimeout(() => controller.abort(), 60000);
+  const {controller,dispose} = linkedReadController(signal), timeout = setTimeout(() => controller.abort(), 60000);
   try {
     let response = await fetch(url, { headers: await githubReadHeaders({ Accept: "application/vnd.github.raw+json" }), credentials: "omit", cache: "no-store", redirect: "error", signal: controller.signal });
     // Public raw content is a separate, anonymous transport. Never send a token
@@ -160,8 +194,8 @@ async function githubFile(repository, ref, path) {
       if (!response.ok) throw apiError;
     }
     if ([401,403,404].includes(response.status)) {
-      const pinned=SHA.test(ref)?{sha:ref}:await githubSessionRead(repository,ref,'resolve');
-      const session=pinned&&await githubSessionRead(repository,pinned.sha,'file',path,limit);
+      const pinned=SHA.test(ref)?{sha:ref}:await githubSessionRead(repository,ref,'resolve','',8*1024*1024,signal);
+      const session=pinned&&await githubSessionRead(repository,pinned.sha,'file',path,limit,signal);
       if(session)return session.content;
     }
     if (response.status === 404) return null;
@@ -172,13 +206,14 @@ async function githubFile(repository, ref, path) {
     const responseLimit = json ? Math.ceil(limit * 4 / 3) + 65536 : limit;
     if (Number(response.headers.get("content-length")) > responseLimit) throw new Error("KiCad file exceeds the browser preview size limit.");
     const reader = response.body.getReader(), chunks = []; let count = 0;
-    while (true) {
+    const cancelBody=()=>reader.cancel().catch(()=>{});controller.signal.addEventListener('abort',cancelBody,{once:true});if(controller.signal.aborted)cancelBody();
+    try{while (true) {
       const { done, value } = await reader.read(); if (done) break;
       count += value.byteLength;
       if (count > responseLimit) { await reader.cancel(); throw new Error("KiCad file exceeds the browser preview size limit."); }
       chunks.push(value);
-    }
-    const bytes = new Uint8Array(count); let offset = 0;
+    }}finally{controller.signal.removeEventListener('abort',cancelBody);}
+    checkLoad(controller.signal);const bytes = new Uint8Array(count); let offset = 0;
     for (const chunk of chunks) { bytes.set(chunk, offset); offset += chunk.byteLength; }
     const body = new TextDecoder().decode(bytes);
     let data;
@@ -194,10 +229,10 @@ async function githubFile(repository, ref, path) {
   } catch (error) {
     if (error.name === "AbortError") throw new Error("GitHub file retrieval timed out.");
     throw error;
-  } finally { clearTimeout(timeout); }
+  } finally { clearTimeout(timeout); dispose(); }
 }
 
-async function githubDirectory(repository, ref, directory, includeBoards = false) {
+async function githubDirectory(repository, ref, directory, includeBoards = false, signal) {
   if (!KiCadBrowserData.validRepository(repository) || !KiCadBrowserData.validRef(ref) ||
       typeof directory !== "string" || (directory && (directory.startsWith("/") ||
       directory.split("/").some((part) => !part || part === "." || part === ".." || /[\\\x00-\x1f\x7f]/.test(part))))) {
@@ -205,11 +240,11 @@ async function githubDirectory(repository, ref, directory, includeBoards = false
   }
   const encoded = directory ? `/${directory.split("/").map(encodeURIComponent).join("/")}` : "";
   let listing;
-  try {listing=await githubJson(`https://api.github.com/repos/${repository}/contents${encoded}?ref=${encodeURIComponent(ref)}`);}
+  try {listing=await githubJson(`https://api.github.com/repos/${repository}/contents${encoded}?ref=${encodeURIComponent(ref)}`,signal);}
   catch(error){
-    if(!/HTTP (401|403|404)|rate limit/i.test(error.message))throw error;
-    const pinned=SHA.test(ref)?{sha:ref}:await githubSessionRead(repository,ref,'resolve');
-    const result=pinned&&await githubSessionRead(repository,pinned.sha,'directory',directory);
+    checkLoad(signal);if(!/HTTP (401|403|404)|rate limit/i.test(error.message))throw error;
+    const pinned=SHA.test(ref)?{sha:ref}:await githubSessionRead(repository,ref,'resolve','',8*1024*1024,signal);
+    const result=pinned&&await githubSessionRead(repository,pinned.sha,'directory',directory,8*1024*1024,signal);
     if(!result)throw error;
     listing=result.items.map(item=>({path:item.path,type:item.type}));
   }
@@ -221,41 +256,42 @@ async function githubDirectory(repository, ref, directory, includeBoards = false
     .map((item) => item.path);
 }
 
-async function githubDiscoveryText(url, limit, accept='application/vnd.github+json') {
-  const response=await githubResponse(url,{Accept:accept});
+async function githubDiscoveryText(url, limit, accept='application/vnd.github+json',signal) {
+  const response=await githubResponse(url,{Accept:accept},signal);
   if(!response)throw new Error('GitHub revision was not found (HTTP 404), or your extension account lacks private repository access. Check the exact revision and sign in with private repository access in extension settings.');
   if(Number(response.headers.get('content-length'))>limit){await response.body?.cancel();throw new Error('GitHub schematic discovery response exceeds its size limit.');}
   const reader=response.body.getReader(),chunks=[];let length=0,timedOut=false;
+  const abort=()=>reader.cancel().catch(()=>{});signal?.addEventListener('abort',abort,{once:true});if(signal?.aborted)abort();
   const timeout=setTimeout(()=>{timedOut=true;reader.cancel().catch(()=>{});},30000);
   try{
     while(true){const {done,value}=await reader.read();if(done)break;length+=value.byteLength;if(length>limit){await reader.cancel();throw new Error('GitHub schematic discovery response exceeds its size limit.');}chunks.push(value);}
-    if(timedOut)throw new Error('GitHub schematic discovery timed out.');
+    checkLoad(signal);if(timedOut)throw new Error('GitHub schematic discovery timed out.');
     const bytes=new Uint8Array(length);let offset=0;for(const chunk of chunks){bytes.set(chunk,offset);offset+=chunk.byteLength;}
     return new TextDecoder().decode(bytes);
-  }finally{clearTimeout(timeout);}
+  }finally{clearTimeout(timeout);signal?.removeEventListener('abort',abort);}
 }
 
-async function githubDiscoveryJson(url, limit) { return JSON.parse(await githubDiscoveryText(url,limit)); }
+async function githubDiscoveryJson(url, limit,signal) { return JSON.parse(await githubDiscoveryText(url,limit,'application/vnd.github+json',signal)); }
 
-async function githubResolvedSha(repository,ref) {
+async function githubResolvedSha(repository,ref,signal) {
   // SHA media omits changed-file patches, which can dwarf the design itself.
-  const sha=(await githubDiscoveryText(`https://api.github.com/repos/${repository}/commits/${encodeURIComponent(ref)}`,128,'application/vnd.github.sha')).trim();
+  const sha=(await githubDiscoveryText(`https://api.github.com/repos/${repository}/commits/${encodeURIComponent(ref)}`,128,'application/vnd.github.sha',signal)).trim();
   if(!SHA.test(sha)||SHA.test(ref)&&sha.toLowerCase()!==ref.toLowerCase())throw new Error('GitHub did not resolve a stable revision.');
   return sha.toLowerCase();
 }
 
-async function githubSchematicSnapshot(repository,ref) {
-  const sha=SHA.test(ref)?ref.toLowerCase():await githubResolvedSha(repository,ref);
-  const commit=await githubDiscoveryJson(`https://api.github.com/repos/${repository}/git/commits/${sha}`,1024*1024);
+async function githubSchematicSnapshot(repository,ref,signal) {
+  const sha=SHA.test(ref)?ref.toLowerCase():await githubResolvedSha(repository,ref,signal);
+  const commit=await githubDiscoveryJson(`https://api.github.com/repos/${repository}/git/commits/${sha}`,1024*1024,signal);
   if(!SHA.test(commit?.sha)||commit.sha.toLowerCase()!==sha||!SHA.test(commit?.tree?.sha))throw new Error('GitHub did not resolve a stable schematic revision.');
   return {sha,treeSha:commit.tree.sha};
 }
 
-async function githubSchematicInventory(repository, ref, treeSha) {
+async function githubSchematicInventory(repository, ref, treeSha,signal) {
   if (!KiCadBrowserData.validRepository(repository) || !SHA.test(ref || '') || !SHA.test(treeSha || '')) {
     throw new Error('A pinned GitHub commit and tree are required for schematic discovery.');
   }
-  const listing = await githubDiscoveryJson(`https://api.github.com/repos/${repository}/git/trees/${treeSha}?recursive=1`,16*1024*1024);
+  const listing = await githubDiscoveryJson(`https://api.github.com/repos/${repository}/git/trees/${treeSha}?recursive=1`,16*1024*1024,signal);
   if (!Array.isArray(listing?.tree) || listing.tree.length > 100000 || listing.truncated) {
     throw new Error('GitHub returned an incomplete schematic repository tree.');
   }
@@ -286,10 +322,10 @@ async function revisionJson(url){
 function revisionScope(repository,ref,file){
   if(!KiCadBrowserData.validRepository(repository)||!KiCadBrowserData.validRef(ref)||!KiCadGitHub.filePath(file)||file.length>500||/[\\:\x00-\x1f\x7f]/.test(file))throw new Error('Invalid drawing revision location.');
 }
-async function revisionResolve(repository,ref,file){
+async function revisionResolve(repository,ref,file,signal){
   revisionScope(repository,ref,file);
-  try {return {repository,ref,sha:await githubResolvedSha(repository,ref)};}
-  catch(error){if(!/HTTP (401|403|404)|rate limit/i.test(error.message))throw error;const snapshot=await githubSessionRead(repository,ref,'resolve');if(!snapshot)throw error;return {repository,ref,sha:snapshot.sha};}
+  try {return {repository,ref,sha:await githubResolvedSha(repository,ref,signal)};}
+  catch(error){checkLoad(signal);if(!/HTTP (401|403|404)|rate limit/i.test(error.message))throw error;const snapshot=await githubSessionRead(repository,ref,'resolve','',8*1024*1024,signal);if(!snapshot)throw error;return {repository,ref,sha:snapshot.sha};}
 }
 async function revisionBranches(repository,ref,file){revisionScope(repository,ref,file);return repositoryBranches(repository,ref);}
 async function repositoryBranches(repository,ref){
@@ -398,17 +434,17 @@ async function projectSearchFiles(repository, ref, file) {
   return {files,settings,warnings,snapshotRef:commit.sha,totalDrawings:candidates.length};
 }
 
-async function projectInventory(repository,ref,file){
+async function projectInventory(repository,ref,file,signal){
   if(!KiCadBrowserData.validRepository(repository)||!KiCadBrowserData.validRef(ref)||!KiCadGitHub.filePath(file))throw new Error('Invalid project location.');
   try {
-  const commit=await githubJson(`https://api.github.com/repos/${repository}/commits/${encodeURIComponent(ref)}`);
+  const commit=await githubJson(`https://api.github.com/repos/${repository}/commits/${encodeURIComponent(ref)}`,signal);
   if(!SHA.test(commit?.sha)||!SHA.test(commit?.commit?.tree?.sha))throw new Error('No stable project revision.');
-  const tree=await githubJson(`https://api.github.com/repos/${repository}/git/trees/${commit.commit.tree.sha}?recursive=1`);
+  const tree=await githubJson(`https://api.github.com/repos/${repository}/git/trees/${commit.commit.tree.sha}?recursive=1`,signal);
   if(!Array.isArray(tree.tree)||tree.tree.length>100000)throw new Error('Repository tree exceeds project discovery limit.');
   const entries=tree.tree.filter(item=>item?.type==='blob'&&item.mode!=='120000'&&KiCadGitHub.filePath(item.path)).sort((a,b)=>a.path.localeCompare(b.path));
   const warnings=[];if(tree.truncated)warnings.push('GitHub truncated the repository tree; project structure is incomplete.');if(entries.length>1000)warnings.push('First 1000 supported project files shown.');
   return {files:entries.slice(0,1000).map(item=>({path:item.path,size:Number(item.size)||0})),snapshotRef:commit.sha,warnings};
-  } catch(error){if(!/HTTP (401|403|404)|rate limit/i.test(error.message))throw error;return githubSessionInventory(repository,ref,error);}
+  } catch(error){checkLoad(signal);if(!/HTTP (401|403|404)|rate limit/i.test(error.message))throw error;return githubSessionInventory(repository,ref,error,KiCadGitHub.filePath,signal);}
 }
 async function repositoryModelIndex(repository,ref){
   if(!validRepository(repository)||!SHA.test(ref||''))throw Error('Model discovery requires a repository and immutable revision.');
@@ -428,9 +464,9 @@ async function repositoryModelIndex(repository,ref){
     return {paths:listing.files.map(item=>item.path),snapshotRef:ref,warnings:listing.warnings};
   }
 }
-async function projectFile(repository,ref,file){
+async function projectFile(repository,ref,file,signal){
   if(!KiCadBrowserData.validRepository(repository)||!KiCadBrowserData.validRef(ref)||!KiCadGitHub.filePath(file))throw new Error('Invalid project file.');
-  const content=await githubFile(repository,ref,file);if(content===null)throw new Error('Project file unavailable.');if(new TextEncoder().encode(content).byteLength>KiCadBrowserData.fileByteLimit(file))throw new Error('Project file exceeds its size limit.');return {path:file,content};
+  const content=await githubFile(repository,ref,file,signal);if(content===null)throw new Error('Project file unavailable.');if(new TextEncoder().encode(content).byteLength>KiCadBrowserData.fileByteLimit(file))throw new Error('Project file exceeds its size limit.');return {path:file,content};
 }
 async function openProjectWindow(repository,ref,file){
   if(!KiCadBrowserData.validRepository(repository)||!KiCadBrowserData.validRef(ref)||!KiCadGitHub.filePath(file))throw new Error('Invalid project location.');
@@ -921,7 +957,7 @@ async function gitlabAnnotations(api,scope){
   }
   return {notes:[...new Map(notes.map(note=>[note.id,note])).values()],warnings};
 }
-async function gitlabSessionResponse(host,contextRepository,url,limit) {
+async function gitlabSessionResponse(host,contextRepository,url,limit,signal) {
   if(!chrome.tabs?.query)return null;
   if(globalThis.KiCadGitLabHosts?!await KiCadGitLabHosts.allowed(host):host!=='https://gitlab.com')throw Error('GitLab host permission is no longer available.');
   const target=new URL(url),match=target.pathname.match(/^\/api\/v4\/projects\/([^/]+)/);
@@ -933,7 +969,7 @@ async function gitlabSessionResponse(host,contextRepository,url,limit) {
   for(const tab of tabs.slice(0,8)) {
     let page;try{page=new URL(tab.url);}catch{continue;}
     if(page.origin!==host||!(page.pathname===`/${repository}`||page.pathname.startsWith(`/${repository}/-/`)))continue;
-    let reply;try{reply=await chrome.tabs.sendMessage(tab.id,{type:'gitlab-session-read',host,repository,url,limit},{frameId:0});}catch{continue;}
+    let reply;try{reply=await sessionLoadMessage(tab.id,{type:'gitlab-session-read',host,repository,url,limit},signal);}catch{checkLoad(signal);continue;}
     if(!reply?.ok)continue;
     if(globalThis.KiCadGitLabHosts?!await KiCadGitLabHosts.allowed(host):host!=='https://gitlab.com')throw Error('GitLab host permission was removed during retrieval.');
     const result=reply.result;if(result===null)return null;
@@ -944,7 +980,7 @@ async function gitlabSessionResponse(host,contextRepository,url,limit) {
   return null;
 }
 
-async function gitlabDispatch(message, sender) {
+async function gitlabDispatch(message, sender,signal) {
   const auth=globalThis.KiCadGitLabReviewApi,hosts=globalThis.KiCadGitLabHosts;
   if(['gitlab-host-list','gitlab-host-add','gitlab-host-remove'].includes(message.type)){
     if(!optionsSender(sender))throw new Error('Only extension settings can configure GitLab servers.');
@@ -953,7 +989,7 @@ async function gitlabDispatch(message, sender) {
   }
   const host=message.host||'https://gitlab.com';
   if (globalThis.KiCadGitLabHosts ? !await KiCadGitLabHosts.allowed(host) : host!=='https://gitlab.com')throw new Error('Configure and grant access to this GitLab host first.');
-  const api=globalThis.KiCadGitLabProvider.forHost(host,{sessionRead:(url,limit)=>gitlabSessionResponse(host,message.repository,url,limit)});
+  const api=globalThis.KiCadGitLabProvider.forHost(host,{signal,sessionRead:(url,limit)=>gitlabSessionResponse(host,message.repository,url,limit,signal)});
   const {repository,ref,file}=message;
   if(['gitlab-auth-status','gitlab-auth-set','gitlab-auth-clear','gitlab-auth-reset','gitlab-client-set','gitlab-oauth-start'].includes(message.type)){
     if(!optionsSender(sender)&&!(message.type==='gitlab-auth-status'&&viewerSender(sender)))throw new Error('Only extension settings can change GitLab authentication.');
@@ -1037,6 +1073,7 @@ async function gitlabDispatch(message, sender) {
     case 'comment-policy-status': return auth.commentPolicyStatus(host,repository);
     case 'comment-publish':
     case 'github-publish-comment': return auth.publish({...message,host,destination:message.discussion?'discussion':message.destination});
+    case 'github-thread-read': return auth.readThread({...message,provider:'gitlab',host});
     case 'comment-remote-list':
     case 'github-annotations': return gitlabAnnotations(api,{...message,host});
     case 'open-options': await chrome.runtime.openOptionsPage();return {opened:true};
@@ -1054,6 +1091,20 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     let senderOrigin;try{senderOrigin=new URL(sender.url).origin;}catch{}
     if(senderOrigin?.startsWith('https://')&&senderOrigin!=='https://github.com'&&message.provider!=='gitlab')throw new Error('GitLab pages must specify the GitLab provider.');
     if(senderOrigin==='https://github.com'&&message.provider==='gitlab')throw new Error('Repository provider does not match the host page.');
+    if(message.type==='load-cancel'){
+      if(!viewerSender(sender)||!loadIdValid(message.loadId))throw Error('Only an owned viewer can cancel its project load.');
+      const load=projectLoads.get(loadKey(sender,message.loadId));if(load)load.controller.abort();
+      return {cancelled:Boolean(load)};
+    }
+    if(message.loadId!==undefined){
+      if(!viewerSender(sender)||!loadIdValid(message.loadId)||!['project','revision-resolve','project-inventory','project-file'].includes(message.type))throw Error('Invalid cancellable project read.');
+      const key=loadKey(sender,message.loadId);if(projectLoads.has(key))throw Error('Project load identifier is already active.');
+      if(projectLoads.size>=32)throw Error('Too many active project loads.');
+      const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),120000);projectLoads.set(key,{controller});
+      try{const result=await (message.provider==='gitlab'?gitlabDispatch(message,sender,controller.signal):cancellableProject(message,controller.signal));checkLoad(controller.signal);return result;}
+      catch(error){checkLoad(controller.signal);throw error;}
+      finally{clearTimeout(timer);projectLoads.delete(key);}
+    }
     if(message.provider==='gitlab'){const host=message.host||'https://gitlab.com';if(senderOrigin?.startsWith('https://')&&senderOrigin!==host)throw new Error('GitLab host does not match the sender.');return gitlabDispatch(message,sender);}
     if(message.comment?.anchor?.provider==='gitlab')throw new Error('GitLab annotations must use the GitLab provider.');
     switch (message.type) {

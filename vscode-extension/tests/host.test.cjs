@@ -19,7 +19,7 @@ function harness(folder=Uri.parse("vscode-vfs://github/owner/repo?ref=main")) {
     ,workspaceFolders:folder?[{uri:folder,name:"repo"}]:[],findFiles:async()=>[...entries.keys()].filter((u)=>/\.kicad_(sch|pcb)(?:\?|$)/.test(u)).map(Uri.parse),asRelativePath:(uri)=>uri.path.split("/").at(-1)
   },EventEmitter:class{constructor(){this.event=()=>{};}fire(){}dispose(){}},window:{registerTreeDataProvider:(view,provider)=>{registrations.push({view,provider});return {dispose(){}};},registerCustomEditorProvider:(view,provider,options)=>{registrations.push({view,provider,options});return {dispose(){}};},showQuickPick:async(items)=>items[0],showWarningMessage(){},showErrorMessage(){},showInformationMessage(){}},
     commands:{registerCommand:(name,handler)=>{commands.push({name,handler});return {dispose(){}};},executeCommand:async(...args)=>{commands.push(args);}}};
-  const sandbox={module:{exports:{}},require(name){if(name==="./media/parsing.js")return require("../../extension/parsing.js");if(name==="./conflict-host.js")return require("../conflict-host.js");if(name==="./media/merge-conflicts.js")return require("../../extension/merge-conflicts.js");assert.equal(name,"vscode");return vscode;},crypto:require("node:crypto").webcrypto,URLSearchParams,TextDecoder,TextEncoder,Uint8Array,console};
+  const sandbox={module:{exports:{}},require(name){if(name==="./remote-collaboration.js")return require("../remote-collaboration.js");if(name==="./media/review-comments.js")return require("../../extension/review-comments.js");if(name==="./media/parsing.js")return require("../../extension/parsing.js");if(name==="./conflict-host.js")return require("../conflict-host.js");if(name==="./media/merge-conflicts.js")return require("../../extension/merge-conflicts.js");assert.equal(name,"vscode");return vscode;},crypto:require("node:crypto").webcrypto,URLSearchParams,TextDecoder,TextEncoder,Uint8Array,console};
   vm.runInNewContext(source,sandbox,{filename:"extension.js"});
   const context={extensionUri:Uri.parse("file:///extension"),subscriptions:[],_reviewQueue:Promise.resolve(),workspaceState:{get:(key,fallback)=>state.has(key)?state.get(key):fallback,update:async(key,value)=>{state.set(key,value);}}};
   const write=(relative,content="(kicad_sch)",options={})=>{const base=folder || Uri.parse("file:///outside"),uri=Uri.joinPath(base,relative),parts=relative.split("/");
@@ -51,7 +51,7 @@ test('repository report route reads bounded provider-relative JSON and excludes 
  const before=h.reads.length;assert.equal((await send(h,s,2,{...request,reportPath:'../outside.json'})).ok,false);assert.equal((await send(h,s,3,{...request,reportPath:'linked.json'})).ok,false);assert.equal(h.reads.length,before);
 });
 
-test("desktop and browser use only vscode, with read-only custom editors and open command",async()=> {
+test("desktop and browser use VS Code APIs with read-only editors; native Git is isolated behind lazy trust gating",async()=> {
   const h=harness();h.api.activate(Object.freeze(h.context));
   const viewer=h.registrations.find((r)=>r.view==="kicadVisualReview.viewer");
   assert.equal(viewer.options.supportsMultipleEditorsPerDocument,true);
@@ -59,7 +59,10 @@ test("desktop and browser use only vscode, with read-only custom editors and ope
   assert.equal(typeof doc.dispose,"function");assert.equal(doc.save,undefined);
   await h.commands.find((r)=>r.name==="kicadVisualReview.open").handler(doc.uri);
   assert.equal(h.commands.find((r)=>Array.isArray(r))[0],"vscode.openWith");
-  assert.ok(!/require\(['"](?:fs|path|crypto|child_process|node:)|process\.|\.fsPath/.test(source));
+  assert.ok(!/require\(['"](?:fs|path|crypto|child_process|node:)|process\./.test(source),'the shared desktop/web host never imports raw Node I/O');
+  assert.equal((source.match(/require\('\.\/git-history-tree\.js'\)/g)||[]).length,1,'native Git object I/O has one lazy entry point');
+  const history=source.slice(source.indexOf('async function historyContext'),source.indexOf('async function historicalBytes'));
+  assert.ok(history.indexOf('await browseGit')<history.indexOf("require('./git-history-tree.js')"),'official Git provider, local URI and trust verification precede loading native helper');
 });
 
 test("virtual URI hierarchy preserves provider/ref and resolves sibling parents without escaping",async()=> {
@@ -166,7 +169,7 @@ test("webview HTML confines resources and points relative SPIKE loads at package
   h.entries.set("file:///extension/media/revision-viewer.html",{bytes:new TextEncoder().encode(template)});
   const webview={cspSource:"https://resources.example",asWebviewUri:(uri)=>({toString:()=>`https://resources.example${uri.path}`})};
   const html=await h.api._test.htmlFor(webview,h.context,s);
-  assert.match(html,/default-src &#39;none&#39;/);assert.match(html,/connect-src https:\/\/resources.example\/extension\/media\/step-worker-vscode.js https:\/\/resources.example\/extension\/media\/vendor\/occt\/occt-import-js.wasm;/);assert.match(html,/worker-src blob:/);assert.match(html,/wasm-unsafe-eval/);assert.doesNotMatch(html,/connect-src [^;]*\*/);assert.doesNotMatch(html,/&#39;unsafe-eval&#39;/);
+  assert.match(html,/default-src &#39;none&#39;/);assert.match(html,/connect-src https:\/\/resources.example\/extension\/media\/load-worker-vscode.js https:\/\/resources.example\/extension\/media\/step-worker-vscode.js https:\/\/resources.example\/extension\/media\/vendor\/occt\/occt-import-js.wasm;/);assert.match(html,/worker-src blob:/);assert.match(html,/wasm-unsafe-eval/);assert.doesNotMatch(html,/connect-src [^;]*\*/);assert.doesNotMatch(html,/&#39;unsafe-eval&#39;/);
   assert.match(html,/"stepWorkerUrl":"https:\/\/resources.example\/extension\/media\/step-worker-vscode.js"/);assert.match(html,/"stepWasmUrl":"https:\/\/resources.example\/extension\/media\/vendor\/occt\/occt-import-js.wasm"/);
   assert.match(html,/base href="https:\/\/resources.example\/extension\/media\/"/);
   assert.match(html,/frame-src https:\/\/resources.example\/extension\/media\/terms.html;/);assert.doesNotMatch(html,/frame-src [^;]*\*/);
@@ -564,8 +567,9 @@ test('repository inventory lists provider files without reading bytes, excludes 
 test('local working tree uses real HEAD and Git state badges, never fabricates blob hashes or claims a historical tree',async()=>{
  const h=harness(Uri.parse('file:///repo')),s=await session(h);h.write('board.kicad_pcb','(kicad_pcb)');h.write('docs/notes.txt','text');let commits=0;
  const repo={rootUri:h.folder,state:{HEAD:{commit:hash(8)},indexChanges:[{uri:Uri.joinPath(h.folder,'docs/notes.txt'),status:1}],workingTreeChanges:[{uri:Uri.joinPath(h.folder,'board.kicad_pcb'),status:5},{uri:Uri.joinPath(h.folder,'deleted.txt'),status:6}],mergeChanges:[]},getCommit:async sha=>{commits++;return{hash:sha};}};browsing(h,{repo});
- const reads=h.reads.length,result=await send(h,s,1,{type:'repository-tree',repository:s.scope.repository,ref:s.scope.ref,sha:hash(4)});assert.equal(result.ok,true);const tree=plain(result.result),entries=new Map(tree.entries.map(e=>[e.path,e]));
- assert.equal(tree.sha,hash(8));assert.equal(tree.treeRef,'HEAD');assert.equal(tree.requestedRef,hash(4));assert.equal(tree.workingTree,true);assert.match(tree.warnings.join(' '),/historical/);assert.equal(entries.get('docs').status,'modified');assert.equal(entries.get('docs/notes.txt').status,'added');assert.equal(entries.get('docs/notes.txt').staged,true);assert.equal(entries.get('board.kicad_pcb').status,'modified');assert.equal(entries.get('deleted.txt').status,'deleted');assert.equal(h.reads.length,reads);assert.equal(commits,1);
+ const reads=h.reads.length,result=await send(h,s,1,{type:'repository-tree',repository:s.scope.repository,ref:s.scope.ref});assert.equal(result.ok,true);const tree=plain(result.result),entries=new Map(tree.entries.map(e=>[e.path,e]));
+ assert.equal(tree.sha,hash(8));assert.equal(tree.treeRef,'HEAD');assert.equal(tree.workingTree,true);assert.equal(entries.get('docs').status,'modified');assert.equal(entries.get('docs/notes.txt').status,'added');assert.equal(entries.get('docs/notes.txt').staged,true);assert.equal(entries.get('board.kicad_pcb').status,'modified');assert.equal(entries.get('deleted.txt').status,'deleted');assert.equal(h.reads.length,reads);assert.equal(commits,0);
+ const historical=await send(h,s,2,{type:'repository-tree',repository:s.scope.repository,ref:s.scope.ref,sha:hash(4)});assert.equal(historical.ok,false);assert.match(historical.error,/No working files were substituted/);assert.equal(h.reads.length,reads);assert.equal(commits,1,'historical requests verify the commit and fail closed when this provider lacks a configured Git executable');
 });
 test('lazy repository directories paginate full paths and reject unsafe names and linked ancestors before listing',async()=>{
  const h=harness(Uri.parse('file:///repo')),s=await session(h);for(let i=0;i<250;i++)h.write('parts/'+String(i).padStart(3,'0')+'.txt','x');h.write('linked/nested/secret.txt','x');h.entries.set(Uri.joinPath(h.folder,'linked').toString(),{type:66});const reads=browsing(h);
@@ -631,4 +635,26 @@ test('compact conflict webview keeps draw-first defaults, secondary controls and
  assert.match(html,/<body class="properties-hidden">/);assert.match(html,/id="toggleProperties" aria-pressed="false"/);assert.match(html,/id="viewOptions" aria-expanded="false"/);assert.match(html,/id="viewOptionsPanel"[^>]* hidden/);assert.match(html,/frame-src &#39;none&#39;/);assert.match(html,/src="https:\/\/resources.example\/extension\/media\/conflict-viewer.js"/);assert.match(html,/href="https:\/\/resources.example\/extension\/media\/conflict-viewer.css"/);
  for(const match of html.matchAll(/<script[^>]+src="([^"]+)"/g))assert.ok(match[1].startsWith('https://resources.example/extension/'));
  assert.match(html,/id="saveOriginal" disabled/);assert.match(html,/Original file stays unchanged until you save/);
+});
+test('trusted native Git workspace enables sanitized collaboration bootstrap and host-bound image sources',async()=>{
+ const h=harness(Uri.parse('file:///repo')),s=await session(h);h.vscode.workspace.isTrusted=true;
+ const repo={rootUri:h.folder,state:{HEAD:{commit:'a'.repeat(40)},remotes:[{name:'origin',fetchUrl:'git@github.com:owner/board.git'}]},show:async()=>'(kicad_sch)'};
+ h.vscode.extensions={getExtension:()=>({isActive:true,exports:{getAPI:()=>({git:{path:'C:/safe/git.exe'},repositories:[repo]})}})};
+ h.entries.set(Uri.joinPath(h.context.extensionUri,'media','revision-viewer.html').toString(),{bytes:new TextEncoder().encode('<html><head></head><body><section id="commentsPane"><h2>Review</h2><p class="hint">Help</p></section></body></html>')});
+ const webview={cspSource:'vscode-resource:',asWebviewUri:uri=>({toString:()=>uri.toString()})};const html=await h.api._test.htmlFor(webview,h.context,s);
+ assert.match(html,/"collaboration":\{"provider":"github","host":"https:\/\/github.com","repository":"owner\/board","ref":"a{40}"/);assert.doesNotMatch(html,/C:\/safe\/git.exe/);assert.match(html,/https:\/\/github.com\/user-attachments\//);assert.doesNotMatch(html,/\.github-publish-action\{display:none/);
+});
+
+test('bound GitLab publication receipts and attachments survive sidecar edits without rebinding local anchors',async()=>{
+ const h=harness(),s=await session(h);s.remoteBinding={provider:'gitlab',host:'https://gitlab.example.com',repository:'team/project',ref:'a'.repeat(40),prefix:''};
+ const note=annotation(s);note.mentions=['reviewer.user'];note.remoteRefs=[{provider:'gitlab',host:'https://gitlab.example.com',repository:'team/project',kind:'issue',number:4,url:'https://gitlab.example.com/team/project/-/issues/4#note_9',publishedAt:note.createdAt}];
+ let reply=await send(h,s,1,{type:'comment-save',comment:note});assert.equal(reply.ok,true,reply.error);assert.equal(storedSidecar(h).annotations[0].anchor.repository,'local/workspace');
+ reply=await send(h,s,2,{type:'comment-list',...scopeOf(s)});assert.equal(reply.ok,true,reply.error);assert.equal(reply.result[0].remoteRefs[0].provider,'gitlab');assert.equal(reply.result[0].mentions[0],'reviewer.user');
+ const foreign={...reply.result[0],remoteRefs:[{...note.remoteRefs[0],host:'https://other.example.com',url:'https://other.example.com/team/project/-/issues/4#note_9'}]};
+ const rejected=await send(h,s,3,{type:'comment-save',comment:foreign});assert.equal(rejected.ok,false);assert.match(rejected.error,/GitLab|reference/);assert.equal(storedSidecar(h).annotations[0].remoteRefs[0].host,'https://gitlab.example.com');
+});
+
+test('net-anchored review notes retain readable net identity through VS Code sidecars',async()=>{
+ const h=harness(),s=await session(h),note=annotation(s);note.anchor.kind='net';note.anchor.netName='POWER_3V3';
+ const reply=await send(h,s,1,{type:'comment-save',comment:note});assert.equal(reply.ok,true,reply.error);assert.equal(storedSidecar(h).annotations[0].anchor.netName,'POWER_3V3');
 });

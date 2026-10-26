@@ -31,3 +31,8 @@ test('expired login, login HTML, missing files, bad pagination and oversized str
  }
  const reader=create({location,fetch:async()=>new Response(null,{status:404})});assert.equal(await reader.read(request('/repository/tree')),null);
 });
+test('GitLab session Stop aborts fetch and stalled body without returning partial bytes',async()=>{
+ const controller=new AbortController();let cancelled=0,signal;
+ const scoped=create({location:{href:'https://gitlab.com/group/board/-/tree/main'},signal:controller.signal,fetch:async(url,init)=>{signal=init.signal;return new Response(new ReadableStream({start(){},cancel(){cancelled++;}}));}});
+ const pending=scoped.read({host:'https://gitlab.com',repository:'group/board',url:'https://gitlab.com/api/v4/projects/group%2Fboard/repository/tree?ref='+sha,limit:1024});await new Promise(r=>setImmediate(r));controller.abort();await assert.rejects(pending,/cancelled/);assert.equal(cancelled,1);assert.equal(signal.aborted,true);
+});

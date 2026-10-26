@@ -54,3 +54,83 @@ Restricted or imported-only workspaces explain when history is unavailable.
 Physical Samsung gestures, cutout behavior and performance must be rechecked on
 the final package later. Existing real GitHub posting/readback evidence predates
 this completion pass; no new public comments were posted here.
+
+
+## Loader cancellation follow-up
+
+The shared loader now offers Stop for cancellable reads and terminates parsing
+workers. Chrome isolates cancellation by trusted viewer and load ID, including
+website-session fallback reads. Android cancels scoped HTTP/local input and uses
+accepted-project acknowledgments to reject cancelled late delivery. Shared
+snapshots preserve other subscribers. VS Code preparation uses a self-contained
+blob worker with an explicitly scoped CSP resource. Large jobs cannot silently
+fall back to an uninterruptible UI-thread parse. Initial waits are bounded and
+stopped drawings offer Retry loading. Publishing and writes do not offer Stop.
+
+Follow-up checks: 1,355 JavaScript checks and 17 package checks passed; 53 targeted
+native cancellation checks passed on the isolated emulator. The shared Stop
+control was clicked against an actual stalled local HTTP body and a busy worker;
+both stopped, and a fresh worker retry could also be stopped. These are isolated
+transport/runtime fixtures, not live provider-account tests.
+
+The final Chrome ZIP was compared byte-for-byte with its 359 source assets; the
+VSIX shared-asset audit covered 314 files. Chrome requests no additional
+permissions and contains no iOS payload. Its SHA-256 and audit are retained in
+`dist/chrome-store-0.12.59/`. Store upload is pending owner sign-in.
+
+The additional full native regression run did not complete: the isolated emulator
+stalled while creating a WebView in FrameBoundaryChecks, after earlier checks
+returned. It was stopped; the subsequent UI invocation reported a process crash.
+Neither run is counted as passed. The targeted 53 cancellation checks and Android
+build/lint passed separately. No physical-phone acceptance is claimed.
+
+## Phone navigation refinement (Android 1.62 / extension 0.12.60)
+
+File cards were replaced with indented folder/file rows in the project Files
+page. Repository browsing uses SVG file/folder icons, consistent name slots and
+flat rows; action controls remain separate. Project tools use full-width aligned
+navigation rows. Shared Android controls use consistent touch targets, gutters,
+form spacing and readable placeholders, preserving the native safe-area rules.
+
+All 1,355 JavaScript checks passed. Android assembleDebug and lintDebug passed.
+The final APK's four changed UI assets matched source byte-for-byte. Chromium's
+359 files and VSIX's 314 shared assets passed the source/package audit. Checksums
+are in `dist/phone-ui-1.62/`; these local packages have not been uploaded to stores
+or installed on a phone in this pass.
+
+Actual browser previews at 320px, 390px and 768px exercised dark and light layouts
+using the real CSS/controllers with synthetic project data. Nested folders,
+search with parent context, long filename truncation and file activation were
+checked. Screenshots are in `.vizdiff/phone-ui-polish/`. This is browser layout
+acceptance, not physical-device/WebView or live-provider acceptance.
+
+## Conversation and Git-history parity (0.12.61 / Android 1.63)
+
+- 1,403 JavaScript checks passed, including real temporary Git repositories,
+  pinned historical project/model reads, both generated provider API adapters,
+  simulated screenshot publication, duplicate receipts, concurrent retry exclusion,
+  foreign-provider/host annotation rejection and workspace-bound GitLab sidecars.
+- 20 Python packaging/release checks passed. Source/package audits cover 359
+  Chromium files, 315 shared VSIX assets, generated host adapters and final APK
+  conversation assets. Checksums and audit are in `dist/parity-0.12.61/`.
+- Android assembleDebug, assembleDebugAndroidTest and lintDebug passed. The isolated
+  emulator executed 54 native GitLab conversation checks. This test uses synthetic
+  transport; no remote issue or screenshot was posted.
+- The actual shared browser UI displayed a synthetic GitLab issue body, comments,
+  a grouped reply and closed state at phone/desktop widths. Reply selected the
+  existing issue number and retained an unpublished draft. Screenshot:
+  `.vizdiff/parity-browser/conversation-preview.png`.
+- Installed the final APK on the connected Samsung SM-A366E using `adb install -r`.
+  The device reported versionName 1.63 / versionCode 66. No uninstall or data-clear
+  command was used. New on-phone account connection/posting was not exercised.
+
+VS Code GitHub sign-in uses the native account provider; GitLab uses exact-host
+SecretStorage. Credential-bearing requests are bound to the trusted Git remote.
+Pinned publication/readback compares raw saved Git blobs; ordinary conversation
+reading does not require a clean displayed source. Historical viewers are separate
+read-only snapshots and never substitute working files for missing saved files.
+
+Remote behavior was verified with mocked transport, not new live-account posting.
+No store upload was performed. Notification inbox/live synchronization and GitLab
+merge-request publication remain outside this preview; historical viewer edits and
+publication are deliberately unavailable.

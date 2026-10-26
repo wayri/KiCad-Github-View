@@ -69,7 +69,7 @@ final class ProjectImporter {
             if(selected.path.toLowerCase(Locale.ROOT).endsWith(".zip")) {
                 File archive=File.createTempFile("project-import-",".zip",cacheDirectory);
                 try {
-                    try(InputStream input=resolver.openInputStream(uri)) {
+                    try(InputStream input=NativeLoadOperation.input(resolver.openInputStream(uri))) {
                         if(input==null)throw new IOException("Cannot open selected ZIP");
                         ZipProjectReader.stage(input,archive,cancelled::get);
                     }
@@ -89,7 +89,7 @@ final class ProjectImporter {
         JSONArray nodes=new JSONArray();for(Entry entry:entries.values())nodes.put(diskNode(entry.path,entry.size));
         return store.importProject(folder?folderName(resolver,uri):querySingle(resolver,uri).path,nodes,(path,target,size)-> {
             Entry entry=entries.get(path);if(entry==null)throw new IOException("Unknown selected file");
-            try(InputStream input=resolver.openInputStream(entry.uri); FileOutputStream output=new FileOutputStream(target)) {
+            try(InputStream input=NativeLoadOperation.input(resolver.openInputStream(entry.uri)); FileOutputStream output=new FileOutputStream(target)) {
                 if(input==null)throw new IOException("Cannot open selected file");
                 byte[] buffer=new byte[65536];long bytes=0;int n;
                 while((n=input.read(buffer))!=-1) {
@@ -292,7 +292,7 @@ final class ProjectImporter {
                                 Set<String> paths, int[] counts) throws Exception {
         java.io.File archive = java.io.File.createTempFile("project-import-", ".zip", cacheDirectory);
         try {
-            try (InputStream input = resolver.openInputStream(selected.uri)) {
+            try (InputStream input = NativeLoadOperation.input(resolver.openInputStream(selected.uri))) {
                 if (input == null) throw new IOException("Cannot open selected ZIP");
                 ZipProjectReader.stage(input, archive, cancelled::get);
             }
@@ -317,7 +317,7 @@ final class ProjectImporter {
 
     private static byte[] readBounded(ContentResolver resolver, Uri uri, Cancelled cancelled,
                                       int remaining) throws IOException {
-        try (InputStream stream = resolver.openInputStream(uri)) {
+        try (InputStream stream = NativeLoadOperation.input(resolver.openInputStream(uri))) {
             if (stream == null) throw new IOException("Cannot open selected file");
             ByteArrayOutputStream output = new ByteArrayOutputStream();
             byte[] buffer = new byte[64 * 1024];

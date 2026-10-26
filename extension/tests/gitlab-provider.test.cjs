@@ -140,3 +140,8 @@ test('GitLab rejects malformed parent IDs and discloses final-page caps',async t
 test('GitLab repository branch discovery has no drawing requirement and preserves encoded branch names',async t=>{
  transport(t,async url=>{assert.match(url,/\/branches\?per_page=100&page=1$/);return json([{name:'feature/board',commit:{id:sha}}]);});const result=await api.repositoryBranches('group/sub/board',sha);assert.equal(result.branches[0].name,'feature/board');await assert.rejects(api.repositoryBranches('group/sub/board','bad\n'),/Invalid/);
 });
+test('GitLab operation cancellation aborts streamed bodies and prevents hierarchy reads after Stop',async t=>{
+ let cancelled=0,reads=0;const controller=new AbortController();transport(t,async()=>{reads++;return new Response(new ReadableStream({start(){},cancel(){cancelled++;}}));});
+ const scoped=api.forHost('https://gitlab.com',{signal:controller.signal});const pending=scoped.resolve('group/board','main','board.kicad_sch');await new Promise(r=>setImmediate(r));controller.abort();await assert.rejects(pending,/cancelled/);assert.equal(cancelled,1);
+ await assert.rejects(scoped.file('group/board',sha,'child.kicad_sch'),/cancelled/);assert.equal(reads,1);
+});
