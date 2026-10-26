@@ -2,7 +2,7 @@
 
 Current GitHub preview: extension 0.12.61 and Android 1.63. Download the packages below; store availability is separate from GitHub release availability.
 
-Choose a prepared package from the [README download buttons](../README.md#downloads) or [GitHub Releases](https://github.com/wayri/KiCad-Github-View/releases). GitHub's automatic **Source code** archives are source checkouts, not installable extensions. The repository is currently private, so release access requires permission until it becomes public.
+Choose a prepared package from the [README download buttons](../README.md#downloads) or [GitHub Releases](https://github.com/wayri/KiCad-Github-View/releases). GitHub's automatic **Source code** archives are source checkouts, not installable extensions. The source repository and release downloads are public.
 
 The browser and VS Code editions run on Windows, Linux and macOS. There is no standalone Windows `.exe`, Linux `.deb`/AppImage or macOS `.dmg` installer in the published release. Ordinary viewing does not require KiCad, Python or a rendering server. The optional local Python launcher has separate requirements.
 

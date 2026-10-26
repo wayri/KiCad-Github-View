@@ -72,4 +72,4 @@ Copyright © 2026 Yawar B (wayri). Source-available license; paid software distr
 
 [GitHub project](https://github.com/wayri/KiCad-Github-View) · [Support](mailto:support@sigharmonic.com)
 
-The GitHub repository is currently private; public access is planned.
+The GitHub repository is public; browse the source, guides and release downloads there.

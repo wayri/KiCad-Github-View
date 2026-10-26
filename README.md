@@ -26,7 +26,7 @@ Explore schematics and PCB layouts, follow nets, measure geometry, work through 
 | Firefox | [Development ZIP 0.12.61](https://github.com/wayri/KiCad-Github-View/releases/download/v0.12.61/kicad-visual-review-firefox-0.12.61.zip) | Desktop 128+; unsigned temporary add-on; [instructions](docs/FIREFOX.md) |
 | Safari | [Development ZIP 0.12.61](https://github.com/wayri/KiCad-Github-View/releases/download/v0.12.61/kicad-visual-review-safari-0.12.61.zip) | macOS Safari 16.4+; requires Xcode conversion/signing; native verification pending; [instructions](docs/SAFARI.md) |
 
-Downloads above are the [v0.12.61 GitHub preview](https://github.com/wayri/KiCad-Github-View/releases/tag/v0.12.61). The VS Code Marketplace channel is updated separately. The repository is currently private, so GitHub downloads require access until it is made public.
+Downloads above are the [v0.12.61 GitHub preview](https://github.com/wayri/KiCad-Github-View/releases/tag/v0.12.61). The VS Code Marketplace channel is updated separately. The source repository and GitHub downloads are public.
 
 <details>
 <summary>Release versions, checksums and Android signing</summary>
