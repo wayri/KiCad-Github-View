@@ -2,6 +2,8 @@
 
 Current Chrome update: [0.12.64 upload file and ready-to-copy text](store-submissions/chrome-0.12.64.txt). Support contact: `support.kivi@sigharmonic.com`. The older preparation notes below are retained as historical guidance; use the current submission text and release artifacts.
 
+For a Mozilla listing, adapt the browser description to the [Firefox-specific limits and submission steps](FIREFOX.md). Use the Firefox ZIP, preserve add-on ID `kicad-visual-review@wayri.github.io`, resolve the current data-consent declaration blocker, and obtain genuine Firefox captures before advertising installed acceptance. A Chrome Store listing/ZIP is not an AMO listing or signed XPI. Both public AMO and unlisted signed distribution are described in that guide.
+
 ## Historical preparation — 0.12.46
 
 Prepared 2026-10-23. These are separate listings; do not advertise browser-only

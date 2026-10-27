@@ -1,5 +1,7 @@
 # Pocket KiView illustrated user guide
 
+Firefox and Firefox derivatives have a separate [installation, signing and Mozilla deployment guide](docs/FIREFOX.md), including Zen, LibreWolf and Waterfox compatibility limits. The current unsigned Firefox ZIP is temporary; Firefox Android extension acceptance is pending.
+
 Open saved KiCad projects, inspect schematics and layouts, and record review or assembly findings without a KiCad installation. Design sources are read-only during ordinary viewing. Review notes, assembly progress and variants are separate data; the VS Code conflict resolver is an explicit exception that can write a resolved drawing after confirmation.
 
 For extension 0.12.61 and Android 1.63. Check your installed version when a control differs. This guide distinguishes shared drawing tools from host-specific pages and account features.

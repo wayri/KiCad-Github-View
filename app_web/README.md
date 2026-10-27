@@ -1,5 +1,7 @@
 # Hosted KiCad visual review
 
+For the separate Firefox/Firefox-derivative extension, see [installation, signed-XPI distribution and Mozilla publishing](../docs/FIREFOX.md). That add-on and this hosted web application are separate deployment routes; a hosted viewer link does not install a browser add-on.
+
 This static browser app is the GitHub App's hosted viewer. It is served at
 `/app/` by the same origin that provides the metadata endpoints. It opens
 public GitHub schematics and PCB layouts with the project's own Canvas2D renderer. Its controls include

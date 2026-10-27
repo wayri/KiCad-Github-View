@@ -27,7 +27,7 @@ Explore schematics and PCB layouts, follow nets, measure geometry, work through 
 | Android | APK button above | Android 8+; published 1.66 preview, development-signed; manual installation and updates |
 | Chrome, Edge, Brave, Opera, Vivaldi, Chromium | Chromium ZIP button above | Published 0.12.64 preview; extract and load unpacked; candidate browsers have differing validation coverage |
 | VS Code | [Marketplace](https://marketplace.visualstudio.com/items?itemName=wayri.kicad-visual-review) / [offline VSIX 0.12.64](https://github.com/wayri/KiCad-Github-View/releases/download/v0.12.64/kicad-visual-review-vscode-0.12.64.vsix) | Windows, Linux and macOS; VS Code 1.95+; Marketplace and GitHub versions may differ |
-| Firefox | [Development ZIP 0.12.64](https://github.com/wayri/KiCad-Github-View/releases/download/v0.12.64/kicad-visual-review-firefox-0.12.64.zip) | Desktop 128+; unsigned temporary add-on; [instructions](docs/FIREFOX.md) |
+| Firefox / compatible derivatives | [Development ZIP 0.12.64](https://github.com/wayri/KiCad-Github-View/releases/download/v0.12.64/kicad-visual-review-firefox-0.12.64.zip) | Firefox desktop 128+; unsigned temporary add-on; Zen/LibreWolf/Waterfox candidates unverified; [install, signing and Mozilla publishing](docs/FIREFOX.md) |
 | Safari | [Development ZIP 0.12.64](https://github.com/wayri/KiCad-Github-View/releases/download/v0.12.64/kicad-visual-review-safari-0.12.64.zip) | macOS Safari 16.4+; requires Xcode conversion/signing; native verification pending; [instructions](docs/SAFARI.md) |
 
 Downloads above are the [v0.12.64 GitHub preview](https://github.com/wayri/KiCad-Github-View/releases/tag/v0.12.64). The VS Code Marketplace channel is updated separately. The source repository and GitHub downloads are public.

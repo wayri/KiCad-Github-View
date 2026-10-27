@@ -17,6 +17,10 @@ Start with the [installation guide](INSTALL.md) for Android, Windows, Linux and 
 
 Offline copies belong to the app and disappear when app data is cleared or the app is uninstalled. **Export project ZIP** creates a separate, unencrypted file containing supported source/model files, without review metadata or credentials. Back up review state separately. See the [Android guide](../android-app/README.md).
 
+### Firefox and Firefox derivatives
+
+Use the dedicated Firefox ZIP and the [Firefox installation guide](FIREFOX.md). Temporary desktop loading uses `about:debugging`; future permanent installs require the official AMO listing or a signed XPI. Zen, LibreWolf and current Waterfox are unverified compatibility candidates. The guide also covers publisher deployment, updates and Firefox Android limits. Local viewing and provider access remain subject to the host differences documented there.
+
 ### Chromium browser extension
 
 Open extension Options and choose **Open local KiCad workspace**. Use **Open files**, **Open folder**, or drag files/a folder into the workspace. Folder import preserves relative paths so subsheets and models can be found. If directory dragging is unsupported, use **Open folder**. Local imports stay on your computer and can be viewed offline after installing the extension.

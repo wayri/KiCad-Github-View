@@ -1,6 +1,6 @@
 # KiCad Visual Review browser extension
 
-Version **0.12.57** includes the shared engineering viewers used by Pocket KiView Android **1.59**. It renders KiCad schematics and PCB layouts inside supported GitHub and GitLab repository pages, and opens local projects offline through its bundled local viewer. No KiCad installation is required. The drawing BoM manager and imported BoM viewer use the same field table, including selectable columns and grouping by value, footprint, value + footprint, unit price/currency or custom fields. Engineering tools provide interactive calculators with circuit diagrams, Gerber analysis and PDF viewing. Board analytics, searchable testpoints, saved simulation plots/overlays, assembly variants, DNP/DNI highlights, photo inspection and portable review transfer share modules with Android. See [platform parity and host limits](docs/platform-parity.md).
+Version **0.12.64** includes the shared engineering viewers used by Pocket KiView Android **1.66**. It renders KiCad schematics and PCB layouts inside supported GitHub and GitLab repository pages, and opens local projects offline through its bundled local viewer. No KiCad installation is required. The drawing BoM manager and imported BoM viewer use the same field table, including selectable columns and grouping by value, footprint, value + footprint, unit price/currency or custom fields. Engineering tools provide interactive calculators with circuit diagrams, Gerber analysis and PDF viewing. Board analytics, searchable testpoints, saved simulation plots/overlays, assembly variants, DNP/DNI highlights, photo inspection and portable review transfer share modules with Android. See [platform parity and host limits](docs/platform-parity.md).
 
 File previews replace the source pane; **Show source** restores it. Pull-request **Files changed** cards retain GitHub’s header and conversation while displaying base/head drawings. Dynamic GitHub navigation and late/replaced file cards are supported. Public forks use the base repository’s PR context while retrieving the fork’s design revision.
 
@@ -30,6 +30,8 @@ Schematic net selection follows exact wire endpoints, T connections, explicit ju
 The default drawing sheet now uses native template coordinates for borders, page zones and the title block. Specialized pin styles, global/hierarchical label outlines, overbars and text dimensions have native SVG fixture checks. Browser glyphs remain an approximation. Repeated hierarchy instances remain file-based.
 
 ## Development installation
+
+For prepared release downloads and platform installation, use the [installation guide](../docs/INSTALL.md). **Firefox, Zen, LibreWolf and current Waterfox use the separate Firefox package**, not this directory's Chromium manifest. See the [Mozilla guide](../docs/FIREFOX.md) for temporary loading, future signed-XPI installation, derivative limits, Android status, and public/unlisted AMO publishing. The Firefox preview is unsigned and temporary; no AMO listing or signed XPI is published yet.
 
 1. Open `chrome://extensions` or `edge://extensions`.
 2. Enable **Developer mode**, choose **Load unpacked**, and select this repository’s `extension` directory.

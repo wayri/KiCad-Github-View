@@ -6,7 +6,7 @@ Choose a prepared package from the [README download buttons](../README.md#downlo
 
 The browser and VS Code editions run on Windows, Linux and macOS. There is no standalone Windows `.exe`, Linux `.deb`/AppImage or macOS `.dmg` installer in the published release. Ordinary viewing does not require KiCad, Python or a rendering server. The optional local Python launcher has separate requirements.
 
-Current release assets: `kicad-visual-review-chrome-edge-brave-opera-vivaldi-chromium-0.12.64.zip`, `kicad-visual-review-vscode-0.12.64.vsix`, and `pocket-kivi-android-phone-tablet-1.66-development.apk`.
+Current release assets: `kicad-visual-review-chrome-edge-brave-opera-vivaldi-chromium-0.12.64.zip`, `kicad-visual-review-firefox-0.12.64.zip`, `kicad-visual-review-vscode-0.12.64.vsix`, and `pocket-kivi-android-phone-tablet-1.66-development.apk`.
 
 ## Choose your platform
 
@@ -57,9 +57,18 @@ For online projects, open a normal repository file page for `.kicad_sch` or `.ki
 
 **Update:** extract the replacement package, select **Reload** on the extension card, then refresh viewer tabs. Unpacked packages do not update automatically. **Remove:** export local reviews first, then remove the extension through its manager; clearing extension storage can remove local drafts.
 
-## Firefox — Windows, Linux and macOS
+## Firefox and derivatives — Windows, Linux and macOS
 
-Download the dedicated Firefox ZIP, extract it, open `about:debugging#/runtime/this-firefox`, choose **Load Temporary Add-on**, and select `manifest.json`. This requires desktop Firefox 128+. The unsigned temporary installation ends when Firefox restarts; no permanent signed XPI/AMO listing is supplied. Use the Firefox package rather than the Chromium ZIP. Installed-browser acceptance remains limited. [Firefox guide](FIREFOX.md).
+1. Download the [Firefox 0.12.64 ZIP](https://github.com/wayri/KiCad-Github-View/releases/download/v0.12.64/kicad-visual-review-firefox-0.12.64.zip), verify its checksum and extract it.
+2. In desktop Firefox 128+, open `about:debugging#/runtime/this-firefox`, choose **Load Temporary Add-on**, and select the extracted `manifest.json`.
+3. Click the extension icon for local files/folders, or refresh a GitHub/GitLab design page. Preferences/Options contains optional provider accounts and approved servers.
+4. To update, reload its `about:debugging` card after replacing the extracted files and refresh design tabs. Load it again after restarting Firefox.
+
+The unsigned preview is temporary; no permanent signed XPI or AMO listing is supplied. When a signed package is published, use its official AMO page or `about:addons` → settings gear → **Install Add-on From File…** with the **signed XPI**. Renaming a ZIP does not sign it. Export local notes before removing/replacing an installation.
+
+Zen, LibreWolf, current Waterfox and other Firefox derivatives are candidates using the **Firefox** package, not the Chromium ZIP. Their Gecko/API versions and add-on manager must support it; installed acceptance is unverified. The [Firefox/derivative guide](FIREFOX.md) covers vendor references, signing, updates and troubleshooting. Firefox Android extension acceptance is pending; use the Android APK now. Its future signed-XPI route is documented separately there.
+
+Publishers should follow the [Mozilla deployment steps and current consent-metadata blocker](FIREFOX.md#publish-to-mozilla-add-ons-or-distribute-a-signed-xpi) for AMO and signed self-distribution. Keep signature checks and organizational policies enabled.
 
 ## Safari — macOS development option
 
@@ -132,4 +141,4 @@ A matching hash verifies bytes against the published checksum; it is not a publi
 | APK will not install | Check Android version, free storage, version downgrade and signing identity; preserve data before migration |
 | Download requires sign-in | This GitHub repository/release is still private; request access or wait for public availability |
 
-Continue with the [user guide](USER-GUIDE.md). Report reproducible problems to [support@sigharmonic.com](mailto:support@sigharmonic.com), including version, operating system, steps and a non-confidential sample. Do not send credentials or private designs without authorization.
+Continue with the [user guide](USER-GUIDE.md). Report reproducible problems to [support.kivi@sigharmonic.com](mailto:support.kivi@sigharmonic.com), including version, operating system, steps and a non-confidential sample. Do not send credentials or private designs without authorization.

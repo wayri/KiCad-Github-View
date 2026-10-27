@@ -1,4 +1,10 @@
-# Store publishing for 0.12.46
+# Store publishing
+
+## Current Mozilla / Firefox deployment instructions
+
+Use the [Firefox and derivative guide](FIREFOX.md#publish-to-mozilla-add-ons-or-distribute-a-signed-xpi) for public AMO submission or signed self-distribution. It covers the stable add-on ID, Firefox-specific ZIP, validator/source submission, privacy and reviewer information, signed-XPI verification and updates. The existing 0.12.64 ZIP is an unsigned temporary desktop preview: its missing `gecko.data_collection_permissions` and consent readiness must be addressed before a new AMO submission. No Mozilla listing/signing has been completed. Do not turn off signature checks to create a permanent installation.
+
+Current Chromium upload text and screenshots: [0.12.64 submission](store-submissions/chrome-0.12.64.txt). Older version-specific publishing records below are historical; use the current package and installed-version evidence.
 
 ## Illustrated VS Code listing: 0.12.50
 

@@ -6,6 +6,8 @@ Portrait and landscape use the same open project without reloading the viewer. R
 
 ## Open a project
 
+For the browser extension in Firefox or a derivative, use the separate [Mozilla installation/deployment guide](../docs/FIREFOX.md). The current unsigned desktop Firefox ZIP is not the Android app and has not been accepted on Firefox Android. Use this APK for the phone/tablet experience now; the guide describes the future signed mobile-extension route without claiming present compatibility.
+
 The home screen and project overview include [BoM & assembly tools](../docs/BOM-ASSEMBLY.md) and [offline engineering calculators](../docs/CALCULATORS.md). BoM tools support local assembly variants, build quantities, procurement and progress drafts, inert iBOM imports, and exported BoM Studio JSON/CSV.
 
 - **Open a project folder** uses Android's storage picker and includes nested sheets and available local model files. Select the complete project folder rather than only its `.kicad_pro` file.

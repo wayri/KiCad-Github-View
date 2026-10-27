@@ -6,6 +6,8 @@ Open KiCad schematics and PCBs beside your code—without installing KiCad. Insp
 
 ## Open your first project
 
+For the separate browser companion, see [installation on Firefox and compatible derivatives, signing and Mozilla publishing](https://github.com/wayri/KiCad-Github-View/blob/main/docs/FIREFOX.md). Firefox uses its own temporary add-on package; the VSIX is only for VS Code.
+
 **KiCad versions:** recognized KiCad **8, 9 and 10** `.kicad_sch` and `.kicad_pcb` constructs use the shared viewer. Native reference fixtures use KiCad 10; 8/9 coverage is narrower and does not certify every feature. Newer generator versions open as warned previews. No KiCad installation is required. Linked and supported embedded 3D models can load when their assets resolve. Component-class rules, schematic net-class rule areas and native schematic tables are not implemented. [Compatibility details](https://github.com/wayri/kiview-marketplace-assets/blob/main/COMPATIBILITY.md).
 
 1. Install the extension and open your KiCad project folder in VS Code.
