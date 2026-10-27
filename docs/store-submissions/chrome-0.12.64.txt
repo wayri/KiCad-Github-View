@@ -1,0 +1,49 @@
+CHROME WEB STORE UPDATE — 0.12.64
+
+Upload this Chromium ZIP to the existing listing's Package tab:
+https://github.com/wayri/KiCad-Github-View/releases/download/v0.12.64/kicad-visual-review-chrome-edge-brave-opera-vivaldi-chromium-0.12.64.zip
+
+SHA-256:
+b3ab1454aaf7d7ef8d1797bcd28c8020a885f6e2bda9124109d962033f26f901
+
+NAME
+KiCad Visual Review for GitHub and GitLab
+
+SHORT DESCRIPTION
+Browser-only KiCad schematic and PCB review on GitHub, GitLab.com and configured GitLab servers, with issue comments.
+
+DETAILED DESCRIPTION
+Inspect KiCad schematics and PCB layouts directly on supported GitHub and GitLab repository pages, or open a local file or project folder from the extension icon.
+
+Keep the drawing in focus with compact controls, searchable parts and properties, net highlighting, layer visibility, measurements and supported revision comparisons. Explore supported 3D component models with seven camera views, grouped display settings and surface measurements.
+
+Review assembly data with BoM tools and open supported saved rule and analysis reports. Follow repository Issues and Discussions in a compact conversation view. Draft notes, mention people and paste screenshots, then review the destination before explicitly posting through your connected account. Provider features depend on the repository, account and permissions available.
+
+Public and local review can be used without signing in. Optional account connections enable supported private-repository and publication workflows. Self-hosted GitLab access requires approval for the selected server. Administrators can apply managed policies to disable networking or provider writes.
+
+Rendering and model support have documented limits. Saved reports are displayed; the extension does not run native KiCad ERC/DRC or simulation solvers. Drawings are viewed from saved source data. Use native engineering tools to validate design decisions.
+
+This is an independent project, not an official product of KiCad, GitHub or GitLab.
+
+WHAT'S NEW IN 0.12.64
+- Smaller drawing controls and a prominent 3D switch.
+- Compact Fit, View, Measure and Display tools with seven 3D camera directions.
+- Message-focused Issues and Discussions, optional formatting, and fewer visible buttons.
+- Improved short-screen menus and draft feedback; destination review remains before posting.
+- Retains the security hardening and administrator controls introduced in 0.12.63.
+
+SINGLE PURPOSE
+Visually inspect and review saved KiCad project files locally and on supported repository pages.
+
+SUPPORT
+https://github.com/wayri/KiCad-Github-View/issues
+support.kivi@sigharmonic.com
+
+PRIVACY POLICY
+https://wayri.github.io/KiCad-Github-View/privacy.html
+
+HOMEPAGE
+https://github.com/wayri/KiCad-Github-View
+
+SUBMISSION NOTE — NOT LISTING COPY
+Update the existing Chrome Store item; do not create a duplicate. Use the Chromium ZIP above, not a source, Firefox, Safari or Android archive. Keep the Privacy tab disclosures aligned with the shipped permissions and provider data transfers; do not declare that no user data is processed. Current permission explanations are in docs/STORE-LISTINGS.md. This text and package are prepared for upload; Chrome Store approval is a separate step.
