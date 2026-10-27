@@ -98,7 +98,7 @@ Click any image to open it at full size. Captures show several development versi
 
 [![PIC Programmer PCB in the shared Three.js renderer, High quality and dark theme](docs/images/current/pcb-3d-dark-0.12.62.jpg)](docs/images/current/pcb-3d-dark-0.12.62.jpg)
 
-Production WebGL rendering of KiCad's public PIC Programmer demo, captured on 27 October 2026. Component bodies in these captures are **approximate footprint stand-ins**; linked mechanical models were not loaded. High quality is enabled. These are browser-rendered application pixels, with no generated imagery or operating-system status bar.
+Production WebGL rendering of KiCad's public PIC Programmer demo, captured on 27 October 2026. **Real linked STEP/VRML component models** are loaded for all 56 footprints with saved model references (19 distinct model files). The seven model-less bodies are hidden, so no stand-ins appear. High quality and ambient occlusion are enabled. These are browser-rendered application pixels, with no generated imagery or operating-system status bar.
 
 <details>
 <summary><strong>Light theme, top view and compact drawing workspaces</strong></summary>
