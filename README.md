@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="docs/play-store/assets/store-icon-512.png" alt="Pocket KiView app icon" width="112" height="112">
+</p>
+
 # Pocket KiView
 
 **Your KiCad project, ready for review—at your desk or at the bench.**
