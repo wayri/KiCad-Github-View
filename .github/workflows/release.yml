@@ -63,7 +63,9 @@ jobs:
       - name: Install pinned 3D test dependency
         run: mkdir -p .vizdiff/build-deps && cp scripts/build-deps/package*.json .vizdiff/build-deps/ && npm ci --prefix .vizdiff/build-deps --ignore-scripts --no-audit --no-fund
       - name: Install Python test dependencies
-        run: python -m pip install --only-binary=:all: --require-hashes -r scripts/requirements-linux.lock && python -m pip install --no-deps --no-build-isolation .
+        run: |
+          python -m pip install --only-binary=:all: --require-hashes -r scripts/requirements-linux.lock
+          python -m pip install --no-deps --no-build-isolation .
       - uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5.7.0
         with:
           distribution: temurin

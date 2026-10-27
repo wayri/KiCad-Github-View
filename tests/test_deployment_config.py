@@ -22,6 +22,7 @@ class DeploymentConfigTests(unittest.TestCase):
             text = (ROOT / '.github/workflows' / name).read_text(encoding='utf-8')
             self.assertIn('npm ci --prefix .vizdiff/build-deps --ignore-scripts', text)
             self.assertIn('--require-hashes -r scripts/requirements-linux.lock', text)
+            self.assertNotIn('run: python -m pip install --only-binary=:all:', text)
             self.assertIn('--no-deps --no-build-isolation .', text)
 
     def test_compose_has_local_binding_file_secrets_and_restrictions(self):
