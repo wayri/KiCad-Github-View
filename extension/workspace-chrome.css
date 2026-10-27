@@ -85,3 +85,19 @@ body[data-workspace-chrome].project-app .setting-field{min-height:38px;border-co
 @media(pointer:coarse){body[data-workspace-chrome] #frameControls button,body[data-workspace-chrome] #drawingTools button,body[data-workspace-chrome] .workspace-tools-menu button{min-height:44px;height:44px;min-width:44px}body[data-workspace-chrome] #drawingTools{width:52px;flex-basis:52px}body[data-workspace-chrome] #reviewWorkspace{--tool-strip-width:52px}}
 @media(prefers-reduced-motion:no-preference){body[data-workspace-chrome] button{transition:background-color .12s ease,color .12s ease,border-color .12s ease}}
 body[data-workspace-chrome].vscode-high-contrast,body[data-workspace-chrome].vscode-high-contrast-light{--line:var(--vscode-contrastBorder);--accent:var(--vscode-focusBorder)}
+
+/* Put mode and context first; occasional inspection actions stay in More. */
+body[data-workspace-chrome] #frameControls .workspace-mode-switch{width:auto;min-width:54px;display:inline-flex;align-items:center;justify-content:center;gap:5px;flex:0 0 auto;min-height:30px;height:30px;padding:4px 9px;font-size:11px;border:1px solid var(--line);background:transparent}
+body[data-workspace-chrome] #frameControls .workspace-mode-switch[hidden]{display:none}
+body[data-workspace-chrome] #frameControls .workspace-mode-switch[aria-pressed=true]{background:var(--selected);border-color:var(--accent)}
+body[data-workspace-chrome]:has(#mode3d[aria-pressed=true]) #frameControls .tool-group:has(#fitDrawing){display:none}
+body[data-workspace-chrome] .workspace-tools-menu .workspace-quick-tools{grid-template-columns:repeat(4,minmax(0,1fr))}
+body[data-workspace-chrome] .workspace-tools-menu .compatibility-button{margin-top:5px;border-top:1px solid var(--line);padding-top:8px;color:var(--muted);font-size:11px}
+body[data-workspace-chrome] #drawingTools{gap:4px;padding-block:6px}
+@media(pointer:coarse){body[data-workspace-chrome] #frameControls .workspace-mode-switch{height:44px;min-height:44px}}
+
+/* Quick actions forward to original controllers; do not show a second copy. */
+body[data-workspace-chrome] .workspace-tools-menu>:is(#openBomManager,#viewRuleChecks,#openSavedReports){display:none}
+
+body[data-workspace-chrome] #frameControls .workspace-mode-switch .button-label{display:inline}
+body[data-workspace-chrome]:has(#mode3d[aria-pressed=true]) #drawingTools>:is(#gridButton,#flipButton){display:none}

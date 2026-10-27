@@ -130,3 +130,13 @@ Reviewed all 72 documentation and VS Code screenshots, including enlarged top/bo
 | All six `vscode-extension/images/*.jpg` captures | 1441 × 891 | (0, 0, 1441, 858) | 1441 × 858; desktop taskbar fragments and editor status-bar strip removed |
 
 The application toolbars, drawing areas and relevant editor context remain. PNG crops preserve retained pixels exactly; cropped JPEGs are re-encoded at quality 97 with no chroma subsampling. No UI text, models or design content was reconstructed or generated. The other 63 captures, including the new linked-model renders and existing phone/tablet WebView captures, were unchanged. These are crop corrections to retained captures, not new device or current-version acceptance tests. Original release archives and capture evidence remain unchanged.
+
+
+## SPIKE-inspired viewer refresh (0.12.64, 2026-10-27)
+
+`current/pcb-3d-{dark,light,top}-0.12.64.jpg` uses the same unchanged public PIC Programmer PCB and 19 installed linked STEP/VRML files described above. All 56 model-bearing footprints load; P101–P106 and JP1 have no saved model and their bodies are hidden through the existing population API. No stand-in bodies are presented. These are actual production WebGL pixels with High/AO enabled and the new compact camera/display controls.
+
+`current/pcb-workspace-0.12.64.png` and `schematic-workspace-0.12.64.png` use the actual viewer with the unchanged public demo and local mock repository transport. They show the refined 2D shell; no live provider authentication/posting or native Android acceptance is implied. All five captures are 1440 × 900 with no OS/browser bars or generated imagery. The former 0.12.62 captures remain retained historical evidence.
+
+
+`current/comments-thread-0.12.64.png` (390 × 844) and `comments-workspace-0.12.64.png` (1280 × 800) show the actual production viewer and chat UI with a synthetic footprint fixture and mocked provider thread/publication responses. The test exercises explicit final review before a simulated write, thread draft preservation, message menus, search and responsive sizing. No live account or provider post was used. They are responsive browser previews, not physical Android screenshots, and contain no OS/browser bars.

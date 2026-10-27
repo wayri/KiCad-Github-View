@@ -428,11 +428,37 @@ test('root navigation resolves an initially opened child and rejects reused-pare
 
 test('GitLab viewer isolates host context and exposes provider account and publication controls',async()=>{
  let notes=[];const calls=[];const view=workspaceRuntime(async message=>{calls.push(message);if(message.type==='comment-save'){notes=[message.comment];return message.comment;}if(message.type==='comment-list')return notes;if(message.type==='comment-policy-status')return{allowed:true,mode:'everyone'};return [];},{provider:'gitlab',host:'https://gitlab.example.com',repository:'group/sub/design'});view.load();await new Promise(resolve=>setImmediate(resolve));
- assert.equal(view.get('reviewSettings').hidden,false);assert.equal(view.get('showGitHub').textContent,'GitLab');assert.equal(view.get('postComment').textContent,'Comment');assert.equal(view.get('editorAccount').textContent,'GitLab account');assert.equal(view.get('repositoryIssues').href,'https://gitlab.example.com/group/sub/design/-/issues');
+ assert.equal(view.get('reviewSettings').hidden,false);assert.equal(view.get('showGitHub').textContent,'GitLab');assert.equal(view.get('postComment').attributes['aria-label'],'Review and send');assert.equal(view.get('editorAccount').textContent,'GitLab account');assert.equal(view.get('repositoryIssues').href,'https://gitlab.example.com/group/sub/design/-/issues');
  view.get('newComment').click();view.get('commentText').value='Check layout';await view.get('saveComment').click();
  assert.match(view.get('commentList').textContent,/Publish to GitLab/);assert.doesNotMatch(view.get('commentList').textContent,/Publish to GitHub/);
  const saved=calls.find(message=>message.type==='comment-save');assert.equal(saved.provider,'gitlab');assert.equal(saved.host,'https://gitlab.example.com');assert.equal(saved.comment.anchor.provider,'gitlab');assert.equal(saved.comment.anchor.host,'https://gitlab.example.com');assert.equal(saved.comment.anchor.repository,'group/sub/design');
  assert.equal(calls.some(message=>message.type.startsWith('github-')),false);assert.equal(calls.find(m=>m.type==='comment-policy-status').host,'https://gitlab.example.com');
+});
+
+test('conversation catalog combines issues and discussions, filters by category and never posts on browse',async()=>{
+ const calls=[],view=workspaceRuntime(async message=>{calls.push(message);if(message.type==='chat-thread-list')return{threads:[{kind:message.kind,number:message.kind==='issue'?7:8,title:message.kind==='issue'?'Connector clearance':'Assembly review',state:'open',author:'reviewer',updatedAt:'2026-10-27T09:00:00Z'}],hasMore:false};return[];});
+ view.load();view.get('showComments').click();await new Promise(setImmediate);
+ assert.deepEqual(calls.filter(message=>message.type==='chat-thread-list').map(message=>message.kind).sort(),['discussion','issue']);
+ assert.match(view.get('commentThreadReader').textContent,/Connector clearance/);assert.match(view.get('commentThreadReader').textContent,/Assembly review/);
+ const category=view.get('commentConversationKind');assert.equal(category.value,'all');category.value='discussion';await category.onchange();
+ assert.doesNotMatch(view.get('commentThreadReader').textContent,/Connector clearance/);assert.match(view.get('commentThreadReader').textContent,/Assembly review/);
+ view.get('newConversation').click();assert.equal(view.get('editorThreadType').value,'discussion');assert.equal(view.get('editorDestination').value,'discussion');
+ assert.equal(view.get('commentComposeTop').closest('#commentComposerMenu').id,'commentComposerMenu');assert.equal(view.get('saveComment').closest('#commentComposerMenu').id,'commentComposerMenu');assert.equal(view.get('commentFormatting').hidden,true);
+ assert.equal(calls.some(message=>['github-publish-comment','comment-publish','chat-message-write'].includes(message.type)),false);view.workspace.dispose();
+});
+
+test('catalog keeps readable results when only one conversation type fails',async()=>{
+ const view=workspaceRuntime(async message=>{if(message.type==='chat-thread-list'){if(message.kind==='discussion')throw Error('Discussions require access.');return{threads:[{kind:'issue',number:7,title:'Retained issue'}],hasMore:false};}return[];});
+ view.load();view.get('showComments').click();await new Promise(setImmediate);assert.match(view.get('commentThreadReader').textContent,/Retained issue/);assert.match(view.get('commentThreadStatus').textContent,/Discussions require access/);assert.equal(view.get('commentThreadStatus').classList.contains('error'),true);view.workspace.dispose();
+});
+
+test('catalog refresh, settings and committed search dismiss More before the next primary action',async()=>{
+ const view=workspaceRuntime(async message=>message.type==='chat-thread-list'?{threads:[],hasMore:false}:[]);view.load();
+ const menu=view.get('commentThreadReader').querySelector('.chat-catalog-more'),body=menu.querySelector('.chat-catalog-menu');
+ menu.open=true;await body.children.find(node=>node.textContent==='Refresh conversations').click();assert.equal(menu.open,false);
+ menu.open=true;body.children.find(node=>node.textContent==='Comment settings').click();assert.equal(menu.open,false);assert.equal(view.get('commentSettings').hidden,false);
+ menu.open=true;const search=body.querySelector('input');let prevented=false;search.onkeydown({key:'Enter',preventDefault(){prevented=true;}});assert.equal(menu.open,false);assert.equal(prevented,true);
+ menu.open=true;view.get('newConversation').click();assert.equal(menu.open,false);assert.equal(view.get('commentEditor').hidden,false);view.workspace.dispose();
 });
 
 test('GitHub collaboration lives in View comments and preserves supported destinations without posting',async()=>{
@@ -442,7 +468,7 @@ test('GitHub collaboration lives in View comments and preserves supported destin
  view.get('githubCommentType').value='discussion';view.get('githubCommentType').onchange();assert.deepEqual(Array.from(view.get('commentDestination').children,e=>e.value),['discussion','existing-discussion']);assert.equal(view.get('discussionCategoryLabel').hidden,false);
  view.get('commentDestination').value='existing-discussion';view.get('commentDestination').onchange();assert.equal(view.get('threadNumberLabel').hidden,false);assert.equal(view.get('discussionCategoryLabel').hidden,true);assert.equal(view.get('threadNumber').placeholder,'Discussion number');
  view.get('githubCommentType').value='issue';view.get('githubCommentType').onchange();assert.deepEqual(Array.from(view.get('commentDestination').children,e=>e.value),['issue','existing-issue','pull-request']);
- view.get('showComments').click();assert.equal(view.get('githubPane').closest('#viewCommentsPane').id,'viewCommentsPane');assert.equal(view.get('commentsPane').hidden,false);assert.equal(calls.some(m=>m.type==='github-publish-comment'),false);
+ view.get('showComments').click();assert.equal(view.get('githubPane').closest('#commentSettings').id,'commentSettings');assert.equal(view.get('commentsPane').hidden,false);assert.equal(calls.some(m=>m.type==='github-publish-comment'),false);
 });
 test('standalone viewer never offers current PR and VS Code remote collaboration remains unavailable',async()=>{
  const github=workspaceRuntime();assert.deepEqual(Array.from(github.get('commentDestination').children,e=>e.value),['issue','existing-issue']);

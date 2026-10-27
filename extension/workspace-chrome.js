@@ -1,7 +1,7 @@
 /* Shared web/VS Code presentation. Existing controllers still own every action. */
 ((root)=>{'use strict';
  const installations=new WeakMap();
- const secondary=['filterTestpoints','highlightTestpoints','openBoardAnalytics','openRepositoryExplorer','openCalculators','openEngineeringTools','openReviewHandoff'];
+ const secondary=['openTestpoints','filterTestpoints','highlightTestpoints','populationHighlight','toggleRuleMarkers','openBoardAnalytics','openRepositoryExplorer','openCalculators','openEngineeringTools','openReviewHandoff','settingsButton','themeButton','openSavedReports','openBomManager','viewRuleChecks'];
  function install(doc,host=root){
   if(host.KiCadAndroidRuntime||doc.body.classList.contains('android-design'))return null;
   doc.body.setAttribute('data-workspace-chrome','');
@@ -15,14 +15,22 @@
   const trigger=create('button','workspace-more-tools icon-only','More tools');trigger.type='button';trigger.id='workspaceMoreTools';trigger.title='More tools';trigger.setAttribute('aria-label','More tools');trigger.setAttribute('aria-expanded','false');trigger.setAttribute('aria-controls',menu.id);trigger.setAttribute('data-icon','tools');
   const moved=[];
   const quick=create('div','workspace-quick-tools');
-  for(const [id,label,icon]of [['measureButton','Measure','ruler'],['viewRuleChecks','Rules','rules'],['mode3d','3D','cube'],['openBomManager','BoM','assembly'],['openSavedReports','Reports','analytics']]){
+  for(const [id,label,icon]of [['measureButton','Measure','ruler'],['viewRuleChecks','Rules','rules'],['openBomManager','BoM','assembly'],['openSavedReports','Reports','analytics']]){
    const action=create('button','',label);action.type='button';action.setAttribute('data-icon',icon);action.title=label;action.setAttribute('aria-label',label==='Reports'?'Saved analysis and KiCad Monkey reports':label==='Rules'?'Rules and ERC or DRC findings':label==='3D'?'Switch 2D and 3D view':label);
    action.onclick=()=>{const target=doc.getElementById(id);if(target&&!target.disabled&&!target.hidden)target.click();};action.dataset.target=id;quick.append(action);
   }menu.append(quick);
   const search=create('input','workspace-tool-search');search.type='search';search.placeholder='Find a tool…';search.setAttribute('aria-label','Find drawing tool');menu.append(search);
-  for(const id of secondary){const node=doc.getElementById(id);if(!node||node.parentNode!==rail)continue;
-   moved.push({node,parent:node.parentNode,next:node.nextSibling});menu.append(node);
+  function move(node,parent,before=null){moved.push({node,parent:node.parentNode,next:node.nextSibling});parent.insertBefore(node,before);}
+  function reconcile(){
+   for(const id of secondary){const node=doc.getElementById(id);if(node?.parentNode===rail)move(node,menu);}
+   const mode=doc.getElementById('mode3d');if(mode?.parentNode===rail){mode.classList.remove('icon-only');mode.classList.add('workspace-mode-switch');mode.title='Toggle 3D board view';mode.setAttribute('aria-label','3D board view');const anchor=doc.getElementById('reviewToolsButton');move(mode,toolbar,anchor?.parentNode===toolbar?anchor:null);}
+   const compatibility=toolbar.querySelector('.compatibility-button');if(compatibility)move(compatibility,menu);
   }
+  reconcile();
+  // Controllers add some tools after project loading; keep those in the same
+  // overflow surface without replacing nodes or their source-bound handlers.
+  const observer=host.MutationObserver?new host.MutationObserver(reconcile):null;
+  observer?.observe(rail,{childList:true});observer?.observe(toolbar,{childList:true});
   const settings=doc.getElementById('settingsButton');rail.insertBefore(trigger,settings?.parentNode===rail?settings:null);doc.body.append(menu);
   function close(restore=false){if(menu.hidden)return;menu.hidden=true;trigger.setAttribute('aria-expanded','false');if(restore)trigger.focus();}
   function place(){if(menu.hidden)return;const rect=trigger.getBoundingClientRect();menu.style.right=Math.max(8,host.innerWidth-rect.left+6)+'px';menu.style.top=Math.max(8,Math.min(rect.top,host.innerHeight-menu.offsetHeight-8))+'px';}
@@ -43,7 +51,7 @@
   const selection=doc.getElementById('selectionMode');if(selection){selection.setAttribute('aria-label','Select parts or nets');selection.options[0].textContent='Smart select';selection.options[1].textContent='Parts';selection.options[2].textContent='Nets';}
   const options=doc.getElementById('reviewToolsButton');if(options){options.classList.add('workspace-view-options');options.setAttribute('data-icon','settings');options.setAttribute('aria-label','View options, variants and rendering notes');options.title='View options, variants and rendering notes';}
   host.KiCadUIIcons?.decorate?.(trigger);host.KiCadUIIcons?.decorate?.(quick);host.KiCadUIIcons?.decorate?.(options);
-  const instance={close,dispose(){close();doc.removeEventListener('pointerdown',outside);doc.removeEventListener('keydown',keys,true);host.removeEventListener('resize',place);for(const item of moved.reverse())item.parent.insertBefore(item.node,item.next?.parentNode===item.parent?item.next:null);menu.remove();trigger.remove();display.remove();installations.delete(toolbar);}};
+  const instance={close,dispose(){observer?.disconnect();close();doc.removeEventListener('pointerdown',outside);doc.removeEventListener('keydown',keys,true);host.removeEventListener('resize',place);for(const item of moved.reverse())item.parent.insertBefore(item.node,item.next?.parentNode===item.parent?item.next:null);menu.remove();trigger.remove();display.remove();installations.delete(toolbar);}};
   installations.set(toolbar,instance);return instance;
  }
  if(typeof module==='object'&&module.exports){module.exports={install,secondary};return;}

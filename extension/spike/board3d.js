@@ -28,6 +28,7 @@ import { createResultOverlay } from "./result3d.js";
 import { sourceZoneGeometry,drillLoopInsideBoard } from "./sourceGeometry.mjs";
 import { nativePadOutline,padSourceDetails,nativeDrillOutline } from "./padGeometry.mjs";
 import { MeasurementSession,distanceLabel } from "./measurement3d.mjs";
+import { boardViewPresets,boardViewPreset } from "./viewPresets.mjs";
 export { mountResultScene } from "./result3d.js";
 
 const STYLE = `
@@ -39,20 +40,21 @@ const STYLE = `
     --accent:#336ac2;--muted:#616d80;--button:#edf0f5;--button-border:#d9dee7;--button-ink:#252c38;
     --hint:#ffffffed;--panel:#fffffff2;--menu:#fff;--notice:#fff}
   *{box-sizing:border-box}.shell{display:flex;flex-direction:column;width:100%;height:100%;min-height:0;background:var(--surface)}
-  .bar{display:flex;align-items:center;gap:7px;min-height:36px;padding:3px 8px;background:var(--bar);border-bottom:1px solid var(--border);flex-wrap:nowrap;overflow-x:auto;scrollbar-width:thin;flex-shrink:0}
-  .title{font-weight:600;color:var(--ink);white-space:nowrap}.detail{font-size:11px;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--muted)}.spacer{flex:1}
-  button,select{background:var(--button);border:1px solid var(--button-border);color:var(--button-ink);padding:4px 8px;border-radius:5px;font:500 11px system-ui;min-height:28px;cursor:pointer;flex-shrink:0}
-  button:hover{border-color:var(--accent)}button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
-  label{display:flex;align-items:center;gap:4px;white-space:nowrap;color:var(--muted);font-size:11px}input{accent-color:var(--accent)}.quality-label{margin-left:3px}.visibility{position:relative;flex-shrink:0}.visibility summary{cursor:pointer;padding:5px 8px;border-radius:5px;color:var(--muted);font-size:11px}.visibility[open] summary{background:var(--button)}.visibility-options{position:fixed;right:8px;top:38px;z-index:6;display:grid;gap:10px;padding:12px;background:var(--menu);border:1px solid var(--border);border-radius:7px;box-shadow:0 8px 22px #0004}.visibility-options input{width:16px;height:16px}
+  .bar{display:flex;align-items:center;gap:6px;min-height:40px;padding:5px 10px;background:var(--bar);border-bottom:1px solid var(--border);flex-wrap:nowrap;flex-shrink:0;min-width:0}
+  .title{font-size:10px;font-weight:650;letter-spacing:.07em;color:var(--muted);white-space:nowrap}.detail{font-size:11px;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--muted)}.spacer{flex:1;min-width:0}
+  button,select{background:var(--button);border:1px solid var(--button-border);color:var(--button-ink);padding:4px 8px;border-radius:5px;font:500 11px/1.4 system-ui;min-height:28px;cursor:pointer;flex-shrink:0}
+  button:hover,select:hover{border-color:var(--accent)}button:focus-visible,select:focus-visible,input:focus-visible,summary:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+  .bar button{display:inline-flex;align-items:center;justify-content:center;gap:5px;background:transparent;border-color:transparent}.bar button:hover,.bar button[aria-expanded=true]{background:var(--button);border-color:var(--button-border)}.bar svg{width:15px;height:15px;flex-shrink:0}.view-select{max-width:105px;background:transparent}.bar .divider{width:1px;height:18px;background:var(--border);flex-shrink:0}
+  label{display:flex;align-items:center;gap:7px;white-space:nowrap;color:var(--muted);font-size:11px}input{accent-color:var(--accent)}.visibility-options{position:absolute;right:10px;top:10px;z-index:6;width:min(260px,calc(100% - 20px));max-height:calc(100% - 20px);overflow:auto;padding:12px;background:var(--menu);border:1px solid var(--border);border-radius:8px;box-shadow:0 8px 24px #0004;display:grid;gap:12px}.visibility-options[hidden]{display:none}.visibility-options fieldset{min-width:0;margin:0;padding:0;border:0;display:grid;gap:9px}.visibility-options fieldset+fieldset{border-top:1px solid var(--border);padding-top:12px}.visibility-options legend{padding:0 0 8px;color:var(--muted);font-size:10px;font-weight:650;letter-spacing:.06em;text-transform:uppercase}.visibility-options select{min-width:0;width:130px;margin-left:auto}.visibility-options input{width:16px;height:16px;margin:0}.display-heading{display:flex;align-items:center;justify-content:space-between;font-weight:600}.display-heading button{min-height:24px;padding:1px 6px}.quality-help{margin:0;color:var(--muted);font-size:10px;line-height:1.5}
   .stage{position:relative;flex:1;min-height:0;overflow:hidden}.canvas{position:absolute;inset:0}.canvas canvas{display:block;width:100%;height:100%}
-  .hint{position:absolute;left:12px;bottom:10px;padding:5px 8px;border:1px solid var(--border);border-radius:5px;background:var(--hint);color:var(--ink);pointer-events:none}
+  .hint{padding:4px 10px;color:var(--muted);background:var(--bar);font-size:10px;border-top:1px solid var(--border);flex-shrink:0}
   .inspector{position:absolute;right:12px;bottom:12px;width:min(280px,45%);max-height:50%;overflow:auto;background:var(--panel);border:1px solid var(--border);border-radius:7px;padding:10px;box-shadow:0 8px 28px #0005}
   .inspector[hidden],.menu[hidden]{display:none}.inspector h2{font-size:13px;margin:0 0 6px;color:var(--accent)}.inspector dl{display:grid;grid-template-columns:auto 1fr;gap:3px 8px;margin:0}.inspector dt{color:var(--muted)}.inspector dd{margin:0;overflow-wrap:anywhere}
   .menu{position:absolute;z-index:4;display:grid;gap:3px;padding:5px;border:1px solid var(--border);border-radius:5px;background:var(--menu);box-shadow:0 7px 25px #0005}
   .notice{padding:3px 9px;background:var(--notice);color:var(--muted);font-size:10px;border-top:1px solid var(--border);flex-shrink:0}.notice details{display:inline;margin-left:8px}.notice summary{display:inline;cursor:pointer;color:var(--accent)}.notice details[open]{display:block;margin:6px 0 0}.notice ul{max-height:120px;overflow:auto;margin:6px 0;padding-left:16px;line-height:1.6}.quality-notice{position:absolute;left:12px;right:12px;top:10px;z-index:7;padding:10px 12px;border:1px solid #bf725c;border-radius:7px;background:var(--panel);color:var(--ink);font-size:12px;max-width:560px}.quality-notice[hidden]{display:none}.quality-notice button{margin:6px 0 0 8px}
   button[aria-pressed=true]{border-color:var(--accent);color:var(--accent)}.measurement-panel{position:absolute;bottom:10px;left:10px;z-index:5;width:min(350px,calc(100% - 20px));padding:10px 12px;border:1px solid var(--border);border-radius:8px;background:var(--panel);box-shadow:0 4px 18px #0003;display:grid;gap:6px}.measurement-panel[hidden],.measurement-label[hidden]{display:none}.measurement-heading{display:flex;align-items:center;gap:6px}.measurement-heading strong{font-size:12px;margin-right:auto}.measurement-panel output{font:600 18px/1.3 system-ui;color:var(--ink);font-variant-numeric:tabular-nums}.measurement-panel small{color:var(--muted);font-size:10px}.measurement-panel .measurement-tools{display:flex;align-items:center;gap:6px}.measurement-panel .measurement-tools select{min-width:0;flex:1}.measurement-panel p{margin:0;color:var(--muted);font-size:11px}.measurement-label{position:absolute;z-index:4;pointer-events:none;padding:4px 7px;border:1px solid #c5a35f;border-radius:5px;background:var(--panel);color:var(--ink);font:600 12px/1.4 system-ui;white-space:nowrap;box-shadow:0 2px 8px #0004}:host([data-measuring=true]) .hint{display:none}
-  @media(max-width:700px){.detail{display:none}.bar{gap:4px}.hint{display:none}.inspector{width:min(260px,65%)}.quality-label>span{display:none}}
-  @media(pointer:coarse){button,select,.visibility summary{min-height:40px}.bar{min-height:44px}.visibility-options{top:46px}.visibility-options label{min-height:32px}}
+  @media(max-width:700px){.detail{display:none}.bar{gap:4px;padding-inline:6px}.hint{display:none}.inspector{width:min(260px,65%)}}@media(max-width:380px){.title{display:none}.bar{gap:2px}.bar button{padding-inline:5px}.view-select{max-width:90px}}
+  @media(pointer:coarse){button,select{min-height:40px}.bar{min-height:50px}.visibility-options label{min-height:32px}}
 `;
 
 function pathFor(points, transform) {
@@ -119,23 +121,28 @@ export function mountBoard3D(container, source, options = {}) {
   const notice = document.createElement("div"); notice.className = "notice";
   notice.textContent = "Material preview · mask openings follow saved pad layer flags · footprint stand-ins where linked models are unavailable.";
   const qualityNotice=document.createElement('div');qualityNotice.className='quality-notice';qualityNotice.hidden=true;qualityNotice.setAttribute('role','status');stage.append(qualityNotice);
-  stage.append(canvasHost, hint, inspector, menu); shell.append(bar, stage, notice); shadow.append(style, shell); container.append(host);
+  stage.append(canvasHost, inspector, menu); shell.append(bar, stage, hint, notice); shadow.append(style, shell); container.append(host);
 
-  const title = document.createElement("strong"); title.className = "title"; title.textContent = "3D board";
+  const title = document.createElement("strong"); title.className = "title"; title.textContent = "3D VIEW";
   const detail = document.createElement("span"); detail.className = "detail";
   detail.textContent = `${board.width.toFixed(1)} × ${board.height.toFixed(1)} mm · ${board.components.length} parts · ${board.tracks.length} tracks`;
   const spacer = document.createElement("span"); spacer.className = "spacer";
-  function action(label, handler) {
-    const button = document.createElement("button"); button.type = "button"; button.textContent = label;
+  function action(label, handler, path, tooltip=label) {
+    const button = document.createElement("button"); button.type = "button"; button.title=tooltip;button.setAttribute('aria-label',tooltip);
+    if(path){const svg=document.createElementNS('http://www.w3.org/2000/svg','svg'),shape=document.createElementNS('http://www.w3.org/2000/svg','path');svg.setAttribute('viewBox','0 0 24 24');svg.setAttribute('fill','none');svg.setAttribute('stroke','currentColor');svg.setAttribute('stroke-width','1.6');svg.setAttribute('stroke-linecap','round');svg.setAttribute('stroke-linejoin','round');svg.setAttribute('aria-hidden','true');shape.setAttribute('d',path);svg.append(shape);button.append(svg);}
+    const caption=document.createElement('span');caption.textContent=label;button.append(caption);
     button.addEventListener("click",()=>{handler();invalidate();}); bar.append(button); return button;
   }
-  const visibility=document.createElement('details');visibility.className='visibility';
-  const visibilityLabel=document.createElement('summary');visibilityLabel.textContent='Layers';
-  const visibilityOptions=document.createElement('div');visibilityOptions.className='visibility-options';visibility.append(visibilityLabel,visibilityOptions);
+  const visibilityOptions=document.createElement('section');visibilityOptions.className='visibility-options';visibilityOptions.id='display-options';visibilityOptions.hidden=true;visibilityOptions.setAttribute('aria-label','3D display settings');stage.append(visibilityOptions);
+  const displayHeading=document.createElement('div');displayHeading.className='display-heading';displayHeading.append(document.createTextNode('Display'));
+  const displayClose=document.createElement('button');displayClose.type='button';displayClose.textContent='×';displayClose.title='Close display settings';displayClose.setAttribute('aria-label','Close display settings');displayClose.onclick=()=>setDisplayOpen(false,true);displayHeading.append(displayClose);
+  const renderingOptions=document.createElement('fieldset'),renderingLegend=document.createElement('legend');renderingLegend.textContent='Rendering';renderingOptions.append(renderingLegend);
+  const layerOptions=document.createElement('fieldset'),layerLegend=document.createElement('legend');layerLegend.textContent='Visible geometry';layerOptions.append(layerLegend);visibilityOptions.append(displayHeading,renderingOptions,layerOptions);
+  function setDisplayOpen(open,restoreFocus=false){visibilityOptions.hidden=!open;displayButton.setAttribute('aria-expanded',String(open));if(restoreFocus)displayButton.focus();}
   function toggle(label, initial, handler) {
     const wrapper = document.createElement("label"), input = document.createElement("input");
     input.type = "checkbox"; input.checked = initial; input.addEventListener("change", () => {handler(input.checked);invalidate();});
-    wrapper.append(input, document.createTextNode(label)); visibilityOptions.append(wrapper); return input;
+    wrapper.append(input, document.createTextNode(label)); layerOptions.append(wrapper); return input;
   }
   bar.append(title, detail, spacer);
   const qualityKey='pocket-kivi:3d-quality:v1';let initialQuality='balanced';
@@ -156,6 +163,9 @@ export function mountBoard3D(container, source, options = {}) {
   const top = thickness / 2, bottom = -top;
   const scene = new THREE.Scene(); scene.background = new THREE.Color(initialDark ? 0x151820 : 0xe7ebf1);
   const camera = new THREE.PerspectiveCamera(45, 1, 0.1, Math.max(3000, extent * 30));
+  // OrbitControls captures its up basis at construction. Use the board's
+  // thickness axis consistently for orbiting and all fitted camera presets.
+  camera.up.set(0,0,1);
   const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false, powerPreference: "high-performance" });
   let active=true,frame=0,contextLost=false,renderCount=0,pipeline=null,quality=initialQuality,shaderFailure=false;
   const constrained=Boolean(globalThis.matchMedia?.('(pointer:coarse)').matches||globalThis.navigator?.deviceMemory&&globalThis.navigator.deviceMemory<=4);
@@ -227,7 +237,8 @@ export function mountBoard3D(container, source, options = {}) {
   const appearanceRecords=[];let realistic=true;
   const appearanceLabel=document.createElement('label');appearanceLabel.append(document.createTextNode('Appearance'));
   const appearanceSelect=document.createElement('select');appearanceSelect.setAttribute('aria-label','3D board appearance');
-  for(const [value,label]of [['realistic','Realistic'],['layers','Layer colors']]){const option=document.createElement('option');option.value=value;option.textContent=label;appearanceSelect.append(option);}appearanceLabel.append(appearanceSelect);visibilityOptions.append(appearanceLabel);
+  for(const [value,label]of [['realistic','Realistic'],['layers','Layer colors']]){const option=document.createElement('option');option.value=value;option.textContent=label;appearanceSelect.append(option);}appearanceLabel.append(appearanceSelect);
+  const qualityHelp=document.createElement('p');qualityHelp.className='quality-help';qualityHelp.textContent='High adds ambient occlusion and enhanced antialiasing. Linked model availability is shown below the viewport.';renderingOptions.append(appearanceLabel,qualityLabel,qualityHelp);
   function applyAppearance(){for(const record of appearanceRecords){const {mesh,role,layer}=record;
     if(role==='pads'){mesh.material.color.setHex(0xffffff);record.pads.forEach((pad,index)=>mesh.setColorAt(index,new THREE.Color(realistic?(padHasMaskOpening(pad,layer)?physicalColors.exposedCopper:physicalColors.coatedCopper):layerThreeColor(layer))));if(mesh.instanceColor)mesh.instanceColor.needsUpdate=true;}
     else mesh.material.color.setHex(realistic?physicalColors.coatedCopper:layerThreeColor(layer));
@@ -480,22 +491,25 @@ export function mountBoard3D(container, source, options = {}) {
     camera.updateProjectionMatrix();
     invalidate();
   }
-  function fit(topView = false) {
+  function fit(view = 'iso') {
     sizeViewport();
     boardGroup.updateWorldMatrix(true, true);
     const bounds=new THREE.Box3().setFromObject(boardGroup),sphere = bounds.getBoundingSphere(new THREE.Sphere());
     const radius = Number.isFinite(sphere.radius) && sphere.radius > 0 ? sphere.radius : Math.hypot(width, height, thickness + 5) / 2;
     const center = sphere.radius > 0 ? sphere.center : new THREE.Vector3();
-    const direction = new THREE.Vector3(topView ? 0 : .45, topView ? 0 : -.38, 1).normalize();
-    const distance = boxFitDistance(bounds.getSize(new THREE.Vector3()).toArray(),direction.toArray(),camera.fov,camera.aspect)||sphereFitDistance(radius, camera.fov, camera.aspect) || extent * 3;
+    const preset=boardViewPreset(view),direction = new THREE.Vector3(...preset.direction).normalize();
+    const distance = boxFitDistance(bounds.getSize(new THREE.Vector3()).toArray(),direction.toArray(),camera.fov,camera.aspect,.85,preset.up)||sphereFitDistance(radius, camera.fov, camera.aspect) || extent * 3;
     fittedRadius = radius;
     controls.maxDistance = Math.max(extent * 8, distance * 4);
     camera.position.copy(center).addScaledVector(direction, distance);
-    camera.up.set(0, 1, 0); controls.target.copy(center); controls.update(); updateClipping();
+    camera.up.fromArray(preset.up); controls.target.copy(center); controls.update(); updateClipping();
   }
-  action("Fit", () => fit()); action("Top", () => fit(true));
-  const measureButton=action('Measure',()=>setMeasurementMode(!measuring));measureButton.setAttribute('aria-pressed','false');measureButton.setAttribute('aria-label','Measure distance between 3D surfaces');measureButton.title='Measure between two visible 3D surface points';
-  bar.append(qualityLabel,visibility);
+  action("Fit", () => {userAdjustedCamera=true;fit();},'M8 3H3v5M16 3h5v5M21 16v5h-5M8 21H3v-5M8 8h8v8H8Z','Fit board to viewport');
+  const viewSelect=document.createElement('select');viewSelect.className='view-select';viewSelect.title='Choose a board viewing side';viewSelect.setAttribute('aria-label','3D camera view');const viewPrompt=document.createElement('option');viewPrompt.value='';viewPrompt.disabled=true;viewPrompt.textContent='View';viewSelect.append(viewPrompt);
+  for(const {id,label}of boardViewPresets){const item=document.createElement('option');item.value=id;item.textContent=label;viewSelect.append(item);}viewSelect.value='';viewSelect.onchange=()=>{userAdjustedCamera=true;fit(viewSelect.value);viewSelect.value='';};bar.append(viewSelect);
+  const divider=document.createElement('span');divider.className='divider';divider.setAttribute('aria-hidden','true');bar.append(divider);
+  const measureButton=action('Measure',()=>setMeasurementMode(!measuring),'M3 17 17 3l4 4L7 21ZM7 13l3 3M10 10l2 2M13 7l3 3','Measure distance between 3D surfaces');measureButton.setAttribute('aria-pressed','false');
+  const displayButton=action('Display',()=>setDisplayOpen(visibilityOptions.hidden),'M3 6h18M3 12h18M3 18h18M7 3v6M17 9v6M10 15v6','3D display settings');displayButton.setAttribute('aria-expanded','false');displayButton.setAttribute('aria-controls',visibilityOptions.id);
   toggle("Front copper", true, (visible) => { groupFor("F.Cu").visible = visible; });
   toggle("Back copper", true, (visible) => { groupFor("B.Cu").visible = visible; });
   toggle("Parts", true, (visible) => { parts.visible = visible; renderer.shadowMap.needsUpdate=true; });
@@ -735,9 +749,9 @@ export function mountBoard3D(container, source, options = {}) {
   const onContextRestored=()=>{if(!active)return;contextLost=false;qualitySelect.disabled=false;disposePipeline();environment?.dispose();environment=createEnvironment();scene.environment=environment?.texture||null;renderer.shadowMap.needsUpdate=true;quality='balanced';qualitySelect.value=quality;host.dataset.quality=quality;graphicsNotice('Graphics restored. Balanced rendering is active; High quality can be selected again.');sizeViewport();invalidate();};
   renderer.domElement.addEventListener('webglcontextlost',onContextLost);
   renderer.domElement.addEventListener('webglcontextrestored',onContextRestored);
-  const closeVisibility=event=>{if(!event.composedPath().includes(visibility))visibility.open=false;};
-  const escapeVisibility=event=>{if(event.key==='Escape'&&visibility.open){visibility.open=false;visibilityLabel.focus();event.stopPropagation();}};
-  document.addEventListener('pointerdown',closeVisibility);shadow.addEventListener('keydown',escapeVisibility);
+  const closeVisibility=event=>{const path=event.composedPath();if(!path.includes(displayButton)&&!path.includes(visibilityOptions))setDisplayOpen(false);};
+  const escapeVisibility=event=>{if(event.key==='Escape'&&!visibilityOptions.hidden){setDisplayOpen(false,true);event.preventDefault();event.stopImmediatePropagation();}};
+  document.addEventListener('pointerdown',closeVisibility);shadow.addEventListener('keydown',escapeVisibility,true);
   applyQuality(initialQuality,false);
   void loadRepositoryModels();
   return { host, board,
@@ -764,6 +778,7 @@ export function mountBoard3D(container, source, options = {}) {
     setAnalysisOpacity(value) { analysisOverlay?.setOpacity(value);invalidate(); },
     setSelection,
     fit(topView=false){if(active)fit(topView);},
+    setView(view){if(!active||!boardViewPresets.some(preset=>preset.id===view))return false;userAdjustedCamera=true;fit(view);return true;},
     zoom(factor){if(!active||!Number.isFinite(factor)||factor<=0)return;const offset=camera.position.clone().sub(controls.target);const distance=Math.max(controls.minDistance,Math.min(controls.maxDistance,offset.length()/factor));if(offset.length()>0)camera.position.copy(controls.target).add(offset.setLength(distance));controls.update();},
     setTheme(dark) {
       if (!active) return;
@@ -803,7 +818,7 @@ export function mountBoard3D(container, source, options = {}) {
         if (index != null && !population[index]) clearSelection();
       }
     },
-    dispose() { if(measuring)options.onMeasurementMode?.(false);active = false; analysisOverlay?.dispose(); stepClient?.dispose(); cancelAnimationFrame(frame); cancelAnimationFrame(layoutFrame); observer.disconnect();controls.removeEventListener('change',invalidate); controls.removeEventListener("change", updateClipping); controls.removeEventListener("start", cameraInteraction); controls.dispose();disposePipeline();environment?.dispose();renderer.domElement.removeEventListener('webglcontextlost',onContextLost);renderer.domElement.removeEventListener('webglcontextrestored',onContextRestored);document.removeEventListener('pointerdown',closeVisibility);shadow.removeEventListener('keydown',escapeVisibility);shadow.removeEventListener('keydown',escapeMeasurement);
+    dispose() { if(measuring)options.onMeasurementMode?.(false);active = false; analysisOverlay?.dispose(); stepClient?.dispose(); cancelAnimationFrame(frame); cancelAnimationFrame(layoutFrame); observer.disconnect();controls.removeEventListener('change',invalidate); controls.removeEventListener("change", updateClipping); controls.removeEventListener("start", cameraInteraction); controls.dispose();disposePipeline();environment?.dispose();renderer.domElement.removeEventListener('webglcontextlost',onContextLost);renderer.domElement.removeEventListener('webglcontextrestored',onContextRestored);document.removeEventListener('pointerdown',closeVisibility);shadow.removeEventListener('keydown',escapeVisibility,true);shadow.removeEventListener('keydown',escapeMeasurement);
     const resources = new Set(); scene.traverse((object) => {object.shadow?.dispose?.(); if (object.geometry) resources.add(object.geometry);
       const materials = Array.isArray(object.material) ? object.material : object.material ? [object.material] : [];
       materials.forEach((item) => resources.add(item)); }); resources.forEach((item) => item.dispose()); hold.dispose(); renderer.dispose(); host.remove(); } };

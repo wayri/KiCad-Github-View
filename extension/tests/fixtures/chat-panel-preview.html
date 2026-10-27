@@ -1,0 +1,20 @@
+<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Conversation UI fixture</title>
+<link rel="stylesheet" href="../../revision-viewer.css"><link rel="stylesheet" href="../../chat-panel.css">
+<style>html,body{margin:0;width:100%;height:100%;overflow:hidden}body{background:var(--panel)}#commentsSidebar{display:flex!important;position:relative!important;inset:auto!important;width:100%!important;max-width:none!important;height:100%;box-sizing:border-box;border:0;box-shadow:none}#commentsPane{flex:1;width:100%;height:100%;box-sizing:border-box}#commentThreadMessages{height:100%}</style></head>
+<body><aside id="commentsSidebar" class="chat-active"><section id="commentsPane" class="chat-active"><div id="commentThreadMessages"></div></section></aside>
+<script src="../../review-comments.js"></script><script src="../../comment-compose.js"></script><script src="../../chat-content.js"></script><script src="../../chat-panel.js"></script>
+<script>
+'use strict';
+const scope={repository:'example/power-board',ref:'a'.repeat(40),file:'power.kicad_pcb'};
+window.fixtureWrites=[];window.fixtureConfirmations=[];
+window.fixturePanel=KiCadChatPanel.mount({container:document.getElementById('commentThreadMessages'),repository:scope.repository,getScope:()=>scope,onBack:()=>{},onClose:()=>{},onAccount:()=>{},onSettings:()=>{},
+ request:async(type,value)=>{if(type==='chat-message-write')fixtureWrites.push(value);return type==='comment-mention-users'?{users:[{login:'mira',name:'Mira Khan'}]}:{};},
+ confirmSend:async value=>{fixtureConfirmations.push(value);return false;},onRead:async()=>true,onSaveTextDraft:async()=>{},
+ createAnnotation:(text,value)=>KiCadReviewComments.validateComment({id:value.id,text,createdAt:'2026-10-27T09:30:00Z',severity:value.severity,state:value.state,anchor:{...scope,reference:'U3',kind:'footprint',uuid:'fixture-u3'}})
+});
+fixturePanel.render({kind:'issue',number:24,title:'Power stage review',state:'open',id:'24',author:'mira',body:'The placement update is ready for review. Please check the return path around **U3** before we close this issue.',createdAt:'2026-10-27T09:00:00Z',comments:[
+ {id:'101',author:'alex',body:'The ground connection looks clear in 2D. Can we move the test point slightly away from the connector?',createdAt:'2026-10-27T09:08:00Z',updatedAt:'2026-10-27T09:08:00Z',canReply:true},
+ {id:'102',author:'mira',body:'Yes — I have marked the area.\n\n- Keep the probe clearance\n- Recheck the 3D enclosure fit',createdAt:'2026-10-27T09:12:00Z',updatedAt:'2026-10-27T09:12:00Z',canReply:true,canEdit:true},
+ {id:'103',author:'alex',body:'Thanks. I will check that against the saved board revision.',createdAt:'2026-10-27T09:14:00Z',updatedAt:'2026-10-27T09:14:00Z',canReply:true}
+],capabilities:{create:true,reply:true,edit:true}});
+</script></body></html>

@@ -30,6 +30,7 @@ function harness(overrides={}){
 }
 const thread=(number=1,extra={})=>({kind:'issue',number,title:'Review power stage',state:'open',id:String(number),author:'owner',body:'Root description',createdAt:'2026-10-27T04:00:00.000Z',updatedAt:'2026-10-27T04:00:00.000Z',comments:[{id:'12',author:'reviewer',body:'Check **U3**',createdAt:'2026-10-27T04:10:00.000Z',updatedAt:'2026-10-27T04:10:00.000Z',canReply:true,canEdit:false}],capabilities:{create:true,reply:true,edit:true,reactions:false},...extra});
 const event=(key,extra={})=>({key,preventDefault(){this.prevented=true;},...extra});
+function messageAction(h,className){const action=h.find(className);assert.ok(action);const menu=action.parentElement.parentElement;assert.equal(menu.className,'chat-message-more');assert.equal(menu.parentElement.className,'chat-byline');menu.children[0].onclick(event('click'));assert.equal(menu.open,true);action.onclick();assert.equal(menu.open,false);return action;}
 test('only explicit Send/Ctrl+Enter and approved confirmation post; ordinary Enter keeps multiline input',async()=>{
  const h=harness();h.api.render(thread());const input=h.type('Hello <script>bad()</script>');
  const enter=event('Enter');input.onkeydown(enter);assert.equal(enter.prevented,undefined);assert.equal(h.requests.length,0);
@@ -57,12 +58,12 @@ test('ten dirty thread drafts are never silently evicted; Save all uses original
 test('message markup is inert, reply targets are explicit and edit actions honor verified permissions',async()=>{
  const own={id:'13',author:'me',body:'My original',createdAt:'2026-10-27T04:20:00.000Z',updatedAt:'2026-10-27T04:20:00.000Z',canReply:true,canEdit:true};
  const h=harness();h.api.render(thread(1,{body:'<img src=x onerror=bad()>',comments:[thread().comments[0],own]}));assert.ok(walk(h.container).filter(n=>n.tagName==='IMG').every(n=>n.hidden&&!n.src));assert.match(h.container.textContent,/<img src=x/);
- assert.equal(walk(h.container).filter(n=>n.className==='chat-edit-action').length,1);h.find('chat-reply-action').onclick();h.type('A reply');await h.find('chat-send').onclick();assert.equal(h.requests[0].payload.replyTo,'12');assert.equal(h.requests[0].payload.action,'reply');
- h.find('chat-edit-action').onclick();assert.equal(h.byId('chatMessageText').value,'My original');h.type('Edited');await h.find('chat-send').onclick();assert.equal(h.requests[1].payload.messageId,'13');assert.equal(h.requests[1].payload.expectedUpdatedAt,own.updatedAt);
+ assert.equal(walk(h.container).filter(n=>n.className==='chat-edit-action').length,1);messageAction(h,'chat-reply-action');h.type('A reply');await h.find('chat-send').onclick();assert.equal(h.requests[0].payload.replyTo,'12');assert.equal(h.requests[0].payload.action,'reply');
+ messageAction(h,'chat-edit-action');assert.equal(h.byId('chatMessageText').value,'My original');h.type('Edited');await h.find('chat-send').onclick();assert.equal(h.requests[1].payload.messageId,'13');assert.equal(h.requests[1].payload.expectedUpdatedAt,own.updatedAt);
  h.api.render(thread(2,{capabilities:{create:false,reply:false,edit:false}}));h.type('No permission');await h.find('chat-send').onclick();assert.equal(h.requests.length,2);assert.equal(h.byId('chatMessageText').disabled,true);
 });
 test('stale edits are retained without a write; source-bound context is not silently reanchored',async()=>{
- const own={...thread().comments[0],canEdit:true};const h=harness();h.api.render(thread(1,{comments:[own]}));h.find('chat-edit-action').onclick();h.type('My update');h.api.render(thread(1,{comments:[{...own,updatedAt:'2026-10-27T04:11:00.000Z'}]}));await h.find('chat-send').onclick();assert.equal(h.requests.length,0);assert.match(h.find('chat-status').textContent,/message changed/);assert.equal(h.byId('chatMessageText').value,'My update');
+ const own={...thread().comments[0],canEdit:true};const h=harness();h.api.render(thread(1,{comments:[own]}));messageAction(h,'chat-edit-action');h.type('My update');h.api.render(thread(1,{comments:[{...own,updatedAt:'2026-10-27T04:11:00.000Z'}]}));await h.find('chat-send').onclick();assert.equal(h.requests.length,0);assert.match(h.find('chat-status').textContent,/message changed/);assert.equal(h.byId('chatMessageText').value,'My update');
  h.api.discard();h.type('Drawing note');await h.find('chat-attach-context').onclick();const anchor=h.api.draft().annotation.anchor;
  h.setScope({repository:'owner/board',ref:'a'.repeat(40),file:'other.kicad_sch'});await h.find('chat-send').onclick();assert.equal(h.requests.length,0);assert.deepEqual(h.api.draft().annotation.anchor,anchor);assert.match(h.find('chat-status').textContent,/Source changed/);
 });
@@ -94,7 +95,7 @@ test('source cards link to their validated saved revision even when Locate refus
  h.api.render(thread(1,{body:comments.toMarkdown(note)}));const link=h.find('chat-source-link');assert.equal(link.href,'https://github.com/owner/board/blob/'+('b'.repeat(40))+'/design/power.kicad_sch');assert.equal(link.rel,'noopener noreferrer');h.find('chat-locate').onclick();assert.match(h.find('chat-status').textContent,/another drawing or revision/);
 });
 test('cancelling an edit restores its previous draft and UTF-8 size bounds are enforced before confirmation',async()=>{
- const h=harness();h.api.render(thread(1,{comments:[{...thread().comments[0],canEdit:true}]}));h.type('Existing unsent draft');h.find('chat-edit-action').onclick();h.type('Edit content');h.find('chat-cancel-target').onclick();assert.equal(h.byId('chatMessageText').value,'Existing unsent draft');
+ const h=harness();h.api.render(thread(1,{comments:[{...thread().comments[0],canEdit:true}]}));h.type('Existing unsent draft');messageAction(h,'chat-edit-action');h.type('Edit content');h.find('chat-cancel-target').onclick();assert.equal(h.byId('chatMessageText').value,'Existing unsent draft');
  h.type('😀'.repeat(16000));await h.find('chat-send').onclick();assert.equal(h.requests.length,0);assert.match(h.find('chat-status').textContent,/60,000 UTF-8 bytes/);
 });
 test('new messages preserve reading position and offer Jump latest rather than forcing scroll',()=>{
@@ -135,12 +136,29 @@ test('an old failed refresh cannot overwrite a newly enabled polling schedule',a
 test('compact chat shows only its header icons and +/Send strip until tools are requested',()=>{
  let back=0,settings=0,close=0;const h=harness({onBack:()=>back++,onSettings:()=>settings++,onClose:()=>close++,onAccount:()=>{}});h.api.render(thread());
  assert.equal(h.byId('chatMessageText').rows,2);assert.equal(h.find('chat-search').hidden,true);assert.equal(h.find('chat-options-menu').hidden,true);assert.equal(h.find('chat-composer-options').hidden,true);
- assert.deepEqual(h.find('chat-compose-actions').children.map(node=>node.className),['chat-attachment-toggle','chat-send']);
+ assert.deepEqual(h.find('chat-compose-actions').children.map(node=>node.className),['chat-attachment-toggle','chat-format-toggle','chat-send']);
+ assert.deepEqual(h.find('chat-header').children.map(node=>node.className),['chat-back','chat-heading','chat-options-toggle']);
+ assert.equal(h.find('chat-thread-meta').parentElement,h.find('chat-options-menu'));assert.equal(h.find('chat-search-toggle').parentElement,h.find('chat-options-menu'));assert.equal(h.find('chat-close').parentElement,h.find('chat-options-menu'));assert.equal(h.find('chat-format-tools').hidden,true);assert.equal(h.find('chat-send').getAttribute('aria-label'),'Review and send');
  assert.equal(h.find('chat-refresh').parentElement,h.find('chat-options-menu'));assert.equal(h.find('chat-account').parentElement,h.find('chat-options-menu'));assert.equal(h.byId('chatAutoRefresh').parentElement.parentElement,h.find('chat-options-menu'));
  assert.equal(h.find('chat-save-draft').parentElement,h.find('chat-composer-options'));assert.equal(h.find('chat-attach-context').parentElement.parentElement,h.find('chat-composer-options'));
  assert.equal(h.find('chat-back').textContent,'‹');assert.equal(h.find('chat-back').getAttribute('aria-label'),'Conversations');assert.equal(h.find('chat-close').getAttribute('aria-label'),'Close conversation pane');
  h.find('chat-back').onclick();h.find('chat-close').onclick();assert.equal(back,1);assert.equal(close,1);
  h.find('chat-options-toggle').onclick();assert.equal(h.find('chat-options-menu').hidden,false);h.find('chat-settings').onclick();assert.equal(settings,1);assert.equal(h.find('chat-options-menu').hidden,true);
+});
+
+test('formatting is optional, edits the selected text, preserves focus and never posts',()=>{
+ const h=harness();h.api.render(thread());const input=h.type('Check U3 now');input.setSelectionRange(6,8);
+ h.find('chat-format-toggle').onclick();assert.equal(h.find('chat-format-tools').hidden,false);assert.equal(h.find('chat-format-toggle').getAttribute('aria-expanded'),'true');
+ h.find('chat-format-tools').children[0].onclick();assert.equal(input.value,'Check **U3** now');assert.equal(h.api.draft().text,input.value);assert.equal(h.doc.activeElement,input);assert.equal(h.requests.length,0);
+ h.find('chat-format-toggle').onclick();assert.equal(h.find('chat-format-tools').hidden,true);assert.equal(input.value,'Check **U3** now');
+});
+
+test('optional pane pin action stays in More, follows host state and never sends requests',()=>{
+ const standalone=harness();standalone.api.render(thread());assert.equal(standalone.find('chat-pin').hidden,true);
+ let pinned=false,calls=0;const h=harness({onPin:()=>{pinned=!pinned;calls++;},isPinned:()=>pinned});h.api.render(thread());
+ const pin=h.find('chat-pin');assert.equal(pin.parentElement,h.find('chat-options-menu'));h.find('chat-options-toggle').onclick();assert.equal(pin.textContent,'Pin pane');pin.onclick();assert.equal(pinned,true);assert.equal(pin.textContent,'Unpin pane');assert.equal(pin.getAttribute('aria-pressed'),'true');assert.equal(h.find('chat-options-menu').hidden,true);
+ h.find('chat-options-toggle').onclick();pin.onclick();assert.equal(pinned,false);assert.equal(pin.textContent,'Pin pane');assert.equal(calls,2);assert.equal(h.requests.length,0);
+ pinned=true;h.find('chat-options-toggle').onclick();assert.equal(pin.textContent,'Unpin pane');assert.equal(h.find('chat-header').children.length,3);
 });
 test('tool popovers dismiss outside or Escape, search resets on close, and closing options does not stop enabled polling',()=>{
  const h=harness();h.api.render(thread());h.find('chat-options-toggle').onclick();h.byId('chatAutoRefresh').checked=true;h.byId('chatAutoRefresh').onchange();const polling=latestTimer(h);
@@ -156,5 +174,17 @@ test('message safety actions live in accessible collapsed disclosures and close 
  assert.equal(h.find('chat-messages').tabIndex,0);const menus=walk(h.container).filter(node=>node.className==='chat-message-more');assert.equal(menus.length,2);assert.ok(menus.every(menu=>menu.open===false));assert.equal(menus[0].children[0].getAttribute('aria-label'),'Message options');
  const first=menus[0],second=menus[1];first.children[0].onclick(event('click'));assert.equal(first.open,true);second.children[0].onclick(event('click'));assert.equal(first.open,false);assert.equal(second.open,true);
  h.events.get('pointerdown')({target:h.doc.body});assert.equal(second.open,false);second.children[0].onclick(event('click'));const escape=event('Escape');h.events.get('keydown')(escape);assert.equal(second.open,false);assert.equal(escape.prevented,true);
- first.children[0].onclick(event('click'));assert.equal(h.api.closeMenus(),true);assert.equal(first.open,false);assert.ok(h.find('chat-reply-action'),'Reply remains available outside the safety menu');
+ first.children[0].onclick(event('click'));assert.equal(h.api.closeMenus(),true);assert.equal(first.open,false);assert.ok(second.contains(h.find('chat-reply-action')),'Reply shares the message options menu');assert.equal(h.find('chat-message-actions'),undefined,'No persistent message action row');assert.ok(menus.every(menu=>menu.parentElement.className==='chat-byline'));
+});
+
+test('message source shares the options disclosure; blocked or read-only messages cannot reply or edit',()=>{
+ const url='https://github.com/owner/board/issues/1#issuecomment-12',h=harness();h.api.render(thread(1,{comments:[{...thread().comments[0],url,canEdit:true}],capabilities:{create:false,reply:false,edit:false}}));const source=h.find('chat-message-source');assert.equal(source.href,url);assert.equal(source.rel,'noopener noreferrer');assert.equal(source.parentElement.parentElement.open,false);assert.equal(h.find('chat-reply-action'),undefined);assert.equal(h.find('chat-edit-action'),undefined);
+ h.options.isBlocked=()=>true;h.api.render(thread(2,{comments:[{...thread().comments[0],url,canEdit:true}]}));assert.equal(h.find('chat-reply-action'),undefined);assert.equal(h.find('chat-edit-action'),undefined);assert.ok(h.find('chat-message-source'));assert.equal(h.requests.length,0);
+ h.options.isBlocked=()=>false;h.api.render(thread(3,{url:'javascript:bad()',comments:[],capabilities:{}}));assert.equal(h.find('chat-message-source'),undefined);assert.equal(h.find('chat-message-more'),undefined);
+});
+
+test('typing a new draft clears the previous send status without posting again',async()=>{
+ const h=harness();h.api.render(thread());h.type('First message');await h.find('chat-send').onclick();
+ assert.match(h.find('chat-status').textContent,/Message sent/);h.type('A new unsent draft');
+ assert.equal(h.find('chat-status').textContent,'');assert.equal(h.requests.filter(row=>row.type==='chat-message-write').length,1);
 });

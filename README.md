@@ -18,38 +18,38 @@ Explore schematics and PCB layouts, follow nets, measure geometry, work through 
 
 ## Downloads
 
-[![Download Android APK](https://img.shields.io/badge/Android-Download%20APK%201.65-3DDC84?logo=android&logoColor=white)](https://github.com/wayri/KiCad-Github-View/releases/download/v0.12.63/pocket-kivi-android-phone-tablet-1.65-development.apk)
-[![Download Chromium extension](https://img.shields.io/badge/Chrome%20%2F%20Chromium-Download%20ZIP-4285F4?logo=googlechrome&logoColor=white)](https://github.com/wayri/KiCad-Github-View/releases/download/v0.12.63/kicad-visual-review-chrome-edge-brave-opera-vivaldi-chromium-0.12.63.zip)
-[![Download VS Code VSIX](https://img.shields.io/badge/VS%20Code-Download%20VSIX%200.12.63-007ACC)](https://github.com/wayri/KiCad-Github-View/releases/download/v0.12.63/kicad-visual-review-vscode-0.12.63.vsix)
+[![Download Android APK](https://img.shields.io/badge/Android-Download%20APK%201.66-3DDC84?logo=android&logoColor=white)](https://github.com/wayri/KiCad-Github-View/releases/download/v0.12.64/pocket-kivi-android-phone-tablet-1.66-development.apk)
+[![Download Chromium extension](https://img.shields.io/badge/Chrome%20%2F%20Chromium-Download%20ZIP-4285F4?logo=googlechrome&logoColor=white)](https://github.com/wayri/KiCad-Github-View/releases/download/v0.12.64/kicad-visual-review-chrome-edge-brave-opera-vivaldi-chromium-0.12.64.zip)
+[![Download VS Code VSIX](https://img.shields.io/badge/VS%20Code-Download%20VSIX%200.12.64-007ACC)](https://github.com/wayri/KiCad-Github-View/releases/download/v0.12.64/kicad-visual-review-vscode-0.12.64.vsix)
 
 | Edition | Download / install | Availability |
 | --- | --- | --- |
-| Android | APK button above | Android 8+; published 1.65 preview, development-signed; manual installation and updates |
-| Chrome, Edge, Brave, Opera, Vivaldi, Chromium | Chromium ZIP button above | Published 0.12.63 preview; extract and load unpacked; candidate browsers have differing validation coverage |
-| VS Code | [Marketplace](https://marketplace.visualstudio.com/items?itemName=wayri.kicad-visual-review) / [offline VSIX 0.12.63](https://github.com/wayri/KiCad-Github-View/releases/download/v0.12.63/kicad-visual-review-vscode-0.12.63.vsix) | Windows, Linux and macOS; VS Code 1.95+; Marketplace and GitHub versions may differ |
-| Firefox | [Development ZIP 0.12.63](https://github.com/wayri/KiCad-Github-View/releases/download/v0.12.63/kicad-visual-review-firefox-0.12.63.zip) | Desktop 128+; unsigned temporary add-on; [instructions](docs/FIREFOX.md) |
-| Safari | [Development ZIP 0.12.63](https://github.com/wayri/KiCad-Github-View/releases/download/v0.12.63/kicad-visual-review-safari-0.12.63.zip) | macOS Safari 16.4+; requires Xcode conversion/signing; native verification pending; [instructions](docs/SAFARI.md) |
+| Android | APK button above | Android 8+; published 1.66 preview, development-signed; manual installation and updates |
+| Chrome, Edge, Brave, Opera, Vivaldi, Chromium | Chromium ZIP button above | Published 0.12.64 preview; extract and load unpacked; candidate browsers have differing validation coverage |
+| VS Code | [Marketplace](https://marketplace.visualstudio.com/items?itemName=wayri.kicad-visual-review) / [offline VSIX 0.12.64](https://github.com/wayri/KiCad-Github-View/releases/download/v0.12.64/kicad-visual-review-vscode-0.12.64.vsix) | Windows, Linux and macOS; VS Code 1.95+; Marketplace and GitHub versions may differ |
+| Firefox | [Development ZIP 0.12.64](https://github.com/wayri/KiCad-Github-View/releases/download/v0.12.64/kicad-visual-review-firefox-0.12.64.zip) | Desktop 128+; unsigned temporary add-on; [instructions](docs/FIREFOX.md) |
+| Safari | [Development ZIP 0.12.64](https://github.com/wayri/KiCad-Github-View/releases/download/v0.12.64/kicad-visual-review-safari-0.12.64.zip) | macOS Safari 16.4+; requires Xcode conversion/signing; native verification pending; [instructions](docs/SAFARI.md) |
 
-Downloads above are the [v0.12.63 GitHub preview](https://github.com/wayri/KiCad-Github-View/releases/tag/v0.12.63). The VS Code Marketplace channel is updated separately. The source repository and GitHub downloads are public.
+Downloads above are the [v0.12.64 GitHub preview](https://github.com/wayri/KiCad-Github-View/releases/tag/v0.12.64). The VS Code Marketplace channel is updated separately. The source repository and GitHub downloads are public.
 
 <details>
 <summary>Release versions, checksums and Android signing</summary>
 
 Release packages are built from the tagged source; screenshots show several retained development versions and may differ from the packaged UI. No Google Play or public Chrome Web Store installation URL is advertised here.
 
-Compare preview downloads with [SHA256SUMS.txt](https://github.com/wayri/KiCad-Github-View/releases/download/v0.12.63/SHA256SUMS.txt). An AAB is a Play upload bundle, not a directly installable Android app. Preserve/export projects and review state before changing signing channels; do not uninstall merely to bypass a signature mismatch. [Installation and updates](docs/INSTALL.md).
+Compare preview downloads with [SHA256SUMS.txt](https://github.com/wayri/KiCad-Github-View/releases/download/v0.12.64/SHA256SUMS.txt). An AAB is a Play upload bundle, not a directly installable Android app. Preserve/export projects and review state before changing signing channels; do not uninstall merely to bypass a signature mismatch. [Installation and updates](docs/INSTALL.md).
 
 </details>
 
 ## Get started
 
-Development additions: repository main pages detect KiCad projects and offer **Open KiCad project**, including nested projects and standalone drawings. The shared viewer also reads [KiCad Monkey saved design/netlist reports](docs/KICAD-MONKEY.md). [Startup and managed-browser troubleshooting](docs/VIEWER-RELIABILITY.md) explains the new local diagnostics. These changes are included in the 0.12.63 preview.
+Development additions: repository main pages detect KiCad projects and offer **Open KiCad project**, including nested projects and standalone drawings. The shared viewer also reads [KiCad Monkey saved design/netlist reports](docs/KICAD-MONKEY.md). [Startup and managed-browser troubleshooting](docs/VIEWER-RELIABILITY.md) explains the new local diagnostics. These changes are included in the 0.12.64 preview.
 
 The development web and VS Code workspace uses a compact drawing toolbar, searchable project and properties panels, and a **More tools** menu for secondary actions. VS Code chrome follows the editor theme. A red **!** opens access diagnostics when a repository request is blocked or fails; an organization policy is identified only when the browser explicitly reports it.
 
 This preview includes chat-style Issue and Discussion conversations in **Comments → Threads** on Android, in the extension and in VS Code. Browse conversations or open a thread by number, search its messages, reply, mention contributors, and edit your own plain messages where the provider permits it. Paste a screenshot or attach the selected drawing location for ECAD context; review the destination before sending. Enter adds a line; Ctrl/Cmd+Enter opens the send review. The conversation opens with a compact icon header and a **+ / Send** composer; search, refresh, filters and attachment tools appear only when opened. Unsaved drafts survive switching conversations during the session; **+ → Save local draft** stores a review note without posting.
 
-GitHub Issues use linked quoted replies, GitHub Discussions use native replies, and GitLab conversations belong to Issues. Refresh loads new messages; this does not provide live presence or typing indicators. Reactions and editing published annotation metadata are unavailable. Context remains tied to its saved source revision; mutable VS Code workspaces and cross-repository fork comparisons may require opening the saved source before locating or attaching context. These features are included in the 0.12.63 preview downloads above.
+GitHub Issues use linked quoted replies, GitHub Discussions use native replies, and GitLab conversations belong to Issues. Refresh loads new messages; this does not provide live presence or typing indicators. Reactions and editing published annotation metadata are unavailable. Context remains tied to its saved source revision; mutable VS Code workspaces and cross-repository fork comparisons may require opening the saved source before locating or attaching context. These features are included in the 0.12.64 preview downloads above.
 
 Drawing tools group Design, Inspect and Review tasks, with shortcuts for Measure, Rules, 3D, Layers, BoM and saved Reports. The 2D ruler keeps five completed distance/angle measurements for session replay, including their original sheet. The 3D viewer measures between tapped model surfaces with XYZ deltas, mm/mil units and five-entry history; endpoints on footprint stand-ins are marked approximate. KiCad Monkey and other saved reports can open directly in a VS Code Results tab. Rules display saved settings and imported ERC/DRC findings; these controls do not run native KiCad checks.
 
@@ -100,26 +100,34 @@ Inspect plots and probe saved values. Supported spatial exports provide **2D/3D 
 
 Click any image to open it at full size. [Capture sources and attribution](docs/images/README.md).
 
-### Current renderer and compact workspace | 0.12.62
+### Current renderer and compact workspace | 0.12.64
 
-[![PIC Programmer PCB in the shared Three.js renderer, High quality and dark theme](docs/images/current/pcb-3d-dark-0.12.62.jpg)](docs/images/current/pcb-3d-dark-0.12.62.jpg)
+[![PIC Programmer PCB in the shared Three.js renderer, High quality and dark theme](docs/images/current/pcb-3d-dark-0.12.64.jpg)](docs/images/current/pcb-3d-dark-0.12.64.jpg)
 
-Production WebGL rendering of KiCad's public PIC Programmer demo, captured on 27 October 2026. **Real linked STEP/VRML component models** are loaded for all 56 footprints with saved model references (19 distinct model files). The seven model-less bodies are hidden, so no stand-ins appear. High quality and ambient occlusion are enabled. These are browser-rendered application pixels, with no generated imagery or operating-system status bar.
+Production WebGL rendering of KiCad's public PIC Programmer demo, captured on 27 October 2026. **Real linked STEP/VRML component models** are loaded for all 56 footprints with saved model references (19 distinct model files). The seven model-less bodies are hidden, so no stand-ins appear. High quality and ambient occlusion are enabled. The refined viewer groups display controls and provides seven fitted camera directions. These are browser-rendered application pixels, with no generated imagery or operating-system status bar.
 
 <details>
 <summary><strong>Light theme, top view and compact drawing workspaces</strong></summary>
 
 | Light theme | Top view |
 | :---: | :---: |
-| [![Light-theme PCB material preview](docs/images/current/pcb-3d-light-0.12.62.jpg)](docs/images/current/pcb-3d-light-0.12.62.jpg) | [![Top view of the public PIC Programmer board](docs/images/current/pcb-3d-top-0.12.62.jpg)](docs/images/current/pcb-3d-top-0.12.62.jpg) |
+| [![Light-theme PCB material preview](docs/images/current/pcb-3d-light-0.12.64.jpg)](docs/images/current/pcb-3d-light-0.12.64.jpg) | [![Top view of the public PIC Programmer board](docs/images/current/pcb-3d-top-0.12.64.jpg)](docs/images/current/pcb-3d-top-0.12.64.jpg) |
 
 | Compact PCB workspace | Compact schematic workspace |
 | :---: | :---: |
-| [![Current PCB viewer with compact controls](docs/images/current/pcb-workspace-0.12.62.png)](docs/images/current/pcb-workspace-0.12.62.png) | [![Current schematic viewer with compact controls](docs/images/current/schematic-workspace-0.12.62.png)](docs/images/current/schematic-workspace-0.12.62.png) |
+| [![Current PCB viewer with compact controls](docs/images/current/pcb-workspace-0.12.64.png)](docs/images/current/pcb-workspace-0.12.64.png) | [![Current schematic viewer with compact controls](docs/images/current/schematic-workspace-0.12.64.png)](docs/images/current/schematic-workspace-0.12.64.png) |
 
 The drawing workspaces use the same public demo through a local read-only fixture transport. They demonstrate the shared viewer UI, not live GitHub authentication, a VS Code window or a physical Android device. [Capture details](docs/images/README.md#current-release-renders-2026-10-27).
 
 </details>
+
+### Focused review conversations
+
+Messages stay central, with a compact composer and secondary actions under menus. The final destination and terms are reviewed before a provider write. These responsive browser previews use synthetic review threads and mocked provider responses; no live comment was posted.
+
+| Compact conversation | Drawing and thread workspace |
+| --- | --- |
+| <a href="docs/images/current/comments-thread-0.12.64.png"><img src="docs/images/current/comments-thread-0.12.64.png" width="240" alt="Responsive review conversation with one message menu and a compact composer"></a> | [![Drawing with the refined review conversation panel](docs/images/current/comments-workspace-0.12.64.png)](docs/images/current/comments-workspace-0.12.64.png) |
 
 ### Chrome | open a project and get straight to the drawing
 
