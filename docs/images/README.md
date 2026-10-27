@@ -88,11 +88,11 @@ The Android capture build passed `assembleDebug`, `assembleDebugAndroidTest` and
 
 ## README platform galleries — 24 October 2026
 
-The expanded root README reuses retained screenshots; no UI mockups or generated images were added. New documentation copies are byte-for-byte copies of the original capture files. The documentation update is not a new app capture or a test of the newest APK/VSIX. Click-through images keep original resolution.
+The expanded root README reuses retained screenshots; no UI mockups or generated images were added. Documentation copies retain the original app pixels; the app-only crops listed below remove system/browser chrome. The documentation update is not a new app capture or a test of the newest APK/VSIX. Click-through images keep original resolution.
 
 | Documentation image | Retained source | Context |
 | --- | --- | --- |
-| `chrome/schematic.png` | `dist/chrome-store-0.12.49/screenshots/01-schematic-1280x800.png` | Installed Chrome extension, local PIC Programmer schematic from the public KiCad demo. Browser chrome is visible. |
+| `chrome/schematic.png` | `dist/chrome-store-0.12.49/screenshots/01-schematic-1280x800.png` | Installed Chrome extension, local PIC Programmer schematic from the public KiCad demo. Browser tab/address bars are cropped out. |
 | `chrome/pcb.png` | `dist/chrome-store-0.12.49/screenshots/02-pcb-1280x800.png` | Same installed Chrome extension and local PCB demo. No live repository authentication is demonstrated. |
 | `chrome/bom-field-table.jpg` | `dist/chrome-store-0.12.50/evidence/bom-layout-improved.jpg` | Loopback local workspace, PIC Programmer demo, expanded BoM table and compact header. No Chrome browser frame is in this capture. |
 | `android/marble-phone-layout.png` | `dist/ui-polish/marble-phone-layout.png` | Physical Samsung SM-A366E, Android development 1.55/code58, 14 October 2026; public Marble drawing. Retained device-test notes record a complete 2D render. It is not a capture of 1.59. |
@@ -117,3 +117,16 @@ The five files in `current/` show the production 0.12.62 renderer and shared wor
 - `pcb-workspace-0.12.62.png` and `schematic-workspace-0.12.62.png`: the production schematic/PCB viewer pages with the same public demo PCB, root schematic and `pic_sockets.kicad_sch`, supplied by a local read-only mock repository transport. The fixture revision identifier is synthetic; it is not an upstream KiCad commit. These demonstrate the current shared UI without live GitHub/GitLab authentication or posting.
 
 The PCB source is the installed `share/kicad/demos/pic_programmer/pic_programmer.kicad_pcb`, SHA-256 `aba03b4359e8bf162fe00b27b0d3394f2141acfbd3d43d9cf8e05bf0845d9bd5`. The demo title is SERIAL PIC PROGRAMMER. KiCad and the demo's authors retain their rights; no endorsement is implied. The source drawings and installed demo files were not altered. JPEGs were encoded directly by the browser at quality 90; PNG workspace captures are unchanged browser screenshots. All captures completed without browser page exceptions.
+
+
+## App-only crop corrections (2026-10-27)
+
+Reviewed all 72 documentation and VS Code screenshots, including enlarged top/bottom edges. Nine images needed corrections:
+
+| Files | Original size | Retained rectangle (left, top, right, bottom; exclusive right/bottom) | Result |
+| --- | --- | --- | --- |
+| `android/marble-phone-layout.png` | 1080 × 2340 | (0, 101, 1080, 2301) | 1080 × 2200; Android status/gesture bars removed |
+| `chrome/pcb.png`, `chrome/schematic.png` | 1280 × 800 | (0, 95, 1280, 800) | 1280 × 705; browser tab/address bars removed |
+| All six `vscode-extension/images/*.jpg` captures | 1441 × 891 | (0, 0, 1441, 858) | 1441 × 858; desktop taskbar fragments and editor status-bar strip removed |
+
+The application toolbars, drawing areas and relevant editor context remain. PNG crops preserve retained pixels exactly; cropped JPEGs are re-encoded at quality 97 with no chroma subsampling. No UI text, models or design content was reconstructed or generated. The other 63 captures, including the new linked-model renders and existing phone/tablet WebView captures, were unchanged. These are crop corrections to retained captures, not new device or current-version acceptance tests. Original release archives and capture evidence remain unchanged.

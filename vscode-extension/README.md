@@ -2,7 +2,7 @@
 
 Open KiCad schematics and PCBs beside your code—without installing KiCad. Inspect a design, review assembly fields, leave notes, and compare Git conflicts visually.
 
-![Schematic review inside VS Code](https://raw.githubusercontent.com/wayri/kiview-marketplace-assets/7542d75ae3afbfd9444255ddcf330455742672bf/schematic-review.jpg)
+![Schematic review inside VS Code](https://raw.githubusercontent.com/wayri/kiview-marketplace-assets/634d2135944e9d2601b178864514df8d9aa9243a/schematic-review.jpg)
 
 ## Open your first project
 
@@ -14,17 +14,17 @@ Open KiCad schematics and PCBs beside your code—without installing KiCad. Insp
 
 You can also press **Ctrl+Shift+P** and run **KiCad: Open Visual Viewer**.
 
-![Open the visual viewer from the VS Code Command Palette](https://raw.githubusercontent.com/wayri/kiview-marketplace-assets/7542d75ae3afbfd9444255ddcf330455742672bf/open-viewer-command.jpg)
+![Open the visual viewer from the VS Code Command Palette](https://raw.githubusercontent.com/wayri/kiview-marketplace-assets/634d2135944e9d2601b178864514df8d9aa9243a/open-viewer-command.jpg)
 
 ## Inspect the board
 
 Pan, zoom, flip the board and focus copper layers. Press **M** to measure in 2D. Select a component or net to inspect its saved properties.
 
-![PCB inspection and drawing tools](https://raw.githubusercontent.com/wayri/kiview-marketplace-assets/7542d75ae3afbfd9444255ddcf330455742672bf/pcb-inspection.jpg)
+![PCB inspection and drawing tools](https://raw.githubusercontent.com/wayri/kiview-marketplace-assets/634d2135944e9d2601b178864514df8d9aa9243a/pcb-inspection.jpg)
 
 Turn on **Layers → Net names** to label traces and filled copper where there is room. Names stay upright when the board is flipped.
 
-![Copper net names in the installed VS Code extension](https://raw.githubusercontent.com/wayri/kiview-marketplace-assets/7542d75ae3afbfd9444255ddcf330455742672bf/copper-net-names.jpg)
+![Copper net names in the installed VS Code extension](https://raw.githubusercontent.com/wayri/kiview-marketplace-assets/634d2135944e9d2601b178864514df8d9aa9243a/copper-net-names.jpg)
 
 For linked schematic/PCB inspection, run **KiCad: Open Paired Schematic and PCB Review**. Matching saved identities support cross-probing. Drag the native VS Code editor-group divider to resize the two views.
 
@@ -32,7 +32,7 @@ For linked schematic/PCB inspection, run **KiCad: Open Paired Schematic and PCB 
 
 Open the drawing's **BoM manager**: a full-width table with sticky headers and a fixed reference column. Search and grouping stay visible; columns, filters and import/export collapse to keep the rows in focus. Choose columns and grouping, filter fitted/DNP parts, locate references and export the visible CSV. Review variants and highlight DNP/DNI footprints without changing the source design.
 
-![KiCad-style BoM field table](https://raw.githubusercontent.com/wayri/kiview-marketplace-assets/7542d75ae3afbfd9444255ddcf330455742672bf/assembly-bom.jpg)
+![KiCad-style BoM field table](https://raw.githubusercontent.com/wayri/kiview-marketplace-assets/634d2135944e9d2601b178864514df8d9aa9243a/assembly-bom.jpg)
 
 **Testpoints & nets** helps plan probing. Board analytics and saved ERC/DRC reports help review existing design data. Available workspace models can load in the 3D board view. Measure works in 2D and between 3D model surfaces, with five-entry session history. **Tools → Reports** opens saved KiCad Monkey design/netlist JSON and analysis data in a native Results tab.
 
@@ -46,7 +46,7 @@ Open **Repository** from the drawing tools to browse working files, status colou
 2. Compare **Current** and **Incoming**, then choose one side for all conflict blocks.
 3. Save a copy, or confirm replacement of the original. Staging is a separate confirmed action.
 
-![Current and Incoming conflict comparison](https://raw.githubusercontent.com/wayri/kiview-marketplace-assets/7542d75ae3afbfd9444255ddcf330455742672bf/visual-merge-conflict.jpg)
+![Current and Incoming conflict comparison](https://raw.githubusercontent.com/wayri/kiview-marketplace-assets/634d2135944e9d2601b178864514df8d9aa9243a/visual-merge-conflict.jpg)
 
 This accepts a whole side across the file; it is not a per-object merger. Saving requires a trusted workspace. No commit or push happens automatically.
 
