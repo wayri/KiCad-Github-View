@@ -45,5 +45,9 @@ https://wayri.github.io/KiCad-Github-View/privacy.html
 HOMEPAGE
 https://github.com/wayri/KiCad-Github-View
 
+SCREENSHOTS
+https://github.com/wayri/KiCad-Github-View/tree/main/docs/images/chrome/0.12.64
+Five current 1280 x 800 PNG captures; suggested order and capture provenance are in that folder's README.
+
 SUBMISSION NOTE — NOT LISTING COPY
 Update the existing Chrome Store item; do not create a duplicate. Use the Chromium ZIP above, not a source, Firefox, Safari or Android archive. Keep the Privacy tab disclosures aligned with the shipped permissions and provider data transfers; do not declare that no user data is processed. Current permission explanations are in docs/STORE-LISTINGS.md. This text and package are prepared for upload; Chrome Store approval is a separate step.
