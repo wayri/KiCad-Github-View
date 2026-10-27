@@ -1,4 +1,4 @@
-FROM python:3.12-slim AS builder
+FROM python:3.12-slim@sha256:12316debbfb86890f6b2d825820612741ba527ad5a44e3902759141d572bfe8f AS builder
 WORKDIR /app
 COPY scripts/requirements-linux.lock ./scripts/requirements-linux.lock
 RUN python -m pip install --no-cache-dir --only-binary=:all: --require-hashes -r scripts/requirements-linux.lock
@@ -10,7 +10,7 @@ COPY app_web ./app_web
 COPY extension ./extension
 RUN python scripts/package_app_web.py
 
-FROM python:3.12-slim
+FROM python:3.12-slim@sha256:12316debbfb86890f6b2d825820612741ba527ad5a44e3902759141d572bfe8f
 WORKDIR /app
 COPY --from=builder /usr/local/lib/python3.12/site-packages /usr/local/lib/python3.12/site-packages
 COPY --from=builder /app/.vizdiff/app-web /app/.vizdiff/app-web

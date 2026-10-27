@@ -34,6 +34,7 @@ class DeploymentConfigTests(unittest.TestCase):
 
     def test_image_runs_as_nonroot_and_stages_complete_assets(self):
         text = (ROOT / 'Dockerfile.github-app').read_text(encoding='utf-8-sig')
+        self.assertRegex(text, r'FROM python:3\.12-slim@sha256:[a-f0-9]{64}')
         self.assertIn('USER 10001:10001', text)
         self.assertIn('COPY extension ./extension', text)
         self.assertIn('COPY --from=builder /app/.vizdiff/app-web', text)
