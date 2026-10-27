@@ -96,7 +96,9 @@ Inspect plots and probe saved values. Supported spatial exports provide **2D/3D 
 
 ## Screenshots
 
-Click any image to open it at full size. Captures show several development versions; older release downloads may look different. [Capture sources and attribution](docs/images/README.md).
+> **Screenshot note:** Some images show older versions of the UI. The latest app, browser extension and VS Code extension may have updated controls, layouts and styling.
+
+Click any image to open it at full size. [Capture sources and attribution](docs/images/README.md).
 
 ### Current renderer and compact workspace | 0.12.62
 
