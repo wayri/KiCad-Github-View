@@ -27,7 +27,7 @@ def generate(origin, owner, name, output):
         f'# GitHub App owner: {owner}\nVIZDIFF_PUBLIC_URL={origin}\n'
         'GITHUB_APP_ID=REPLACE_WITH_REGISTERED_APP_ID\n'
         'GITHUB_APP_INSTALL_URL=https://github.com/apps/REPLACE_WITH_APP_SLUG/installations/new\n'
-        'GITHUB_WEBHOOK_SECRET=REPLACE_WITH_RANDOM_SECRET_AT_LEAST_24_CHARACTERS\n'
+        'GITHUB_WEBHOOK_SECRET_FILE=REPLACE_WITH_WEBHOOK_SECRET_FILE_ON_DEPLOYMENT_HOST\n'
         'GITHUB_PRIVATE_KEY_FILE=REPLACE_WITH_PRIVATE_KEY_FILE_ON_DEPLOYMENT_HOST\n', encoding='utf-8')
     print(f'Register the App while signed in as {owner}: https://github.com/settings/apps/new')
     print(output / 'app-manifest.json')

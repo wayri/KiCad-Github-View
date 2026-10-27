@@ -1,5 +1,19 @@
 const test=require('node:test'),assert=require('node:assert/strict');
 const data=require('../analysis-data.js');
+
+test('CSV rejects oversized rows during tokenization, including blank delimiter floods',()=>{
+ assert.throws(()=>data.delimited(','.repeat(258),','),/columns/);
+ assert.throws(()=>data.delimited('header\n'+Array(257).fill('value').join(','),','),/columns/);
+ assert.throws(()=>data.delimited('x\n'.repeat(200000)+'x',','),/rows/);
+});
+
+test('sparse JSON tables cannot expand tiny records beyond the aggregate cell budget',()=>{
+ const columns=Object.fromEntries(Array.from({length:128},(_,i)=>['c'+i,i]));
+ const sparse=[columns,...Array.from({length:32000},()=>({}))];
+ assert.throws(()=>data.parse('sparse.json',JSON.stringify(sparse)),/cells/);
+ const half=[columns,...Array.from({length:16000},()=>({}))];
+ assert.throws(()=>data.parse('aggregate.json',JSON.stringify({first:half,second:half})),/cells/);
+});
 test('KiCad exported semicolon CSV retains trace names, units, and event timestamps',()=>{
  const r=data.parse('transient.csv','time;V(out);\r\n0;0;\r\n1e-6;0.25;\r\n1e-6;0.5;\r\n');
  assert.deepEqual(r.tables[0].columns,['time','V(out)']);assert.deepEqual(r.plots[0].series[0].points.map(p=>p.x),[0,1e-6,1e-6]);

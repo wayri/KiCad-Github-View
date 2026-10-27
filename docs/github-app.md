@@ -59,8 +59,8 @@ outside the current browser renderer.
    at least 24 characters, record its numeric App ID, and generate an RSA
    private key. Keep the key in a host file outside this repository and the
    web root. Fill a private deployment environment file from the generated
-   example with the actual HTTPS origin, App ID, webhook secret, installation
-   URL and `GITHUB_PRIVATE_KEY_FILE` pointing to that host key file. Do not
+   example with the actual HTTPS origin, App ID and installation URL, and set `GITHUB_PRIVATE_KEY_FILE` and
+   `GITHUB_WEBHOOK_SECRET_FILE` to the host paths of separate secret files. Do not
    commit the environment file or key. Public startup requires a valid RSA
    key, numeric App ID, webhook secret and HTTPS origin; it fails closed if
    these are missing or invalid.
@@ -72,8 +72,9 @@ outside the current browser renderer.
    docker compose --env-file $envFile -f compose.github-app.yml up --build -d
    ```
 
-   Compose mounts the key as a secret at `/run/secrets/github_app_key` and
-   sets `GITHUB_PRIVATE_KEY_PATH` to that location. Its named `app-state`
+   Compose mounts the key and webhook secret as files under `/run/secrets`.
+   Protect both host files and ensure the container UID 10001 can read them;
+   see `docs/HARDENED-DEPLOYMENT.md` for deployment limitations. Its named `app-state`
    volume stores the SQLite delivery database at
    `/var/lib/kicad-review/deliveries.sqlite3`, outside `/app/`'s served
    assets. Keep the volume across upgrades and do not run multiple service

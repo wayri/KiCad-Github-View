@@ -36,7 +36,16 @@ test('GitLab annotations remain local, provider-isolated and bypass the GitHub s
 });
 test('GitLab project hierarchy retrieval uses immutable revision and subgroup namespace',async t=>{
  const previous=global.fetch,sha='a'.repeat(40),calls=[];global.fetch=async url=>{calls.push(url);if(url.includes('/commits/'))return new Response(JSON.stringify({id:sha}));if(url.includes('/tree?'))return new Response('[]');assert.equal(new URL(url).searchParams.get('ref'),sha);return new Response('(kicad_pcb)');};t.after(()=>global.fetch=previous);
- const result=await message({type:'project',provider:'gitlab',repository:'group/sub/board',ref:'feature/pcb',file:'board.kicad_pcb'},tab);assert.equal(result.ok,true,result.error);assert.equal(result.result[0].content,'(kicad_pcb)');assert.ok(calls.every(url=>url.startsWith('https://gitlab.com/api/v4/projects/group%2Fsub%2Fboard/')));
+ const result=await message({type:'project',provider:'gitlab',repository:'group/sub/board',ref:'feature/pcb',file:'board.kicad_pcb'},{...tab,url:'https://gitlab.com/group/sub/board/-/blob/feature/pcb/board.kicad_pcb'});assert.equal(result.ok,true,result.error);assert.equal(result.result[0].content,'(kicad_pcb)');assert.ok(calls.every(url=>url.startsWith('https://gitlab.com/api/v4/projects/group%2Fsub%2Fboard/')));
+});
+
+test('GitLab host-page project reads reject cross-project and subframe requests before fetch',async t=>{
+ const previous=global.fetch;let reads=0;global.fetch=async()=>{reads++;return new Response('{}');};t.after(()=>global.fetch=previous);
+ for(const [repository,sender]of [['private/other',tab],['group/board',{...tab,frameId:2}]]){
+  const result=await message({type:'project',provider:'gitlab',repository,ref:'main',file:'board.kicad_pcb'},sender);
+  assert.equal(result.ok,false);assert.match(result.error,/host page/);
+ }
+ assert.equal(reads,0);
 });
 
 test('GitLab leaf discovery finds roots across folders from one pinned recursive tree',async t=>{

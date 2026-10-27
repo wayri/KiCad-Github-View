@@ -4,6 +4,16 @@ import java.net.URI;
 
 /** No caller-supplied origin, URL prefix, or top document alone grants native access. */
 final class NativeBridgePolicy {
+    /** Picker results are untrusted: file: would run with this app's private-file authority. */
+    static boolean pickerContent(String address) {
+        if (address == null || address.length() > 8192) return false;
+        try {
+            URI uri = new URI(address);
+            return "content".equals(uri.getScheme()) && !uri.isOpaque()
+                && uri.getRawAuthority() != null && uri.getRawAuthority().matches("[A-Za-z0-9._-]+")
+                && uri.getRawFragment() == null && uri.getRawPath() != null && uri.getRawPath().startsWith("/");
+        } catch (Exception error) { return false; }
+    }
     static boolean repositorySource(String address, String activeHost) {
         if (address == null || activeHost == null || address.length() > 4096) return false;
         try {

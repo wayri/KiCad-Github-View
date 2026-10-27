@@ -1,5 +1,6 @@
 """Development GitHub App/extension service. Public repositories only in v0.1."""
 import argparse
+import hashlib
 from concurrent.futures import ThreadPoolExecutor
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import json
@@ -15,6 +16,7 @@ from .github import api, download_snapshot, installation_token, public_commit, r
 from .git import VizError, run, safe_path
 from .inspect import inspect
 from .render import DEFAULT_LAYERS, add_drawing_boxes, find_kicad, pair_pages, render
+from .http_limits import BoundedHTTPServer, DeadlineRequestHandler
 
 
 class Jobs:
@@ -87,7 +89,7 @@ class Jobs:
             self.items[job].update(status='failed', error=str(exc))
 
 
-class Handler(BaseHTTPRequestHandler):
+class Handler(DeadlineRequestHandler):
     server_version = 'KiCadVisualReview/0.1'
 
     def log_message(self, format, *args):
@@ -105,7 +107,10 @@ class Handler(BaseHTTPRequestHandler):
 
     def authenticated(self):
         key = self.server.api_key
-        return not key or secrets.compare_digest(self.headers.get('Authorization', ''), 'Bearer ' + key)
+        # Loopback is not an authentication boundary (e.g. DNS rebinding).
+        return (len(key) >= 24 and not self.headers.get('Origin')
+                and len(self.headers.get_all('Authorization', [])) == 1
+                and secrets.compare_digest(self.headers.get('Authorization', ''), 'Bearer ' + key))
 
     def do_GET(self):
         path = urlsplit(self.path).path
@@ -121,10 +126,14 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_POST(self):
         try:
+            if self.headers.get('Transfer-Encoding') or len(self.headers.get_all('Content-Length', [])) != 1:
+                return self.respond(400, {'error': 'Exactly one Content-Length and no Transfer-Encoding required.'})
             length = int(self.headers.get('Content-Length', '0'))
             if not 0 < length <= 1024 * 1024:
                 return self.respond(413, {'error': 'Request body must be between 1 byte and 1 MiB.'})
             raw = self.rfile.read(length)
+            if len(raw) != length:
+                return self.respond(400, {'error': 'Incomplete request body.'})
             path = urlsplit(self.path).path
             if path == '/api/github/webhook':
                 if not verify_webhook(os.environ.get('GITHUB_WEBHOOK_SECRET', ''), raw, self.headers.get('X-Hub-Signature-256')):
@@ -135,19 +144,34 @@ class Handler(BaseHTTPRequestHandler):
                 delivery = self.headers.get('X-GitHub-Delivery', '')
                 if not delivery:
                     raise VizError('Missing webhook delivery ID.')
+                if len(delivery) > 200:
+                    raise VizError('Invalid webhook delivery ID.')
+                # Delivery headers are unsigned; changing them must not replay a
+                # captured signed payload and enqueue another provider write.
+                fingerprint = hashlib.sha256(raw).hexdigest()
                 with self.server.jobs.lock:
                     now = time.time()
                     seen = self.server.jobs.seen_deliveries
                     self.server.jobs.seen_deliveries = {k: v for k, v in seen.items() if now-v < 86400}
-                    if delivery in self.server.jobs.seen_deliveries:
+                    if fingerprint in self.server.jobs.seen_deliveries:
                         return self.respond(202, {'status': 'duplicate'})
                     if len(self.server.jobs.seen_deliveries) >= 10000:
                         raise VizError('Webhook capacity reached.')
-                    self.server.jobs.seen_deliveries[delivery] = now
+                    self.server.jobs.seen_deliveries[fingerprint] = now
                 if self.headers.get('X-GitHub-Event') == 'pull_request' and payload.get('action') in ('opened', 'synchronize', 'reopened'):
                     if payload.get('repository', {}).get('private', True):
                         return self.respond(202, {'status': 'skipped', 'reason': 'Private repositories are not enabled in v0.1.'})
-                    self.server.webhooks.submit(self.server.process_pr, payload)
+                    if not self.server.webhook_slots.acquire(blocking=False):
+                        with self.server.jobs.lock:
+                            self.server.jobs.seen_deliveries.pop(fingerprint, None)
+                        return self.respond(503, {'error': 'Webhook capacity reached.'})
+                    try:
+                        self.server.webhooks.submit(self.server.process_pr_bounded, payload)
+                    except Exception:
+                        self.server.webhook_slots.release()
+                        with self.server.jobs.lock:
+                            self.server.jobs.seen_deliveries.pop(fingerprint, None)
+                        raise
                 return self.respond(202, {'status': 'accepted'})
             if path != '/api/jobs':
                 return self.respond(404, {'error': 'Not found.'})
@@ -163,7 +187,17 @@ class Handler(BaseHTTPRequestHandler):
             self.respond(400, {'error': str(exc)})
 
 
-class Server(ThreadingHTTPServer):
+class Server(BoundedHTTPServer):
+    def __init__(self, *args, **kwargs):
+        self.webhook_slots = threading.BoundedSemaphore(40)
+        super().__init__(*args, **kwargs)
+
+    def process_pr_bounded(self, payload):
+        try:
+            self.process_pr(payload)
+        finally:
+            self.webhook_slots.release()
+
     def process_pr(self, payload):
         """Post links to the GitHub file views enhanced by the companion extension."""
         try:
@@ -196,10 +230,16 @@ def main():
     parser.add_argument('--host', default='127.0.0.1')
     parser.add_argument('--port', type=int, default=8765)
     parser.add_argument('--kicad-cli')
+    parser.add_argument('--allow-unsandboxed-native', action='store_true',
+                        help='Explicit development-only opt-in: native KiCad runs with this account\'s privileges.')
     args = parser.parse_args()
+    if not args.allow_unsandboxed_native:
+        parser.error('Native rendering service is disabled by default. Use the browser-only viewer, or explicitly opt in with --allow-unsandboxed-native for trusted local development.')
+    if args.host not in ('127.0.0.1', 'localhost', '::1'):
+        parser.error('The unsandboxed native development service may bind only to loopback.')
     key = os.environ.get('VIZDIFF_API_KEY', '')
-    if args.host not in ('127.0.0.1', 'localhost', '::1') and len(key) < 24:
-        parser.error('Set VIZDIFF_API_KEY (at least 24 characters) before binding to a network interface.')
+    if len(key) < 24:
+        parser.error('Set VIZDIFF_API_KEY (at least 24 characters), including for loopback use.')
     server = Server((args.host, args.port), Handler)
     server.api_key = key
     server.jobs = Jobs(find_kicad(args.kicad_cli))

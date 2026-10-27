@@ -1,6 +1,7 @@
 "use strict";
 
-importScripts("parsing.js", "browser-data.js", "review-comments.js", "review-file-store.js", "credential-vault.js", "github-review-api.js", "gitlab-provider.js", "gitlab-review-api.js", "gitlab-hosts.js", "mention-users.js", "environment-diagnostics.js");
+importScripts("managed-policy.js", "parsing.js", "browser-data.js", "review-comments.js", "review-file-store.js", "credential-vault.js", "github-review-api.js", "gitlab-provider.js", "gitlab-review-api.js", "gitlab-hosts.js", "mention-users.js", "environment-diagnostics.js");
+globalThis.KiCadManagedPolicy?.installFetch();
 
 let mentionService=null;
 function mentionUsers(message){
@@ -39,6 +40,7 @@ async function cancellableProject(message,signal){
 // Reads remain in an isolated content script on the already-open repository tab.
 // Cookies and signed raw URLs never enter extension messages or storage.
 async function sessionLoadMessage(tabId,message,signal){
+ await globalThis.KiCadManagedPolicy?.assertNetwork();
  checkLoad(signal);const requestId='load-'+crypto.randomUUID().replaceAll('-','');
  const abort=()=>{chrome.tabs.sendMessage(tabId,{type:'repository-session-cancel',requestId},{frameId:0}).catch(()=>{});};
  signal?.addEventListener('abort',abort,{once:true});
@@ -687,6 +689,20 @@ function optionsSender(sender) {
     sender.url?.split(/[?#]/, 1)[0] === chrome.runtime.getURL("options.html");
 }
 
+function authorizeHostRead(message, sender) {
+  if (viewerSender(sender)) return;
+  const host=message.provider==='gitlab'?(message.host||'https://gitlab.com'):'https://github.com';
+  const route=KiCadGitHub.route(sender.url,{gitlabHosts:message.provider==='gitlab'?[host]:[]}) ||
+    KiCadGitHub.repositoryRoute(sender.url,{gitlabHosts:message.provider==='gitlab'?[host]:[]});
+  // Page-controlled metadata must never choose another credentialed repository.
+  if ((sender.frameId??0)!==0 || !route || route.repository!==message.repository ||
+      new URL(sender.url).origin!==host ||
+      ['githubPull','githubFiles'].includes(message.type)&&(route.kind!=='pull'||route.number!==message.number) ||
+      message.type==='gitlab-merge-request'&&(route.kind!=='merge'||route.number!==message.number)) {
+    throw Error('Repository read context does not match the top-level host page.');
+  }
+}
+
 const commentLocks = new Map();
 function commentKey(scope) {
   const { repository, ref, file, provider, host } = KiCadReviewComments.normalizeScope(scope);
@@ -895,6 +911,7 @@ async function githubAnnotations(request) {
 
 async function openFromAction(tab) {
   const home = () => chrome.tabs.create({ url: chrome.runtime.getURL('local-viewer.html') });
+  if(globalThis.KiCadManagedPolicy){const policy=await KiCadManagedPolicy.read();if(!policy.valid||!policy.networkEnabled)return home();}
   const focus = async type => {
     try { if ((await chrome.tabs.sendMessage(tab.id, { type }))?.focused) return; } catch {}
     return home();
@@ -1004,6 +1021,7 @@ async function gitlabDispatch(message, sender,signal) {
   if (optionsSender(sender)) throw new Error('Options cannot load GitLab projects.');
   switch(message.type) {
     case 'gitlab-merge-request': {
+      authorizeHostRead(message,sender);
       if(!viewerSender(sender)){
         const route=KiCadGitHub.route(sender.url,{gitlabHosts:[host]});
         if(route?.kind!=='merge'||route.repository!==repository||route.number!==message.number)throw new Error('Merge-request context does not match the host page.');
@@ -1011,6 +1029,7 @@ async function gitlabDispatch(message, sender,signal) {
       return api.mergeRequest(repository,message.number);
     }
     case 'project': {
+      authorizeHostRead(message,sender);
       const snapshot=await api.resolve(repository,ref,file);
       return KiCadBrowserData.loadProject(repository,snapshot.sha,file,api.file,api.directory,'gitlab',api.schematics);
     }
@@ -1128,6 +1147,11 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   const customHostSender=sender?.id===chrome.runtime.id&&typeof sender.url==='string'&&sender.url.startsWith('https://')&&message?.provider==='gitlab';
   if (!(senderAllowed(sender) || pdfSender(sender) || analysisSender(sender) || optionsSender(sender)||customHostSender) || !message || typeof message !== "object") return false;
   (async () => {
+    if(message.type==='managed-policy-status'){
+      if(!optionsSender(sender))throw Error('Only extension settings can inspect administrator policy.');
+      return KiCadManagedPolicy.read();
+    }
+    await globalThis.KiCadManagedPolicy?.authorize(message);
     if(message.type==='repository-detect')return repositoryDetection(message,sender);
     if(message.type==='viewer-diagnostics'){
       if(!optionsSender(sender))throw Error('Only extension settings can run environment diagnostics.');
@@ -1289,6 +1313,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         return acknowledgeCommentDraft(sender);
       case "project": {
         if (optionsSender(sender)) throw new Error("Options cannot load KiCad projects.");
+        authorizeHostRead(message,sender);
         const { repository, ref, file } = message;
         revisionScope(repository,ref,file);
         try {
@@ -1306,9 +1331,11 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       }
       case "githubPull":
         if (optionsSender(sender)) throw new Error("Options cannot load pull requests.");
+        authorizeHostRead(message,sender);
         return githubPull(message.repository, message.number);
       case "githubFiles":
         if (optionsSender(sender)) throw new Error("Options cannot load pull request files.");
+        authorizeHostRead(message,sender);
         return githubFiles(message.repository, message.number, message.expectedFiles, message.expectedHead, message.expectedBase);
       default: throw new Error("Unsupported extension request.");
     }

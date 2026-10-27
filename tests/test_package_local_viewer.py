@@ -4,6 +4,9 @@ from pathlib import Path
 import tempfile
 import unittest
 import zipfile
+import subprocess
+import sys
+import os
 from unittest.mock import patch
 from kicad_vizdiff.local_viewer import asset_inventory
 from kicad_vizdiff.cli import main
@@ -32,6 +35,13 @@ class LocalPackageTests(unittest.TestCase):
             self.assertNotIn('manifest.json', names)
             self.assertNotIn('credential-vault.js', names)
             self.assertEqual(set(json.loads((web / 'local-assets.json').read_text())['files']), set(names))
+            # Import from only the extracted package, not this checkout: missing
+            # shared Python helpers must fail before a release is distributed.
+            result = subprocess.run([sys.executable, '-c',
+                'from kicad_vizdiff.local_viewer import LocalViewerServer; print(LocalViewerServer.__name__)'],
+                cwd=target, env={**os.environ, 'PYTHONPATH': str(target / 'pocket_kiview')},
+                text=True, capture_output=True, timeout=15, check=True)
+            self.assertIn('LocalViewerServer', result.stdout)
 
     def test_browser_cli_does_not_require_native_rendering(self):
         with patch('kicad_vizdiff.local_viewer.main', return_value=0) as launch, patch('kicad_vizdiff.cli.find_kicad', side_effect=AssertionError('Native renderer should not run')):

@@ -14,6 +14,7 @@ import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import unquote, urlsplit
 import webbrowser
+from .http_limits import BoundedHTTPServer, DeadlineRequestHandler
 
 MAX_FILE_BYTES = 32 * 1024 * 1024
 MAX_PROJECT_BYTES = 96 * 1024 * 1024
@@ -144,7 +145,7 @@ def asset_inventory(assets: Path) -> frozenset[str]:
     return frozenset(allowed)
 
 
-class LocalViewerServer(ThreadingHTTPServer):
+class LocalViewerServer(BoundedHTTPServer):
     daemon_threads = True
     allow_reuse_address = False
 
@@ -164,7 +165,7 @@ class LocalViewerServer(ThreadingHTTPServer):
         self.url = self.origin + '/local-viewer.html?session=' + self.session
 
 
-class LocalViewerHandler(BaseHTTPRequestHandler):
+class LocalViewerHandler(DeadlineRequestHandler):
     server: LocalViewerServer
 
     def log_message(self, format, *args):
@@ -180,6 +181,7 @@ class LocalViewerHandler(BaseHTTPRequestHandler):
         self.send_header('Referrer-Policy', 'no-referrer')
         self.send_header('Cross-Origin-Resource-Policy', 'same-origin')
         self.send_header('X-Frame-Options', 'SAMEORIGIN')
+        self.send_header('Content-Security-Policy', "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; worker-src 'self' blob:; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self'; connect-src 'self'; frame-src 'self' blob:; object-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'self'")
         self.end_headers()
         self.wfile.write(data)
 

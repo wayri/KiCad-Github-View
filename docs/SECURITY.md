@@ -35,7 +35,7 @@ These are application access controls, not a claim of CPU/cache/timing side-chan
 
 Client-side limits protect this app's workflow. A modified client, cleared installation or separate provider API client can bypass them. Use GitHub/GitLab repository permissions, protected credentials and provider moderation controls as the authority. For restricted reviews, configure `.kicad-review-policy.json` with `collaborators` or an explicit `allowlist`; see [comment policy](COMMENTS.md). This policy cannot restrict comments posted directly on the provider website.
 
-The review UI provides local blocking and content/user reporting. Reporting opens a draft to **support@sigharmonic.com**; it does not claim delivery or implement automatic moderation. The Pocket KiView team must monitor reports and use provider controls when removal or account action is needed.
+The review UI provides local blocking and content/user reporting. Reporting opens a draft to **support.kivi@sigharmonic.com**; it does not claim delivery or implement automatic moderation. The Pocket KiView team must monitor reports and use provider controls when removal or account action is needed.
 
 Public service deployments still need a TLS reverse proxy with request/header/body deadlines and edge rate limits or WAF protection. In-process limits do not stop distributed traffic from saturating the network. These deployment controls have not been configured by this code change.
 
@@ -44,3 +44,15 @@ Keep signing keys and provider secrets outside source and release archives. Use 
 ## Verification
 
 The posting security update passed 930 JavaScript tests, 37 focused Python tests and 38 JVM request-guard checks. The subsequent terms/injection update passed 932 JavaScript tests and 18 JVM origin/path checks; Android debug/test APK compilation and lint passed. Hosted security tests exercise signature rejection, replay deduplication, framing limits, pacing, queue bounds and redirect rejection. Android persisted-write and actual WebView main-frame/subframe instrumentation compile but must also be run on a connected device. Tests are regression evidence, not a penetration-test certification.
+
+
+## High-security assessment
+
+See the [27 October 2026 source security assessment](SECURITY-AUDIT-2026-10-27.md) for verified corrections, test evidence, source/package differences and unresolved deployment blockers. Existing 0.12.62 / Android 1.64 releases predate these corrections. They are not certified or approved for high-security use by this review.
+
+The legacy native-render service now requires `VIZDIFF_API_KEY` of at least 24 characters even on loopback. Its job API rejects browser-origin calls; it is an optional development service and must not be used as a privileged renderer for untrusted files.
+
+
+## Hardened packages and enterprise controls (0.12.63 / Android 1.65)
+
+The security update incorporates the earlier assessment’s source corrections, adds application-specific managed network/write controls, hash-locked CI dependencies and hardened deployment templates. See [deployment profiles](HARDENED-DEPLOYMENT.md). Templates are not evidence that a remote host has been updated. Production signing, accurate builder attestations, Docker/ingress runtime acceptance and administrator policy application remain separate requirements.

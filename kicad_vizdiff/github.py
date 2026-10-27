@@ -105,7 +105,9 @@ def download_snapshot(repo, sha, destination):
         raise VizError('A resolved commit SHA is required.')
     request = urllib.request.Request(f'https://codeload.github.com/{repo}/zip/{sha}',
                                      headers={'User-Agent': 'KiCad-Visual-Review'})
-    with urllib.request.urlopen(request, timeout=60) as response:
+    # Archive fetches are unauthenticated, but may still run inside a privileged
+    # service network. A redirect must not turn a fixed public host into SSRF.
+    with _api_opener.open(request, timeout=60) as response:
         raw = response.read(MAX_ARCHIVE + 1)
     if len(raw) > MAX_ARCHIVE:
         raise VizError('Repository download exceeds 50 MiB.')

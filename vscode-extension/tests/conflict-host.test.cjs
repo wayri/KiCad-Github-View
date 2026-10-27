@@ -4,12 +4,12 @@ const conflict='(kicad_sch\n<<<<<<< HEAD\n(version 20250101)\n=======\n(version 
 function harness(options={}){
  const root=new Uri('/repo'),uri=Uri.joinPath(root,'drawing.kicad_sch'),entries=new Map([[root.toString(),{type:2,data:new Uint8Array()}],[uri.toString(),{type:1,data:new TextEncoder().encode(options.source||conflict)}]]),writes=[],reads=[],staged=[],requested=[];
  const repository={rootUri:root,state:{HEAD:{name:'main',commit:options.head},refs:options.refs||[],mergeChanges:options.unmerged===false?[]:[{uri}]},async getCommit(ref){requested.push(ref);if(!options.commits||!options.commits[ref])throw new Error('Unknown commit');return options.commits[ref];},async add(paths){staged.push(paths);}};
- let receive,dispose;const panel={webview:{options:{},html:'',onDidReceiveMessage(fn){receive=fn;return {dispose(){}};},async postMessage(reply){panel.reply=reply;}},onDidDispose(fn){dispose=fn;}};
+ let receive,dispose;const responses=[],panel={webview:{options:{},html:'',onDidReceiveMessage(fn){receive=fn;return {dispose(){}};},async postMessage(reply){panel.reply=reply;responses.push(reply);}},onDidDispose(fn){dispose=fn;}};
  const vscode={Uri,FileType:{File:1,SymbolicLink:64},ViewColumn:{Active:1},workspace:{isTrusted:true,textDocuments:[],fs:{async stat(u){const e=entries.get(u.toString());if(!e){const error=new Error('Missing');error.code='FileNotFound';throw error;}return {type:e.type,size:e.data.length};},async readFile(u){reads.push(u.toString());return entries.get(u.toString()).data.slice();},async writeFile(u,data){writes.push(u.toString());entries.set(u.toString(),{type:1,data});}}},window:{createWebviewPanel(){return panel;},async showWarningMessage(_m,_options,action){return action;},async showSaveDialog(){return Uri.joinPath(root,'drawing-resolved.kicad_sch');}},extensions:{getExtension(){return {isActive:true,exports:{getAPI(){return {repositories:[repository]};}}};}}};
  const sameScope=(u,b)=>u.scheme===b.scheme&&u.authority===b.authority&&u.path.startsWith(b.path+'/');
  const host=createHost(vscode,merge,{sameScope,projectScope(){return {boundary:root,rootFile:'drawing.kicad_sch'};},secret(){return 'a'.repeat(48);},async conflictHTML(){return '<html></html>';}});
  let id=0;const send=async(request,token='a'.repeat(48))=>{panel.reply=null;receive({channel:'kicad-vscode:v1',token,id:++id,request});for(let i=0;i<20&&!panel.reply;i++)await new Promise(r=>setImmediate(r));return panel.reply?.reply;};
- return {host,vscode,panel,entries,uri,root,writes,reads,staged,requested,send,close(){dispose();}};
+ return {host,vscode,panel,entries,uri,root,writes,reads,staged,requested,send,responses,enqueue(request,id){receive({channel:'kicad-vscode:v1',token:'a'.repeat(48),id,request});},close(){dispose();}};
 }
 test('accept current saves exact validated original after explicit confirmation and stages separately',async()=>{const h=harness();await h.host.open(h.uri,{extensionUri:new Uri("/extension")});assert.equal((await h.send({type:'conflict-load'})).result.git.branch,'main');assert.deepEqual(h.writes,[]);assert.equal((await h.send({type:'conflict-save',mode:'original',choices:'current'})).ok,true);assert.equal(new TextDecoder().decode(h.entries.get(h.uri.toString()).data),merge.resolve(conflict,'current'));assert.equal(h.staged.length,0);assert.equal((await h.send({type:'conflict-stage'})).result.staged,true);assert.deepEqual(h.staged,[['/repo/drawing.kicad_sch']]);});
 test('copy preserves original and rejects arbitrary text or URI writes and existing destination',async()=>{const h=harness();await h.host.open(h.uri,{extensionUri:new Uri("/extension")});assert.equal((await h.send({type:'conflict-save',mode:'original',choices:'current',text:'oops'})).ok,false);assert.equal((await h.send({type:'conflict-save',mode:'copy',choices:'incoming'})).ok,true);assert.equal(new TextDecoder().decode(h.entries.get(h.uri.toString()).data),conflict);assert.equal((await h.send({type:'conflict-stage'})).ok,false);assert.equal((await h.send({type:'conflict-save',mode:'copy',choices:'current'})).ok,false);assert.equal(h.writes.length,1);});
@@ -25,6 +25,42 @@ test('workspace trust revoked during staging confirmation prevents Git writes',a
 const headHash='a'.repeat(40),incomingHash='b'.repeat(40);
 const marked=(current,incoming)=>`(kicad_sch\n<<<<<<< ${current}\n(version 20250101)\n=======\n(version 20260101)\n>>>>>>> ${incoming}\n)`;
 const commit=(hash,date)=>({hash,commitDate:new Date(date)});
+
+test('untrusted conflict preview never activates Git or resolves attacker-controlled marker refs',async()=>{
+ const h=harness({source:marked('HEAD','feature'),head:headHash,refs:[{name:'feature',commit:incomingHash}],commits:{[headHash]:commit(headHash,'2026-09-01T00:00:00Z')}});
+ h.vscode.workspace.isTrusted=false;let lookups=0;const original=h.vscode.extensions.getExtension;
+ h.vscode.extensions.getExtension=(...args)=>{lookups++;return original(...args);};
+ await h.host.open(h.uri,{extensionUri:new Uri('/extension')});
+ assert.equal(lookups,0);assert.deepEqual(h.requested,[]);
+ assert.equal((await h.send({type:'conflict-load'})).result.git,null);
+});
+
+test('trust revoked while activating Git prevents subsequent repository API calls',async()=>{
+ const h=harness({source:marked('HEAD','feature'),head:headHash});let apiCalls=0;
+ h.vscode.extensions.getExtension=()=>({isActive:false,async activate(){h.vscode.workspace.isTrusted=false;return{getAPI(){apiCalls++;return {repositories:[]};}};}});
+ await h.host.open(h.uri,{extensionUri:new Uri('/extension')});
+ assert.equal(apiCalls,0);assert.deepEqual(h.requested,[]);
+});
+
+test('conflict host rejects oversized and excess requests before retaining queued payloads',async()=>{
+ const h=harness();await h.host.open(h.uri,{extensionUri:new Uri('/extension')});
+ for(let id=1;id<=129;id++)h.enqueue({type:'conflict-load'},id);
+ h.enqueue({type:'conflict-load',padding:'x'.repeat(2048)},130);
+ assert.equal(h.responses.length,2,'both rejections occur before queued work starts');
+ assert.match(h.responses[0].reply.error,/pending request limit/);
+ assert.match(h.responses[1].reply.error,/Invalid conflict request/);
+ for(let turn=0;turn<20&&h.responses.length<130;turn++)await new Promise(resolve=>setImmediate(resolve));
+ assert.equal(h.responses.length,130);assert.equal(h.responses.filter(value=>value.reply.ok).length,128);
+ h.enqueue({type:'conflict-load'},131);await new Promise(resolve=>setImmediate(resolve));
+ assert.equal(h.responses.at(-1).reply.ok,true);
+});
+
+test('closing a conflict viewer cancels queued confirmation prompts',async()=>{
+ const h=harness();await h.host.open(h.uri,{extensionUri:new Uri('/extension')});let prompts=0;
+ h.vscode.window.showWarningMessage=async()=>{prompts++;return undefined;};
+ h.enqueue({type:'conflict-save',mode:'original',choices:'current'},1);h.close();
+ await new Promise(resolve=>setImmediate(resolve));assert.equal(prompts,0);assert.equal(h.writes.length,0);
+});
 test('merge markers resolve HEAD and named repository ref, then identify the newer commit date',async()=>{
  const h=harness({source:marked('HEAD','feature'),head:headHash,refs:[{name:'feature',commit:incomingHash}],commits:{[headHash]:commit(headHash,'2026-09-02T00:00:00Z'),[incomingHash]:commit(incomingHash,'2026-09-01T00:00:00Z')}});
  await h.host.open(h.uri,{extensionUri:new Uri('/extension')});const git=(await h.send({type:'conflict-load'})).result.git;

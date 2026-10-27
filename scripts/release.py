@@ -216,6 +216,8 @@ def package_android(output: Path, root: Path = ROOT):
     subprocess.run([str(tools / ('apksigner' + suffix)), 'verify', str(apk)], check=True, cwd=root)
     aapt = tools / ('aapt2.exe' if os.name == 'nt' else 'aapt2')
     badging = subprocess.check_output([str(aapt), 'dump', 'badging', str(apk)], text=True, cwd=root)
+    if 'application-debuggable' in badging:
+        raise ValueError('Refusing to distribute a debuggable Android APK.')
     gradle = (root / 'android-app/app/build.gradle').read_text(encoding='utf-8')
     code = re.search(r'versionCode\s+(\d+)', gradle).group(1)
     if not re.search(r"package: name='dev\.kicadvizdiff\.android' versionCode='" + code + r"' versionName='" + re.escape(version) + "'", badging):
@@ -240,6 +242,7 @@ def package_android(output: Path, root: Path = ROOT):
         shutil.copyfile(source_path, output / name)
     return {'version': version, 'versionCode': int(code), 'viewerAssets': len(expected),
             'apkSignature': 'Verified development/debug signature; not a production signing identity.',
+            'debuggable': False,
             'bundleSigning': 'Unsigned; not ready for Play Store upload.',
             'lintWarnings': sum(issue.get('severity') == 'Warning' for issue in issues),
             'deviceAcceptance': 'Not implied by the release build; requires separate device verification.',
@@ -270,7 +273,7 @@ def build(output: Path, tag: str | None = None, android: bool = False):
              f'kicad-visual-review-firefox-{version}.zip', f'kicad-visual-review-safari-{version}.zip',
              f'kicad-visual-review-guides-{version}.zip', 'FIREFOX.md', 'SAFARI.md',
              f'kicad-visual-review-app-web-{version}.zip', f'kicad-visual-review-github-app-{version}.zip',
-             f'kicad-visual-review-step-source-{version}.zip', 'SHA256SUMS.txt', 'RELEASE-NOTES.md', 'INSTALL.md', 'COMMENTS.md', 'GIT-HOSTS.md', 'THIRD-PARTY-NOTICES.md', 'release-manifest.json'}
+             f'kicad-visual-review-step-source-{version}.zip', f'pocket-kiview-local-preview-{version}.zip', 'SHA256SUMS.txt', 'RELEASE-NOTES.md', 'INSTALL.md', 'COMMENTS.md', 'GIT-HOSTS.md', 'THIRD-PARTY-NOTICES.md', 'release-manifest.json', 'HARDENED-DEPLOYMENT.md'}
     if android:
         names.update(android_names())
     if output.is_symlink():
@@ -281,6 +284,13 @@ def build(output: Path, tag: str | None = None, android: bool = False):
     chrome = module('package_extension').package(output=output / f'kicad-visual-review-chrome-edge-brave-opera-vivaldi-chromium-{version}.zip')
     native = module('package_vscode').package(output=output / f'kicad-visual-review-vscode-{version}.vsix')
     evidence = audit_packages(chrome, native)
+    local_builder = module('package_local_viewer')
+    local_path = local_builder.package(output=output / f'pocket-kiview-local-preview-{version}.zip')
+    with zipfile.ZipFile(local_path) as archive:
+        local_expected = {'pocket_kiview/' + name: data for name, data in local_builder.payload().items()}
+        if set(archive.namelist()) != set(local_expected) or any(archive.read(name) != data for name, data in local_expected.items()):
+            raise ValueError('Standalone local viewer package/source mismatch.')
+    evidence['localViewerFiles'] = len(local_expected)
     if android:
         evidence['android'] = package_android(output)
     module('package_step_source').package(output / f'kicad-visual-review-step-source-{version}.zip')
@@ -301,7 +311,7 @@ def build(output: Path, tag: str | None = None, android: bool = False):
         normalize_archive(ROOT / '.vizdiff' / f'kicad-visual-review-{kind}.zip',
                           output / f'kicad-visual-review-{kind}-{version}.zip')
     for source, destination in ((f'docs/releases/v{version}.md', 'RELEASE-NOTES.md'),
-                                ('docs/INSTALL.md', 'INSTALL.md'), ('docs/FIREFOX.md', 'FIREFOX.md'), ('docs/SAFARI.md', 'SAFARI.md'), ('docs/COMMENTS.md', 'COMMENTS.md'), ('docs/GIT-HOSTS.md', 'GIT-HOSTS.md'), ('THIRD-PARTY-NOTICES.md', 'THIRD-PARTY-NOTICES.md')):
+                                ('docs/HARDENED-DEPLOYMENT.md', 'HARDENED-DEPLOYMENT.md'), ('docs/INSTALL.md', 'INSTALL.md'), ('docs/FIREFOX.md', 'FIREFOX.md'), ('docs/SAFARI.md', 'SAFARI.md'), ('docs/COMMENTS.md', 'COMMENTS.md'), ('docs/GIT-HOSTS.md', 'GIT-HOSTS.md'), ('THIRD-PARTY-NOTICES.md', 'THIRD-PARTY-NOTICES.md')):
         shutil.copyfile(ROOT / source, output / destination)
     assets = sorted(p for p in output.iterdir() if p.name not in {'SHA256SUMS.txt', 'release-manifest.json'})
     digests = {p.name: hashlib.sha256(p.read_bytes()).hexdigest() for p in assets}

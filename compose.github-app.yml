@@ -4,22 +4,26 @@ services:
       context: .
       dockerfile: Dockerfile.github-app
     ports:
-      - "${VIZDIFF_BIND_IP:-127.0.0.1}:8780:8780"
+      - "127.0.0.1:8780:8780"
     environment:
       VIZDIFF_PUBLIC_URL: ${VIZDIFF_PUBLIC_URL:?Set the HTTPS service origin}
-      GITHUB_WEBHOOK_SECRET: ${GITHUB_WEBHOOK_SECRET:?Set the GitHub App webhook secret}
+      GITHUB_WEBHOOK_SECRET_FILE: /run/secrets/github_webhook_secret
       GITHUB_APP_ID: ${GITHUB_APP_ID:?Set the registered GitHub App ID}
       GITHUB_APP_INSTALL_URL: ${GITHUB_APP_INSTALL_URL:?Set the GitHub installation URL}
       GITHUB_PRIVATE_KEY_PATH: /run/secrets/github_app_key
       VIZDIFF_STATE_DB: /var/lib/kicad-review/deliveries.sqlite3
     secrets:
       - github_app_key
+      - github_webhook_secret
     volumes:
       - app-state:/var/lib/kicad-review
     restart: unless-stopped
     read_only: true
+    mem_limit: 512m
+    cpus: 1.0
+    pids_limit: 128
     tmpfs:
-      - /tmp
+      - /tmp:rw,noexec,nosuid,nodev,size=64m
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8780/health', timeout=5).close()"]
       interval: 30s
@@ -30,5 +34,7 @@ services:
 secrets:
   github_app_key:
     file: ${GITHUB_PRIVATE_KEY_FILE:?Set the private key file on the deployment host}
+  github_webhook_secret:
+    file: ${GITHUB_WEBHOOK_SECRET_FILE:?Set the webhook secret file on the deployment host}
 volumes:
   app-state:

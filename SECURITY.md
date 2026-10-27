@@ -4,6 +4,10 @@ Do not post access tokens, private repository files, OAuth credentials or privat
 
 Reports should identify the affected version, viewer surface, reproduction steps and whether the issue crosses the isolated HTML, extension worker, repository scope or VS Code message boundary. Use a minimal synthetic example where possible.
 
+## Current assessment
+
+The [27 October 2026 assessment](docs/SECURITY-AUDIT-2026-10-27.md) records source fixes, verification and restrictions for controlled deployment. The 0.12.63 / Android 1.65 security update incorporates those corrections; [deployment profiles](docs/HARDENED-DEPLOYMENT.md) describe additional managed controls and remaining operational requirements. This project does not claim high-security certification.
+
 ## Authentication protection
 
 Browser packages encrypt GitHub and per-server GitLab tokens using AES-256-GCM before writing them to extension session storage. Each save uses a fresh key and random 96-bit IV. Expiry metadata is authenticated; changed ciphertext, IVs or expiry fail closed. Non-extractable keys exist only in memory and are never stored alongside ciphertext, exported, synced or written into review files. In Chrome with the required offscreen and service-worker messaging APIs, a dedicated worker in an offscreen document retains the keys independently of the background service worker. Its authenticated data also binds each record to its provider and GitLab server. Unsupported browsers retain keys only in the background process. Startup removes obsolete plaintext and records without usable keys. Pending OAuth device secrets stay in background memory and do not survive its restart.

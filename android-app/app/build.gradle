@@ -20,8 +20,8 @@ android {
         applicationId 'dev.kicadvizdiff.android'
         minSdk 26
         targetSdk 36
-        versionCode 67
-        versionName '1.64'
+        versionCode 68
+        versionName '1.65'
         testInstrumentationRunner 'dev.kicadvizdiff.android.LibraryInstrumentation'
     }
 
@@ -41,6 +41,11 @@ android {
         }
     }
     buildTypes {
+        // Preserve the existing development signer for in-place updates, but
+        // never ship an APK exposing debugger/run-as access to private projects.
+        debug {
+            debuggable false
+        }
         release {
             debuggable false
             if (uploadSigning) signingConfig signingConfigs.upload

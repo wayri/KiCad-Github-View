@@ -1,6 +1,19 @@
 "use strict";
 // Host-only collaboration. The webview never supplies credentials or destinations.
 const REMOTE_OPERATIONS=new Set(['chat-thread-list','chat-message-write','chat-reaction','comment-mention-users','mention-users','comment-policy-status','comment-remote-list','github-thread-read','github-annotations','github-discussion-categories','github-comment-policy','github-publish-comment','github-recover-publication','comment-publish','open-options']);
+const WRITE_OPERATIONS=new Set(['chat-message-write','chat-reaction','github-publish-comment','github-recover-publication','comment-publish']);
+// Application/user values only: repository settings never grant authority.
+function deploymentPolicy(vscode){
+ try{
+  const config=vscode.workspace.getConfiguration('kicadVisualReview'),values={};
+  for(const key of ['networkAccess','providerWrites']){
+   const setting=config.inspect(key);if(!setting)throw Error('Missing deployment setting');
+   values[key]=setting.globalValue===undefined?(setting.defaultValue===undefined?true:setting.defaultValue):setting.globalValue;
+   if(typeof values[key]!=='boolean')throw Error('Invalid deployment setting');
+  }
+  return values;
+ }catch{return{networkAccess:false,providerWrites:false};}
+}
 function remoteURL(value){
  if(typeof value!=='string'||value.length>1000)return null;
  let host,path;const ssh=/^git@([^:/]+):(.+)$/.exec(value);
@@ -12,6 +25,7 @@ function remoteURL(value){
 }
 function createHost(vscode,{sameScope,comments,apiFactory,readCommitted,fetch:fetcher=globalThis.fetch}={}){
  const memory=new Map(),publicationLocks=new Map();
+ function policy(write=false){const value=deploymentPolicy(vscode);if(!value.networkAccess)throw Error('Network access is disabled by application deployment settings.');if(write&&!value.providerWrites)throw Error('Provider writes are disabled by application deployment settings.');return value;}
  async function publication(message,session,ctx,work){
   const note=message.comment;
   if(typeof note?.id!=='string'||!/^[A-Za-z0-9_-]{1,100}$/.test(note.id)||!['new-issue','issue','new-discussion','discussion'].includes(message.destination)||(message.number!==undefined&&(!Number.isSafeInteger(message.number)||message.number<1)))throw Error('Invalid remote publication identity.');
@@ -24,10 +38,14 @@ function createHost(vscode,{sameScope,comments,apiFactory,readCommitted,fetch:fe
   try{return await work();}finally{if(publicationLocks.get(noteKey)===operationKey)publicationLocks.delete(noteKey);}
  }
  async function context(session){
+  policy();
   if(vscode.workspace.isTrusted!==true)throw Error('Trust this workspace before connecting remote collaboration.');
+  if(session.disposed)throw Error('The remote viewer is no longer active.');
   if(session.scope.boundary.scheme!=='file')throw Error('Remote collaboration requires a local Git workspace.');
   const ext=vscode.extensions?.getExtension('vscode.git');if(!ext)throw Error('Enable the VS Code Git extension for remote collaboration.');
   const exports=ext.isActive?ext.exports:await ext.activate();
+  policy();
+  if(vscode.workspace.isTrusted!==true||session.disposed)throw Error('The trusted viewer is no longer active.');
   const gitAPI=exports.getAPI(1),repo=(gitAPI.repositories||[]).filter(r=>sameScope(session.uri,r.rootUri)).sort((a,b)=>b.rootUri.path.length-a.rootUri.path.length)[0];
   if(!repo||typeof repo.show!=='function'||! /^[a-f0-9]{40}$/i.test(repo.state?.HEAD?.commit||''))throw Error('A committed Git repository is required for remote collaboration.');
   const remotes=repo.state.remotes||[],origin=remotes.find(r=>r.name==='origin')||remotes[0],remote=remoteURL(origin?.fetchUrl);
@@ -49,19 +67,22 @@ function createHost(vscode,{sameScope,comments,apiFactory,readCommitted,fetch:fe
   for(const file of session.files){if(Date.now()>=deadline)throw Error('Committed-source verification timed out. Nothing was published.');verifiedBytes+=new TextEncoder().encode(file.content).byteLength;if(verifiedBytes>24*1024*1024)throw Error('Committed-source verification exceeds 24 MiB. Nothing was published.');const path=mapFile(ctx,file.path),committed=readCommitted?await readCommitted(ctx,path):new TextDecoder('utf-8',{fatal:true}).decode((await reader.read({sha:ctx.ref,path,maxBytes:8*1024*1024})).bytes);if(committed!==file.content)throw Error('The displayed drawing differs from the committed Git revision. Commit the changes and reopen before publishing or reading pinned annotations.');}
  }
  async function credential(ctx,create=false,secrets){
+  policy();
   if(vscode.workspace.isTrusted!==true)throw Error('Workspace trust was revoked.');
   if(ctx.provider==='github'){
    const value=await vscode.authentication.getSession('github',['repo'],{createIfNone:create,silent:!create});
+   policy();
    return value?{token:value.accessToken,expiresAt:Date.now()+3600000}:null;
   }
-  const token=await secrets?.get('kiview:gitlab:'+ctx.host);return token?{token,expiresAt:Date.now()+3600000}:null;
+  const token=await secrets?.get('kiview:gitlab:'+ctx.host);policy();return token?{token,expiresAt:Date.now()+3600000}:null;
  }
  async function connect(session){
   const ctx=await context(session);
   if(ctx.provider==='github'){await credential(ctx,true);return{connected:true};}
   const token=await vscode.window.showInputBox({title:'Connect GitLab: '+ctx.host,prompt:'Token for this exact Git remote host (api scope). Stored only in VS Code SecretStorage.',password:true,ignoreFocusOut:true});
+  policy();
   if(token===undefined)return{connected:false};if(typeof token!=='string'||token.length<20||token.length>1000||/[^\x21-\x7e]/.test(token))throw Error('Invalid GitLab token.');
-  if(vscode.workspace.isTrusted!==true)throw Error('Workspace trust changed.');await session.context.secrets.store('kiview:gitlab:'+ctx.host,token);return{connected:true};
+  if(vscode.workspace.isTrusted!==true||session.disposed)throw Error('The trusted viewer is no longer active.');await session.context.secrets.store('kiview:gitlab:'+ctx.host,token);return{connected:true};
  }
  function storage(session){
   const prefix='kiview:remote:'+session.scope.boundary.toString()+':';
@@ -69,6 +90,7 @@ function createHost(vscode,{sameScope,comments,apiFactory,readCommitted,fetch:fe
   return{storage:{local:area(true),session:area(false)}};
  }
  async function dispatch(message,session){
+  policy(WRITE_OPERATIONS.has(message.type));
   const ctx=await context(session);
   if(message.provider!==undefined&&message.provider!==ctx.provider||message.host!==undefined&&message.host!==ctx.host)throw Error('Remote provider or host does not match this Git workspace.');
   for(const key of ['repository','pullRepository','targetRepository'])if(message[key]!==undefined&&![session.scope.repository,ctx.repository].includes(message[key]))throw Error('Remote request belongs to another repository.');
@@ -84,9 +106,17 @@ function createHost(vscode,{sameScope,comments,apiFactory,readCommitted,fetch:fe
   if(write){if(!message.comment)throw Error('An explicit review note is required.');const a=message.comment.anchor;if(a?.repository!==session.scope.repository||a.ref!==session.scope.ref||!session.paths.has(a.file))throw Error('Publication anchor belongs to another workspace.');await credential(ctx,ctx.provider==='github');}
   let requests=0,bytes=0,projectId=null;const deadline=Date.now()+120000;
   const safeFetch=async(url,init={})=>{
+   policy(WRITE_OPERATIONS.has(message.type));
    if(vscode.workspace.isTrusted!==true||session.disposed)throw Error('The trusted viewer is no longer active.');
    // Recheck provenance before every credential-bearing request, including writes.
-   await context(session);const u=new URL(url);if(u.username||u.password||u.hash)throw Error('Invalid remote API destination.');
+   await context(session);
+   if(vscode.workspace.isTrusted!==true||session.disposed)throw Error('The trusted viewer is no longer active.');
+   const u=new URL(url);if(u.username||u.password||u.hash)throw Error('Invalid remote API destination.');
+   const rules=policy(WRITE_OPERATIONS.has(message.type)),method=String(init.method||'GET').toUpperCase();
+   if(!rules.providerWrites&&!['GET','HEAD'].includes(method)){
+    let query;try{query=JSON.parse(init.body).query;}catch{}
+    if(method!=='POST'||u.origin!=='https://api.github.com'||u.pathname!=='/graphql'||typeof query!=='string'||!/^\s*(?:query\b|\{)/.test(query)||/\bmutation\b/.test(query))throw Error('Provider writes are disabled by application deployment settings.');
+   }
    const github=ctx.provider==='github',project='/api/v4/projects/'+encodeURIComponent(ctx.repository);
    const allowed=github?(u.origin==='https://api.github.com'&&(u.pathname==='/user'||['mention-users','comment-mention-users'].includes(message.type)&&u.pathname==='/search/users'||u.pathname==='/graphql'||u.pathname==='/repos/'+ctx.repository||u.pathname.startsWith('/repos/'+ctx.repository+'/'))||u.origin==='https://uploads.github.com'&&u.pathname==='/user-attachments/assets'):
     u.origin===ctx.host&&(u.pathname==='/api/v4/user'||['mention-users','comment-mention-users'].includes(message.type)&&u.pathname==='/api/v4/users'||u.pathname===project||u.pathname.startsWith(project+'/')||projectId!==null&&(u.pathname==='/api/v4/projects/'+projectId||u.pathname.startsWith('/api/v4/projects/'+projectId+'/')));
@@ -150,4 +180,4 @@ function createHost(vscode,{sameScope,comments,apiFactory,readCommitted,fetch:fe
  }
  return{dispatch,publicContext,context,connect,operations:REMOTE_OPERATIONS};
 }
-module.exports={createHost,remoteURL,REMOTE_OPERATIONS};
+module.exports={createHost,remoteURL,REMOTE_OPERATIONS,deploymentPolicy};

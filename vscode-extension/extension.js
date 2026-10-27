@@ -9,10 +9,13 @@ const MAX_MESSAGE = 1024 * 1024, MAX_FILES = 32;
 const MAX_SIDECAR=4*1024*1024,liveSessions=new Set(),pairTargets=new Map();
 const OPERATIONS = new Set(["open-analysis-viewer", "close-analysis-viewer", "repository-tree", "repository-history", "repository-branches", "preview-project-html", "project-inventory", "project-file", "open-project-file", "open-project-overview", "rule-report", "project-search-files", "open-project-drawing", "project", "repo-model-index", "repo-asset", "pair-selection", "comments-changed", "comment-list", "comment-save", "comment-delete", "storage-get", "storage-set", "open-comment-draft", "github-annotations"]);
 const sharedReviewComments=require('./media/review-comments.js');
-const remoteCollaboration=require('./remote-collaboration.js').createHost(vscode,{sameScope,comments:sharedReviewComments});
+const {createHost:createRemoteHost,deploymentPolicy}=require('./remote-collaboration.js');
+const remoteCollaboration=createRemoteHost(vscode,{sameScope,comments:sharedReviewComments});
 OPERATIONS.add('repository-open-file');
 for(const operation of remoteCollaboration.operations)OPERATIONS.add(operation);
 let storageQueue=Promise.resolve();
+let pendingMessages=0,pendingMessageBytes=0;
+const MAX_PENDING_MESSAGES=128,MAX_PENDING_MESSAGE_BYTES=8*1024*1024;
 const safePath = (path) => typeof path === "string" && path.length <= 500 && /\.kicad_(sch|pcb)$/i.test(path) &&
   !path.startsWith("/") && path.split("/").every((p) => p && p !== "." && p !== ".." && !/[\\\x00-\x1f\x7f:]/.test(p));
 const safeAssetPath=(path)=>typeof path==="string" && path.length>0 && path.length<=500 && /\.(?:wrl|vrml|glb|step|stp)$/i.test(path) &&
@@ -43,7 +46,20 @@ function sameScope(uri, boundary) {
   return uri.scheme === boundary.scheme && uri.authority === boundary.authority &&
     uri.query === boundary.query && uri.fragment === boundary.fragment && scopePath(uri).startsWith(prefix);
 }
+function sourceAccess(uri){
+  if(uri?.scheme!=="file"&&!deploymentPolicy(vscode).networkAccess)throw Error("Network access is disabled; open a local file instead of a virtual workspace source.");
+}
+async function workspaceAccess(method,uri,...args){
+  sourceAccess(uri);if(method==='rename')sourceAccess(args[0]);
+  return vscode.workspace.fs[method](uri,...args);
+}
+async function findSourceFiles(pattern,...args){
+  if(pattern?.baseUri)sourceAccess(pattern.baseUri);
+  else if(!deploymentPolicy(vscode).networkAccess&&(vscode.workspace.workspaceFolders||[]).some(folder=>folder.uri.scheme!=='file'))return [];
+  return vscode.workspace.findFiles(pattern,...args);
+}
 function projectScope(uri) {
+  sourceAccess(uri);
   const folder = vscode.workspace.getWorkspaceFolder(uri);
   const boundary = folder?.uri || uri.with({path:uri.path.slice(0,uri.path.lastIndexOf("/")) || "/"});
   if (!sameScope(uri,boundary)) throw new Error("Drawing is outside its containing workspace.");
@@ -104,15 +120,15 @@ async function loadProject(uri,scope=projectScope(uri),cancel={isCancellationReq
       for(let i=1;i<parts.length;i++) {
         const directory=vscode.Uri.joinPath(scope.boundary,...parts.slice(0,i)),key=directory.toString();
         if(checkedDirectories.has(key))continue;
-        const directoryStat=await vscode.workspace.fs.stat(directory);
+        const directoryStat=await workspaceAccess("stat",directory);
         if(directoryStat.type & vscode.FileType.SymbolicLink)throw new Error("Symbolic-link directories are excluded from bounded workspace review.");
         checkedDirectories.add(key);
       }
-      const stat=await vscode.workspace.fs.stat(target);
+      const stat=await workspaceAccess("stat",target);
       if(stat.type & vscode.FileType.SymbolicLink)throw new Error("Symbolic-link drawings are excluded from bounded workspace review.");
       if(stat.size>MAX_FILE)throw new Error("Drawing exceeds the 8 MiB file limit.");
       if(readBudget&&(readBudget.files>=MAX_FILES||readBudget.bytes+stat.size>MAX_PROJECT))throw new Error("Project search reached its 32-read / 24 MiB source limit.");
-      bytes=await vscode.workspace.fs.readFile(target);
+      bytes=await workspaceAccess("readFile",target);
       if(readBudget){readBudget.files++;readBudget.bytes+=bytes.byteLength;if(readBudget.bytes>MAX_PROJECT)throw new Error("Project search source grew beyond its 24 MiB read limit.");}
     } catch(error) {
       if(path===scope.rootFile || !["FileNotFound","EntryNotFound"].includes(error.code))throw error;
@@ -233,10 +249,10 @@ async function readSidecar(session) {
   if(!session.history&&!session.remoteBinding)await remoteCollaboration.publicContext(session);
   const uri=vscode.Uri.joinPath(session.scope.boundary,".kicad-review.json");
   try {
-    const stat=await vscode.workspace.fs.stat(uri);
+    const stat=await workspaceAccess("stat",uri);
     if(stat.type & vscode.FileType.SymbolicLink)throw new Error("The review sidecar is a symbolic link; writes are disabled.");
     if(stat.size>MAX_SIDECAR)throw new Error("Review sidecar exceeds 4 MiB.");
-    const bytes=await vscode.workspace.fs.readFile(uri);
+    const bytes=await workspaceAccess("readFile",uri);
     if(bytes.length>MAX_SIDECAR)throw new Error("Review sidecar exceeds 4 MiB.");
     return {uri,bytes:bytes.slice(),data:validateSidecar(JSON.parse(new TextDecoder("utf-8",{fatal:true}).decode(bytes)),session)};
   } catch(error) {
@@ -251,11 +267,11 @@ async function writeSidecar(session,before,data) {
   if(bytes.length>MAX_SIDECAR)throw new Error("Review sidecar exceeds 4 MiB; no annotations were written.");
   const temporary=vscode.Uri.joinPath(session.scope.boundary,`.kicad-review.${secret()}.tmp`);
   try {
-    await vscode.workspace.fs.writeFile(temporary,bytes);
-    if(!equalBytes(bytes,await vscode.workspace.fs.readFile(temporary)))throw new Error("Review staging verification failed; original sidecar preserved.");
+    await workspaceAccess("writeFile",temporary,bytes);
+    if(!equalBytes(bytes,await workspaceAccess("readFile",temporary)))throw new Error("Review staging verification failed; original sidecar preserved.");
     const latest=await readSidecar(session);
     if(!equalBytes(before.bytes,latest.bytes))throw new Error("Review sidecar changed externally; reload annotations before retrying. Original changes were preserved.");
-    try {await vscode.workspace.fs.rename(temporary,before.uri,{overwrite:before.bytes!==null});}
+    try {await workspaceAccess("rename",temporary,before.uri,{overwrite:before.bytes!==null});}
     catch(error) {
       // A remote provider can commit and then lose its acknowledgement. Recover
       // only when the full destination bytes prove this exact candidate arrived.
@@ -268,7 +284,7 @@ async function writeSidecar(session,before,data) {
     return validated;
   } catch(error) {
     throw new Error(`Could not save .kicad-review.json: ${error.message || error}`);
-  } finally {await vscode.workspace.fs.delete(temporary,{recursive:false,useTrash:false}).catch(()=>{});}
+  } finally {await workspaceAccess("delete",temporary,{recursive:false,useTrash:false}).catch(()=>{});}
 }
 async function annotationSnapshot(session) {
   const current=await readSidecar(session);
@@ -332,16 +348,16 @@ async function loadRepoAsset(request,session) {
   const parts=request.file.split("/"),target=vscode.Uri.joinPath(session.scope.boundary,...parts);
   if(!sameScope(target,session.scope.boundary))throw new Error("Model asset escapes the workspace.");
   for(let i=1;i<parts.length;i++) {
-    const stat=await vscode.workspace.fs.stat(vscode.Uri.joinPath(session.scope.boundary,...parts.slice(0,i)));
+    const stat=await workspaceAccess("stat",vscode.Uri.joinPath(session.scope.boundary,...parts.slice(0,i)));
     if(stat.type & vscode.FileType.SymbolicLink)throw new Error("Symbolic-link model directories are excluded from bounded workspace review.");
     if(!(stat.type & vscode.FileType.Directory))throw new Error("Model asset parent is not a directory.");
   }
-  const stat=await vscode.workspace.fs.stat(target);
+  const stat=await workspaceAccess("stat",target);
   if(stat.type & vscode.FileType.SymbolicLink)throw new Error("Symbolic-link model assets are excluded from bounded workspace review.");
   if(!(stat.type & vscode.FileType.File))throw new Error("Model asset is not a file.");
   if(!Number.isSafeInteger(stat.size) || stat.size<0 || stat.size>MAX_FILE)throw new Error("Model asset exceeds the 8 MiB file limit.");
   if(session.assetBytes+stat.size>32*1024*1024)throw new Error("Model assets exceed the 32 MiB session limit.");
-  const bytes=await vscode.workspace.fs.readFile(target);session.assetBytes+=bytes.byteLength;
+  const bytes=await workspaceAccess("readFile",target);session.assetBytes+=bytes.byteLength;
   if(bytes.byteLength>MAX_FILE)throw new Error("Model asset exceeds the 8 MiB file limit.");
   if(session.assetBytes>32*1024*1024)throw new Error("Model assets exceed the 32 MiB session limit.");
   return {base64:encodeBase64(bytes),mediaType:/\.(step|stp)$/i.test(request.file)?"model/step":/\.glb$/i.test(request.file)?"model/gltf-binary":"model/vrml"};
@@ -349,7 +365,7 @@ async function loadRepoAsset(request,session) {
 async function repoModelIndex(request,session){
   if(request.repository!==session.scope.repository||request.ref!==session.scope.ref)throw Error('Model discovery belongs to another workspace or revision.');
   if(session.history){const tree=await historicalInventory(session);return{paths:tree.entries.filter(e=>e.kind==='file'&&safeAssetPath(e.path)).map(e=>e.path).slice(0,2000),snapshotRef:session.history.sha,warnings:tree.warnings};}
-  const candidates=await vscode.workspace.findFiles({baseUri:session.scope.boundary,pattern:'**/*'},'**/{.git,node_modules,__pycache__}/**',5001),paths=[],warnings=[];
+  const candidates=await findSourceFiles({baseUri:session.scope.boundary,pattern:'**/*'},'**/{.git,node_modules,__pycache__}/**',5001),paths=[],warnings=[];
   if(candidates.length>5000)warnings.push('Workspace model discovery reached 5000 files; library path matching may be incomplete.');
   const prefix=session.scope.boundary.path.replace(/\/$/,'')+'/';
   for(const uri of candidates.slice(0,5000)){
@@ -357,7 +373,7 @@ async function repoModelIndex(request,session){
     try{
       const parts=path.split('/');
       for(let i=1;i<=parts.length;i++){
-        const stat=await vscode.workspace.fs.stat(vscode.Uri.joinPath(session.scope.boundary,...parts.slice(0,i)));
+        const stat=await workspaceAccess("stat",vscode.Uri.joinPath(session.scope.boundary,...parts.slice(0,i)));
         if(stat.type&vscode.FileType.SymbolicLink)throw Error('linked model excluded');
         if(!(stat.type&(i===parts.length?vscode.FileType.File:vscode.FileType.Directory)))throw Error('invalid model file or directory');
       }
@@ -370,7 +386,7 @@ async function repoModelIndex(request,session){
 async function searchProjectFiles(request,session) {
   assertScope(request,session);
   if(session.history){const tree=await historicalInventory(session),files=[],seen=new Set(),settings=[],warnings=[...tree.warnings],budget={files:0,bytes:0};let bytes=0;const drawings=tree.entries.filter(e=>e.kind==='file'&&safePath(e.path));for(const item of drawings){if(seen.has(item.path))continue;if(files.length>=MAX_FILES||budget.files>=MAX_FILES)break;const project=await loadHistoricalProject({...session.scope,rootFile:item.path},session.history,budget);for(const file of project.files){if(seen.has(file.path))continue;bytes+=new TextEncoder().encode(file.content).byteLength;if(files.length>=MAX_FILES||bytes>MAX_PROJECT)throw Error('Saved project search exceeds the 32-file / 24 MiB limit.');seen.add(file.path);files.push(file);session.paths.add(file.path);}}for(const item of tree.entries.filter(e=>e.kind==='file'&&/\.kicad_pro$/i.test(e.path)).slice(0,8)){const content=new TextDecoder('utf-8',{fatal:true}).decode(await historicalBytes(session,item.path,1024*1024));settings.push({path:item.path,content});}if(drawings.length>files.length)warnings.push('Saved project search is limited to 32 drawings.');return{files,settings,warnings,snapshotRef:session.history.sha,totalDrawings:drawings.length};}
-  const candidates=await vscode.workspace.findFiles({baseUri:session.scope.boundary,pattern:"**/*.{kicad_sch,kicad_pcb}"},"**/{.git,node_modules}/**",201);
+  const candidates=await findSourceFiles({baseUri:session.scope.boundary,pattern:"**/*.{kicad_sch,kicad_pcb}"},"**/{.git,node_modules}/**",201);
   const safe=candidates.filter(uri=>sameScope(uri,session.scope.boundary)).map(uri=>({uri,path:uri.path.slice(session.scope.boundary.path.replace(/\/$/,"").length+1)})).filter(item=>safePath(item.path)).sort((a,b)=>a.path.localeCompare(b.path));
   safe.sort((a,b)=>(b.path===session.scope.rootFile?1:0)-(a.path===session.scope.rootFile?1:0));
   const files=[],seen=new Set(),warnings=[],readBudget={files:0,bytes:0};let total=0;
@@ -386,12 +402,12 @@ async function searchProjectFiles(request,session) {
     if(files.length>=32||total>=MAX_PROJECT||readBudget.files>=MAX_FILES||readBudget.bytes>=MAX_PROJECT)break;
   }
   if(safe.length>32)warnings.push(`Workspace has ${safe.length} discovered drawings; search loads at most 32.`);
-  const settings=[],projects=await vscode.workspace.findFiles({baseUri:session.scope.boundary,pattern:"**/*.kicad_pro"},"**/{.git,node_modules}/**",9);
+  const settings=[],projects=await findSourceFiles({baseUri:session.scope.boundary,pattern:"**/*.kicad_pro"},"**/{.git,node_modules}/**",9);
   for(const uri of projects.slice(0,8)) {
     if(!sameScope(uri,session.scope.boundary))continue;const path=uri.path.slice(session.scope.boundary.path.replace(/\/$/,"").length+1);
     if(!/\.kicad_pro$/i.test(path)||path.length>500||path.split('/').some(p=>!p||p==='.'||p==='..'||/[\\:\x00-\x1f\x7f]/.test(p)))continue;
-    try{const parts=path.split('/');for(let i=1;i<=parts.length;i++){const stat=await vscode.workspace.fs.stat(vscode.Uri.joinPath(session.scope.boundary,...parts.slice(0,i)));if(stat.type&vscode.FileType.SymbolicLink)throw new Error('Symbolic-link project settings are excluded.');if(i===parts.length&&stat.size>1024*1024)throw new Error('Project settings exceed 1 MiB.');}
-      const bytes=await vscode.workspace.fs.readFile(uri);if(bytes.byteLength>1024*1024)throw new Error('Project settings exceed 1 MiB.');settings.push({path,content:new TextDecoder('utf-8',{fatal:true}).decode(bytes)});
+    try{const parts=path.split('/');for(let i=1;i<=parts.length;i++){const stat=await workspaceAccess("stat",vscode.Uri.joinPath(session.scope.boundary,...parts.slice(0,i)));if(stat.type&vscode.FileType.SymbolicLink)throw new Error('Symbolic-link project settings are excluded.');if(i===parts.length&&stat.size>1024*1024)throw new Error('Project settings exceed 1 MiB.');}
+      const bytes=await workspaceAccess("readFile",uri);if(bytes.byteLength>1024*1024)throw new Error('Project settings exceed 1 MiB.');settings.push({path,content:new TextDecoder('utf-8',{fatal:true}).decode(bytes)});
     }catch(error){warnings.push(`${path}: ${error.message}`);}
   }
   if(projects.length>8)warnings.push('Only the first eight project settings files were retrieved. Import the desired .kicad_pro if absent.');
@@ -401,16 +417,16 @@ async function readProjectFile(path,session){
   if(!projectPaths.filePath(path))throw new Error('Unsupported project file path.');
   if(session.history)return{path,content:new TextDecoder('utf-8',{fatal:true}).decode(await historicalBytes(session,path))};
   const uri=vscode.Uri.joinPath(session.scope.boundary,...path.split('/'));if(!sameScope(uri,session.scope.boundary))throw new Error('Project file escapes workspace.');
-  const parts=path.split('/');for(let i=1;i<=parts.length;i++){const stat=await vscode.workspace.fs.stat(vscode.Uri.joinPath(session.scope.boundary,...parts.slice(0,i)));if(stat.type&vscode.FileType.SymbolicLink)throw new Error('Symbolic-link project files are excluded.');if(i===parts.length&&stat.size>MAX_FILE)throw new Error('Project file exceeds 8 MiB.');}
-  const bytes=await vscode.workspace.fs.readFile(uri);if(bytes.byteLength>MAX_FILE)throw new Error('Project file exceeds 8 MiB.');return {path,content:new TextDecoder('utf-8',{fatal:true}).decode(bytes)};
+  const parts=path.split('/');for(let i=1;i<=parts.length;i++){const stat=await workspaceAccess("stat",vscode.Uri.joinPath(session.scope.boundary,...parts.slice(0,i)));if(stat.type&vscode.FileType.SymbolicLink)throw new Error('Symbolic-link project files are excluded.');if(i===parts.length&&stat.size>MAX_FILE)throw new Error('Project file exceeds 8 MiB.');}
+  const bytes=await workspaceAccess("readFile",uri);if(bytes.byteLength>MAX_FILE)throw new Error('Project file exceeds 8 MiB.');return {path,content:new TextDecoder('utf-8',{fatal:true}).decode(bytes)};
 }
 async function projectInventory(session){
   if(session.history){const tree=await historicalInventory(session),files=tree.entries.filter(e=>e.kind==='file'&&projectPaths.filePath(e.path));return{files:files.slice(0,1000).map(({path,size})=>({path,size})),snapshotRef:session.history.sha,warnings:[...tree.warnings,...(files.length>1000?['First 1000 saved project files shown.']:[])]};}
-  const candidates=await vscode.workspace.findFiles({baseUri:session.scope.boundary,pattern:'**/*'},'**/{.git,node_modules,__pycache__}/**',5001),files=[],warnings=[];
+  const candidates=await findSourceFiles({baseUri:session.scope.boundary,pattern:'**/*'},'**/{.git,node_modules,__pycache__}/**',5001),files=[],warnings=[];
   if(candidates.length>5000)warnings.push('Workspace discovery reached 5000 files; project structure may be incomplete.');
   const prefix=session.scope.boundary.path.replace(/\/$/,'')+'/';
   for(const uri of candidates.slice(0,5000)){if(!sameScope(uri,session.scope.boundary))continue;const path=uri.path.slice(prefix.length);if(!projectPaths.filePath(path))continue;
-    try{const stat=await vscode.workspace.fs.stat(uri);if(stat.type&vscode.FileType.SymbolicLink)continue;files.push({path,size:stat.size});}catch(error){warnings.push(`${path}: unavailable.`);}}
+    try{const stat=await workspaceAccess("stat",uri);if(stat.type&vscode.FileType.SymbolicLink)continue;files.push({path,size:stat.size});}catch(error){warnings.push(`${path}: unavailable.`);}}
   files.sort((a,b)=>a.path.localeCompare(b.path));if(files.length>1000)warnings.push('First 1000 supported project files shown.');
   return {files:files.slice(0,1000),snapshotRef:'workspace',warnings};
 }
@@ -425,7 +441,7 @@ function openStaticHTML(source,path){
 }
 async function openOverview(session){
   const panel=vscode.window.createWebviewPanel('kicadVisualReview.project','KiCad Project Review',vscode.ViewColumn.Beside,{enableScripts:true,localResourceRoots:[vscode.Uri.joinPath(session.context.extensionUri,'media'),session.context.extensionUri]});
-  const project={files:session.files,scope:session.scope,history:session.history},overview=createSession(session.uri,project,session.context);overview.overview=true;overview.post=message=>panel.webview.postMessage(message);
+  const project={files:session.files,scope:session.scope,history:session.history},overview=createSession(session.uri,project,session.context);overview.overview=true;overview.closeForPolicy=()=>panel.dispose();overview.closeForPolicy=()=>panel.dispose();view.post=message=>panel.webview.postMessage(message);
   const receiver=panel.webview.onDidReceiveMessage(message=>handleMessage(message,overview,reply=>panel.webview.postMessage(reply)));panel.onDidDispose(()=>{overview.disposed=true;liveSessions.delete(overview);receiver.dispose();});panel.webview.html=await htmlFor(panel.webview,session.context,overview);return {opened:true};
 }
 async function openAnalysis(request,session){
@@ -434,7 +450,7 @@ async function openAnalysis(request,session){
   await readProjectFile(request.path,session); // Enforce the existing workspace, symlink and byte boundaries.
   const panel=vscode.window.createWebviewPanel('kicadVisualReview.analysis','Results: '+request.path.split('/').at(-1),vscode.ViewColumn.Beside,{enableScripts:true,localResourceRoots:[vscode.Uri.joinPath(session.context.extensionUri,'media'),session.context.extensionUri]});
   const view=createSession(session.uri,{files:session.files,scope:session.scope,history:session.history},session.context);
-  view.analysisPath=request.path;view.closeAnalysis=()=>panel.dispose();view.post=message=>panel.webview.postMessage(message);
+  view.analysisPath=request.path;view.closeAnalysis=()=>panel.dispose();view.closeForPolicy=()=>panel.dispose();view.post=message=>panel.webview.postMessage(message);
   const receiver=panel.webview.onDidReceiveMessage(message=>handleMessage(message,view,reply=>panel.webview.postMessage(reply)));
   panel.onDidDispose(()=>{view.disposed=true;liveSessions.delete(view);receiver.dispose();});
   try{panel.webview.html=await htmlFor(panel.webview,session.context,view);}catch(error){panel.dispose();throw error;}return{opened:true};
@@ -506,7 +522,7 @@ async function openHistoricalFile(request,session){
   const history=await historyContext(session,request.sha.toLowerCase()),scope={...session.scope,rootFile:request.path,ref:history.sha};
   const project=await loadHistoricalProject(scope,history),uri=vscode.Uri.joinPath(scope.boundary,...request.path.split('/')).with({query:'kiview-commit='+history.sha});
   const panel=vscode.window.createWebviewPanel(VIEW,'Saved '+request.path.split('/').at(-1)+' · '+history.sha.slice(0,8),vscode.ViewColumn.Beside,{enableScripts:true,localResourceRoots:[session.context.extensionUri]});
-  const saved=createSession(uri,project,session.context);saved.post=message=>panel.webview.postMessage(message);
+  const saved=createSession(uri,project,session.context);saved.closeForPolicy=()=>panel.dispose();saved.post=message=>panel.webview.postMessage(message);
   const receiver=panel.webview.onDidReceiveMessage(message=>handleMessage(message,saved,reply=>panel.webview.postMessage(reply)));panel.onDidDispose(()=>{saved.disposed=true;liveSessions.delete(saved);receiver.dispose();});
   try{panel.webview.html=await htmlFor(panel.webview,saved.context,saved);}catch(error){saved.disposed=true;liveSessions.delete(saved);panel.dispose();throw error;}
   return{opened:true,sha:history.sha,workingTree:false};
@@ -537,9 +553,9 @@ async function repositoryTree(request,session){
     const parts=directory?directory.split('/'):[];
     for(let i=0;i<=parts.length;i++){
       const uri=vscode.Uri.joinPath(boundary,...parts.slice(0,i));if(i&&!sameScope(uri,boundary))throw Error('Repository directory escapes workspace.');
-      const stat=await vscode.workspace.fs.stat(uri);if(stat.type&vscode.FileType.SymbolicLink)throw Error('Symbolic-link repository directories are excluded.');if(!(stat.type&vscode.FileType.Directory))throw Error('Repository path is not a directory.');
+      const stat=await workspaceAccess("stat",uri);if(stat.type&vscode.FileType.SymbolicLink)throw Error('Symbolic-link repository directories are excluded.');if(!(stat.type&vscode.FileType.Directory))throw Error('Repository path is not a directory.');
     }
-    const rows=await vscode.workspace.fs.readDirectory(vscode.Uri.joinPath(boundary,...parts));
+    const rows=await workspaceAccess("readDirectory",vscode.Uri.joinPath(boundary,...parts));
     if(!Array.isArray(rows)||rows.length>50000)throw Error('Directory inventory exceeds the provider limit.');
     return rows.filter(row=>Array.isArray(row)&&typeof row[0]==='string').sort((a,b)=>a[0]<b[0]?-1:a[0]>b[0]?1:0);
   }
@@ -605,6 +621,7 @@ async function repositoryHistory(request,session){
   return{...base,commits,hasMore,nextPage:hasMore?page+1:null,warnings:[...new Set(warnings)].slice(0,20)};
 }
 async function dispatch(request,session) {
+  if(!['project','storage-get','storage-set','pair-selection','comments-changed','close-analysis-viewer'].includes(request.type))sourceAccess(session.scope.boundary);
   const state=session.context.workspaceState,key=session.storageKey;
   if(session.history){if(vscode.workspace.isTrusted!==true)throw Error('Saved Git browsing requires workspace trust.');if(remoteCollaboration.operations.has(request.type)||['comment-save','comment-delete','open-comment-draft','comments-changed'].includes(request.type))throw Error('Saved commit viewers are read-only; remote publication and workspace annotations are disabled.');if(request.type==='comment-list'){assertScope(request,session);return[];}}
   if(remoteCollaboration.operations.has(request.type))return remoteCollaboration.dispatch(request,session);
@@ -632,8 +649,8 @@ async function dispatch(request,session) {
     if(typeof path!=='string'||path.length>500||!path.endsWith('.json')||path.startsWith('/')||path.split('/').some(p=>!p||p==='.'||p==='..'||/[\\:\x00-\x1f\x7f]/.test(p)))throw new Error('Invalid workspace report path.');
     if(session.history)return{path,content:new TextDecoder('utf-8',{fatal:true}).decode(await historicalBytes(session,path,4*1024*1024))};
     const uri=vscode.Uri.joinPath(session.scope.boundary,...path.split('/'));if(!sameScope(uri,session.scope.boundary))throw new Error('Report escapes workspace.');
-    const parts=path.split('/');for(let i=1;i<=parts.length;i++){const stat=await vscode.workspace.fs.stat(vscode.Uri.joinPath(session.scope.boundary,...parts.slice(0,i)));if(stat.type&vscode.FileType.SymbolicLink)throw new Error('Symbolic-link reports are excluded.');if(i===parts.length&&stat.size>4*1024*1024)throw new Error('Rule report exceeds 4 MiB.');}
-    const bytes=await vscode.workspace.fs.readFile(uri);if(bytes.byteLength>4*1024*1024)throw new Error('Rule report exceeds 4 MiB.');return {content:new TextDecoder('utf-8',{fatal:true}).decode(bytes),path};
+    const parts=path.split('/');for(let i=1;i<=parts.length;i++){const stat=await workspaceAccess("stat",vscode.Uri.joinPath(session.scope.boundary,...parts.slice(0,i)));if(stat.type&vscode.FileType.SymbolicLink)throw new Error('Symbolic-link reports are excluded.');if(i===parts.length&&stat.size>4*1024*1024)throw new Error('Rule report exceeds 4 MiB.');}
+    const bytes=await workspaceAccess("readFile",uri);if(bytes.byteLength>4*1024*1024)throw new Error('Rule report exceeds 4 MiB.');return {content:new TextDecoder('utf-8',{fatal:true}).decode(bytes),path};
   }
   if(request.type==="project-search-files")return searchProjectFiles(request,session);
   if(request.type==="open-project-drawing"){assertScope(request,session);if(session.history)return openHistoricalFile({...request,path:request.file,sha:session.history.sha},session);await vscode.commands.executeCommand("vscode.openWith",vscode.Uri.joinPath(session.scope.boundary,...request.file.split("/")),VIEW,vscode.ViewColumn.Beside);return {opened:true};}
@@ -693,16 +710,21 @@ function handleMessage(message,session,post) {
   if(session.disposed || !message || message.channel!==CHANNEL || message.token!==session.token ||
     !Number.isSafeInteger(message.id) || message.id<=session.lastId || message.id>10000)return Promise.resolve(false);
   session.lastId=message.id;
-  let request=message.request;
-  try {if(!request || !OPERATIONS.has(request.type) || new TextEncoder().encode(JSON.stringify(request)).length>MAX_MESSAGE)throw new Error("Invalid or oversized viewer request.");}
+  let request=message.request,requestBytes;
+  try {
+    if(!request || !OPERATIONS.has(request.type) || (requestBytes=new TextEncoder().encode(JSON.stringify(request)).length)>MAX_MESSAGE)throw new Error("Invalid or oversized viewer request.");
+    if(pendingMessages>=MAX_PENDING_MESSAGES || pendingMessageBytes+requestBytes>MAX_PENDING_MESSAGE_BYTES)throw new Error("Viewer pending request budget exceeded; wait for current work to finish.");
+  }
   catch(error){return Promise.resolve(post({channel:CHANNEL,token:session.token,id:message.id,reply:{ok:false,error:error.message}}));}
+  pendingMessages++;pendingMessageBytes+=requestBytes;
   // Serialize persisted updates and reads, including multiple editors of one URI.
   const run=async()=> {
+    if(session.disposed)return false;
     let reply;
     try {reply={ok:true,result:await dispatch(request,session)};}catch(error){reply={ok:false,error:String(error.message || error).slice(0,1000)};}
     if(!session.disposed)await post({channel:CHANNEL,token:session.token,id:message.id,reply});return true;
   };
-  const result=storageQueue.then(run,run);storageQueue=result.catch(()=>{});return result;
+  const result=storageQueue.then(run,run).finally(()=>{pendingMessages--;pendingMessageBytes-=requestBytes;});storageQueue=result.catch(()=>{});return result;
 }
 async function htmlFor(webview,context,session) {
   const media=vscode.Uri.joinPath(context.extensionUri,"media"),templateUri=vscode.Uri.joinPath(media,session.analysisPath?"analysis-viewer.html":session.overview||!safePath(session.scope.rootFile)?"project-viewer.html":"revision-viewer.html");
@@ -732,17 +754,24 @@ async function conflictHTML(webview,context,session) {
   return html.replace("<head>",`<head><meta http-equiv="Content-Security-Policy" content="${escaped(csp)}"><base href="${escaped(resource(""))}/"><script nonce="${nonce}">globalThis.KiCadVSCodeContext=${bootstrap};</script><script nonce="${nonce}" src="${escaped(webview.asWebviewUri(vscode.Uri.joinPath(context.extensionUri,"webview-bridge.js")).toString())}"></script>`);
 }
 function activate(context) {
-  const conflicts=require("./conflict-host.js").createHost(vscode,require("./media/merge-conflicts.js"),{projectScope,sameScope,secret,conflictHTML});
+  if(vscode.workspace.onDidChangeConfiguration)context.subscriptions.push(vscode.workspace.onDidChangeConfiguration(event=>{
+    if(!event.affectsConfiguration('kicadVisualReview')||deploymentPolicy(vscode).networkAccess)return;
+    // Existing webviews can have remote attachment origins in their CSP. Tear
+    // those documents down so disabling networking also stops renderer egress.
+    for(const session of [...liveSessions])if((session.remoteBinding||session.uri.scheme!=='file')&&session.closeForPolicy){session.disposed=true;session.closeForPolicy();}
+  }));
+  const conflicts=require("./conflict-host.js").createHost(vscode,require("./media/merge-conflicts.js"),{projectScope,sameScope,secret,conflictHTML,sourceAccess});
   const navigatorChanged=new vscode.EventEmitter();
   context.subscriptions.push(navigatorChanged,vscode.window.registerTreeDataProvider("kicadVisualReview.navigator",{
     onDidChangeTreeData:navigatorChanged.event,getTreeItem:(item)=>item,
     async getChildren() {
-      const drawings=await vscode.workspace.findFiles("**/*.{kicad_sch,kicad_pcb,kicad_pro,kicad_prl,kicad_dru,kicad_wks,gbr,ger,gerber,gtl,gbl,gts,gbs,gto,gbo,gtp,gbp,gko,gm1,drl,xln,html,htm}","**/{.git,node_modules,__pycache__}/**",200);
+      const drawings=await findSourceFiles("**/*.{kicad_sch,kicad_pcb,kicad_pro,kicad_prl,kicad_dru,kicad_wks,gbr,ger,gerber,gtl,gbl,gts,gbs,gto,gbo,gtp,gbp,gko,gm1,drl,xln,html,htm}","**/{.git,node_modules,__pycache__}/**",200);
       const result=drawings.sort((a,b)=>a.path.localeCompare(b.path)).map((uri)=>({label:uri.path.split("/").at(-1),
         description:vscode.workspace.asRelativePath(uri,false),resourceUri:uri,command:{command:"kicadVisualReview.open",title:"Open drawing",arguments:[uri]}}));
       for(const folder of (vscode.workspace.workspaceFolders || []).slice(0,32)) {
+        if(folder.uri.scheme!=='file'&&!deploymentPolicy(vscode).networkAccess)continue;
         const uri=vscode.Uri.joinPath(folder.uri,".kicad-review.json");
-        try {await vscode.workspace.fs.stat(uri);result.push({label:"Review annotations",description:folder.name,resourceUri:uri,command:{command:"vscode.open",title:"Open sidecar",arguments:[uri]}});}catch(error){if(!["FileNotFound","EntryNotFound"].includes(error.code))throw error;}
+        try {await workspaceAccess("stat",uri);result.push({label:"Review annotations",description:folder.name,resourceUri:uri,command:{command:"vscode.open",title:"Open sidecar",arguments:[uri]}});}catch(error){if(!["FileNotFound","EntryNotFound"].includes(error.code))throw error;}
       }
       return result;
     }
@@ -758,7 +787,7 @@ function activate(context) {
       panel.webview.options={enableScripts:true,localResourceRoots:[vscode.Uri.joinPath(context.extensionUri,"media"),context.extensionUri]};
       try {
         const project=await loadProject(document.uri,projectScope(document.uri),cancel),session=createSession(document.uri,project,context);
-        session.post=(message)=>panel.webview.postMessage(message);
+        session.closeForPolicy=()=>panel.dispose();session.post=(message)=>panel.webview.postMessage(message);
         const receiver=panel.webview.onDidReceiveMessage((message)=>handleMessage(message,session,(reply)=>panel.webview.postMessage(reply)));
         panel.onDidDispose(()=>{session.disposed=true;liveSessions.delete(session);receiver.dispose();if(![...liveSessions].some((other)=>other.uri.toString()===session.uri.toString()))unpair(session.uri);});
         panel.webview.html=await htmlFor(panel.webview,context,session);
@@ -779,7 +808,7 @@ function activate(context) {
     if(!supportedViewerUri(target)){vscode.window.showErrorMessage("Select a saved schematic or PCB to pair.");return;}
     try {
       const scope=projectScope(target),directory=target.path.slice(0,target.path.lastIndexOf("/")),opposite=/\.kicad_sch$/i.test(target.path)?"pcb":"sch";
-      const found=await vscode.workspace.findFiles(`**/*.kicad_${opposite}`,"**/{.git,node_modules,__pycache__}/**",200);
+      const found=await findSourceFiles(`**/*.kicad_${opposite}`,"**/{.git,node_modules,__pycache__}/**",200);
       const items=found.filter((candidate)=>sameScope(candidate,scope.boundary) && candidate.path.slice(0,candidate.path.lastIndexOf("/"))===directory &&
         new RegExp(`\\.kicad_${opposite}$`,"i").test(candidate.path) && safePath(candidate.path.slice(scope.boundary.path.replace(/\/$/,"").length+1)))
         .sort((a,b)=>a.path.localeCompare(b.path)).map((candidate)=>({label:candidate.path.split("/").at(-1),description:vscode.workspace.asRelativePath(candidate,false),uri:candidate}));

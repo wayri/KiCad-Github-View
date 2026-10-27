@@ -1,6 +1,7 @@
 """Read Git snapshots without checkout, hooks, filters, or repository mutation."""
 
 from pathlib import Path, PurePosixPath
+import os
 import subprocess
 
 
@@ -8,9 +9,9 @@ class VizError(Exception):
     """An actionable user-facing failure."""
 
 
-def run(args, cwd=None, timeout=120, data=None):
+def run(args, cwd=None, timeout=120, data=None, env=None):
     try:
-        result = subprocess.run(args, cwd=cwd, input=data, capture_output=True, timeout=timeout)
+        result = subprocess.run(args, cwd=cwd, input=data, capture_output=True, timeout=timeout, env=env)
     except (OSError, subprocess.TimeoutExpired) as exc:
         raise VizError(f"Could not run {args[0]}: {exc}") from exc
     if result.returncode:
@@ -20,7 +21,13 @@ def run(args, cwd=None, timeout=120, data=None):
 
 
 def git(repo, *args, data=None):
-    return run(["git", "-C", str(repo), *args], data=data)
+    # Even read-only ls-files can execute a repository-configured fsmonitor
+    # command. Never run that hook while inspecting an untrusted checkout.
+    environment = {key: value for key, value in os.environ.items() if not key.upper().startswith('GIT_')}
+    environment.update(GIT_NO_LAZY_FETCH='1', GIT_TERMINAL_PROMPT='0', GIT_OPTIONAL_LOCKS='0')
+    return run(["git", "--no-optional-locks", "-c", "core.fsmonitor=false",
+                "-c", "core.untrackedCache=false", "-c", "protocol.allow=never",
+                "-c", "protocol.ext.allow=never", "-C", str(repo), *args], data=data, env=environment)
 
 
 def root(repo):

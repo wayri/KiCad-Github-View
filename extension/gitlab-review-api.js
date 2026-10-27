@@ -46,6 +46,7 @@ const KiCadGitLabReviewApi = (() => {
     if (externalVault) await sessionVault(host).clear();
   }
   async function credential(host) {
+    await globalThis.KiCadManagedPolicy?.assertNetwork();
     const record = (await records())[host]; if (!record) return null;
     try {
       if (externalVault) return { token: await sessionVault(host).decrypt(record), expiresAt: record.expiresAt };
@@ -62,6 +63,7 @@ const KiCadGitLabReviewApi = (() => {
     if (typeof token !== "string" || token.length < 20 || token.length > 1000 || /[^\x21-\x7e]/.test(token)) throw fail("Enter a valid GitLab token without spaces.", true);
   }
   async function setToken(host, token, lifetime = LIMIT, expectedEpoch) {
+    await globalThis.KiCadManagedPolicy?.assertNetwork();
     host = validateHost(host); validToken(token);
     if (expectedEpoch === undefined) expectedEpoch = advance(host);
     return operation(async () => {
@@ -141,6 +143,7 @@ const KiCadGitLabReviewApi = (() => {
     } finally { clearTimeout(timer);controller.abort(); }
   }
   async function startOAuth(host) {
+    await globalThis.KiCadManagedPolicy?.assertNetwork();
     host = validateHost(host); const status = await authStatus(host);
     if (!status.clientId) throw fail("Register a non-confidential GitLab OAuth application with the extension redirect URI, then configure its public client ID.", true);
     if (!chrome.identity?.launchWebAuthFlow || !chrome.identity?.getRedirectURL) throw fail("OAuth login is unavailable in this browser; use a repository-limited GitLab token.", true);
@@ -251,6 +254,7 @@ const KiCadGitLabReviewApi = (() => {
     }catch(error){if(error.definitive)await chrome.storage.local.remove(key);throw error;}
   }
   async function publish(message) {
+    await globalThis.KiCadManagedPolicy?.assertWrites();
     const host = validateHost(message.host), note = KiCadReviewComments.validateComment(message.comment);
     if (note.anchor.provider !== "gitlab" || (note.anchor.host && validateHost(note.anchor.host) !== host)) throw fail("This note belongs to another Git provider or host.", true);
     const repository = repositoryPath(note.anchor.repository), destination = message.destination;
@@ -362,6 +366,7 @@ const KiCadGitLabReviewApi = (() => {
     return {...thread,comments,warnings,capabilities:{create:allowed,reply:allowed,edit:allowed,reactions:false,replyMode:'native'}};
   }
   async function chatMessageWrite(message) {
+    await globalThis.KiCadManagedPolicy?.assertWrites();
     if(message?.provider!==undefined&&message.provider!=='gitlab')throw fail('Invalid GitLab chat provider.',true);
     const host=validateHost(message?.host),repository=repositoryPath(message?.repository),scope=KiCadReviewComments.normalizeScope({...message,provider:'gitlab',host,repository});
     const {kind,number}=message.thread||{},action=message.action,mutation=message.clientMutationId;

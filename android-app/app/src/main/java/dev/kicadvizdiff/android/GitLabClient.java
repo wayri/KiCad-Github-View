@@ -105,6 +105,7 @@ final class GitLabClient {
         return new JSONObject().put("connected",true).put("login",user.getString("username")).put("host",host);
     }
     synchronized JSONObject startOAuth(String host,String clientId,int epoch) throws Exception {
+        ManagedPolicy.requireNetwork(context);
         check(epoch);host=validateHost(host);
         if(!clientId.matches("[A-Za-z0-9_-]{8,200}"))throw new Failure("Enter the registered GitLab public application ID");
         byte[] random=new byte[32];new SecureRandom().nextBytes(random);oauthState=Base64.encodeToString(random,Base64.URL_SAFE|Base64.NO_WRAP|Base64.NO_PADDING);
@@ -134,6 +135,7 @@ final class GitLabClient {
         try (NativeLoadOperation.Scope scope = operation.enter()) { return handle(request, epoch); }
     }
     JSONObject handle(JSONObject request,int epoch) throws Exception {
+        ManagedPolicy.requireAction(context,request.getString("action"));
         check(epoch); String host=validateHost(request.optString("host","https://gitlab.com"));
         switch(request.getString("action")) {
             case "oauth-start":return startOAuth(host,request.getString("clientId"),epoch);
@@ -499,6 +501,7 @@ final class GitLabClient {
     }
     /** Bounded file transfer: raw bytes never pass through the WebView or a whole-file byte array. */
     private void downloadBlob(String host,String root,String identity,File target,int epoch,long deadline)throws Exception {
+        ManagedPolicy.requireNetwork(context);
         check(epoch);host=validateHost(host);identity=sha(identity);
         String path=root+"/repository/blobs/"+identity+"/raw";
         URL url=new URL(host+"/api/v4"+path);
@@ -548,13 +551,15 @@ final class GitLabClient {
     private String network(String host,String path,String method,byte[] body,String bearer,int epoch,int limit)throws Exception {return network(host,path,method,body,bearer,epoch,limit,"application/json");}
     private String network(String host,String path,String method,byte[] body,String bearer,int epoch,int limit,String contentType)throws Exception {return utf8(networkBytes(host,path,method,body,bearer,epoch,limit,contentType));}
     private byte[] networkBytes(String host,String path,String method,byte[] body,String bearer,int epoch,int limit,String contentType)throws Exception {
+        boolean providerWrite=!method.equals("GET")&&!method.equals("HEAD")&&!path.equals("/oauth/token");
+        ManagedPolicy.requireTransport(context,providerWrite);
         check(epoch);host=validateHost(host);if(!path.startsWith("/projects/")&&!path.equals("/user")&&!path.startsWith("/projects?")&&!path.equals("/oauth/token"))throw new Failure("Unsupported GitLab endpoint");
         URL url=new URL(host+(path.equals("/oauth/token")?"":"/api/v4")+path);if(!url.getProtocol().equals("https")||url.getUserInfo()!=null||!url.getHost().equals(new URI(host).getHost())||url.getPort()!=-1)throw new Failure("Unsupported GitLab endpoint");
         HttpsURLConnection connection=connections.open(url); NativeLoadOperation.track(connection);connection.setInstanceFollowRedirects(false);connection.setConnectTimeout(15000);connection.setReadTimeout(20000);connection.setUseCaches(false);connection.setRequestProperty("Accept","application/json");connection.setRequestProperty("User-Agent","KiCadVizDiff-Android");connection.setRequestMethod(method);
         if(path.equals("/oauth/token")&&bearer!=null)throw new Failure("Unsupported GitLab OAuth credential");
         if(bearer!=null)connection.setRequestProperty("Authorization","Bearer "+bearer);long deadline=SystemClock.elapsedRealtime()+90000;
         try {
-            if(body!=null){connection.setDoOutput(true);connection.setRequestProperty("Content-Type",contentType);connection.setFixedLengthStreamingMode(body.length);check(epoch);try(OutputStream stream=connection.getOutputStream()){check(epoch);stream.write(body);}}
+            if(body!=null){connection.setDoOutput(true);connection.setRequestProperty("Content-Type",contentType);connection.setFixedLengthStreamingMode(body.length);check(epoch);ManagedPolicy.requireTransport(context,providerWrite);try(OutputStream stream=connection.getOutputStream()){check(epoch);stream.write(body);}}
             int status=connection.getResponseCode();check(epoch);
             if(status==401||status==400&&path.equals("/oauth/token")){synchronized(this){check(epoch);authExpired=bearer!=null||refreshRecords.containsKey(host);tokens.remove(host);refreshRecords.remove(host);vault(host).clear();}throw new Failure("GitLab sign-in expired or was revoked; sign in again");}
             if(status==403||status==429)throw new Failure("GitLab denied access or rate limited this request");

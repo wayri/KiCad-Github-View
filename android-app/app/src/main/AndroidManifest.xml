@@ -16,6 +16,7 @@
         android:label="@string/app_name"
         android:theme="@style/AppTheme"
         android:usesCleartextTraffic="false">
+        <meta-data android:name="android.content.APP_RESTRICTIONS" android:resource="@xml/app_restrictions" />
         <receiver android:name=".TemporaryProjectCleanup" android:exported="false"><intent-filter><action android:name="android.intent.action.BOOT_COMPLETED" /></intent-filter></receiver>
         <activity android:name=".KeepTemporaryProjectActivity" android:exported="false" android:screenOrientation="fullUser" android:configChanges="orientation|screenSize|smallestScreenSize|screenLayout" />
         <activity

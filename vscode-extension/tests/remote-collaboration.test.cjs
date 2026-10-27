@@ -1,11 +1,12 @@
 'use strict';
 const test=require('node:test'),assert=require('node:assert/strict');
 const {createHost,remoteURL}=require('../remote-collaboration.js'),comments=require('../../extension/review-comments.js');
+const {deploymentPolicy}=require('../remote-collaboration.js');
 const sha='a'.repeat(40),content='(kicad_pcb)',uri=path=>({scheme:'file',path,toString(){return 'file://'+path;}});
 function harness({remote='git@github.com:owner/board.git',factory,dirty=false,transport,commentAPI=comments}={}){
  const values=new Map(),secrets=new Map(),auth=[],fetches=[],invocations=[];
  const repo={rootUri:uri('/repo'),state:{HEAD:{commit:sha},remotes:[{name:'origin',fetchUrl:remote}]},show:async(ref,path)=>dirty?'different':content};
- const vscode={workspace:{isTrusted:true},extensions:{getExtension:()=>({isActive:true,exports:{getAPI:()=>({repositories:[repo]})}})},authentication:{getSession:async(...args)=>{auth.push(args);return{accessToken:'gho_SUPERSECRET000000000000'};}},window:{showInputBox:async()=> 'glpat_SECRET000000000000000'}};
+ const vscode={workspace:{isTrusted:true,getConfiguration:()=>({inspect:()=>({defaultValue:true})})},extensions:{getExtension:()=>({isActive:true,exports:{getAPI:()=>({repositories:[repo]})}})},authentication:{getSession:async(...args)=>{auth.push(args);return{accessToken:'gho_SUPERSECRET000000000000'};}},window:{showInputBox:async()=> 'glpat_SECRET000000000000000'}};
  const session={uri:uri('/repo/workspace/board.kicad_pcb'),scope:{boundary:uri('/repo/workspace'),repository:'local/workspace',ref:'workspace',rootFile:'board.kicad_pcb'},paths:new Set(['board.kicad_pcb']),files:[{path:'board.kicad_pcb',content}],context:{secrets:{get:async k=>secrets.get(k),store:async(k,v)=>secrets.set(k,v)},workspaceState:{get:k=>values.get(k),update:async(k,v)=>values.set(k,v)}}};
  const apiFactory=deps=>factory?factory(deps):({readThread:async args=>{invocations.push(args);const credential=await deps.credential(args.host);await deps.fetch(args.provider==='github'?'https://api.github.com/repos/owner/board/issues/1':'https://gitlab.com/api/v4/projects/owner%2Fboard',{headers:{Authorization:'Bearer '+credential?.token}});return{kind:'issue',number:1,body:'Thread',comments:[],warnings:[]};},publish:async args=>{invocations.push(args);await deps.credential(args.host);return{remoteRef:{kind:'issue',repository:args.repository,number:1,url:'https://github.com/'+args.repository+'/issues/1',publishedAt:'2026-10-26T00:00:00Z'}};},commentPolicyStatus:async()=>({allowed:true}),categories:async()=>({categories:[{id:'id',name:'Help'}]})});
  const host=createHost(vscode,{sameScope:(file,root)=>file.path.startsWith(root.path+'/'),comments:commentAPI,apiFactory,readCommitted:async(ctx,path)=>dirty?'different':content,fetch:async(url,init)=>{fetches.push({url,init});return transport?transport(url,init):new Response(JSON.stringify({path_with_namespace:'owner/board',id:42}));}});
@@ -17,6 +18,35 @@ test('remote parsing excludes credentials, ambiguous paths and local/network des
  assert.deepEqual(remoteURL('git@github.com:owner/board.git'),{provider:'github',host:'https://github.com',repository:'owner/board'});
  assert.equal(remoteURL('https://gitlab.com/group/sub/board.git').repository,'group/sub/board');
  for(const remote of ['https://user:secret@github.com/owner/repo','http://github.com/o/r','https://127.0.0.1/o/r','https://localhost/o/r','https://git.local/o/r','https://github.com/o/../r','git@github.com:../r','https://github.com/o/r?token=secret'])assert.equal(remoteURL(remote),null,remote);
+});
+
+function setDeployment(h,values={},workspace={}){h.vscode.workspace.getConfiguration=()=>({inspect:key=>({defaultValue:true,globalValue:values[key],workspaceValue:workspace[key],workspaceFolderValue:workspace[key]})});}
+test('application policy ignores repository overrides and fails closed for malformed values',()=>{
+ const h=harness();setDeployment(h,{networkAccess:false,providerWrites:false},{networkAccess:true,providerWrites:true});
+ assert.deepEqual(deploymentPolicy(h.vscode),{networkAccess:false,providerWrites:false});
+ for(const malformed of ['true',1,null,{}]){setDeployment(h,{providerWrites:malformed});assert.deepEqual(deploymentPolicy(h.vscode),{networkAccess:false,providerWrites:false});}
+ h.vscode.workspace.getConfiguration=()=>{throw Error('unavailable');};assert.equal(deploymentPolicy(h.vscode).networkAccess,false);
+});
+test('disabled network blocks existing sessions and authentication before credentials or fetch',async()=>{
+ const h=harness();await h.host.publicContext(h.session);setDeployment(h,{networkAccess:false});
+ for(const type of ['open-options','github-thread-read','github-publish-comment'])await assert.rejects(h.request(type,{kind:'issue',number:1,comment:h.note,destination:'new-issue'}),/Network access is disabled/);
+ assert.equal(h.auth.length,0);assert.equal(h.fetches.length,0);
+});
+test('read-only deployment permits remote reads while refusing publication and chat mutations',async()=>{
+ const h=harness();setDeployment(h,{providerWrites:false});await h.request('github-thread-read',{kind:'issue',number:1});
+ for(const type of ['github-publish-comment','github-recover-publication','comment-publish','chat-message-write','chat-reaction'])await assert.rejects(h.request(type,{comment:h.note,destination:'new-issue'}),/Provider writes are disabled/);
+ assert.equal(h.fetches.length,1);
+});
+test('transport policy rejects writes disguised as reads including multi-operation GraphQL documents',async()=>{
+ for(const [url,init] of [
+  ['https://api.github.com/repos/owner/board/issues',{method:'POST',body:'{}'}],
+  ['https://api.github.com/graphql',{method:'POST',body:JSON.stringify({query:'query A{viewer{id}} mutation B{addComment{id}}',operationName:'B'})}]
+ ]){const h=harness({factory:deps=>({readThread:()=>deps.fetch(url,init)})});setDeployment(h,{providerWrites:false});await assert.rejects(h.request('github-thread-read',{kind:'issue',number:1}),/Provider writes are disabled/);assert.equal(h.fetches.length,0);}
+ const h=harness({factory:deps=>({readThread:()=>deps.fetch('https://api.github.com/graphql',{method:'POST',body:JSON.stringify({query:'query{viewer{id}}'})})})});setDeployment(h,{providerWrites:false});await h.request('github-thread-read',{kind:'discussion',number:1});assert.equal(h.fetches.length,1);
+});
+test('network policy revocation during asynchronous authentication stops credential use',async()=>{
+ const h=harness();h.vscode.authentication.getSession=async()=>{setDeployment(h,{networkAccess:false});return{accessToken:'synthetic-secret'};};
+ await assert.rejects(h.request('github-thread-read',{kind:'issue',number:1}),/Network access is disabled/);assert.equal(h.fetches.length,0);
 });
 test('thread reads use native GitHub auth host-side while bootstrap exposes only committed remote context',async()=>{
  const h=harness(),context=await h.host.publicContext(h.session);assert.equal(context.prefix,'workspace');assert.equal(context.ref,sha);assert.equal(JSON.stringify(context).includes('SECRET'),false);
@@ -39,6 +69,28 @@ test('GitLab connection is explicit and stores token only in exact-origin Secret
 });
 test('host fetch gate rejects foreign destinations even if a provider adapter requests them',async()=>{
  const h=harness({factory:deps=>({readThread:()=>deps.fetch('https://evil.example/repos/owner/board',{headers:{Authorization:'secret'}})})});await assert.rejects(h.request('github-thread-read',{kind:'issue',number:1}),/outside/);assert.equal(h.fetches.length,0);
+});
+
+test('closed remote viewers cannot request account connection',async()=>{
+ const h=harness();h.session.disposed=true;
+ await assert.rejects(h.request('open-options'),/active|closed/);
+ assert.equal(h.auth.length,0);
+});
+
+test('remote Git activation stops when workspace trust is revoked',async()=>{
+ const h=harness();let apiCalls=0;
+ h.vscode.extensions.getExtension=()=>({isActive:false,async activate(){h.vscode.workspace.isTrusted=false;return{getAPI(){apiCalls++;return{repositories:[h.repo]};}};}});
+ await assert.rejects(h.host.context(h.session),/trust/i);assert.equal(apiCalls,0);
+});
+
+test('credential-bearing fetch rechecks trust and viewer lifetime after asynchronous provenance lookup',async()=>{
+ for(const revoke of ['trust','viewer']){
+  const h=harness({factory:deps=>({readThread:()=>deps.fetch('https://api.github.com/repos/owner/board/issues/1',{headers:{Authorization:'synthetic-secret'}})})});
+  let lookups=0;
+  h.vscode.extensions.getExtension=()=>({isActive:true,exports:{getAPI(){if(++lookups===2)queueMicrotask(()=>{if(revoke==='trust')h.vscode.workspace.isTrusted=false;else h.session.disposed=true;});return{repositories:[h.repo]};}}});
+  await assert.rejects(h.request('github-thread-read',{kind:'issue',number:1}),/trusted|active|closed/);
+  assert.equal(h.fetches.length,0);
+ }
 });
 test('GitLab numeric project routes become available only after verified project discovery',async()=>{
  const h=harness({remote:'https://gitlab.com/owner/board.git',factory:deps=>({readThread:()=>deps.fetch('https://gitlab.com/api/v4/projects/42/issues/1')})});await assert.rejects(h.request('github-thread-read',{provider:'gitlab',host:'https://gitlab.com',kind:'issue',number:1}),/outside/);assert.equal(h.fetches.length,0);

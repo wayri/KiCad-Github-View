@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="managed_network_title">Disable provider network access</string>
+    <string name="managed_network_description">Block provider requests, authentication and external browser launches. Local viewing remains available.</string>
+    <string name="managed_writes_title">Disable provider writes</string>
+    <string name="managed_writes_description">Block publication, uploads and chat mutations while allowing provider reads and local notes.</string>
+    <string name="managed_screen_title">Protect the viewer screen</string>
+    <string name="managed_screen_description">Apply Android FLAG_SECURE to the viewer to prevent system screenshots, recording and insecure displays. This is not an export or camera control.</string>
+</resources>

@@ -42,6 +42,7 @@ const KiCadGitHubReviewApi = (() => {
     return result;
   }
   async function readCredential() {
+    await globalThis.KiCadManagedPolicy?.assertNetwork();
     const record = (await chrome.storage.session.get(TOKEN_KEY))[TOKEN_KEY];
     if (!record) return null;
     try {
@@ -72,6 +73,7 @@ const KiCadGitHubReviewApi = (() => {
     });
   }
   async function setToken(value, lifetime = SESSION_LIMIT, expectedEpoch) {
+    await globalThis.KiCadManagedPolicy?.assertNetwork();
     if (typeof value !== "string" || value.length < 20 || value.length > 500 || /[^\x21-\x7e]/.test(value)) {
       throw fail("Enter a valid GitHub access token (20–500 printable characters, no spaces).", true);
     }
@@ -157,6 +159,7 @@ const KiCadGitHubReviewApi = (() => {
   }
 
   async function deviceHttp(path, fields) {
+    await globalThis.KiCadManagedPolicy?.assertNetwork();
     if (path !== "/login/device/code" && path !== "/login/oauth/access_token") throw fail("Invalid GitHub authorization path.", true);
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 30000);
@@ -491,6 +494,7 @@ const KiCadGitHubReviewApi = (() => {
   }
 
   async function chatMessageWrite(message) {
+    await globalThis.KiCadManagedPolicy?.assertWrites();
     if(message?.provider!==undefined&&message.provider!=='github'||message?.host!==undefined&&message.host!=='https://github.com')throw fail('Invalid GitHub chat provider.',true);
     const {repository,ref,file}=KiCadReviewComments.normalizeScope(message||{}),{kind,number}=message.thread||{};
     const action=message.action,mutation=message.clientMutationId;
@@ -967,6 +971,7 @@ const KiCadGitHubReviewApi = (() => {
     return {...confirmed,recovered:true};
   }
   async function publish(message) {
+    await globalThis.KiCadManagedPolicy?.assertWrites();
     const args = publishArgs(message), key = operationKey(args);
     if (locks.has(key)) return locks.get(key);
     const work = publishLocked(args, key);

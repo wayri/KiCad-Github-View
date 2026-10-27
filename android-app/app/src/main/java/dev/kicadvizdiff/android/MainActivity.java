@@ -129,6 +129,21 @@ public final class MainActivity extends Activity {
     private final Runnable githubPollTask = () -> checkGitHubLogin();
     private final NativeRequestGuard bridgeMessageGuard = new NativeRequestGuard();
     private boolean nativeBridgeReady;
+    private boolean restrictionsListening;
+    private EnterprisePolicy appliedPolicy;
+    private final android.content.BroadcastReceiver restrictionsReceiver=new android.content.BroadcastReceiver(){
+        @Override public void onReceive(android.content.Context context,Intent intent){applyManagedPolicy();}
+    };
+    private void applyManagedPolicy(){
+        EnterprisePolicy policy=ManagedPolicy.read(this);
+        if(policy.secureScreen)getWindow().addFlags(WindowManager.LayoutParams.FLAG_SECURE);
+        else getWindow().clearFlags(WindowManager.LayoutParams.FLAG_SECURE);
+        if(appliedPolicy!=null&&((appliedPolicy.network&&!policy.network)||(appliedPolicy.providerWrites&&!policy.providerWrites))){
+            if(github!=null)github.invalidateRequests();if(gitlab!=null)gitlab.cancelRequests();
+        }
+        appliedPolicy=policy;
+    }
+
     private final NativeRequestGuard providerRequestGuard = new NativeRequestGuard();
     private final ExecutorService githubExecutor = Executors.newSingleThreadExecutor();
     private final AtomicInteger githubImportGeneration = new AtomicInteger();
@@ -170,6 +185,11 @@ public final class MainActivity extends Activity {
         gitlab.setDiskProjectStore(diskProjectStore);
         importExecutor.execute(() -> { diskProjectStore.cleanupExpired(); diskProjectStore.scheduleCleanup(); });
         configureWindow();
+        applyManagedPolicy();
+        android.content.IntentFilter restrictionsFilter=new android.content.IntentFilter(Intent.ACTION_APPLICATION_RESTRICTIONS_CHANGED);
+        if(Build.VERSION.SDK_INT>=33)registerReceiver(restrictionsReceiver,restrictionsFilter,android.content.Context.RECEIVER_NOT_EXPORTED);
+        else registerReceiver(restrictionsReceiver,restrictionsFilter);
+        restrictionsListening=true;
         createViewer();
         registerBackCallback();
         webView.loadUrl(VIEWER_URL);
@@ -598,6 +618,7 @@ public final class MainActivity extends Activity {
             if (body == null || body.length() > 8192) return;
             runOnUiThread(() -> {
                 if (!trustedPage()) return;
+                if(!ManagedPolicy.read(MainActivity.this).network){sendError("Network access is disabled by managed application policy.");return;}
                 Intent draft = new Intent(Intent.ACTION_SENDTO, Uri.parse("mailto:support@sigharmonic.com?subject="
                         + Uri.encode("Pocket KiView content/user report") + "&body=" + Uri.encode(body)));
                 draft.putExtra(Intent.EXTRA_SUBJECT, "Pocket KiView content/user report");
@@ -623,6 +644,7 @@ public final class MainActivity extends Activity {
                 try {
                     JSONObject request = new JSONObject(json);
                     String action = request.getString("action");
+                    ManagedPolicy.requireAction(MainActivity.this,action);
                     if (action.equals("device-start") || action.equals("sign-out") || action.equals("token-connect")) {
                         purgeProject("https://github.com");
                         github.reset(); clearCopiedGitHubCode();
@@ -655,7 +677,7 @@ public final class MainActivity extends Activity {
                         catch (Exception error) { githubReply(id, epoch, importEpoch, null, githubError(error),read); }
                     });
                 } catch (Exception error) {
-                    githubReply(id, github.generation(), -1, null, "Invalid GitHub request or browser unavailable");
+                    githubReply(id, github.generation(), -1, null, error instanceof ManagedPolicy.Denied ? error.getMessage() : "Invalid GitHub request or browser unavailable");
                 }
             });
         }
@@ -667,6 +689,7 @@ public final class MainActivity extends Activity {
                 try {
                     JSONObject request = new JSONObject(json);
                     String action = request.getString("action");
+                    ManagedPolicy.requireAction(MainActivity.this,action);
                     String host = GitLabClient.validateHost(request.optString("host", "https://gitlab.com"));
                     if (action.equals("sign-out") || action.equals("token-connect") || action.equals("oauth-start")) { purgeProject(host); gitlab.reset(host); }
 
@@ -697,7 +720,7 @@ public final class MainActivity extends Activity {
                             gitlabReply(id, epoch, null, gitlabError(error),read,host);
                         }
                     });
-                } catch (Exception ignored) { gitlabReply(id, gitlab.generation(), null, "Invalid GitLab connection request"); }
+                } catch (Exception error) { gitlabReply(id, gitlab.generation(), null, error instanceof ManagedPolicy.Denied ? error.getMessage() : "Invalid GitLab connection request"); }
             });
         }
         public void downloadProject() {
@@ -845,6 +868,7 @@ public final class MainActivity extends Activity {
         dialog.getWindow().addFlags(android.view.WindowManager.LayoutParams.FLAG_SECURE); dialog.show();
     }
     private static String gitlabError(Exception error) {
+        if(error instanceof ManagedPolicy.Denied)return error.getMessage();
         return error instanceof GitLabClient.Failure && error.getMessage() != null ? error.getMessage() : "Unable to complete GitLab request; check server and permissions";
     }
     private void gitlabReply(int id,int epoch,JSONObject result,String error){gitlabReply(id,epoch,result,error,null,null);}
@@ -860,6 +884,7 @@ public final class MainActivity extends Activity {
         });
     }
     private void gitlabCallback(Uri uri) {
+        if(!ManagedPolicy.read(this).network){sendError("Network access is disabled by managed application policy.");return;}
         if (uri==null || !"kicadvizdiff".equals(uri.getScheme()) || !"gitlab-oauth".equals(uri.getHost())) return;
         final int epoch=gitlab.generation();
         gitlabExecutor.execute(() -> {
@@ -876,6 +901,7 @@ public final class MainActivity extends Activity {
     }
 
     private static String githubError(Exception error) {
+        if(error instanceof ManagedPolicy.Denied)return error.getMessage();
         // JSON/parser errors can include raw server values; do not expose them to the WebView.
         return error instanceof GitHubClient.Failure && error.getMessage() != null
                 ? error.getMessage() : "Unable to complete GitHub request; check the repository and sign-in";
@@ -1102,7 +1128,14 @@ public final class MainActivity extends Activity {
         super.onActivityResult(requestCode, resultCode, data);
         if (requestCode == REQUEST_WEB_FILE) {
             android.webkit.ValueCallback<Uri[]> callback = webFileCallback; webFileCallback = null;
-            if (callback != null) callback.onReceiveValue(trustedPage() ? WebChromeClient.FileChooserParams.parseResult(resultCode, data) : null);
+            Uri[] selected = null;
+            if (trustedPage()) try { selected = WebChromeClient.FileChooserParams.parseResult(resultCode, data); }
+            catch (RuntimeException invalid) { /* A document handler may return a malformed result. */ }
+            if (selected != null) {
+                if (selected.length == 0 || selected.length > 128) selected = null;
+                else for (Uri item : selected) if (!NativeBridgePolicy.pickerContent(item == null ? null : item.toString())) { selected = null; break; }
+            }
+            if (callback != null) callback.onReceiveValue(selected);
             return;
         }
         if (resultCode != RESULT_OK || data == null || data.getData() == null) {
@@ -1114,6 +1147,14 @@ public final class MainActivity extends Activity {
             return;
         }
         Uri uri = data.getData();
+        if (!NativeBridgePolicy.pickerContent(uri.toString())) {
+            if (requestCode == REQUEST_TEXT_EXPORT) pendingTextExport = null;
+            if (requestCode == REQUEST_DOWNLOAD) pendingDownload = null;
+            // Do not attempt cleanup on a rejected destination: that would also
+            // delegate the app's filesystem authority to the document handler.
+            sendError("The document handler returned an unsupported location. Choose a document provider.");
+            return;
+        }
         if (requestCode == REQUEST_TEXT_EXPORT) {
             final String text = pendingTextExport; final int epoch = pendingTextEpoch; pendingTextExport = null;
             if (text == null || epoch != downloadGeneration.get()) { deleteIncompleteDownload(uri); sendError("Export cancelled because the project changed"); return; }
@@ -1141,6 +1182,7 @@ public final class MainActivity extends Activity {
     }
 
     private void checkGitHubLogin() {
+        if(!ManagedPolicy.read(this).network)return;
         if (destroyed || github == null || githubPollInFlight) return;
         boolean expired = github.deviceExpired();
         if(!github.pendingDevice()) { if(expired && trustedPage()) webView.evaluateJavascript("window.dispatchEvent(new CustomEvent('kicad-github-auth-changed',{detail:{pending:false,error:'GitHub sign-in expired. Start again.'}}));",null); return; }
@@ -1182,6 +1224,7 @@ public final class MainActivity extends Activity {
     }
 
     private void openGitHubVerification(boolean mobile) {
+        if(!ManagedPolicy.read(this).network){sendError("Network access is disabled by managed application policy.");return;}
         copyGitHubCode();
         Uri uri = Uri.parse("https://github.com/login/device");
         if(mobile) { Intent githubApp = new Intent(Intent.ACTION_VIEW,uri).setPackage("com.github.android");
@@ -1195,6 +1238,7 @@ public final class MainActivity extends Activity {
     }
 
     private void openBrowser(Uri uri) {
+        if(!ManagedPolicy.read(this).network){sendError("Network access is disabled by managed application policy.");return;}
         Intent browser = new Intent(Intent.ACTION_VIEW, uri);
         browser.setSelector(Intent.makeMainSelectorActivity(Intent.ACTION_MAIN, Intent.CATEGORY_APP_BROWSER));
         try { startActivity(browser); }
@@ -1226,6 +1270,7 @@ public final class MainActivity extends Activity {
     private void importSource(Uri uri, boolean folder) { importSource(uri,folder,null); }
 
     private void importSource(Uri uri, boolean folder, Boolean temporary) {
+        if (!NativeBridgePolicy.pickerContent(uri == null ? null : uri.toString())) { sendError("Choose a document from a content provider."); return; }
         stopProjectLoads();
         final int generation = importGeneration.incrementAndGet();
         final ReadTicket read=new ReadTicket(true);localRead=read;
@@ -1309,6 +1354,7 @@ public final class MainActivity extends Activity {
     @Override
     protected void onResume() {
         super.onResume();
+        applyManagedPolicy();
         if(diskProjectStore!=null) importExecutor.execute(() -> { diskProjectStore.cleanupExpired(); diskProjectStore.showDueReminders(); diskProjectStore.scheduleCleanup(); runOnUiThread(this::checkTemporaryExpiry); });
         activityResumed = true;
         if(cameraRuntimeGranted)finishCameraRequest();
@@ -1327,6 +1373,7 @@ public final class MainActivity extends Activity {
 
     @Override
     protected void onDestroy() {
+        if(restrictionsListening){unregisterReceiver(restrictionsReceiver);restrictionsListening=false;}
         cancelAllReads();
         clearCameraRequest(true);
         destroyed = true;

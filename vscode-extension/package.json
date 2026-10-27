@@ -2,7 +2,7 @@
   "name": "kicad-visual-review",
   "displayName": "KiCad Visual Review",
   "description": "View KiCad schematics and PCBs, inspect nets and assembly fields, and resolve Git conflicts visually.",
-  "version": "0.12.62",
+  "version": "0.12.63",
   "publisher": "wayri",
   "license": "SEE LICENSE IN LICENSE.txt",
   "engines": {
@@ -36,6 +36,19 @@
     }
   },
   "contributes": {
+    "configuration": {
+      "title": "KiCad Visual Review deployment",
+      "properties": {
+        "kicadVisualReview.networkAccess": {
+          "type": "boolean", "default": true, "scope": "application", "ignoreSync": true,
+          "description": "Allow provider network access and account authentication. User/application setting only; repository settings cannot enable it. Local viewing remains available."
+        },
+        "kicadVisualReview.providerWrites": {
+          "type": "boolean", "default": true, "scope": "application", "ignoreSync": true,
+          "description": "Allow provider publication, uploads and chat changes. Disable for remote read-only review; local notes remain available. Repository settings cannot enable it."
+        }
+      }
+    },
     "commands": [
       {
         "command": "kicadVisualReview.open",

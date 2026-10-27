@@ -1,18 +1,22 @@
 /* Inert saved analysis readers. Never execute reports or run a simulation. */
 ((root)=>{
  'use strict';
- const MAX_BYTES=64*1024*1024,MAX_ROWS=200000,MAX_FIELDS=4000;
+ const MAX_BYTES=64*1024*1024,MAX_ROWS=200000,MAX_FIELDS=4000,MAX_CELLS=4000000;
  const candidate=path=>/\.(wbk|raw|csv|tsv|html?|json|txt)$/i.test(path);
  const numeric=value=>typeof value==='number'?Number.isFinite(value)?value:null:typeof value==='string'&&/^[+-]?(?:\d+\.?\d*|\.\d+)(?:[eE][+-]?\d+)?$/.test(value.trim())?(Number.isFinite(Number(value))?Number(value):null):null;
  function delimited(text,separator){
-  const rows=[];let row=[],value='',quoted=false;
+  const rows=[];let row=[],value='',quoted=false,cells=0;
+  // Bound allocation as fields arrive, before malformed or empty rows can grow.
+  // Permit KiCad's one trailing empty field in addition to 256 data columns.
+  const field=()=>{if(row.length>=257||row.length===256&&value!=='')throw Error('Too many data columns.');if(++cells>MAX_CELLS)throw Error('Too many CSV cells; split the exported data.');row.push(value);value='';};
+  const finish=()=>{field();if(row.some(v=>v.trim())){if(rows.length>=MAX_ROWS)throw Error('Too many data rows; split this export into smaller files.');rows.push(row);}row=[];};
   for(let i=0;i<text.length;i++){
    const c=text[i];if(c==='"'){if(quoted&&text[i+1]==='"'){value+='"';i++;}else quoted=!quoted;}
-   else if(c===separator&&!quoted){row.push(value);value='';}
-   else if((c==='\n'||c==='\r')&&!quoted){if(c==='\r'&&text[i+1]==='\n')i++;row.push(value);if(row.some(v=>v.trim()))rows.push(row);row=[];value='';if(rows.length>MAX_ROWS)throw Error('Too many data rows; split this export into smaller files.');}
+   else if(c===separator&&!quoted){field();}
+   else if((c==='\n'||c==='\r')&&!quoted){if(c==='\r'&&text[i+1]==='\n')i++;finish();}
    else value+=c;
   }
-  if(quoted)throw Error('Incomplete quoted CSV field.');if(value||row.length){row.push(value);if(row.some(v=>v.trim()))rows.push(row);}return rows;
+  if(quoted)throw Error('Incomplete quoted CSV field.');if(value||row.length)finish();return rows;
  }
  function tablePlot(table){
   const numericColumns=table.columns.map((_,i)=>i).filter(i=>table.rows.some(row=>numeric(row[i])!==null));
@@ -118,7 +122,7 @@
  }
  function json(value,path){
   const monkey=monkeyReport(value);if(monkey)return monkey;
-  const result={kind:/\.wbk$/i.test(path)?'KiCad simulation workbook':'Saved analysis report',tables:[],plots:[],fields:[],warnings:[]};let nodes=0;
+  const result={kind:/\.wbk$/i.test(path)?'KiCad simulation workbook':'Saved analysis report',tables:[],plots:[],fields:[],warnings:[]};let nodes=0,cells=0;
   const visit=(item,key,depth)=>{
    if(++nodes>MAX_FIELDS||depth>32)return;
    if(item===null||typeof item!=='object'){result.fields.push({path:key,value:item});return;}
@@ -126,7 +130,7 @@
     if(item.length>MAX_ROWS)throw Error('Too many analysis rows.');
     if(item.length&&item.every(row=>row&&typeof row==='object'&&!Array.isArray(row))){
      const columns=[...new Set(item.slice(0,100).flatMap(row=>Object.keys(row).filter(k=>row[k]===null||typeof row[k]!=='object')))].slice(0,128);
-     if(columns.length){const table={title:key,columns,rows:item.map(row=>columns.map(k=>row[k]??''))};result.tables.push(table);}
+     if(columns.length){if((cells+=columns.length*item.length)>MAX_CELLS)throw Error('Too many analysis table cells; split this export into smaller files.');const table={title:key,columns,rows:item.map(row=>columns.map(k=>row[k]??''))};result.tables.push(table);}
     }
     for(let i=0;i<Math.min(item.length,100);i++)visit(item[i],key+'['+i+']',depth+1);return;
    }

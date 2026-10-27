@@ -15,6 +15,29 @@ from .github import api, installation_token, verify_webhook
 from .git import VizError
 from .app_jobs import DeliveryQueue
 from .app_assets import PUBLIC_ASSETS
+from .http_limits import DeadlineRequestHandler
+
+
+def webhook_secret(environment=None):
+    """Load either a mounted deployment secret or the legacy environment value."""
+    environment = os.environ if environment is None else environment
+    filename = environment.get('GITHUB_WEBHOOK_SECRET_FILE', '')
+    inline = environment.get('GITHUB_WEBHOOK_SECRET', '')
+    if filename and inline:
+        raise VizError('Use one webhook secret source, not both file and environment.')
+    if not filename:
+        return inline
+    try:
+        with Path(filename).open('rb') as stream:
+            value = stream.read(4097)
+        if len(value) > 4096:
+            raise ValueError('Oversized secret')
+        text = value.decode('utf-8').rstrip('\r\n')
+        if not text or any(ord(c) < 32 or ord(c) == 127 for c in text):
+            raise ValueError('Invalid secret')
+        return text
+    except (OSError, UnicodeError, ValueError) as exc:
+        raise VizError('Webhook secret file must contain 1–4096 bytes of UTF-8 text without controls.') from exc
 
 
 def validate_credentials(app_id, key_path, web_root):
@@ -37,7 +60,7 @@ def validate_credentials(app_id, key_path, web_root):
         raise VizError('GITHUB_PRIVATE_KEY_PATH must be a readable, unencrypted RSA private key.') from exc
 
 
-class Handler(BaseHTTPRequestHandler):
+class Handler(DeadlineRequestHandler):
     server_version = 'KiCadGitHubApp/0.1'
 
     def log_message(self, *args):
@@ -223,7 +246,10 @@ def main():
     parser.add_argument('--state-db', default=os.environ.get('VIZDIFF_STATE_DB', '.vizdiff/app-state.sqlite3'))
     args = parser.parse_args()
     origin = os.environ.get('VIZDIFF_PUBLIC_URL', f'http://127.0.0.1:{args.port}')
-    secret = os.environ.get('GITHUB_WEBHOOK_SECRET', '')
+    try:
+        secret = webhook_secret()
+    except VizError as exc:
+        parser.error(str(exc))
     if urlsplit(origin).scheme == 'https' or args.host not in ('127.0.0.1', 'localhost', '::1'):
         try:
             service_origin(origin)

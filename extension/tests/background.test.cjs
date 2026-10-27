@@ -58,6 +58,18 @@ function withFetch(t, handler) {
   t.after(() => { global.fetch = before; });
 }
 
+test('host-page project and pull reads cannot cross repository, pull, or frame boundaries',async t=>{
+ let reads=0;withFetch(t,async()=>{reads++;return json({});});
+ for(const type of ['project','githubPull','githubFiles']){
+  const input={type,repository:'private/other',ref:'main',file:'board.kicad_pcb',number:7};
+  const result=await message(input,githubTab(2,'/owner/repo/pull/7/files'));
+  assert.equal(result.ok,false);assert.match(result.error,/host page/);
+ }
+ for(const type of ['githubPull','githubFiles'])assert.match((await message({type,repository:'owner/repo',number:8},githubTab(2,'/owner/repo/pull/7/files'))).error,/host page/);
+ assert.match((await message({type:'project',repository:'owner/repo',ref:'main',file:'board.kicad_pcb'},{...githubTab(2,'/owner/repo/blob/main/board.kicad_pcb'),frameId:3})).error,/host page/);
+ assert.equal(reads,0);
+});
+
 test('worker failures carry sanitized access warnings without treating missing files as organization blocks',async t=>{
  withFetch(t,async()=>{throw Error('net::ERR_BLOCKED_BY_ADMINISTRATOR SECRET');});
  const blocked=await message({type:'project',repository:'owner/repo',ref:'main',file:'board.kicad_pcb'});

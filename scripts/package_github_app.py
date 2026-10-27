@@ -6,7 +6,7 @@ import zipfile
 root = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(root))
 from kicad_vizdiff.app_assets import RENDERER_ASSETS, VENDOR_ASSETS, VIEWER_PAGES
-names = {'LICENSING.md', 'THIRD-PARTY-NOTICES.md', 'docs/INSTALL.md', 'docs/COMMENTS.md', 'docs/GIT-HOSTS.md', 'README.md', 'pyproject.toml', 'Dockerfile.github-app', '.dockerignore',
+names = {'LICENSE', 'LICENSING.md', 'scripts/requirements-linux.lock', 'deploy/nginx-github-app.conf', 'docs/HARDENED-DEPLOYMENT.md', 'THIRD-PARTY-NOTICES.md', 'docs/INSTALL.md', 'docs/COMMENTS.md', 'docs/GIT-HOSTS.md', 'README.md', 'pyproject.toml', 'Dockerfile.github-app', '.dockerignore',
          'compose.github-app.yml', '.github/app-manifest.example.json',
          'docs/github-app.md', 'scripts/configure_github_app.py',
          'scripts/package_app_web.py', 'scripts/package_github_app.py', 'scripts/package_step_source.py'}

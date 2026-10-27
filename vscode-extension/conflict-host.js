@@ -16,26 +16,31 @@ function markerRef(label,repo){
  const refs=(repo.state?.refs||[]).filter(r=>r.name===label||`refs/heads/${r.name}`===label||`refs/remotes/${r.name}`===label);
  return refs.length===1&&hashPattern.test(refs[0].commit||"")?{ref:refs[0].commit,hash:refs[0].commit.toLowerCase()}:null;
 }
-async function commitForMarker(repo,label){
+async function commitForMarker(repo,label,isTrusted){
+ if(!isTrusted())return null;
  const identity=markerRef(label,repo);if(!identity||typeof repo.getCommit!=="function")return null;
  try{
   const commit=await repo.getCommit(identity.ref),hash=commit?.hash?.toLowerCase(),when=commit?.commitDate;
+  if(!isTrusted())return null;
   if(!hashPattern.test(hash||"")||(identity.hash&&hash!==identity.hash)||(identity.prefix&&!hash.startsWith(identity.prefix)))return null;
   const date=when instanceof Date?when:null,timestamp=date?.getTime();
   return Number.isFinite(timestamp)?{hash,date:date.toISOString(),label}:null;
  }catch{return null;}
 }
-async function gitMetadata(repo,conflicts,uri){
- if(!repo)return null;
+async function gitMetadata(repo,conflicts,uri,isTrusted){
+ if(!repo||!isTrusted())return null;
  if(!(repo.state?.mergeChanges||[]).some(change=>change.uri?.toString()===uri.toString()))return {branch:repo.state?.HEAD?.name||"Detached HEAD",current:null,incoming:null,latest:null};
- const [current,incoming]=await Promise.all(["current","incoming"].map(side=>commitForMarker(repo,markerLabel(conflicts,side))));
+ const [current,incoming]=await Promise.all(["current","incoming"].map(side=>commitForMarker(repo,markerLabel(conflicts,side),isTrusted)));
+ if(!isTrusted())return null;
  const latest=current&&incoming&&current.hash!==incoming.hash&&current.date!==incoming.date?(current.date>incoming.date?"current":"incoming"):null;
  return {branch:repo.state?.HEAD?.name||"Detached HEAD",current,incoming,latest};
 }
 function createHost(vscode,merge,helpers) {
- let actionQueue=Promise.resolve();
+ let actionQueue=Promise.resolve(),pendingMessages=0;
+ const isTrusted=()=>vscode.workspace.isTrusted===true;
  const dirty=uri=>(vscode.workspace.textDocuments||[]).some(d=>d.uri.toString()===uri.toString()&&d.isDirty);
  async function boundedRead(uri,boundary) {
+  helpers.sourceAccess?.(uri);
   if(!/\.kicad_(sch|pcb)$/i.test(uri.path)||!helpers.sameScope(uri,boundary))throw new Error("Select an in-workspace KiCad drawing.");
   const boundaryStat=await vscode.workspace.fs.stat(boundary);if(boundaryStat.type&vscode.FileType.SymbolicLink)throw new Error("Symbolic-link workspace roots are excluded.");
   const relative=uri.path.slice(boundary.path.replace(/\/$/,"").length+1),parts=relative.split("/");
@@ -44,12 +49,14 @@ function createHost(vscode,merge,helpers) {
    if(stat.type&vscode.FileType.SymbolicLink)throw new Error("Symbolic-link paths cannot be resolved.");
    if(i===parts.length&&(!(stat.type&vscode.FileType.File)||stat.size>LIMIT))throw new Error("Drawing exceeds the 8 MiB limit or is not a file.");
   }
-  const bytes=await vscode.workspace.fs.readFile(uri);if(bytes.length>LIMIT)throw new Error("Drawing grew beyond the 8 MiB limit.");return bytes;
+  helpers.sourceAccess?.(uri);const bytes=await vscode.workspace.fs.readFile(uri);if(bytes.length>LIMIT)throw new Error("Drawing grew beyond the 8 MiB limit.");return bytes;
  }
  async function gitRepository(uri) {
-  if(uri.scheme!=="file")return null;
+  if(uri.scheme!=="file"||!isTrusted())return null;
   const extension=vscode.extensions?.getExtension("vscode.git");if(!extension)return null;
-  try {const exports=extension.isActive?extension.exports:await extension.activate(),api=exports.getAPI(1);
+  try {const exports=extension.isActive?extension.exports:await extension.activate();
+   if(!isTrusted())return null;
+   const api=exports.getAPI(1);
    return api.repositories.filter(r=>helpers.sameScope(uri,r.rootUri)).sort((a,b)=>b.rootUri.path.length-a.rootUri.path.length)[0]||null;
   } catch {return null;}
  }
@@ -60,7 +67,7 @@ function createHost(vscode,merge,helpers) {
   const analysis=merge.analyze(source,{expectedRoot});if(!analysis.count)throw new Error("The selected file has no unresolved Git conflict markers.");
   panel=panel||vscode.window.createWebviewPanel("kicadVisualReview.conflicts","KiCad: Resolve Git Conflict",vscode.ViewColumn.Active,{enableScripts:true,retainContextWhenHidden:true});
   panel.webview.options={enableScripts:true,localResourceRoots:[context.extensionUri,vscode.Uri.joinPath(context.extensionUri,"media")]};
-  const session={token:helpers.secret(),lastId:0,disposed:false},repo=await gitRepository(uri),git=await gitMetadata(repo,analysis.conflicts,uri);let savedOriginal=false,savedBytes=null,queue=Promise.resolve();
+  const session={token:helpers.secret(),lastId:0,disposed:false},repo=await gitRepository(uri),git=await gitMetadata(repo,analysis.conflicts,uri,isTrusted);let savedOriginal=false,savedBytes=null,queue=Promise.resolve();
   const checkOriginal=async()=>{if(dirty(uri)||!sameBytes(bytes,await boundedRead(uri,scope.boundary))||dirty(uri))throw new Error("Source changed or has unsaved edits; reopen conflict review. Nothing was written.");};
   async function guardCopy(destination) {
     const parts=destination.path.slice(scope.boundary.path.replace(/\/$/,"").length+1).split("/");
@@ -84,7 +91,7 @@ function createHost(vscode,merge,helpers) {
     if(session.disposed)throw new Error("Conflict review was closed.");await checkOriginal();if(dirty(destination))throw new Error("Destination has unsaved changes.");
     if(vscode.workspace.isTrusted!==true)throw new Error("Workspace trust changed; nothing was written.");
     if(request.mode==="copy")await guardCopy(destination);
-    await vscode.workspace.fs.writeFile(destination,data);savedOriginal=request.mode==="original";savedBytes=savedOriginal?data:null;
+    helpers.sourceAccess?.(destination);await vscode.workspace.fs.writeFile(destination,data);savedOriginal=request.mode==="original";savedBytes=savedOriginal?data:null;
     return {saved:true,path:destination.toString(),message:"Resolved source saved. Git staging is a separate action.",canStage:savedOriginal&&!!repo};
    }
    if(request.type==="conflict-stage"){
@@ -100,7 +107,11 @@ function createHost(vscode,merge,helpers) {
   const receiver=panel.webview.onDidReceiveMessage(message=>{
    if(session.disposed||message?.channel!==CHANNEL||message.token!==session.token||!Number.isSafeInteger(message.id)||message.id<=session.lastId||message.id>10000)return;
    session.lastId=message.id;
-   const run=async()=>{let reply;try{if(!message.request||JSON.stringify(message.request).length>1024)throw new Error("Invalid conflict request.");reply={ok:true,result:await dispatch(message.request)};}catch(error){reply={ok:false,error:String(error.message).slice(0,1000)};}if(!session.disposed)await panel.webview.postMessage({channel:CHANNEL,token:session.token,id:message.id,reply});};queue=actionQueue.then(run,run);actionQueue=queue.catch(()=>{});
+   // Admission belongs at the host boundary, before retaining a queued payload.
+   try{if(!message.request||JSON.stringify(message.request).length>1024)throw new Error("Invalid conflict request.");if(pendingMessages>=128)throw new Error("Conflict pending request limit exceeded.");}
+   catch(error){return panel.webview.postMessage({channel:CHANNEL,token:session.token,id:message.id,reply:{ok:false,error:error.message}});}
+   pendingMessages++;
+   const run=async()=>{if(session.disposed)return;let reply;try{reply={ok:true,result:await dispatch(message.request)};}catch(error){reply={ok:false,error:String(error.message).slice(0,1000)};}if(!session.disposed)await panel.webview.postMessage({channel:CHANNEL,token:session.token,id:message.id,reply});};queue=actionQueue.then(run,run).finally(()=>{pendingMessages--;});actionQueue=queue.catch(()=>{});
   });
   panel.onDidDispose(()=>{session.disposed=true;receiver.dispose();});
   panel.webview.html=await helpers.conflictHTML(panel.webview,context,session);return panel;

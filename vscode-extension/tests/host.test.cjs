@@ -10,6 +10,7 @@ class Uri {
 function harness(folder=Uri.parse("vscode-vfs://github/owner/repo?ref=main")) {
   const entries=new Map(),reads=[],stats=[],state=new Map(),commands=[],registrations=[];
   const vscode={Uri,ViewColumn:{Beside:-2},FileType:{File:1,Directory:2,SymbolicLink:64},workspace:{
+    getConfiguration:()=>({inspect:()=>({defaultValue:true})}),
     getWorkspaceFolder:()=>folder?{uri:folder}:undefined,
     fs:{async stat(uri){stats.push(uri.toString());const item=entries.get(uri.toString());if(!item){const error=new Error("absent");error.code="FileNotFound";throw error;}return {size:item.size ?? item.bytes?.byteLength ?? 0,type:item.type || 1};},
       async readFile(uri){reads.push(uri.toString());const item=entries.get(uri.toString());if(!item){const error=new Error("absent");error.code="FileNotFound";throw error;}return item.bytes;},
@@ -30,6 +31,55 @@ function harness(folder=Uri.parse("vscode-vfs://github/owner/repo?ref=main")) {
 const plain=(value)=>JSON.parse(JSON.stringify(value));
 async function session(h,relative="root.kicad_sch") {const uri=h.write(relative),project=await h.api._test.loadProject(uri);return h.api._test.createSession(uri,project,h.context,"a".repeat(48));}
 async function send(h,s,id,request,extra={}) {const replies=[];await h.api._test.handleMessage({channel:h.api._test.CHANNEL,token:s.token,id,request,...extra},s,(reply)=>{replies.push(reply);});return replies[0]?.reply;}
+
+test('closing a viewer cancels its queued storage mutations',async()=>{
+ const h=harness(),s=await session(h);
+ const pending=send(h,s,1,{type:'storage-set',values:{[s.variantKey]:'queued-value'}});
+ s.disposed=true;await pending;
+ assert.equal(h.state.size,0,'no mutation may begin after viewer disposal');
+});
+
+test('network revocation closes documents with remote attachment CSP while local-only views remain available',async()=>{
+ const h=harness(Uri.parse('file:///repo')),remote=await session(h),local=await session(h,'local.kicad_sch');let listener,closed=0;
+ h.vscode.workspace.onDidChangeConfiguration=fn=>{listener=fn;return{dispose(){}};};
+ remote.remoteBinding={provider:'github'};remote.closeForPolicy=()=>{closed++;};local.closeForPolicy=()=>{throw Error('Local-only viewer was closed');};
+ h.api.activate(h.context);h.vscode.workspace.getConfiguration=()=>({inspect:key=>({defaultValue:true,globalValue:key==='networkAccess'?false:true})});
+ listener({affectsConfiguration:()=>true});assert.equal(closed,1);assert.equal(remote.disposed,true);assert.equal(local.disposed,false);
+});
+
+test('offline deployment denies virtual source reads but preserves cached project data and local viewing',async()=>{
+ const h=harness(),s=await session(h);h.write('extra.kicad_pcb','(kicad_pcb)');
+ h.vscode.workspace.getConfiguration=()=>({inspect:key=>({defaultValue:true,globalValue:key==='networkAccess'?false:true})});
+ const before=h.reads.length;await assert.rejects(h.api._test.loadProject(Uri.joinPath(h.folder,'root.kicad_sch')),/local file/);
+ assert.equal((await send(h,s,1,{type:'project',...s.scope,file:s.scope.rootFile})).ok,true);
+ assert.equal((await send(h,s,2,{type:'project-file',...s.scope,file:'extra.kicad_pcb'})).ok,false);assert.equal(h.reads.length,before);
+ assert.equal((await send(h,s,3,{type:'open-project-drawing',...s.scope,file:s.scope.rootFile})).ok,false);assert.equal(h.commands.length,0);
+ const local=harness(Uri.parse('file:///repo'));local.vscode.workspace.getConfiguration=h.vscode.workspace.getConfiguration;
+ assert.equal((await session(local)).files.length,1);
+});
+
+test('policy revoked during virtual file stat prevents the following source byte read',async()=>{
+ const h=harness(),uri=h.write('root.kicad_sch'),stat=h.vscode.workspace.fs.stat;
+ h.vscode.workspace.fs.stat=async target=>{const result=await stat(target);h.vscode.workspace.getConfiguration=()=>({inspect:key=>({defaultValue:true,globalValue:key==='networkAccess'?false:true})});return result;};
+ await assert.rejects(h.api._test.loadProject(uri),/local file/);assert.equal(h.reads.length,0);
+});
+
+test('host admission bounds authenticated request floods and releases capacity',async()=>{
+ const h=harness(),s=await session(h),pending=[];
+ for(let id=1;id<=129;id++)pending.push(send(h,s,id,{type:'storage-get',key:s.variantKey}));
+ const replies=await Promise.all(pending);
+ assert.equal(replies.filter(reply=>reply?.ok===false).length,1);
+ assert.match(replies.at(-1).error,/pending|budget|limit/i);
+ assert.equal((await send(h,s,130,{type:'storage-get',key:s.variantKey})).ok,true);
+});
+
+test('host admission bounds retained payload bytes independently of request count',async()=>{
+ const h=harness(),s=await session(h),pending=[];
+ for(let id=1;id<=10;id++)pending.push(send(h,s,id,{type:'storage-get',key:s.variantKey,padding:'x'.repeat(900000)}));
+ const replies=await Promise.all(pending);
+ assert.ok(replies.some(reply=>reply?.ok===false),'oversized aggregate queues must reject before retention');
+ assert.equal((await send(h,s,11,{type:'storage-get',key:s.variantKey})).ok,true);
+});
 
 test('global workspace search discovers both kinds without crossing providers and opens only discovered drawings',async()=>{
  const h=harness(),s=await session(h);h.write('board.kicad_pcb','(kicad_pcb)');h.write('power/child.kicad_sch');h.write('linked.kicad_pcb','(kicad_pcb)',{type:65});

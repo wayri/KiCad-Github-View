@@ -34,6 +34,7 @@ final class GitHubClient {
     private static final int TOTAL_LIMIT = 96 * 1024 * 1024;
     interface ConnectionFactory { HttpsURLConnection open(URL url)throws IOException; }
     private final ConnectionFactory connections;
+    private final Context policyContext;
     private final DiskProjectStore diskStore;
     private final GitHubVault vault;
     private final GitHubVault deviceVault;
@@ -56,7 +57,7 @@ final class GitHubClient {
 
     GitHubClient(Context context) { this(context,"github"); }
     GitHubClient(Context context, String namespace) { this(context,namespace,url->(HttpsURLConnection)url.openConnection()); }
-    GitHubClient(Context context,String namespace,ConnectionFactory connections) { this.connections=connections;diskStore = new DiskProjectStore(context); vault = new GitHubVault(context,namespace); deviceVault = new GitHubVault(context, namespace+"_device"); token = vault.read();
+    GitHubClient(Context context,String namespace,ConnectionFactory connections) { this.policyContext=context.getApplicationContext();this.connections=connections;diskStore = new DiskProjectStore(context); vault = new GitHubVault(context,namespace); deviceVault = new GitHubVault(context, namespace+"_device"); token = vault.read();
         try { String saved = deviceVault.read(); if (saved != null && token == null) {
             JSONObject pending = new JSONObject(saved); long remaining = pending.getLong("expiresAt") - System.currentTimeMillis();
             if (remaining > 0 && remaining <= 1800000) { deviceCode = pending.getString("deviceCode"); userCode = pending.getString("userCode"); interval = Math.max(5, Math.min(60,pending.optInt("interval",5))); deviceWallExpiry = pending.getLong("expiresAt"); deviceExpiry = SystemClock.elapsedRealtime()+remaining; nextPoll = SystemClock.elapsedRealtime()+interval*1000L; }
@@ -98,6 +99,7 @@ final class GitHubClient {
         try (NativeLoadOperation.Scope scope = operation.enter()) { return handle(request, epoch); }
     }
     JSONObject handle(JSONObject request, int epoch) throws Exception {
+        ManagedPolicy.requireAction(policyContext,request.getString("action"));
         check(epoch);
         switch (request.getString("action")) {
             case "auth-status":
@@ -369,6 +371,7 @@ final class GitHubClient {
         return new JSONObject().put("entries", entries).put("truncated", omitted);
     }
     private void downloadFile(String repository, String sha, String path, java.io.File target, long size, boolean isPrivate, int epoch, long projectDeadline) throws Exception {
+        ManagedPolicy.requireNetwork(policyContext);
         HttpsURLConnection connection = connections.open(downloadUrl(repository,sha,path,size,isPrivate)); NativeLoadOperation.track(connection);
         connection.setInstanceFollowRedirects(false); connection.setUseCaches(false); connection.setConnectTimeout(15000); connection.setReadTimeout(30000);
         connection.setRequestProperty("Accept", "application/vnd.github.raw+json"); connection.setRequestProperty("User-Agent", "KiCadVizDiff-Android");
@@ -993,6 +996,12 @@ final class GitHubClient {
                 || (!url.getHost().equals("api.github.com") && !(url.getHost().equals("uploads.github.com") && bearer != null && body != null
                 && url.getPath().equals("/user-attachments/assets")) && !(url.getHost().equals("github.com") && bearer == null && body != null
                 && (url.getPath().equals("/login/device/code") || url.getPath().equals("/login/oauth/access_token"))))) throw new Failure("Unsupported GitHub endpoint");
+        boolean providerWrite=body!=null&&!url.getHost().equals("github.com");
+        if(providerWrite&&url.getPath().equals("/graphql")){
+            String query=new JSONObject(new String(body,StandardCharsets.UTF_8)).optString("query",null);
+            providerWrite=!EnterprisePolicy.readOnlyGraphql(query);
+        }
+        ManagedPolicy.requireTransport(policyContext,providerWrite);
         HttpsURLConnection connection = connections.open(url); NativeLoadOperation.track(connection);
         connection.setInstanceFollowRedirects(false);
         connection.setConnectTimeout(15000); connection.setReadTimeout(20000); connection.setUseCaches(false);
@@ -1007,7 +1016,7 @@ final class GitHubClient {
                 connection.setRequestMethod("POST"); connection.setDoOutput(true);
                 connection.setRequestProperty("Content-Type", contentType);
                 connection.setFixedLengthStreamingMode(bytes.length);
-                check(epoch);try (java.io.OutputStream stream = connection.getOutputStream()) { check(epoch);stream.write(bytes); }
+                check(epoch);ManagedPolicy.requireTransport(policyContext,providerWrite);try (java.io.OutputStream stream = connection.getOutputStream()) { check(epoch);stream.write(bytes); }
             }
             int status = connection.getResponseCode();
             check(epoch);

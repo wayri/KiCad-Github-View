@@ -1,0 +1,7 @@
+{
+  "type": "object",
+  "properties": {
+    "NetworkEnabled": {"type": "boolean", "title": "Allow extension network requests", "description": "Set false to disable repository access, diagnostics, provider authentication and publication. Local imported work remains available."},
+    "ProviderWritesEnabled": {"type": "boolean", "title": "Allow provider writes", "description": "Set false to disable publishing, chat changes, reactions, uploads and external comment drafts while retaining read access."}
+  }
+}

@@ -74,6 +74,9 @@ class LocalViewerTests(unittest.TestCase):
         self.assertEqual(json.loads(content)['rootFile'], 'board.kicad_pcb')
         self.assertEqual(headers['Cache-Control'], 'no-store')
         self.assertEqual(headers['Referrer-Policy'], 'no-referrer')
+        self.assertIn("connect-src 'self'", headers['Content-Security-Policy'])
+        self.assertIn("object-src 'none'", headers['Content-Security-Policy'])
+        self.assertIn("form-action 'none'", headers['Content-Security-Policy'])
         self.assertNotIn('Access-Control-Allow-Origin', headers)
         for extra in [{}, {'X-KiView-Session': 'wrong'}, {'X-KiView-Session': server.session, 'Origin': 'https://evil.example'}, {'X-KiView-Session': server.session, 'Host': 'evil.example'}]:
             self.assertEqual(self.request(server, '/api/project', headers=extra)[0], 403)

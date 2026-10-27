@@ -12,7 +12,7 @@ from urllib.request import Request, urlopen
 
 from kicad_vizdiff.app_review import changed_designs, check_payload, public_designs, public_review, service_origin
 from kicad_vizdiff.app_assets import PUBLIC_ASSETS
-from kicad_vizdiff.app_server import AppServer, validate_credentials
+from kicad_vizdiff.app_server import AppServer, validate_credentials, webhook_secret
 from kicad_vizdiff.git import VizError
 
 SHA = 'a' * 40
@@ -20,6 +20,18 @@ BASE = 'b' * 40
 
 
 class AppMetadataTests(unittest.TestCase):
+    def test_mounted_webhook_secret_is_bounded_and_unambiguous(self):
+        with tempfile.TemporaryDirectory() as folder:
+            path = Path(folder) / 'webhook'
+            path.write_bytes(b'strong-mounted-secret-value\n')
+            self.assertEqual(webhook_secret({'GITHUB_WEBHOOK_SECRET_FILE': str(path)}), 'strong-mounted-secret-value')
+            with self.assertRaises(VizError):
+                webhook_secret({'GITHUB_WEBHOOK_SECRET_FILE': str(path), 'GITHUB_WEBHOOK_SECRET': 'other'})
+            for value in [b'x' * 4097, b'line\nbreak', b'\xff', b'']:
+                path.write_bytes(value)
+                with self.assertRaises(VizError):
+                    webhook_secret({'GITHUB_WEBHOOK_SECRET_FILE': str(path)})
+
     def test_suffix_changing_renames_are_added_or_removed(self):
         files = [{'filename': 'board.kicad_pcb', 'previous_filename': 'notes.txt', 'status': 'renamed'},
                  {'filename': 'notes.txt', 'previous_filename': 'old.kicad_sch', 'status': 'renamed'},

@@ -7,7 +7,7 @@ from pathlib import Path
 from urllib.request import Request
 from unittest.mock import patch
 
-from kicad_vizdiff.github import extract_archive, repository_name, verify_webhook, api, NoRedirect
+from kicad_vizdiff.github import extract_archive, repository_name, verify_webhook, api, NoRedirect, download_snapshot
 from kicad_vizdiff.git import VizError
 
 
@@ -20,6 +20,13 @@ def archive(entries):
 
 
 class GitHubBoundaryTests(unittest.TestCase):
+    def test_archive_uses_the_redirect_rejecting_transport(self):
+        with tempfile.TemporaryDirectory() as temp, patch('kicad_vizdiff.github._api_opener.open') as transport:
+            transport.return_value.__enter__.return_value.read.return_value = archive({'repo-root/board.kicad_pcb': '(kicad_pcb)'})
+            download_snapshot('owner/repo', 'a' * 40, Path(temp))
+            self.assertEqual(transport.call_args.args[0].full_url, 'https://codeload.github.com/owner/repo/zip/' + 'a' * 40)
+            self.assertTrue((Path(temp) / 'board.kicad_pcb').is_file())
+
     def test_authorized_api_redirect_never_forwards_credentials(self):
         request = Request('https://api.github.com/repos/owner/repo', headers={'Authorization': 'Bearer secret'})
         for url in ('https://attacker.example/collect', 'https://api.github.com/repos/renamed/repo'):

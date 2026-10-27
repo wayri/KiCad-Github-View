@@ -16,6 +16,7 @@ FILES = {'analysis-data.js', 'analysis-viewer.html', 'analysis-viewer.css', 'ana
 FILES.update({'workspace-chrome.css','workspace-chrome.js'})
 FILES.update({'chat-content.js','chat-panel.js','chat-panel.css'})
 FILES.update({'compact-surfaces.css','compact-surfaces.js'})
+FILES.update({'managed-policy.js','managed-policy-schema.json','managed-policy-options.js'})
 FILES.update(MODEL_FILES)
 FILES.update({'repository-explorer.js','repository-explorer.css','layer-colors.js'})
 FILES.update({'engineering-launcher.js', 'review-handoff.js', 'local-project.js', 'local-import.js', 'local-runtime.js', 'local-viewer.html', 'local-viewer.js', 'local-viewer.css', 'local-layout.js'})
