@@ -78,7 +78,8 @@ def project_snapshot(project: str | Path) -> dict:
     root_file = None if selected.is_dir() else selected.name
     if root_file and not (supported_text(selected) or selected.suffix.lower() in ASSET_SUFFIXES):
         raise ValueError('Select a KiCad project, drawing or supported review file.')
-    files, assets, warnings = [], [], []
+    files, assets, warnings, entries = [], [], [], []
+    inventory_truncated = False
     total = 0
     for folder, dirs, names in os.walk(root, followlinks=False):
         base = Path(folder)
@@ -86,7 +87,14 @@ def project_snapshot(project: str | Path) -> dict:
         for name in sorted(names):
             candidate = base / name
             relative = candidate.relative_to(root).as_posix()
-            if not safe_relative(relative) or candidate.is_symlink() or not (supported_text(candidate) or candidate.suffix.lower() in ASSET_SUFFIXES):
+            if not safe_relative(relative) or candidate.is_symlink() or not candidate.is_file():
+                continue
+            # List ordinary project files without reading arbitrary file contents.
+            if len(entries) < 10000:
+                entries.append({'path': relative, 'type': 'blob'})
+            else:
+                inventory_truncated = True
+            if not (supported_text(candidate) or candidate.suffix.lower() in ASSET_SUFFIXES):
                 continue
             if len(files) + len(assets) >= MAX_FILES:
                 raise ValueError(f'Project exceeds {MAX_FILES} supported files; select a smaller project directory.')
@@ -111,7 +119,8 @@ def project_snapshot(project: str | Path) -> dict:
         raise ValueError('The selected file was not loaded.')
     # Identity describes this saved source snapshot; no account or path is exposed.
     identity = hashlib.sha256(json.dumps([files, assets], ensure_ascii=False, separators=(',', ':')).encode()).hexdigest()
-    return {'name': root.name, 'id': 'local-' + identity[:24], 'files': files, 'assets': assets, 'rootFile': root_file, 'warnings': warnings}
+    return {'name': root.name, 'id': 'local-' + identity[:24], 'files': files, 'assets': assets, 'rootFile': root_file, 'warnings': warnings,
+            'repositoryTree': {'entries': entries, 'truncated': inventory_truncated}}
 
 
 def asset_inventory(assets: Path) -> frozenset[str]:

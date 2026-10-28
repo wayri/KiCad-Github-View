@@ -59,13 +59,15 @@ function workspaceRuntime(respond=async()=>[], hooks={}){
   const receipts=new Map(hooks.unacceptedRules?[]:[['kivi:content-rules','2026-10-10-terms-1']]),localStorage={getItem:key=>receipts.get(key)||null,setItem:(key,value)=>receipts.set(key,value),removeItem:key=>receipts.delete(key)};
   const keyHandlers=new Set();
   let resizeCallback;
-  const context={innerWidth:hooks.width||800,innerHeight:hooks.frameHeight||600,EventTarget,CustomEvent,TextEncoder,Map,Set,console,crypto:require('node:crypto').webcrypto,localStorage,document:{body,querySelectorAll:selector=>{const found=[];const visit=n=>{if(selector==='dialog[open]'&&n.tagName==='DIALOG'&&n.open)found.push(n);for(const c of n.children)visit(c);};visit(body);return found;},getElementById:id=>{const node=elements.get(id);return node&&body.contains(node)?node:null;},createElement:tag=>new Element(tag),createElementNS:(_,tag)=>new Element(tag)},addEventListener:(type,fn)=>{if(type==='keydown')keyHandlers.add(fn);if(type==='resize')resizeCallback=fn;},removeEventListener:(type,fn)=>{if(type==='keydown')keyHandlers.delete(fn);},matchMedia:()=>({matches:true}),
+  const context={innerWidth:hooks.width||800,innerHeight:hooks.frameHeight||600,EventTarget,CustomEvent,TextEncoder,Map,Set,console,crypto:require('node:crypto').webcrypto,localStorage,document:{body,addEventListener(){},removeEventListener(){},querySelectorAll:selector=>{const found=[];const visit=n=>{if(selector==='dialog[open]'&&n.tagName==='DIALOG'&&n.open)found.push(n);for(const c of n.children)visit(c);};visit(body);return found;},getElementById:id=>{const node=elements.get(id);return node&&body.contains(node)?node:null;},createElement:tag=>new Element(tag),createElementNS:(_,tag)=>new Element(tag)},addEventListener:(type,fn)=>{if(type==='keydown')keyHandlers.add(fn);if(type==='resize')resizeCallback=fn;},removeEventListener:(type,fn)=>{if(type==='keydown')keyHandlers.delete(fn);},matchMedia:()=>({matches:true}),
     KiCadViewState:require('../view-state.js'),KiCadBomManager:require('../bom-manager.js'),KiCadReviewHandoff:hooks.handoff,KiCadEngineeringLauncher:hooks.engineeringLauncher,KiCadCommentCompose:{...require('../comment-compose.js'),...(hooks.compose||{})},KiCadReviewTools:require('../review-tools.js'),KiCadDesignModel:require('../design-model.js'),KiCadNetModel:require('../net-model.js'),KiCadReviewComments:require('../review-comments.js'),KiCadBrowserData:require('../browser-data.js'),KiCadOwnedCanvas:require('../owned-canvas.js'),
     top:hooks.top||{},KiCadRevisionActions:require('../revision-actions.js'),KiCadRepositoryExplorer:hooks.repositoryExplorer,KiCadRatsnest:require('../ratsnest.js'),KiCadTestpointTools:hooks.testpointTools,KiCadPhotoReview:hooks.photoReview,KiCadComponentLinks:require('../component-links.js'),KiCadPairedReview:require('../paired-review.js'),KiCadBomAnalytics:require('../bom-analytics.js'),
     chrome:{storage:{local:hooks.chromeStorage||{get:async()=>({}),set:async()=>{}}},runtime:{sendMessage:async message=>({ok:true,result:await respond(message)})}},setTimeout,clearTimeout,URL,Blob};
   if(hooks.android){context.KiCadAndroidRuntime=true;context.KiCadAndroidOnline=hooks.androidOnline!==false;}
   if(hooks.localRuntime)context.KiCadLocalRuntime=true;
   if(hooks.chatPanel)context.KiCadChatPanel=hooks.chatPanel;
+  if(hooks.workBoardPanel)context.KiCadWorkBoardPanel=hooks.workBoardPanel;
+  if(hooks.reviewSync)context.KiCadReviewSync=hooks.reviewSync;
   if(hooks.vscode)context.KiCadVSCodeContext=typeof hooks.vscode==='object'?hooks.vscode:{};
   if(hooks.navigation){Object.assign(context,{KiCadProjectSearch:require('../project-search.js'),KiCadRuleReports:require('../rule-reports.js'),KiCadDesignDiff:diff,KiCadPCBRenderer:require('../pcb-renderer.js'),KiCadSchematicRenderer:require('../schematic-renderer.js')});vm.runInNewContext(fs.readFileSync(path.join(__dirname,'../review-navigation.js'),'utf8'),context);get('ruleSeverity').value='all';get('showRuleMarkers').checked=true;}
   canvas.setNetHighlights=(nets,options)=>{canvas.highlightNets=nets;canvas.netHighlight=nets[0]||null;canvas.netPrimitives=new Set(nets.flatMap(n=>n.primitives||[]));canvas.highlightMode=options.mode;};
@@ -552,11 +554,9 @@ test('confirmed GitHub screenshot URLs persist with the remote thread and displa
  assert.equal(findImages(view.get('commentList'))[0].src,attachment.url);
  assert.equal(findImages(view.get('commentList'))[0].referrerPolicy,'no-referrer');
  const elements=node=>[node,...node.children.flatMap(elements)];
- elements(view.get('commentList')).find(node=>node.tagName==='BUTTON'&&node.textContent==='Edit').click();
- assert.equal(view.get('capturePreview').src,attachment.url);assert.equal(view.get('removeCapture').hidden,false);
- view.get('removeCapture').click();assert.equal(view.get('capturePreview').hidden,true);
- assert.equal(notes[0].attachments.length,1,'removal is a draft change until saved');
- await view.get('saveComment').click();assert.equal(notes[0].attachments,undefined);
+ assert.equal(elements(view.get('commentList')).some(node=>node.tagName==='BUTTON'&&['Edit','Delete','Resolve','Skip'].includes(node.textContent)),false,'published content is changed only through its provider conversation');
+ assert.equal(notes[0].attachments.length,1,'rendering published content never rewrites its cache');
+ assert.ok(elements(view.get('commentList')).some(node=>node.tagName==='BUTTON'&&node.textContent==='View thread'));
 });
 
 test('editor routes replies to the selected existing Issue or Discussion number',async()=>{
@@ -1254,3 +1254,20 @@ test('thread state changes require current policy and Terms, and send only exact
 test('chat uses exact source-bound net location and refuses another revision or provider',()=>{const chat=captureChat(),view=workspaceRuntime(undefined,{chatPanel:chat.panel});view.load();const anchor={...chat.options.getScope(),kind:'net',netName:'SIGNAL',objectId:'net:1'};assert.equal(chat.options.onLocate(anchor),true);assert.equal(view.canvas.netHighlight.name,'SIGNAL');assert.equal(chat.options.onLocate({...anchor,ref:'another'}),false);assert.equal(chat.options.onLocate({...anchor,provider:'gitlab',host:'https://gitlab.com'}),false);assert.equal(view.chatDraft().hasDraft(),true);view.workspace.dispose();assert.equal(view.chatDraft(),undefined);assert.equal(chat.calls.at(-1),'disposed');});
 test('chat confirmation names the verified VS Code remote while keeping local annotation scope',async()=>{const chat=captureChat(),collaboration={provider:'github',host:'https://github.com',repository:'real/project',ref:'a'.repeat(40),prefix:''},calls=[],view=workspaceRuntime(async m=>{calls.push(m);return[];},{chatPanel:chat.panel,vscode:{collaboration},repository:'local/workspace',ref:'workspace'});view.load();assert.equal(chat.options.getScope().repository,'local/workspace');const pending=chat.options.confirmSend({thread:{kind:'issue',number:4,title:'Review'},action:'create'}),dialog=view.document.body.children.find(n=>n.tagName==='DIALOG'&&n.className.includes('chat-send-review'));assert.match(dialog.textContent,/real\/project/);assert.equal(calls.some(m=>m.type==='chat-message-write'),false);dialog.querySelector('button').click();assert.equal(await pending,false);view.workspace.dispose();});
 test('chat local draft saving rejects foreign provider context and preserves fork source identity',async()=>{const chat=captureChat(),calls=[],view=workspaceRuntime(async m=>{calls.push(m);return[];},{chatPanel:chat.panel,pullRepository:'base/project'});view.load();assert.throws(()=>chat.options.createAnnotation('Check',{id:'context',severity:'info',state:'open'}),/fork/);await chat.options.onSaveTextDraft({text:'Draft',thread:{kind:'issue',number:4},id:'draft-chat',scope:chat.options.getScope()});const saved=calls.find(m=>m.type==='comment-save').comment;assert.equal(saved.anchor.repository,'wayri/fixture');await assert.rejects(chat.options.onSaveDraft({...saved,anchor:{...saved.anchor,provider:'gitlab',host:'https://gitlab.com'}}),/no longer loaded/);view.workspace.dispose();});
+
+test('work board opens from Comments and carries GitLab provider, host and current drawing scope',async()=>{
+ let panel,disposed=false;const calls=[];
+ const view=workspaceRuntime(async m=>{calls.push(m);if(m.type==='github-thread-read')return{kind:'issue',number:m.number,title:'Task',state:'open',comments:[],body:'',warnings:[]};return[];},{provider:'gitlab',host:'https://gitlab.example.org',workBoardPanel:{mount:options=>{panel=options;return{dispose(){disposed=true;}};}}});
+ view.load();await new Promise(setImmediate);view.get('openWorkBoard').click();assert.equal(panel.getScope().provider,'gitlab');assert.equal(panel.getScope().host,'https://gitlab.example.org');assert.equal(panel.getScope().file,'board.kicad_pcb');
+ await panel.onOpenThread({kind:'issue',number:42,repository:'wayri/fixture'});assert.ok(calls.some(m=>m.type==='github-thread-read'&&m.number===42&&m.provider==='gitlab'));
+ view.workspace.dispose();assert.equal(disposed,true);
+});
+
+test('annotation polling mounts with foreground lifecycle and source-scoped updates',async()=>{
+ let sync,started,visibility=0,disposed=false;const calls=[];
+ const view=workspaceRuntime(async m=>{calls.push(m);if(m.type==='github-annotations')return{notes:[],warnings:[]};return[];},{reviewSync:{create:options=>{sync=options;return{start:scope=>{started=scope;},visibilityChanged:()=>visibility++,dispose:()=>{disposed=true;}};}}});
+ view.load();await new Promise(setImmediate);assert.equal(started.file,'board.kicad_pcb');view.get('commentsButton').click();assert.ok(visibility>0);assert.equal(sync.isVisible(),true);
+ const result=await sync.load(started);assert.equal(result.syncFile,'board.kicad_pcb');sync.onUpdate(result);assert.ok(calls.some(m=>m.type==='github-annotations'));
+ sync.onUpdate({notes:[{text:'Foreign result'}],syncFile:'other.kicad_pcb'});assert.equal(view.get('commentList').textContent.includes('Foreign result'),false);
+ view.workspace.dispose();assert.equal(disposed,true);
+});

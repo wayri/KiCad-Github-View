@@ -32,22 +32,50 @@
  const valid=p=>Number.isFinite(p?.x)&&Number.isFinite(p?.y);
  const turn=a=>(a%(2*Math.PI)+2*Math.PI)%(2*Math.PI);
  function onArc(a,angle){return a.ccw?turn(a.start-angle)<=turn(a.start-a.end)+1e-9:turn(angle-a.start)<=turn(a.end-a.start)+1e-9;}
+ function snapCategory(p){
+  if(p.layer==='Edge.Cuts')return 'outline';
+  if(p.kind==='pad'||p.kind==='pin'||p.kind==='pin-marker')return 'pads';
+  if(p.kind==='via')return 'vias';
+  if(['track','segment','wire','bus'].includes(p.kind))return 'tracks';
+  if(['symbol','sheet','junction'].includes(p.kind))return 'symbols';
+  return 'graphics';
+ }
  function snap(at,primitives,options={}){
   if(!valid(at))throw new Error('Invalid ruler point.');
-  const mode=options.mode||'geometry-grid',pitch=Number(options.pitch)||1,tolerance=8/Math.max(.001,options.zoom||1),origin=options.origin;
+  const mode=options.mode||'geometry-grid',pitch=Number(options.pitch)||1,pixels=Math.max(4,Math.min(32,Number(options.tolerancePixels)||8)),tolerance=pixels/Math.max(.001,Number(options.zoom)||1),origin=options.origin;
+  const geometry=mode.includes('geometry'),corners=geometry||mode.startsWith('corners'),edges=geometry||mode.startsWith('edges');
+  const filters=options.filters instanceof Set?options.filters:Array.isArray(options.filters)?new Set(options.filters):new Set([options.filter||'all']);
   let point={...at},axis=null;
   if(options.constrain&&valid(origin)){axis=Math.abs(at.x-origin.x)>=Math.abs(at.y-origin.y)?'y':'x';point[axis]=origin[axis];}
   const allowed=q=>valid(q)&&(!axis||Math.abs(q[axis]-origin[axis])<1e-7);
   let best=null,bestDist=Infinity,bestPriority=Infinity;
   const candidate=(q,kind,priority)=>{if(!allowed(q))return;const d=Math.hypot(q.x-point.x,q.y-point.y);if(d<=tolerance&&(priority<bestPriority||priority===bestPriority&&d<bestDist)){best={point:{x:q.x,y:q.y},kind};bestDist=d;bestPriority=priority;}};
-  if(!options.bypass&&mode.includes('geometry'))for(const p of primitives||[]){
-   if(p.hidden||p.frame||p.hole||p.type==='text')continue;
-   if(['pad','via','pin','junction'].includes(p.kind)){if(valid(p.connectPoint))candidate(p.connectPoint,'pin',0);else if(valid(p))candidate(p,p.kind+' center',0);else if(p.kind==='pad'&&p.points?.length){const pts=p.points;candidate({x:pts.reduce((n,q)=>n+q.x,0)/pts.length,y:pts.reduce((n,q)=>n+q.y,0)/pts.length},'pad center',0);}if(p.kind==='pad'||p.kind==='via')continue;}
-   const pts=p.points||[p.start,p.mid,p.end].filter(valid);
-   for(const q of pts)candidate(q,'endpoint',0);
-   if(p.type==='arc'&&options.arcThrough){const a=options.arcThrough(p.start,p.mid,p.end);if(a){const angle=Math.atan2(point.y-a.y,point.x-a.x);if(onArc(a,angle))candidate({x:a.x+a.r*Math.cos(angle),y:a.y+a.r*Math.sin(angle)},'arc edge',1);}continue;}
-   if(p.type==='circle'&&valid(p)&&Number.isFinite(p.r)){const angle=Math.atan2(point.y-p.y,point.x-p.x);candidate({x:p.x+p.r*Math.cos(angle),y:p.y+p.r*Math.sin(angle)},'circle edge',1);}
-   for(let i=1;i<pts.length+(p.type==='polygon'?1:0);i++){const a=pts[i-1],b=pts[i%pts.length];if(!valid(a)||!valid(b))continue;const dx=b.x-a.x,dy=b.y-a.y,l=dx*dx+dy*dy,t=l?Math.max(0,Math.min(1,((point.x-a.x)*dx+(point.y-a.y)*dy)/l)):0;candidate({x:a.x+t*dx,y:a.y+t*dy},'edge',1);}
+  const segment=(a,b)=>{if(!valid(a)||!valid(b))return;const dx=b.x-a.x,dy=b.y-a.y,l=dx*dx+dy*dy;let t=l?((point.x-a.x)*dx+(point.y-a.y)*dy)/l:0;
+   if(axis&&Math.abs(b[axis]-a[axis])>1e-12){t=(origin[axis]-a[axis])/(b[axis]-a[axis]);if(t<0||t>1)return;}
+   else t=Math.max(0,Math.min(1,t));candidate({x:a.x+t*dx,y:a.y+t*dy},'edge',1);
+  };
+  const circle=(a,kind,sweep)=>{if(!valid(a)||!Number.isFinite(a.r)||a.r<=0)return;const add=q=>{const angle=Math.atan2(q.y-a.y,q.x-a.x);if(!sweep||onArc(a,angle))candidate(q,kind,1);};
+   if(axis){const delta=origin[axis]-a[axis],remaining=a.r*a.r-delta*delta;if(remaining<0)return;const other=axis==='x'?'y':'x',distance=Math.sqrt(Math.max(0,remaining));add({[axis]:origin[axis],[other]:a[other]+distance});add({[axis]:origin[axis],[other]:a[other]-distance});}
+   else{const angle=Math.atan2(point.y-a.y,point.x-a.x);add({x:a.x+a.r*Math.cos(angle),y:a.y+a.r*Math.sin(angle)});}
+  };
+  if(!options.bypass&&(corners||edges))for(const p of primitives||[]){
+   if(!p||p.hidden||p.frame||p.hole||p.type==='text'||!filters.has('all')&&!filters.has(snapCategory(p)))continue;
+   if(geometry&&['pad','via','pin','junction'].includes(p.kind)){
+    if(valid(p.connectPoint))candidate(p.connectPoint,'pin',0);
+    else if(valid(p.padCenter))candidate(p.padCenter,'pad center',0);
+    else if(valid(p))candidate(p,p.kind+' center',0);
+    else if(p.kind==='pad'&&p.points?.length&&p.points.every(valid))candidate({x:p.points.reduce((n,q)=>n+q.x,0)/p.points.length,y:p.points.reduce((n,q)=>n+q.y,0)/p.points.length},'pad center',0);
+   }
+   if(p.type==='arc'){
+    if(corners){candidate(p.start,'endpoint',0);candidate(p.end,'endpoint',0);}
+    if(edges&&options.arcThrough){const arc=options.arcThrough(p.start,p.mid,p.end);if(arc)circle(arc,'arc edge',true);}continue;
+   }
+   if((p.type==='circle'||p.type==='pad')&&valid(p)&&Number.isFinite(p.r)){if(edges)circle(p,'circle edge');continue;}
+   const pts=(p.points||[p.start,p.end]).filter(valid),closed=p.type==='polygon'||p.type==='pad';
+   // Curved pad outlines are tessellated by the renderer. Their sample vertices
+   // are not physical sharp corners; retain edge snapping without inventing them.
+   if(corners&&!(p.kind==='pad'&&pts.length>4))for(const q of pts)candidate(q,closed?'corner':'endpoint',0);
+   if(edges)for(let i=1;i<pts.length+(closed?1:0);i++)segment(pts[i-1],pts[i%pts.length]);
   }
   if(best)return{...best,constrained:Boolean(axis)};
   if(!options.bypass&&mode.includes('grid')&&pitch>=.001&&pitch<=100){const q={x:Math.round(point.x/pitch)*pitch,y:Math.round(point.y/pitch)*pitch};if(axis)q[axis]=origin[axis];if(mode==='grid'||Math.hypot(q.x-point.x,q.y-point.y)<=tolerance)return{point:q,kind:'grid',constrained:Boolean(axis)};}
@@ -74,5 +102,31 @@
    const row={id:++next,kind,file,points:points.map(p=>({x:p.x,y:p.y})),key};rows.unshift(row);rows.length=Math.min(rows.length,limit);return clone(row);
   },list(){return rows.map(clone);},clear(){rows=[];}};
  }
- root.KiCadReviewTools={papers,area,page,crop,capture,ruler,angle,snap,boardExtents,measurementHistory};if(typeof module==='object'&&module.exports)module.exports=root.KiCadReviewTools;
+
+ // Raster drawing export: bounded local pixels, no external assets or solver calls.
+ function rasterPDF(jpeg,width,height,widthMM=297,heightMM=210){
+  if(!(jpeg instanceof Uint8Array)||jpeg.length<4||jpeg.length>16*1024*1024||jpeg[0]!==255||jpeg[1]!==216||![width,height].every(v=>Number.isSafeInteger(v)&&v>0&&v<=4096)||width*height>12000000||![widthMM,heightMM].every(v=>Number.isFinite(v)&&v>0&&v<=2000))throw Error('Invalid or oversized PDF image.');
+  const encode=s=>new TextEncoder().encode(s),chunks=[],offsets=[0];let length=0;const append=bytes=>{chunks.push(bytes);length+=bytes.length;},text=s=>append(encode(s)),object=(id,body)=>{offsets[id]=length;text(id+' 0 obj\n'+body+'\nendobj\n');};
+  const w=(widthMM*72/25.4).toFixed(3),h=(heightMM*72/25.4).toFixed(3);text('%PDF-1.4\n');
+  object(1,'<< /Type /Catalog /Pages 2 0 R >>');object(2,'<< /Type /Pages /Kids [3 0 R] /Count 1 >>');
+  object(3,'<< /Type /Page /Parent 2 0 R /MediaBox [0 0 '+w+' '+h+'] /Resources << /XObject << /Drawing 5 0 R >> >> /Contents 4 0 R >>');
+  const commands='q\n'+w+' 0 0 '+h+' 0 0 cm\n/Drawing Do\nQ\n';object(4,'<< /Length '+encode(commands).length+' >>\nstream\n'+commands+'endstream');
+  offsets[5]=length;text('5 0 obj\n<< /Type /XObject /Subtype /Image /Width '+width+' /Height '+height+' /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length '+jpeg.length+' >>\nstream\n');append(jpeg);text('\nendstream\nendobj\n');
+  const xref=length;text('xref\n0 6\n0000000000 65535 f \n');for(let i=1;i<=5;i++)text(String(offsets[i]).padStart(10,'0')+' 00000 n \n');text('trailer\n<< /Size 6 /Root 1 0 R >>\nstartxref\n'+xref+'\n%%EOF\n');
+  const result=new Uint8Array(length);let at=0;for(const bytes of chunks){result.set(bytes,at);at+=bytes.length;}return result;
+ }
+ function drawingImage(view,{scope='full',create=()=>document.createElement('canvas')}={}){
+  const owned=root.KiCadOwnedCanvas;if(!view?.viewport?.camera||!owned?.Camera||!owned.bounds||!['full','viewport'].includes(scope))throw Error('Open a 2D drawing to export.');
+  let primitives=(view.primitives||[]).filter(p=>view.geometryVisible(p)&&(!p.layer||p.frame||view.visibleLayers.has(p.layer))&&(!view.focusedLayer||view.layerFocusMode!=='isolate'||!p.layer||p.layer===view.focusedLayer||p.hole||p.layer==='Edge.Cuts'));
+  if(primitives.length>1000000)throw Error('Drawing exceeds the export primitive budget.');
+  const paper=!view.pcb&&view.design?.page;let box=scope==='viewport'?view.viewport.camera.bbox:paper?{x:0,y:0,w:paper.width,h:paper.height}:owned.bounds(primitives.filter(p=>!p.frame));
+  if(!box||![box.x,box.y,box.w,box.h].every(Number.isFinite)||box.w<=0||box.h<=0)throw Error('No finite drawing geometry to export.');
+  box={...box};if(scope==='full'&&!paper){const margin=Math.max(1,Math.max(box.w,box.h)*.025);box={x:box.x-margin,y:box.y-margin,w:box.w+2*margin,h:box.h+2*margin};}
+  const scale=Math.min(4096/box.w,4096/box.h,Math.sqrt(12000000/(box.w*box.h))),canvas=create();canvas.width=Math.max(1,Math.floor(box.w*scale));canvas.height=Math.max(1,Math.floor(box.h*scale));const ctx=canvas.getContext('2d');if(!ctx)throw Error('Canvas export is unavailable.');
+  const camera=new owned.Camera(canvas.width,canvas.height);camera.flipped=view.viewport.camera.flipped;camera.bbox=box;camera.zoom=Math.min(canvas.width/box.w,canvas.height/box.h);
+  const painter=Object.create(view);painter.ctx=ctx;painter.canvas=canvas;painter.viewport={camera};painter.paperVisible=Boolean(paper);ctx.fillStyle=paper?view.paperColor():view.background();ctx.fillRect(0,0,canvas.width,canvas.height);
+  for(const primitive of primitives){if(primitive.frame&&!paper)continue;view.paint.call(painter,primitive,{color:view.netClassColors?.get(primitive)||null});}
+  return{canvas,widthMM:box.w,heightMM:box.h};
+ }
+ root.KiCadReviewTools={papers,area,page,crop,capture,ruler,angle,snap,boardExtents,measurementHistory,rasterPDF,drawingImage};if(typeof module==='object'&&module.exports)module.exports=root.KiCadReviewTools;
 })(globalThis);

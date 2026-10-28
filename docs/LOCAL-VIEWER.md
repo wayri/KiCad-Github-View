@@ -18,6 +18,16 @@ Folder selection preserves relative paths and includes subsheets/models. Browser
 directory-drop support varies; use Open folder if dropping a directory is not
 supported. Files are read into memory and are not uploaded to a Git host.
 
+The left file browser preserves physical folders, including nested documentation
+and other filenames. Use **Expand**, **Collapse**, or each folder's disclosure arrow;
+search temporarily expands matching paths without changing your collapsed folders.
+Large lists offer **Show more** rather than hiding files after the first 200.
+Unsupported files are listed with a “no preview available” tooltip. Their contents
+are not read or executed. Models remain listed as assets for the board's 3D viewer.
+The loopback launcher keeps its existing hidden-directory and link exclusions and
+caps filename inventory at 10,000 entries; browser selection retains its 2,000-file
+import limit. Only explicitly selected folders/files enter the browser workspace.
+
 Use **Parallel views** and the two selectors to show a schematic beside its PCB
 or another saved drawing. Selection cross-probing follows the existing saved
 identity/net matching rules; ambiguous matches require review. Pane cameras are

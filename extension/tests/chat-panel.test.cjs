@@ -13,6 +13,7 @@ function harness(overrides={}){
   removeAttribute(name){delete this.attributes[name];if(name==='src')delete this.src;}
   contains(other){return this===other||this.children.some(child=>child.contains(other));}
   focus(){doc.activeElement=this;}setSelectionRange(start,end){this.selectionStart=start;this.selectionEnd=end;}
+  click(){this.clicked=(this.clicked||0)+1;return this.onclick?.();}
   set innerHTML(value){throw Error('Unsafe HTML assignment: '+value);}
  }
  doc={body:new Node('body'),createElement:tag=>new Node(tag),createTextNode:text=>new Node(undefined,text),addEventListener:(name,fn)=>events.set(name,fn),removeEventListener:name=>events.delete(name)};
@@ -90,6 +91,34 @@ test('pending or discarded screenshot work cannot post early or reappear in a ne
  assert.equal(h.find('chat-send').disabled,true);await h.find('chat-send').onclick();assert.equal(h.requests.length,0);assert.match(h.find('chat-status').textContent,/screenshot to finish/);
  h.api.discard();finish({mime:'image/png',dataUrl:'data:image/png;base64,iVBORw0KGgoAAAAA',width:10,height:10});await pending;assert.equal(h.api.draft().capture,null);assert.equal(h.api.hasDraft(),false);
 });
+
+const imageCapture={mime:'image/png',dataUrl:'data:image/png;base64,iVBORw0KGgoAAAAA',width:10,height:10};
+async function chooseImage(h,file={type:'image/png'}){h.find('chat-attach-image').onclick();const picker=h.byId('chatImageInput');picker.files=[file];return picker.onchange();}
+test('Attach image opens an accessible native chooser and uses the shared normalization and send review',async()=>{
+ const h=harness();let normalized;h.host.KiCadCommentCompose={normalizeCapture:async blob=>{normalized=blob;return imageCapture;}};h.api.render(thread());const button=h.find('chat-attach-image'),picker=h.byId('chatImageInput');
+ assert.equal(button.parentElement,h.find('chat-composer-options'));assert.equal(picker.type,'file');assert.equal(picker.accept,'image/png,image/jpeg,image/webp');assert.equal(picker.hidden,true);assert.equal(picker.getAttribute('aria-label'),'Choose image to attach');const file={type:'image/jpeg'};
+ await chooseImage(h,file);assert.equal(picker.clicked,1);assert.equal(normalized,file);assert.equal(h.api.draft().capture.width,10);assert.equal(h.api.draft().annotation.anchor.file,'board.kicad_pcb');assert.equal(h.requests.length,0);assert.equal(h.confirmations.length,0);assert.equal(h.byId('chatCapturePreview').hidden,false);
+ h.options.confirmSend=async()=>false;await h.find('chat-send').onclick();assert.equal(h.requests.length,0);assert.equal(h.api.hasDraft(),true);
+ h.options.confirmSend=async value=>{h.confirmations.push(value);return true;};await h.find('chat-send').onclick();assert.equal(h.requests.at(-1).payload.body,'Screenshot');assert.ok(h.requests.at(-1).payload.annotation.capture);assert.equal(h.confirmations.length,1);
+});
+test('image picker cancellation, navigation, changed source and discarded drafts ignore late file selections',async()=>{
+ for(const action of [h=>h.api.discard(),h=>h.api.render(thread(2)),h=>h.setScope({repository:'owner/board',ref:'b'.repeat(40),file:'other.kicad_sch'}),h=>h.api.dispose()]){
+  const h=harness();let calls=0;h.host.KiCadCommentCompose={normalizeCapture:async()=>{calls++;return imageCapture;}};h.api.render(thread());h.find('chat-attach-image').onclick();const picker=h.byId('chatImageInput');action(h);picker.files=[{type:'image/png'}];await picker.onchange();assert.equal(calls,0);assert.equal(h.requests.length,0);
+ }
+ const h=harness();h.api.render(thread());h.find('chat-attach-image').onclick();const picker=h.byId('chatImageInput');picker.files=[];await picker.onchange();assert.equal(h.api.hasDraft(),false);assert.equal(h.requests.length,0);
+});
+test('pending chosen images cannot publish early or reappear after discard',async()=>{
+ let finish;const h=harness();h.host.KiCadCommentCompose={normalizeCapture:()=>new Promise(resolve=>{finish=resolve;})};h.api.render(thread());const pending=chooseImage(h);await new Promise(setImmediate);assert.equal(h.find('chat-attach-image').disabled,true);assert.equal(h.find('chat-send').disabled,true);await h.find('chat-send').onclick();assert.equal(h.requests.length,0);h.api.discard();finish(imageCapture);await pending;assert.equal(h.api.draft().capture,null);assert.equal(h.api.hasDraft(),false);
+});
+test('Attach image is disabled for message editing and read-only conversations',async()=>{
+ const h=harness();h.api.render(thread(1,{comments:[{...thread().comments[0],canEdit:true}]}));messageAction(h,'chat-edit-action');const picker=h.byId('chatImageInput');assert.equal(h.find('chat-attach-image').disabled,true);h.find('chat-attach-image').onclick();assert.equal(picker.clicked,undefined);
+ h.find('chat-cancel-target').onclick();h.api.render(thread(1,{capabilities:{create:false,reply:false,edit:false}}));assert.equal(h.find('chat-attach-image').disabled,true);assert.equal(picker.disabled,true);h.find('chat-attach-image').onclick();assert.equal(picker.clicked,undefined);assert.equal(h.requests.length,0);
+});
+test('malformed and oversized selected images report errors without publishing or losing message text',async()=>{
+ const h=harness();h.api.render(thread());h.type('Keep this caption');await chooseImage(h,new Blob(['bad'],{type:'text/plain'}));assert.match(h.find('chat-status').textContent,/PNG, JPEG or WebP.*8 MiB/);assert.equal(h.api.draft().capture,null);
+ await chooseImage(h,{type:'image/png',size:8*1024*1024+1,arrayBuffer:async()=>new ArrayBuffer(0)});assert.match(h.find('chat-status').textContent,/8 MiB/);
+ h.host.KiCadCommentCompose={normalizeCapture:async()=>{throw Error('Malformed image');}};await chooseImage(h,{type:'image/webp'});assert.match(h.find('chat-status').textContent,/Malformed image/);assert.equal(h.api.draft().text,'Keep this caption');assert.equal(h.requests.length,0);assert.equal(h.find('chat-send').disabled,false);
+});
 test('source cards link to their validated saved revision even when Locate refuses it',()=>{
  const h=harness({onLocate:()=>false}),note=comments.validateComment({id:'source-note',text:'Source note',createdAt:'2026-10-27T04:00:00.000Z',anchor:{repository:'owner/board',ref:'b'.repeat(40),file:'design/power.kicad_sch',reference:'U3'}});
  h.api.render(thread(1,{body:comments.toMarkdown(note)}));const link=h.find('chat-source-link');assert.equal(link.href,'https://github.com/owner/board/blob/'+('b'.repeat(40))+'/design/power.kicad_sch');assert.equal(link.rel,'noopener noreferrer');h.find('chat-locate').onclick();assert.match(h.find('chat-status').textContent,/another drawing or revision/);
@@ -104,25 +133,25 @@ test('new messages preserve reading position and offer Jump latest rather than f
 });
 const latestTimer=h=>h.timers.findLast(fn=>!!fn);
 const tick=h=>{const at=h.timers.findLastIndex(fn=>!!fn),fn=h.timers[at];assert.ok(fn,'a timer is scheduled');h.timers[at]=null;return fn();};
-test('automatic refresh is opt-in, visible-only and preserves drafts and reading position',async()=>{
+test('automatic refresh is enabled by default, visible-only and preserves drafts and reading position',async()=>{
  const h=harness();h.api.render(thread());h.type('Unsent message');const list=h.find('chat-messages');list.scrollTop=0;
- assert.equal(h.byId('chatAutoRefresh').checked,false);assert.equal(latestTimer(h),undefined);
- h.byId('chatAutoRefresh').checked=true;h.byId('chatAutoRefresh').onchange();assert.equal(latestTimer(h).delay,60000);
+ assert.equal(h.byId('chatAutoRefresh').checked,true);assert.equal(latestTimer(h).delay,10000);
+ h.byId('chatAutoRefresh').checked=true;h.byId('chatAutoRefresh').onchange();assert.equal(latestTimer(h).delay,10000);
  h.options.onRead=async()=>{h.reads.push({number:1});h.api.render(thread(1,{comments:[...thread().comments,{...thread().comments[0],id:'new',body:'New automatic read'}]}));};
- await tick(h);assert.equal(h.reads.length,1);assert.equal(h.byId('chatMessageText').value,'Unsent message');assert.equal(list.scrollTop,0);assert.equal(h.find('chat-jump-latest').hidden,false);assert.equal(latestTimer(h).delay,60000);
+ await tick(h);assert.equal(h.reads.length,1);assert.equal(h.byId('chatMessageText').value,'Unsent message');assert.equal(list.scrollTop,0);assert.equal(h.find('chat-jump-latest').hidden,false);assert.equal(latestTimer(h).delay,10000);
  h.container.hidden=true;await tick(h);assert.equal(h.reads.length,1,'hidden catalog does not poll');
  h.container.hidden=false;h.doc.body.hidden=true;await tick(h);assert.equal(h.reads.length,1,'hidden ancestors pause polling');h.doc.body.hidden=false;
  h.container.checkVisibility=()=>false;await tick(h);assert.equal(h.reads.length,1,'CSS-hidden conversation does not poll');h.container.checkVisibility=()=>true;
- h.doc.hidden=true;h.events.get('visibilitychange')();assert.equal(latestTimer(h),undefined);h.doc.hidden=false;h.events.get('visibilitychange')();assert.equal(latestTimer(h).delay,60000);
+ h.doc.hidden=true;h.events.get('visibilitychange')();assert.equal(latestTimer(h),undefined);h.doc.hidden=false;h.events.get('visibilitychange')();assert.equal(latestTimer(h).delay,1000);
  await tick(h);assert.equal(h.reads.length,2);
  h.byId('chatAutoRefresh').checked=false;h.byId('chatAutoRefresh').onchange();assert.equal(latestTimer(h),undefined);
 });
 test('manual and automatic refresh do not overlap, and failures back off to five minutes',async()=>{
  let finish;const h=harness();h.api.render(thread());h.options.onRead=()=>{h.reads.push({number:1});return new Promise(resolve=>{finish=resolve;});};
  h.byId('chatAutoRefresh').checked=true;h.byId('chatAutoRefresh').onchange();const polling=tick(h);await new Promise(setImmediate);const manual=h.find('chat-refresh').onclick();assert.equal(h.reads.length,1);assert.equal(latestTimer(h),undefined);
- finish(false);await polling;await manual;assert.equal(latestTimer(h).delay,120000);assert.match(h.find('chat-status').textContent,/could not be refreshed/);
- h.options.onRead=async()=>false;await tick(h);assert.equal(latestTimer(h).delay,240000);await tick(h);assert.equal(latestTimer(h).delay,300000);await tick(h);assert.equal(latestTimer(h).delay,300000);
- h.options.onRead=async()=>true;await tick(h);assert.equal(latestTimer(h).delay,60000,'successful read resets backoff');
+ finish(false);await polling;await manual;assert.equal(latestTimer(h).delay,20000);assert.match(h.find('chat-status').textContent,/could not be refreshed/);
+ h.options.onRead=async()=>false;await tick(h);assert.equal(latestTimer(h).delay,40000);await tick(h);assert.equal(latestTimer(h).delay,80000);await tick(h);assert.equal(latestTimer(h).delay,160000);await tick(h);assert.equal(latestTimer(h).delay,300000);
+ h.options.onRead=async()=>true;await tick(h);assert.equal(latestTimer(h).delay,10000,'successful read resets backoff');
  h.api.dispose();assert.equal(latestTimer(h),undefined);assert.equal(h.events.has('visibilitychange'),false);
 });
 test('disabling automatic refresh during a pending read prevents further polling',async()=>{
@@ -131,13 +160,13 @@ test('disabling automatic refresh during a pending read prevents further polling
 });
 test('an old failed refresh cannot overwrite a newly enabled polling schedule',async()=>{
  let finish;const h=harness();h.api.render(thread());h.options.onRead=()=>new Promise(resolve=>{finish=resolve;});const checkbox=h.byId('chatAutoRefresh');checkbox.checked=true;checkbox.onchange();const pending=tick(h);await new Promise(setImmediate);
- checkbox.checked=false;checkbox.onchange();checkbox.checked=true;checkbox.onchange();const restarted=latestTimer(h);finish(false);await pending;assert.equal(latestTimer(h),restarted);assert.equal(latestTimer(h).delay,60000);
+ checkbox.checked=false;checkbox.onchange();checkbox.checked=true;checkbox.onchange();const restarted=latestTimer(h);finish(false);await pending;assert.equal(latestTimer(h),restarted);assert.equal(latestTimer(h).delay,10000);
 });
 test('compact chat shows only its header icons and +/Send strip until tools are requested',()=>{
  let back=0,settings=0,close=0;const h=harness({onBack:()=>back++,onSettings:()=>settings++,onClose:()=>close++,onAccount:()=>{}});h.api.render(thread());
  assert.equal(h.byId('chatMessageText').rows,2);assert.equal(h.find('chat-search').hidden,true);assert.equal(h.find('chat-options-menu').hidden,true);assert.equal(h.find('chat-composer-options').hidden,true);
  assert.deepEqual(h.find('chat-compose-actions').children.map(node=>node.className),['chat-attachment-toggle','chat-format-toggle','chat-send']);
- assert.deepEqual(h.find('chat-header').children.map(node=>node.className),['chat-back','chat-heading','chat-options-toggle']);
+ assert.deepEqual(h.find('chat-header').children.map(node=>node.className),['chat-back','chat-heading','chat-options-toggle','chat-provider-link']);
  assert.equal(h.find('chat-thread-meta').parentElement,h.find('chat-options-menu'));assert.equal(h.find('chat-search-toggle').parentElement,h.find('chat-options-menu'));assert.equal(h.find('chat-close').parentElement,h.find('chat-options-menu'));assert.equal(h.find('chat-format-tools').hidden,true);assert.equal(h.find('chat-send').getAttribute('aria-label'),'Review and send');
  assert.equal(h.find('chat-refresh').parentElement,h.find('chat-options-menu'));assert.equal(h.find('chat-account').parentElement,h.find('chat-options-menu'));assert.equal(h.byId('chatAutoRefresh').parentElement.parentElement,h.find('chat-options-menu'));
  assert.equal(h.find('chat-save-draft').parentElement,h.find('chat-composer-options'));assert.equal(h.find('chat-attach-context').parentElement.parentElement,h.find('chat-composer-options'));
@@ -158,7 +187,7 @@ test('optional pane pin action stays in More, follows host state and never sends
  let pinned=false,calls=0;const h=harness({onPin:()=>{pinned=!pinned;calls++;},isPinned:()=>pinned});h.api.render(thread());
  const pin=h.find('chat-pin');assert.equal(pin.parentElement,h.find('chat-options-menu'));h.find('chat-options-toggle').onclick();assert.equal(pin.textContent,'Pin pane');pin.onclick();assert.equal(pinned,true);assert.equal(pin.textContent,'Unpin pane');assert.equal(pin.getAttribute('aria-pressed'),'true');assert.equal(h.find('chat-options-menu').hidden,true);
  h.find('chat-options-toggle').onclick();pin.onclick();assert.equal(pinned,false);assert.equal(pin.textContent,'Pin pane');assert.equal(calls,2);assert.equal(h.requests.length,0);
- pinned=true;h.find('chat-options-toggle').onclick();assert.equal(pin.textContent,'Unpin pane');assert.equal(h.find('chat-header').children.length,3);
+ pinned=true;h.find('chat-options-toggle').onclick();assert.equal(pin.textContent,'Unpin pane');assert.equal(h.find('chat-header').children.length,4);
 });
 test('tool popovers dismiss outside or Escape, search resets on close, and closing options does not stop enabled polling',()=>{
  const h=harness();h.api.render(thread());h.find('chat-options-toggle').onclick();h.byId('chatAutoRefresh').checked=true;h.byId('chatAutoRefresh').onchange();const polling=latestTimer(h);
@@ -197,4 +226,23 @@ test('Close/Reopen stays in More, requires verified capability and explicit conf
 });
 test('thread and source changes during state confirmation cancel the write',async()=>{
  for(const change of ['thread','scope']){let resolve;const calls=[],h=harness({onThreadState:async value=>calls.push(value),confirmThreadState:()=>new Promise(r=>resolve=r)});h.api.render(thread(1,{capabilities:{canClose:true}}));const pending=h.find('chat-thread-state').onclick();if(change==='thread')h.api.render(thread(2,{capabilities:{canClose:true}}));else h.setScope({repository:'other/board',ref:'b'.repeat(40),file:'board.kicad_pcb'});resolve(true);await pending;assert.equal(calls.length,0);}
+});
+
+test('participant buttons highlight multiple authors without claiming online presence',()=>{
+ const h=harness();h.api.render(thread());const people=walk(h.container).filter(n=>n.className==='chat-participant');assert.equal(people.length,2);
+ people[0].onclick();const second=walk(h.container).filter(n=>n.className==='chat-participant')[1];second.onclick();
+ assert.equal(walk(h.container).filter(n=>n.className?.includes('chat-author-highlight')).length,2);
+ assert.match(h.find('chat-participants').getAttribute('aria-label'),/not online presence/);
+ assert.equal(h.byId('chatMessageText').value,'');assert.equal(h.requests.length,0);
+});
+test('provider shortcut accepts only the selected HTTPS provider origin',()=>{
+ const h=harness();h.api.render(thread(1,{url:'https://github.com/owner/board/issues/1'}));assert.equal(h.find('chat-provider-link').hidden,false);assert.equal(h.find('chat-provider-link').href,'https://github.com/owner/board/issues/1');
+ h.api.render(thread(1,{url:'https://attacker.example/thread'}));assert.equal(h.find('chat-provider-link').hidden,true);
+ h.api.render(thread(1,{url:'javascript:alert(1)'}));assert.equal(h.find('chat-provider-link').hidden,true);
+});
+test('mixed clipboard text and image are retained and an image alone can be sent',async()=>{
+ const h=harness();h.host.KiCadCommentCompose={normalizeCapture:async()=>({mime:'image/png',dataUrl:'data:image/png;base64,iVBORw0KGgoAAAAA',width:10,height:10})};h.api.render(thread());h.type('Before after');h.byId('chatMessageText').setSelectionRange(7,7);
+ const paste=text=>({clipboardData:{getData:()=>text,items:[{kind:'file',type:'image/png',getAsFile:()=>({type:'image/png'})}]},preventDefault(){}});
+ await h.byId('chatMessageText').onpaste(paste('caption '));assert.equal(h.byId('chatMessageText').value,'Before caption after');assert.equal(h.api.draft().capture.width,10);
+ h.api.discard();await h.byId('chatMessageText').onpaste(paste(''));await h.find('chat-send').onclick();assert.equal(h.requests.at(-1).payload.body,'Screenshot');assert.ok(h.requests.at(-1).payload.annotation.capture);
 });

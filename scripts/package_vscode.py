@@ -20,7 +20,7 @@ ASSETS = ('analysis-data.js', 'analysis-viewer.html', 'analysis-viewer.css', 'an
 )
 ASSETS += ('population-inspection.js','population-photo.js','population-review.js','testpoint-tools.js','photo-alignment.js','component-links.js','photo-review.js','photo-review.css')
 ASSETS += ('compact-surfaces.css','compact-surfaces.js')
-ASSETS += ('workspace-chrome.css','workspace-chrome.js','chat-content.js','chat-panel.js','chat-panel.css')
+ASSETS += ('workspace-chrome.css','workspace-chrome.js','chat-content.js','chat-panel.js','chat-panel.css','review-sync.js','work-board-panel.js')
 ASSETS += ('ui-foundation.css','tool-surfaces.css','gerber-camera.js')
 ASSETS += ('pdf-tools.js','pdf-viewer.html','pdf-viewer.css','pdf-viewer.js','vendor/pdfjs/FILES.json') + tuple('vendor/pdfjs/'+name for name in json.loads((ROOT/'extension/vendor/pdfjs/FILES.json').read_text())['files'])
 ASSETS += ('mention-users.js','repository-explorer.js','repository-explorer.css','layer-colors.js','load-worker-vscode.js')

@@ -1,6 +1,7 @@
 """Build a deterministic browser-store archive from an explicit source inventory."""
 from pathlib import Path
 import json
+import importlib.util
 import zipfile
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -15,7 +16,9 @@ FILES = {'analysis-data.js', 'analysis-viewer.html', 'analysis-viewer.css', 'ana
          'credential-vault-host.html', 'credential-vault-host.js', 'credential-vault-worker.js'}
 FILES.update({'overview-routing.js','dashboard.html','dashboard.css','dashboard.js','project-recents.js'})
 FILES.update({'workspace-chrome.css','workspace-chrome.js','revision-actions.js','revision-fork.js','analysis-simulation.js','analysis-simulation.css'})
-FILES.update({'chat-content.js','chat-panel.js','chat-panel.css'})
+FILES.update({'provider-oauth.js','provider-oauth.json'})
+FILES.update({'native-kicad.js'})
+FILES.update({'chat-content.js','chat-panel.js','chat-panel.css','review-sync.js','work-board-panel.js'})
 FILES.update({'compact-surfaces.css','compact-surfaces.js'})
 FILES.update({'managed-policy.js','managed-policy-schema.json','managed-policy-options.js'})
 FILES.update(MODEL_FILES)
@@ -52,7 +55,12 @@ def package(root: Path = ROOT, output: Path | None = None) -> Path:
             info = zipfile.ZipInfo(name, date_time=(2020, 1, 1, 0, 0, 0))
             info.compress_type = zipfile.ZIP_DEFLATED
             info.external_attr = 0o100644 << 16
-            archive.writestr(info, (source / name).read_bytes())
+            content = (source / name).read_bytes()
+            if name == 'provider-oauth.json':
+                spec = importlib.util.spec_from_file_location('publisher_oauth', root / 'scripts/provider_oauth.py')
+                config = importlib.util.module_from_spec(spec); spec.loader.exec_module(config)
+                content = config.payload(root)
+            archive.writestr(info, content)
     return output
 
 if __name__ == '__main__':

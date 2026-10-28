@@ -77,7 +77,7 @@ function showDevice(flow) {
     return;
   }
   deviceCode.textContent = flow.userCode;
-  if (flow.scope) { accessInput.value = flow.scope; showScope(); }
+  if (flow.scope) { accessInput.value = flow.scope.split(" ")[0]; const projects=document.getElementById("githubProjectsAccess");if(projects)projects.checked=flow.scope.split(" ").includes("project");showScope(); }
   verificationLink.href = flow.verificationUrl;
   deviceStatus.textContent = "Enter the code on GitHub. Waiting for authorization…";
   availability.textContent = 'Sign-in is in progress. After approving the code on GitHub, return here to complete the connection.';
@@ -116,7 +116,7 @@ connectButton.addEventListener("click", async () => {
   if (accountConnected) { await signOut(); return; }
   connectButton.disabled = true;
   try {
-    const result = await request("github-device-start", { clientId: clientInput.value.trim(), scope: accessInput.value });
+    const result = await request("github-device-start", { clientId: clientInput.value.trim(), scope: accessInput.value+(document.getElementById("githubProjectsAccess")?.checked?" project":"") });
     showDevice(result);
     schedulePoll(result.retryAfterMs);
   } catch (error) {

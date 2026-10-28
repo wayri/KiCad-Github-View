@@ -18,12 +18,12 @@
   }
   async function refresh(){
     const result=await send('gitlab-auth-status');
-    $('gitlabClientId').value=result.clientId||'';
+    $('gitlabClientId').value=result.clientSource==='publisher'?'':result.clientId||'';
     $('gitlabRedirectUri').value=result.redirectUri||'';
     oauthSupported=Boolean(result.oauthSupported);$('gitlabOAuth').disabled=!oauthSupported;
     $('gitlabRemoveHost').disabled=hostSelect.value==='https://gitlab.com';
     status.textContent=result.configured?'Connected to '+result.host+' for up to eight hours. Supported Chrome sessions survive background idle. Browser restart or extension reload requires sign-in; other browsers may also sign out after background restart.':
-      'Not connected. Public files work without login. Use a repository-authorized token or configure OAuth below.';
+      result.releaseConfigured?'Sign in with your GitLab account. No application registration is needed.':'Publisher sign-in is not configured in this build. The publisher or server administrator configures it once; access tokens remain available under Advanced.';
     $('gitlabAppLink').href=hostSelect.value+'/user_settings/applications';
   }
   async function action(button,work){button.disabled=true;try{await work();}catch(error){status.textContent=error.message;}finally{button.disabled=button.id==='gitlabRemoveHost'&&hostSelect.value==='https://gitlab.com'||button.id==='gitlabOAuth'&&!oauthSupported;}}

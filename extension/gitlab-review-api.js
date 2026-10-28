@@ -98,7 +98,8 @@ const KiCadGitLabReviewApi = (() => {
   }
   async function authStatus(host) {
     host = validateHost(host); return operation(async () => { const value = await credential(host), clients = (await chrome.storage.local.get(CLIENTS))[CLIENTS] || {};
-      return { host, configured: !!value, ...(value ? { expiresAt: value.expiresAt } : {}), clientId: clients[host] || "", oauthSupported: !!chrome.identity?.launchWebAuthFlow,
+      const releaseClientId=await globalThis.KiCadProviderOAuth?.clientId(host)||'',clientId=clients[host]||releaseClientId;
+      return { host, configured: !!value, ...(value ? { expiresAt: value.expiresAt } : {}), clientId, releaseConfigured:Boolean(releaseClientId),clientSource:clients[host]?'override':releaseClientId?'publisher':'unavailable',oauthSupported: !!chrome.identity?.launchWebAuthFlow,
         redirectUri: chrome.identity?.getRedirectURL ? chrome.identity.getRedirectURL("gitlab") : "" }; });
   }
   async function authorizationHeaders(host) {
@@ -145,7 +146,7 @@ const KiCadGitLabReviewApi = (() => {
   async function startOAuth(host) {
     await globalThis.KiCadManagedPolicy?.assertNetwork();
     host = validateHost(host); const status = await authStatus(host);
-    if (!status.clientId) throw fail("Register a non-confidential GitLab OAuth application with the extension redirect URI, then configure its public client ID.", true);
+    if (!status.clientId) throw fail("GitLab sign-in is not configured in this release for the selected server. The publisher or server administrator must configure its public OAuth application ID.", true);
     if (!chrome.identity?.launchWebAuthFlow || !chrome.identity?.getRedirectURL) throw fail("OAuth login is unavailable in this browser; use a repository-limited GitLab token.", true);
     const current = advance(host), redirectUri = chrome.identity.getRedirectURL("gitlab"), verifier = base64url(crypto.getRandomValues(new Uint8Array(32))), state = base64url(crypto.getRandomValues(new Uint8Array(32)));
     const challenge = base64url(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(verifier)));
@@ -471,6 +472,64 @@ const KiCadGitLabReviewApi = (() => {
     if(epoch(host)!==current)throw fail('GitLab account changed or signed out.',true);
     const more=rows.length===20;return {threads,hasMore:more&&page<5,...(more&&page<5?{nextPage:page+1}:{}),warnings,...(more&&page===5?{truncated:true}:{})};
   }
+  function boardScope(message) {
+    const host=validateHost(message.host),repository=repositoryPath(message.repository);
+    KiCadReviewComments.normalizeScope({...message,provider:'gitlab',host,repository});
+    if(message.provider!==undefined&&message.provider!=='gitlab'||message.boardId!==undefined&&!Number.isSafeInteger(message.boardId)||message.page!==undefined&&(!Number.isSafeInteger(message.page)||message.page<1||message.page>20))throw fail('Invalid GitLab board request.',true);
+    return{host,repository};
+  }
+  async function boardSession(message) {
+    const {host,repository}=boardScope(message),current=epoch(host),headers=await authorizationHeaders(host),token=headers.Authorization?.slice(7),options={token,expectedEpoch:current};
+    const project=await request(host,`/api/v4/projects/${encodeURIComponent(repository)}`,options);
+    if(project?.path_with_namespace!==repository||!Number.isSafeInteger(project.id)||project.id<1)throw fail('GitLab returned another project identity.',true);
+    return{host,repository,current,token,options,project,path:`/api/v4/projects/${project.id}`};
+  }
+  async function boardList(message={}) {
+    const s=await boardSession(message),page=message.page||1,rows=await request(s.host,`${s.path}/boards?per_page=20&page=${page}`,s.options);
+    if(!Array.isArray(rows)||rows.length>20)throw fail('GitLab returned invalid issue boards.',true);
+    const boards=rows.map(row=>{if(!Number.isSafeInteger(row?.id)||row.id<1||typeof row.name!=='string')throw fail('GitLab returned invalid board identity.',true);return{id:row.id,title:row.name.slice(0,1024),url:`${s.host}/${s.repository}/-/boards/${row.id}`};});
+    return{boards,hasMore:rows.length===20&&page<20,...(rows.length===20&&page<20?{nextPage:page+1}:{}),warnings:rows.length===20&&page===20?['Board discovery is limited to 400 boards.']:[]};
+  }
+  async function boardDefinition(s,id) {
+    if(!Number.isSafeInteger(id)||id<1)throw fail('Choose a GitLab issue board.',true);
+    const board=await request(s.host,`${s.path}/boards/${id}`,s.options);
+    if(board?.id!==id||typeof board.name!=='string'||!Array.isArray(board.lists)||board.lists.length>100||board.project&&board.project.id!==s.project.id)throw fail('GitLab returned invalid board identity or lists.',true);
+    // Scoped/assignee/iteration boards must not be silently presented as a label
+    // board: their actual membership and move semantics differ.
+    if(board.assignee||board.milestone||board.iteration||board.weight!==undefined&&board.weight!==null||(board.labels||[]).length)throw fail('This scoped GitLab board must be opened in GitLab. Unscoped label boards are supported here.',true);
+    const lists=[];for(const list of board.lists){if(!Number.isSafeInteger(list?.id)||list.id<1||typeof list.label?.name!=='string'||!list.label.name||list.label.name.length>255||list.label.name.includes(',')||/[\x00-\x1f\x7f]/.test(list.label.name))throw fail('This board contains unsupported lists. Open it in GitLab.',true);lists.push({id:list.id,title:list.label.name,position:list.position||0});}
+    lists.sort((a,b)=>a.position-b.position);return{board,lists};
+  }
+  async function boardRead(message={}) {
+    const s=await boardSession(message),{board,lists}=await boardDefinition(s,message.boardId),page=message.page||1;
+    const rows=await request(s.host,`${s.path}/issues?state=all&scope=all&order_by=updated_at&sort=desc&per_page=50&page=${page}`,s.options);
+    if(!Array.isArray(rows)||rows.length>50)throw fail('GitLab returned invalid board issues.',true);
+    const columns=[...(!board.hide_backlog_list?[{id:'open',title:'Open'}]:[]),...lists.map(({id,title})=>({id,title})),...(!board.hide_closed_list?[{id:'closed',title:'Closed'}]:[])],items=[];
+    for(const row of rows){if(!Number.isSafeInteger(row?.iid)||row.iid<1||row.project_id!==s.project.id||typeof row.title!=='string'||!['opened','closed'].includes(row.state)||!Array.isArray(row.labels)||row.labels.some(l=>typeof l!=='string'))throw fail('GitLab returned invalid board issue identity.',true);
+      const matches=lists.filter(l=>row.labels.includes(l.title)).map(l=>l.id),columnIds=row.state==='closed'?['closed']:matches.length?matches:['open'];
+      const visible=columnIds.filter(id=>columns.some(c=>c.id===id));if(!visible.length)continue;
+      items.push({id:row.iid,title:row.title.slice(0,1024),number:row.iid,kind:'issue',repository:s.repository,url:`${s.host}/${s.repository}/-/issues/${row.iid}`,columnId:visible[0],columnIds:visible,updatedAt:row.updated_at,assignees:(row.assignees||[]).filter(a=>/^[A-Za-z0-9][A-Za-z0-9_.-]{0,99}$/.test(a?.username||'')).slice(0,10).map(a=>a.username)});
+    }
+    return{id:board.id,title:board.name.slice(0,1024),url:`${s.host}/${s.repository}/-/boards/${board.id}`,columns,items,hasMore:rows.length===50&&page<20,...(rows.length===50&&page<20?{nextPage:page+1}:{}),warnings:rows.length===50&&page===20?['Board issue discovery is limited to 1000 issues.']:[]};
+  }
+  async function boardMove(message={}) {
+    await globalThis.KiCadManagedPolicy?.assertWrites();boardScope(message);
+    const {itemId,listId,fromListId}=message;if(!Number.isSafeInteger(itemId)||itemId<1||!['open','closed'].includes(listId)&&(!Number.isSafeInteger(listId)||listId<1)||fromListId!==undefined&&!['open','closed'].includes(fromListId)&&(!Number.isSafeInteger(fromListId)||fromListId<1))throw fail('Invalid GitLab board move.',true);
+    const s=await boardSession(message);if(!s.token)throw fail('Sign in to GitLab before moving a task.',true);
+    const {board,lists}=await boardDefinition(s,message.boardId),target=lists.find(l=>l.id===listId),source=lists.find(l=>l.id===fromListId);
+    if(!target&&!['open','closed'].includes(listId)||fromListId!==undefined&&!source&&!['open','closed'].includes(fromListId)||listId==='open'&&board.hide_backlog_list||listId==='closed'&&board.hide_closed_list)throw fail('Board lists changed; refresh before moving.',true);
+    const issue=await request(s.host,`${s.path}/issues/${itemId}`,s.options);
+    if(issue?.iid!==itemId||issue.project_id!==s.project.id||!Array.isArray(issue.labels)||!['opened','closed'].includes(issue.state))throw fail('GitLab returned another issue identity.',true);
+    if(message.expectedUpdatedAt!==undefined&&message.expectedUpdatedAt!==issue.updated_at)throw fail('This task changed. Refresh before moving.',true);
+    if(source&&!issue.labels.includes(source.title))throw fail('Task no longer belongs to the source list. Refresh before moving.',true);
+    const policy=await commentPolicyStatus(s.host,s.repository,s.project.id);if(!policy.allowed)throw fail(policy.reason||'Repository policy does not allow this update.',true);
+    const removals=listId==='open'?lists.filter(l=>issue.labels.includes(l.title)).map(l=>l.title):source&&source.id!==listId?[source.title]:[];
+    const body={...(target?{add_labels:target.title}:{}),...(removals.length?{remove_labels:removals.join(',')}:{}),...(listId==='closed'?{state_event:'close'}:issue.state==='closed'?{state_event:'reopen'}:{})};
+    const result=await request(s.host,`${s.path}/issues/${itemId}`,{...s.options,method:'PUT',body});
+    if(result?.iid!==itemId||result.project_id!==s.project.id||!Array.isArray(result.labels)||target&&!result.labels.includes(target.title)||removals.some(l=>result.labels.includes(l))||result.state!==(listId==='closed'?'closed':'opened'))throw fail('GitLab did not confirm the board move. Refresh before retrying.');
+    return{updated:true,itemId,columnId:listId};
+  }
+
   async function forkRevision(message){
     const host=validateHost(message.host||'https://gitlab.com');
     KiCadRevisionFork.validate({...message,provider:'gitlab',host});
@@ -483,7 +542,7 @@ const KiCadGitLabReviewApi = (() => {
       request:(method,path,body)=>request(host,path,{method,body,token,expectedEpoch:current,forkResponse:true})
     });
   }
-  return { forkRevision, validateHost, validatePolicy, authStatus, tokenStatus: authStatus, setToken, clearToken, resetAuth, authorizationHeaders, setClientId, startOAuth, commentPolicyStatus, publish, readThread, chatThreadState, chatMessageWrite, chatThreadList };
+  return { boardList, boardRead, boardMove, forkRevision, validateHost, validatePolicy, authStatus, tokenStatus: authStatus, setToken, clearToken, resetAuth, authorizationHeaders, setClientId, startOAuth, commentPolicyStatus, publish, readThread, chatThreadState, chatMessageWrite, chatThreadList };
 })();
 if (typeof globalThis === "object") globalThis.KiCadGitLabReviewApi = KiCadGitLabReviewApi;
 if (typeof module === "object" && module.exports) module.exports = KiCadGitLabReviewApi;

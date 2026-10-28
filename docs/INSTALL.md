@@ -53,6 +53,19 @@ Brave, Opera and Vivaldi can use the same ZIP where their extension manager supp
 
 For local projects, choose **Open folder**, **Open files**, or drag and drop supported files/folders. Folder selection preserves sheet/model paths. Files selected locally stay local unless you explicitly export/share them. The installed local workspace works without internet. See [local workspace details](LOCAL-VIEWER.md).
 
+### Open in KiCad setup
+
+The browser viewer's **Open in KiCad** button saves the repository at its viewed
+commit through the browser's Save As dialog, then asks the optional desktop helper
+to validate/extract that ZIP into a new sibling folder and launch installed KiCad.
+It never overwrites an existing project folder. The feature requests Downloads and
+Native Messaging permissions only when used; ordinary viewing needs neither.
+Install the Windows helper once using [Open in KiCad setup](OPEN-IN-KICAD.md).
+Managed browsers can block native messaging. macOS/Linux native installation and
+an installed-browser launch have not yet been validated; use manual ZIP extraction
+and opening in KiCad there. A missing helper produces setup instructions rather
+than claiming KiCad opened.
+
 For online projects, open a normal repository file page for `.kicad_sch` or `.kicad_pcb`, rather than a raw download URL. Allow the declared host access. Public viewing needs no connected account. Supported private session reads require an explicitly approved matching signed-in tab; API history, binary assets and publication may still require a connected account. Android has its own authorization flow. See [Git host support](GIT-HOSTS.md) and [GitHub sign-in](GITHUB-SIGNIN.md).
 
 **Update:** extract the replacement package, select **Reload** on the extension card, then refresh viewer tabs. Unpacked packages do not update automatically. **Remove:** export local reviews first, then remove the extension through its manager; clearing extension storage can remove local drafts.

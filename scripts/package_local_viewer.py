@@ -21,7 +21,7 @@ def payload(root=ROOT):
                 'github-review-api.js', 'gitlab-review-api.js', 'gitlab-hosts.js', 'gitlab-options.js',
                 'gitlab-provider.js', 'mention-users.js', 'review-file-settings.js', 'environment-options.js',
                 'managed-policy.js', 'managed-policy-schema.json', 'managed-policy-options.js'}
-    excluded.update({'dashboard.html','dashboard.css','dashboard.js','project-recents.js'})
+    excluded.update({'dashboard.html','dashboard.css','dashboard.js','project-recents.js','native-kicad.js','provider-oauth.js','provider-oauth.json'})
     names = sorted((names - excluded) | {'parsing.js'})
     result = {'web/' + name: (root / 'extension' / name).read_bytes() for name in names}
     result['web/local-assets.json'] = (json.dumps({'files': [name for name in names if name != 'LICENSE.txt']}, indent=2) + '\n').encode()

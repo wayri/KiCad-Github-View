@@ -83,6 +83,23 @@ class LocalViewerTests(unittest.TestCase):
         self.assertEqual(self.request(server, '/api/project?session=' + server.session)[0], 403)
         self.assertIn('?session=', server.url)
 
+    def test_inventory_lists_other_project_files_without_reading_their_contents(self):
+        (self.project / 'docs').mkdir()
+        (self.project / 'docs' / 'README.md').write_text('metadata only', encoding='utf-8')
+        (self.project / 'firmware.bin').write_bytes(b'\x00\xff')
+        (self.project / '.env').write_text('PRIVATE=not listed', encoding='utf-8')
+        original = viewer.read_bounded
+        reads = []
+        def read(root, path, *args):
+            reads.append(path)
+            return original(root, path, *args)
+        with patch.object(viewer, 'read_bounded', side_effect=read):
+            result = viewer.project_snapshot(self.project)
+        self.assertEqual(set(reads), {'board.kicad_pcb'})
+        self.assertEqual({entry['path'] for entry in result['repositoryTree']['entries']},
+                         {'board.kicad_pcb', 'docs/README.md', 'firmware.bin'})
+        self.assertFalse(result['repositoryTree']['truncated'])
+
     def test_assets_are_allowlisted_and_all_writes_are_rejected(self):
         (self.assets / 'private.json').write_text('{"secret":"never served"}')
         server = self.server()

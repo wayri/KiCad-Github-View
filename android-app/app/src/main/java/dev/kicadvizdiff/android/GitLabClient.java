@@ -91,11 +91,16 @@ final class GitLabClient {
         synchronized(this){check(epoch);return tokens.get(host);}
     }
     private synchronized void saveOAuth(String host,String client,JSONObject result,int epoch)throws Exception {
-        check(epoch);String access=result.getString("access_token"),refresh=result.getString("refresh_token");
+        check(epoch);validateOAuth(result);String access=result.getString("access_token"),refresh=result.getString("refresh_token");
         if(access.length()<20||access.length()>1000||!access.matches("[\\x21-\\x7e]+")||refresh.length()<20||refresh.length()>1000||!refresh.matches("[\\x21-\\x7e]+"))throw new Failure("Invalid GitLab OAuth token response");
         int lifetime=result.getInt("expires_in");if(lifetime<=0||lifetime>86400)throw new Failure("Invalid GitLab OAuth expiry");
         JSONObject record=new JSONObject().put("accessToken",access).put("refreshToken",refresh).put("clientId",client).put("expiresAt",System.currentTimeMillis()+lifetime*1000L);
         vault(host).write(record.toString());tokens.put(host,access);refreshRecords.put(host,record);authExpired=false;
+    }
+    static void validateOAuth(JSONObject result)throws Exception {
+        if(!"bearer".equalsIgnoreCase(result.optString("token_type"))||result.has("scope")&&!java.util.Arrays.asList(result.optString("scope").split("\\s+")).contains("api"))throw new Failure("GitLab did not grant the required API access; sign in again");
+        for(String field:new String[]{"access_token","refresh_token"}){String value=result.optString(field);if(value.length()<20||value.length()>1000||!value.matches("[\\x21-\\x7e]+"))throw new Failure("Invalid GitLab OAuth token response");}
+        int lifetime=result.getInt("expires_in");if(lifetime<=0||lifetime>86400)throw new Failure("Invalid GitLab OAuth expiry");
     }
     JSONObject connectToken(String host,String candidate,int epoch) throws Exception {
         host=validateHost(host);
@@ -107,7 +112,9 @@ final class GitLabClient {
     synchronized JSONObject startOAuth(String host,String clientId,int epoch) throws Exception {
         ManagedPolicy.requireNetwork(context);
         check(epoch);host=validateHost(host);
-        if(!clientId.matches("[A-Za-z0-9_-]{8,200}"))throw new Failure("Enter the registered GitLab public application ID");
+        if(clientId==null||clientId.isBlank())clientId=GitLabOAuthConfig.resolve(context,host);
+        if(clientId.isEmpty())throw new Failure("GitLab sign-in is not configured in this build. The publisher must configure it once; users do not need to register an application. Token connection remains available under Advanced.");
+        if(!clientId.matches("[A-Za-z0-9_-]{10,200}"))throw new Failure("Invalid server OAuth configuration");
         byte[] random=new byte[32];new SecureRandom().nextBytes(random);oauthState=Base64.encodeToString(random,Base64.URL_SAFE|Base64.NO_WRAP|Base64.NO_PADDING);
         new SecureRandom().nextBytes(random);oauthVerifier=Base64.encodeToString(random,Base64.URL_SAFE|Base64.NO_WRAP|Base64.NO_PADDING);
         oauthHost=host;oauthClient=clientId;oauthExpiry=SystemClock.elapsedRealtime()+600000;
@@ -118,17 +125,21 @@ final class GitLabClient {
         String host,client,verifier,code;
         synchronized(this) {
             check(epoch);
-            if(!"kicadvizdiff".equals(uri.getScheme())||!"gitlab-oauth".equals(uri.getHost())||!(uri.getPath()==null||uri.getPath().isEmpty())||uri.getFragment()!=null||uri.getUserInfo()!=null
+            if(!"kicadvizdiff".equals(uri.getScheme())||!"gitlab-oauth".equals(uri.getHost())||uri.getPort()!=-1||!(uri.getPath()==null||uri.getPath().isEmpty())||uri.getFragment()!=null||uri.getUserInfo()!=null
+                ||uri.getQueryParameters("state").size()!=1||uri.getQueryParameters("code").size()!=1||uri.getQueryParameter("error")!=null
                 ||oauthState==null||SystemClock.elapsedRealtime()>oauthExpiry||!oauthState.equals(uri.getQueryParameter("state")))throw new Failure("GitLab sign-in callback is invalid or expired");
             code=uri.getQueryParameter("code");if(code==null||!code.matches("[A-Za-z0-9_-]{8,2048}"))throw new Failure("GitLab authorization was cancelled");
             host=oauthHost;client=oauthClient;verifier=oauthVerifier;oauthState=null;oauthVerifier=null;
         }
         byte[] body=("client_id="+encode(client)+"&code="+encode(code)+"&grant_type=authorization_code&redirect_uri="+encode("kicadvizdiff://gitlab-oauth")+"&code_verifier="+encode(verifier)).getBytes(StandardCharsets.UTF_8);
         JSONObject result=new JSONObject(network(host,"/oauth/token","POST",body,null,epoch,65536,"application/x-www-form-urlencoded"));
-        JSONObject connected=connectToken(host,result.getString("access_token"),epoch);saveOAuth(host,client,result,epoch);return connected;
+        validateOAuth(result);
+        JSONObject user=new JSONObject(network(host,"/user","GET",null,result.getString("access_token"),epoch,1024*1024));
+        String login=user.getString("username");if(!login.matches("[A-Za-z0-9][A-Za-z0-9_.-]{0,99}"))throw new Failure("Invalid GitLab account response");
+        saveOAuth(host,client,result,epoch);return new JSONObject().put("connected",true).put("login",login).put("host",host);
     }
     static boolean cancellableRead(String action) {
-        return java.util.Arrays.asList("repositories", "import", "revision-import", "revision-resolve", "revision-branches", "revision-commits", "repository-tree", "repository-history", "repository-branches", "policy", "threads", "thread", "chat-thread-list", "contributors").contains(action);
+        return java.util.Arrays.asList("work-board-list", "work-board-read", "repositories", "import", "revision-import", "revision-resolve", "revision-branches", "revision-commits", "repository-tree", "repository-history", "repository-branches", "policy", "threads", "thread", "chat-thread-list", "contributors").contains(action);
     }
     JSONObject handleLoad(JSONObject request, int epoch, NativeLoadOperation operation) throws Exception {
         if (!cancellableRead(request.optString("action"))) throw new IllegalArgumentException("Only project reads can be stopped");
@@ -138,12 +149,12 @@ final class GitLabClient {
         ManagedPolicy.requireAction(context,request.getString("action"));
         check(epoch); String host=validateHost(request.optString("host","https://gitlab.com"));
         switch(request.getString("action")) {
-            case "oauth-start":return startOAuth(host,request.getString("clientId"),epoch);
+            case "oauth-start":return startOAuth(host,request.optString("clientId",""),epoch);
             case "policy":return policy(host,request,epoch);
             case "auth-status": {
                 String token=credential(host,epoch),login="";
                 if(token!=null) login=json(host,"/user",epoch).getString("username");
-                return new JSONObject().put("connected",token!=null).put("login",login).put("host",host);
+                return new JSONObject().put("connected",token!=null).put("login",login).put("host",host).put("oauthConfigured",!GitLabOAuthConfig.resolve(context,host).isEmpty());
             }
             case "sign-out":return new JSONObject().put("connected",false).put("host",host);
             case "repositories": {
@@ -182,6 +193,7 @@ final class GitLabClient {
             case "chat-thread-state": return chatThreadState(host,request,epoch);
             case "chat-message-write": return chatWrite(host,request,epoch);
             case "chat-thread-list": return chatThreadList(host,request,epoch);
+            case "work-board-list":case "work-board-read":case "work-board-move":return workBoard(host,request,epoch);
             case "contributors": {
                 JSONArray users=new JSONArray(),warnings=new JSONArray();String query=request.optString("query","").toLowerCase(Locale.ROOT);if(query.length()>100||controls(query))throw new Failure("Invalid people query");
                 if(credential(host,epoch)==null)return new JSONObject().put("users",users).put("warnings",warnings.put("Sign in to discover GitLab project members"));
@@ -314,6 +326,15 @@ final class GitLabClient {
     }
     private JSONObject optional(String host,String path,int epoch)throws Exception {
         try{return json(host,path,epoch);}catch(Failure e){if(e.status==404)return null;throw e;}
+    }
+    private JSONObject workBoard(String host,JSONObject request,int epoch)throws Exception {
+        try{return NativeWorkBoards.handle(request,false,host,new NativeWorkBoards.Transport(){
+            public void authorize(boolean write)throws Exception {check(epoch);ManagedPolicy.requireTransport(context,write);if(write){if(credential(host,epoch)==null)throw new Failure("Sign in to GitLab before moving a task");JSONObject allowed=policy(host,request,epoch);if(!allowed.getBoolean("allowed"))throw new Failure("Repository policy blocks board changes");claimWrite("publish");}}
+            public JSONObject graphql(String query,JSONObject variables)throws Exception {throw new Failure("Unsupported GitLab board operation");}
+            public JSONObject get(String path)throws Exception {return json(host,path,epoch);}
+            public JSONArray list(String path)throws Exception {return array(host,path,epoch);}
+            public JSONObject put(String path,JSONObject body)throws Exception {return new JSONObject(network(host,path,"PUT",body.toString().getBytes(StandardCharsets.UTF_8),credential(host,epoch),epoch,1024*1024));}
+        });}catch(NativeWorkBoards.Failure error){throw new Failure(error.getMessage());}
     }
     private JSONObject policy(String host,JSONObject request,int epoch)throws Exception {
         if(credential(host,epoch)==null)return new JSONObject().put("allowed",false).put("reason","Sign in before posting");

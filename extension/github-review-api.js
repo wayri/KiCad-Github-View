@@ -13,7 +13,7 @@ const KiCadGitHubReviewApi = (() => {
   // Publisher configuration: the OAuth App's public client ID, never its secret.
   // Public client ID for wayri's registered OAuth App; Device Flow is required.
   const RELEASE_OAUTH_CLIENT_ID = "Ov23li8RsSVZk2dHptN1";
-  const DEVICE_SCOPES = new Set(["public_repo", "repo"]);
+  const DEVICE_SCOPES = new Set(["public_repo", "repo", "public_repo project", "repo project"]);
   const DESTINATIONS = new Set(["new-issue", "issue", "new-discussion", "discussion"]);
   const validRepository = (value) => typeof value === "string" && REPOSITORY.test(value) &&
     value.split("/").every((part) => part !== "." && part !== "..");
@@ -199,7 +199,7 @@ const KiCadGitHubReviewApi = (() => {
   }
   async function startDevice(value = "", scope = "public_repo") {
     const epoch = authEpoch;
-    if (!DEVICE_SCOPES.has(scope)) throw fail("Choose public repositories or public and private repositories.", true);
+    if (!DEVICE_SCOPES.has(scope)) throw fail("Choose public repositories or public and private repositories, optionally with Projects access.", true);
     if (typeof value !== "string") throw fail("Invalid GitHub OAuth App configuration.", true);
     value = value.trim() || RELEASE_OAUTH_CLIENT_ID;
     if (!value) throw fail("GitHub sign-in is not configured in this build. The publisher must register an OAuth App with Device Flow enabled. Local review and GitHub draft links still work; advanced setup is available below.", true);
@@ -274,11 +274,11 @@ const KiCadGitHubReviewApi = (() => {
     }
     if (data.access_token) {
       const granted = typeof data.scope === "string" ? data.scope.split(/[\s,]+/) : [];
-      const requested = pending.scope || "public_repo";
+      const requested = pending.scope || "public_repo", privateScope=requested.split(' ').includes('repo'), projectsScope=requested.split(' ').includes('project');
       if (data.token_type?.toLowerCase() !== "bearer" ||
-          !(requested === "repo" ? granted.includes("repo") : granted.includes("public_repo") || granted.includes("repo"))) {
+          !(privateScope ? granted.includes("repo") : granted.includes("public_repo") || granted.includes("repo")) || projectsScope&&!granted.includes('project')) {
         await finishDevice(pending, epoch);
-        throw fail(`GitHub did not grant ${requested === "repo" ? "private" : "public"} repository access. Start sign-in again and approve that scope.`, true);
+        throw fail(`GitHub did not grant ${privateScope ? "private" : "public"} repository access${projectsScope?' and Projects access':''}. Start sign-in again and approve that scope.`, true);
       }
       await setToken(data.access_token, Number.isInteger(data.expires_in) && data.expires_in > 0 ?
         data.expires_in * 1000 : SESSION_LIMIT, epoch);
@@ -633,6 +633,73 @@ const KiCadGitHubReviewApi = (() => {
       threads.push({kind,number:row.number,title:row.title.slice(0,1024),state:kind==='issue'?row.state:row.closed?'closed':'open',author:author?.login||null,updatedAt,url:`https://github.com/${repository}/${kind==='issue'?'issues':'discussions'}/${row.number}`});
     }
     await session.check();return {threads,hasMore:hasMore&&page<5,...(hasMore&&page<5?{nextPage:page+1,...(kind==='discussion'?{cursor:nextCursor}:{})}:{}),warnings,...(hasMore&&page===5?{truncated:true}:{})};
+  }
+
+  // Projects are read through the same account session as comments. Only items
+  // belonging to the active repository are exposed by the integrated board.
+  function boardScope(message) {
+    const scope=KiCadReviewComments.normalizeScope(message);
+    if(scope.provider==='gitlab')throw fail('Invalid GitHub board provider.',true);
+    for(const key of ['boardId','fieldId','itemId'])if(message[key]!==undefined&&!validId(message[key]))throw fail('Invalid GitHub board identifier.',true);
+    if(message.cursor!==undefined&&message.cursor!==null&&(typeof message.cursor!=='string'||!message.cursor||message.cursor.length>1024||/[\x00-\x1f\x7f]/.test(message.cursor)))throw fail('Invalid board cursor.',true);
+    return scope;
+  }
+  function boardConnection(value,limit,cursor=null) {
+    if(!Array.isArray(value?.nodes)||value.nodes.length>limit||typeof value.pageInfo?.hasNextPage!=='boolean')throw fail('GitHub returned invalid project data.',true);
+    const more=value.pageInfo.hasNextPage,next=value.pageInfo.endCursor;
+    if(more&&(typeof next!=='string'||!next||next.length>1024||/[\x00-\x1f\x7f]/.test(next)||next===cursor))throw fail('GitHub returned invalid project pagination.',true);
+    return {hasMore:more,...(more?{cursor:next}:{}),warnings:[]};
+  }
+  async function boardList(message={}) {
+    const {repository}=boardScope(message),session=await readbackSession(),[owner,name]=repoParts(repository),cursor=message.cursor||null;
+    const result=await readbackJson(API+'/graphql',session,{query:'query($owner:String!,$name:String!,$cursor:String){repository(owner:$owner,name:$name){projectsV2(first:20,after:$cursor){nodes{id title number url closed} pageInfo{hasNextPage endCursor}}}}',variables:{owner,name,cursor}});
+    const connection=result.data?.repository?.projectsV2,paging=boardConnection(connection,20,cursor),boards=[];
+    for(const row of connection.nodes){if(!validId(row?.id)||typeof row.title!=='string'||!NUMBER(row.number))throw fail('GitHub returned invalid project identity.',true);if(!row.closed)boards.push({id:row.id,title:row.title.slice(0,1024),url:boardUrl(row.url)});}
+    await session.check();return {boards,...paging};
+  }
+  function boardUrl(value) {
+    let url;try{url=new URL(value);}catch{throw fail('GitHub returned an invalid project URL.',true);}
+    if(url.origin!=='https://github.com'||url.username||url.password||!/^\/(?:users|orgs)\/[A-Za-z0-9-]+\/projects\/[1-9][0-9]*$/.test(url.pathname)||url.search||url.hash)throw fail('GitHub returned an invalid project URL.',true);
+    return url.href;
+  }
+  const boardFields='fields(first:100){nodes{... on ProjectV2SingleSelectField{id name options{id name}}} pageInfo{hasNextPage endCursor}}';
+  async function boardRead(message={}) {
+    const {repository}=boardScope(message);if(!validId(message.boardId))throw fail('Choose a GitHub project.',true);
+    const session=await readbackSession(),cursor=message.cursor||null;
+    const result=await readbackJson(API+'/graphql',session,{query:`query($id:ID!,$cursor:String){node(id:$id){... on ProjectV2{id title url repositories(first:100){nodes{nameWithOwner} pageInfo{hasNextPage endCursor}} ${boardFields} items(first:50,after:$cursor){nodes{id fieldValues(first:100){nodes{... on ProjectV2ItemFieldSingleSelectValue{optionId field{... on ProjectV2SingleSelectField{id}}}} pageInfo{hasNextPage endCursor}} content{... on Issue{number title repository{nameWithOwner} assignees(first:10){nodes{login}}} ... on PullRequest{number title repository{nameWithOwner} assignees(first:10){nodes{login}}} __typename}} pageInfo{hasNextPage endCursor}}}}}`,variables:{id:message.boardId,cursor}});
+    const project=result.data?.node;if(project?.id!==message.boardId||typeof project.title!=='string')throw fail('GitHub project is unavailable. Check Projects permission.',true);
+    const repositories=project.repositories;if(!Array.isArray(repositories?.nodes)||!repositories.nodes.some(r=>r?.nameWithOwner?.toLowerCase()===repository.toLowerCase()))throw fail('This project is not linked to the active repository.',true);
+    if(!Array.isArray(project.fields?.nodes)||project.fields.nodes.length>100)throw fail('GitHub returned invalid project fields.',true);
+    const field=project.fields.nodes.find(f=>message.fieldId?f?.id===message.fieldId:f?.name==='Status');
+    if(!field||!validId(field.id)||!Array.isArray(field.options)||field.options.length>100)throw fail('Choose a single-select project status field.',true);
+    const columns=[{id:'',title:'No status'},...field.options.map(option=>{if(typeof option?.id!=='string'||!option.id||option.id.length>200||typeof option.name!=='string')throw fail('Invalid project status option.',true);return{id:option.id,title:option.name.slice(0,200)};})];
+    const paging=boardConnection(project.items,50,cursor),items=[];
+    if(project.fields.pageInfo?.hasNextPage)paging.warnings.push('Project fields are limited to the first 100.');
+    for(const row of project.items.nodes){const content=row?.content;if(!content||content.repository?.nameWithOwner?.toLowerCase()!==repository.toLowerCase())continue;
+      if(!validId(row.id)||!NUMBER(content.number)||typeof content.title!=='string'||!['Issue','PullRequest'].includes(content.__typename)||!Array.isArray(row.fieldValues?.nodes))throw fail('Invalid GitHub project item.',true);
+      const status=row.fieldValues.nodes.find(v=>v?.field?.id===field.id)?.optionId||'';
+      if(!columns.some(c=>c.id===status))throw fail('Invalid GitHub project item status.',true);
+      if(row.fieldValues.pageInfo?.hasNextPage)paging.warnings.push('Some project item fields were truncated.');
+      items.push({id:row.id,title:content.title.slice(0,1024),number:content.number,kind:content.__typename==='Issue'?'issue':'pull',repository,url:`https://github.com/${repository}/${content.__typename==='Issue'?'issues':'pull'}/${content.number}`,columnId:status,assignees:(content.assignees?.nodes||[]).filter(a=>LOGIN.test(a?.login||'')).slice(0,10).map(a=>a.login)});
+    }
+    await session.check();return{id:project.id,title:project.title.slice(0,1024),url:boardUrl(project.url),fieldId:field.id,columns,items,...paging};
+  }
+  async function boardMove(message={}) {
+    await globalThis.KiCadManagedPolicy?.assertWrites();const {repository}=boardScope(message);
+    if(!validId(message.boardId)||!validId(message.itemId)||typeof message.optionId!=='string'||message.optionId.length>200)throw fail('Invalid project move.',true);
+    const board=await boardRead({...message,cursor:null});if(!board.columns.some(c=>c.id===message.optionId))throw fail('Project status changed; refresh the board.',true);
+    const session=await readbackSession();
+    const identity=await readbackJson(API+'/graphql',session,{query:'query($id:ID!){node(id:$id){... on ProjectV2Item{id project{id} fieldValues(first:100){nodes{... on ProjectV2ItemFieldSingleSelectValue{optionId field{... on ProjectV2SingleSelectField{id}}}} pageInfo{hasNextPage endCursor}} content{... on Issue{repository{nameWithOwner}} ... on PullRequest{repository{nameWithOwner}}}}}}',variables:{id:message.itemId}});
+    const item=identity.data?.node;if(item?.id!==message.itemId||item.project?.id!==board.id||item.content?.repository?.nameWithOwner?.toLowerCase()!==repository.toLowerCase())throw fail('Project item belongs to another project or repository.',true);
+    if(message.expectedColumnId!==undefined){if(!Array.isArray(item.fieldValues?.nodes)||item.fieldValues.pageInfo?.hasNextPage)throw fail('Project item status cannot be verified; refresh before moving.',true);const previous=item.fieldValues.nodes.find(v=>v?.field?.id===board.fieldId)?.optionId||'';if(previous!==message.expectedColumnId)throw fail('Project item status changed. Refresh before moving.',true);}
+    const policy=await commentPolicyStatus(repository);if(!policy.allowed)throw fail(policy.reason||'Repository policy does not allow this update.',true);
+    await session.check();const clearing=message.optionId==='';
+    const query=clearing?'mutation($input:ClearProjectV2ItemFieldValueInput!){clearProjectV2ItemFieldValue(input:$input){projectV2Item{id}}}':'mutation($input:UpdateProjectV2ItemFieldValueInput!){updateProjectV2ItemFieldValue(input:$input){projectV2Item{id}}}';
+    const input={projectId:board.id,itemId:message.itemId,fieldId:board.fieldId,...(clearing?{}:{value:{singleSelectOptionId:message.optionId}})};
+    const result=await request('/graphql',session.token,{query,variables:{input}},session.epoch,undefined,{stateChange:true});
+    const confirmed=result.data?.data?.[clearing?'clearProjectV2ItemFieldValue':'updateProjectV2ItemFieldValue']?.projectV2Item;
+    if(confirmed?.id!==message.itemId)throw fail('GitHub did not confirm the project move. Refresh before retrying.');
+    return{updated:true,itemId:message.itemId,columnId:message.optionId};
   }
 
   async function createPullReader(repository, number) {
@@ -1105,7 +1172,7 @@ const KiCadGitHubReviewApi = (() => {
       throw error;
     }
   }
-  return { forkRevision, tokenStatus, setToken, clearToken, resetAuth, authorizationHeaders, deviceStatus, startDevice, pollDevice, cancelDevice,
+  return { boardList, boardRead, boardMove, forkRevision, tokenStatus, setToken, clearToken, resetAuth, authorizationHeaders, deviceStatus, startDevice, pollDevice, cancelDevice,
     commentPolicyStatus, validatePolicy, categories, publish, recoverPublication, publishArgs, validRepository, createAnnotationReader, createPullReader, readDiscussionAnnotations, readThread, chatThreadState, chatMessageWrite, chatThreadList };
 })();
 

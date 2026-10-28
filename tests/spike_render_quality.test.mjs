@@ -1,6 +1,27 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { viewportPixelRatio,qualityName,qualityViewport,boardOcclusion,padHasMaskOpening, boardClipRange, studioLights, studioMaterials } from '../extension/spike/renderQuality.mjs';
+import { viewportPixelRatio,qualityName,qualityViewport,graphicsProfile,boardOcclusion,padHasMaskOpening, boardClipRange, studioLights, studioMaterials } from '../extension/spike/renderQuality.mjs';
+
+test('mobile graphics tiers use actual limits instead of treating touch screens as low GPUs',()=>{
+ const premium=graphicsProfile({maxTextureSize:16384,maxRenderbufferSize:16384,deviceMemory:8,hardwareConcurrency:8,floatTargets:true,android:true});
+ assert.equal(premium.tier,'premium');assert.equal(premium.defaultQuality,'high');
+ const phone=qualityViewport(390,740,3,premium.maxDimension,'high',premium);assert.equal(phone.ratio,3);assert.ok(phone.estimatedBytes<300_000_000);
+ const standard=graphicsProfile({maxTextureSize:8192,deviceMemory:4,floatTargets:true,android:true});assert.equal(standard.tier,'standard');assert.equal(standard.defaultQuality,'balanced');
+ const low=graphicsProfile({maxTextureSize:16384,deviceMemory:2,floatTargets:true,android:true});assert.equal(low.tier,'constrained');assert.equal(low.defaultQuality,'balanced');
+ assert.equal(graphicsProfile({maxTextureSize:16384,deviceMemory:8,floatTargets:false,android:true}).defaultQuality,'balanced');
+ assert.equal(graphicsProfile({maxTextureSize:16384,maxRenderbufferSize:4096,deviceMemory:8,floatTargets:true,android:true}).tier,'constrained');
+ assert.equal(graphicsProfile({maxTextureSize:16384,deviceMemory:8,floatTargets:true,android:false}).defaultQuality,'balanced');
+});
+
+test('tablet high detail remains within reported renderbuffer dimensions and bounded memory',()=>{
+ for(const memory of [2,4,8,undefined])for(const size of [4096,8192,16384])for(const [width,height]of [[390,740],[1536,1100],[1100,1536],[3840,2160]]){
+  const profile=graphicsProfile({maxTextureSize:size,maxRenderbufferSize:size,deviceMemory:memory,floatTargets:true,hardwareConcurrency:8,android:true});
+  const plan=qualityViewport(width,height,3,profile.maxDimension,'high',profile);
+  assert.ok(plan.width<=size&&plan.height<=size);assert.ok(plan.pixels<=profile.highMaxPixels);assert.ok(plan.estimatedBytes<300_000_000);
+ }
+ assert.equal(graphicsProfile({maxTextureSize:16384,floatTargets:true,hardwareConcurrency:8,android:true}).tier,'premium');
+ assert.equal(graphicsProfile({maxTextureSize:8192,floatTargets:true,hardwareConcurrency:8,android:true}).tier,'standard');
+});
 
 test('exposed-pad material follows saved mask layer membership for each side',()=>{
  assert.equal(padHasMaskOpening({layers:['F.Cu','F.Mask']},'F.Cu'),true);

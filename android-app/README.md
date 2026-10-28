@@ -248,3 +248,26 @@ The online tree includes metadata for unsupported files without downloading them
 Comment posting uses a single destination selector for the provider's supported new/existing Issues, Discussions and current pull request where available. Publication still requires final confirmation.
 
 The 3D viewer loads supported STEP/STP, WRL/VRML and GLB assets from imported repository files. Standard KiCad model-directory variables can resolve against a unique matching repository suffix; ambiguous paths remain unavailable. Supported embedded board/footprint models are decoded with bounded Zstandard handling and checksum validation. Missing models remain disclosed stand-ins; unsupported geometry and oversized assets do not become accurate models merely because a reference exists.
+
+## Provider boards, publisher sign-in and 3D graphics
+
+Comments → conversation options → Work board opens linked GitHub Projects or
+GitLab project label boards. GitHub sign-in can include Projects permission.
+Status updates use provider fields, preserve unrelated GitLab labels, and reject
+stale statuses. Board operations remain bound to the active imported project.
+
+GitLab sign-in resolves the publisher's public Application ID from packaged
+configuration. Ordinary users do not register applications. The publisher (or
+self-hosted administrator) configures a public OAuth application once; see
+[GitLab publisher setup](../docs/GITLAB-PUBLISHER-OAUTH.md). Without that release
+configuration, the app explains the missing setup and keeps the token alternative
+under Advanced. No client secret is packaged.
+
+The comment composer supports mixed text/image paste and an Attach image picker
+under + for mobile keyboards without image paste. Both use the same bounded PNG
+normalization, source attachment and destination confirmation.
+
+3D uses hardware-accelerated WebView WebGL and capability-based quality budgets,
+with PBR lighting, tone mapping, real linked models, ambient occlusion and enhanced
+antialiasing where supported. [3D diagnostics and acceptance](../docs/ANDROID-3D.md)
+distinguish emulator rendering checks from physical-phone GPU performance.

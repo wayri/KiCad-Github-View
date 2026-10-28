@@ -401,11 +401,25 @@ test('comments persist per repository/revision/file and reject unauthorized writ
   assert.equal((await message({ type: 'comment-list', ...scope })).result.length, 0);
 });
 
-test('connected Git-tracked sidecar becomes authoritative for comment CRUD', async (t) => {
+test('provider annotation reads refresh only confirmed thread snapshots in the optional cache',async t=>{
+ const original=global.KiCadReviewFileStore,reader=KiCadGitHubReviewApi.createAnnotationReader,cached=[];
+ t.after(()=>{global.KiCadReviewFileStore=original;KiCadGitHubReviewApi.createAnnotationReader=reader;});
+ global.KiCadReviewFileStore={status:async()=>({connected:true}),sync:async(...args)=>cached.push(args)};
+ const note=sampleComment();let body=KiCadReviewComments.toMarkdown(note);
+ KiCadGitHubReviewApi.createAnnotationReader=async()=>async path=>path.includes('/comments?')?[]:{number:3,state:'open',body,user:{login:'reviewer'}};
+ const result=await background.githubAnnotations({...note.anchor,issueNumber:3});assert.equal(result.notes.length,1);assert.equal(cached.length,1);assert.equal(cached[0][1][0].remoteRefs[0].url,`https://github.com/${note.anchor.repository}/issues/3`);assert.deepEqual(cached[0][2],{sourceUrl:`https://github.com/${note.anchor.repository}/issues/3`,complete:true});
+ body='';await background.githubAnnotations({...note.anchor,issueNumber:3});assert.deepEqual(cached[1][1],[]);assert.equal(cached[1][2].complete,true,'confirmed empty thread clears only its published cache');
+ body=KiCadReviewComments.toMarkdown(note);KiCadGitHubReviewApi.createAnnotationReader=async()=>async path=>path.includes('/comments?')?[]:{number:3,state:'open',body,pull_request:{},user:{login:'reviewer'}};
+ await background.githubAnnotations({...note.anchor,pullRepository:'upstream/board',pullNumber:3});assert.equal(cached[2][1][0].remoteRefs[0].kind,'pull-request');assert.equal(cached[2][1][0].remoteRefs[0].repository,'upstream/board');assert.equal(cached[2][2].sourceUrl,'https://github.com/upstream/board/pull/3');assert.equal(cached[2][2].complete,true);
+ global.KiCadReviewFileStore={};assert.equal((await background.githubAnnotations({...note.anchor,issueNumber:3})).notes.length,1,'absent optional cache cannot break provider readback');
+ global.KiCadReviewFileStore={status:async()=>{throw Error('Unavailable');},sync:async()=>{}};assert.equal((await background.githubAnnotations({...note.anchor,issueNumber:3})).notes.length,1,'broken optional cache cannot break provider readback');
+});
+
+test('connected sync cache preserves legacy drafts but new drafts use browser storage', async (t) => {
   const store = global.KiCadReviewFileStore;
   const original = { ...store };
   t.after(() => Object.assign(store, original));
-  const saved = [];
+  const saved = [{...sampleComment(),id:'legacy'}];
   Object.assign(store, {
     status: async () => ({ connected: true, name: 'board.kicad-review.json' }),
     read: async () => saved.slice(),
@@ -420,10 +434,20 @@ test('connected Git-tracked sidecar becomes authoritative for comment CRUD', asy
   const note = sampleComment();
   assert.equal((await message({ type: 'comment-store-status' })).result.connected, true);
   assert.equal((await message({ type: 'comment-save', comment: note })).ok, true);
-  assert.equal(localStore.size, 0, 'connected sidecar does not shadow-save into browser storage');
-  assert.equal((await message({ type: 'comment-list', ...note.anchor })).result.length, 1);
+  assert.equal(localStore.size, 1, 'pending drafts use browser storage');
+  assert.equal(saved.length,1,'saving a new draft never changes the provider cache');
+  assert.equal((await message({ type: 'comment-list', ...note.anchor })).result.length, 2);
   assert.equal((await message({ type: 'comment-delete', ...note.anchor, id: note.id })).result.deleted, true);
-  assert.equal((await message({ type: 'comment-list', ...note.anchor })).result.length, 0);
+  assert.equal((await message({ type: 'comment-list', ...note.anchor })).result.length, 1);
+  assert.equal(saved[0].id,'legacy','legacy pending draft survives');
+});
+
+test('publication receipt retires drafts without making local published content authoritative',async t=>{
+ const prior=global.KiCadReviewFileStore;global.KiCadReviewFileStore={status:async()=>({connected:false})};t.after(()=>global.KiCadReviewFileStore=prior);localStore.clear();
+ const note=sampleComment();assert.equal((await message({type:'comment-save',comment:note})).ok,true);
+ const published={...note,remoteRefs:[{kind:'issue',repository:note.anchor.repository,number:3,url:`https://github.com/${note.anchor.repository}/issues/3`,publishedAt:note.createdAt}]};
+ assert.equal((await message({type:'comment-save',comment:published,expectedUpdatedAt:note.updatedAt})).ok,true);assert.deepEqual((await message({type:'comment-list',...note.anchor})).result,[]);
+ assert.equal((await message({type:'comment-save',comment:{...published,text:'Local metadata edit'}})).ok,true);assert.deepEqual((await message({type:'comment-list',...note.anchor})).result,[],'published edits must be read from the provider');
 });
 
 test('saving a 101st note to one file is rejected while editing an existing note works', async () => {
@@ -1321,4 +1345,14 @@ test('conversation state writes require exact extension viewer identity',async t
  const request={type:'chat-thread-state',repository:'owner/repo',ref:'main',file:'board.kicad_pcb',thread:{kind:'issue',number:42},state:'closed',expectedUpdatedAt:'2026-10-27T00:00:00Z',confirmed:true};
  for(const sender of [options,githubTab(1,'/owner/repo/blob/main/board.kicad_pcb'),{id:'other',url:viewer.url}])assert.notEqual((await message(request,sender)).ok,true);
  assert.equal(called,0);assert.equal((await message(request)).ok,true);assert.equal(called,1);
+});
+
+test('Open in KiCad background route accepts only bound owned viewers and uses completed download paths',async t=>{
+ const previousDownloads=chrome.downloads,previousPermissions=chrome.permissions,previousNative=chrome.runtime.sendNativeMessage;const nativeCalls=[],downloadCalls=[],listeners=new Set();
+ t.after(()=>{chrome.downloads=previousDownloads;chrome.permissions=previousPermissions;chrome.runtime.sendNativeMessage=previousNative;});
+ chrome.permissions={contains:async()=>true};chrome.downloads={download:async value=>{downloadCalls.push(value);return 987;},search:async()=>[{id:987,state:'complete',filename:'C:\\Downloads\\review.zip'}],onChanged:{addListener:f=>listeners.add(f),removeListener:f=>listeners.delete(f)}};chrome.runtime.sendNativeMessage=async(host,value)=>{nativeCalls.push({host,value});return value.operation==='status'?{ok:true}:{ok:true,opened:true};};
+ const scope={type:'native-kicad-open',repository:'owner/repo',ref:'e'.repeat(40),file:'board.kicad_pcb',confirmed:true},owned={id:'test-id',frameId:0,documentId:'native-open',url:extensionOrigin+'pcb-viewer.html?'+new URLSearchParams({repository:scope.repository,ref:scope.ref,file:scope.file})};
+ for(const other of [options,githubTab(1,'/owner/repo'),viewer])assert.equal((await message(scope,other)).ok,false);
+ assert.equal(downloadCalls.length,0);const result=await message(scope,owned);assert.equal(result.ok,true);assert.equal(result.result.opened,true);assert.equal(downloadCalls[0].saveAs,true);assert.equal(nativeCalls[1].value.archivePath,'C:\\Downloads\\review.zip');assert.equal(listeners.size,0);
+ const foreign=await message({...scope,archivePath:'C:\\private.zip'},owned);assert.equal(foreign.ok,false);assert.equal(downloadCalls.length,1);
 });

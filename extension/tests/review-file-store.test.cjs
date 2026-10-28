@@ -32,3 +32,20 @@ test('sidecar validates duplicate scopes, metadata and unsafe remote links',()=>
  assert.throws(()=>validator.validateComment({...note(),remoteRefs:[{kind:'issue',repository:'wayri/demo',number:3,url:'https://evil.example/issues/3',publishedAt:note().createdAt}]}));
  const normalized=validator.validateComment({...note(),tags:[' assembly ','assembly','review']});assert.deepEqual(normalized.tags,['assembly','review']);assert.deepEqual(validator.fromMarkdown(validator.toMarkdown(normalized)),[normalized]);
 });
+
+const remote=(id='one',text='Published')=>({...note(),id,text,remoteRefs:[{kind:'issue',repository:'wayri/demo',number:3,url:'https://github.com/wayri/demo/issues/3#issuecomment-45',publishedAt:note().createdAt}]});
+test('complete provider refresh replaces cached edits and deletions while preserving unpublished drafts',async()=>{
+ const f=fixture(validator.serializeSidecar([remote(),remote('deleted'),{...note(),id:'draft'}]));await f.store.connect(f.handle);
+ await f.store.sync(note().anchor,[remote('one','Edited on GitHub')],{complete:true});const snapshot=await f.store.readSnapshot();assert.equal(snapshot.synced.length,1);assert.equal(snapshot.synced[0].text,'Edited on GitHub');assert.equal(snapshot.pending[0].id,'draft');
+});
+test('partial refresh retains unseen published notes and refuses draft collisions or foreign scope',async()=>{
+ const f=fixture(validator.serializeSidecar([remote('unseen'),note()]));await f.store.connect(f.handle);await f.store.sync(note().anchor,[remote('new')]);assert.equal((await f.store.read()).length,3);const before=f.contents;
+ await assert.rejects(f.store.sync(note().anchor,[remote()]),/pending draft/);assert.equal(f.contents,before);
+ await assert.rejects(f.store.sync({...note().anchor,repository:'other/repo'},[remote('new')]),/provider scope/);assert.equal(f.contents,before);
+ await assert.rejects(f.store.sync(note().anchor,[note()]),/published/);
+});
+test('complete thread snapshots remove only that thread and reject unsafe thread scopes',async()=>{
+ const other={...remote('other'),remoteRefs:[{...remote().remoteRefs[0],number:4,url:'https://github.com/wayri/demo/issues/4'}]};const f=fixture(validator.serializeSidecar([remote(),other]));await f.store.connect(f.handle);
+ await f.store.sync(note().anchor,[],{complete:true,sourceUrl:'https://github.com/wayri/demo/issues/3'});assert.equal((await f.store.read())[0].id,'other');
+ await assert.rejects(f.store.sync(note().anchor,[],{complete:true,sourceUrl:'https://evil.test/issues/4'}),/thread scope/);assert.equal((await f.store.read()).length,1);
+});

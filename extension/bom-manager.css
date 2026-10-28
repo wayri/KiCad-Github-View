@@ -163,3 +163,8 @@ body .bom-management-dialog .bom-manager-field-grid td:last-child{max-width:none
  body .bom-management-dialog .bom-manager-field-grid :is(th,td){height:40px}
  body .bom-management-dialog .bom-manager-field-grid button{min-height:36px}
 }
+
+body .bom-management-dialog .bom-manager-column-controls{display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin:6px 0}
+body .bom-management-dialog .bom-manager-column-controls input{flex:1 1 150px;min-width:0;min-height:30px}
+body .bom-management-dialog .bom-manager-column-controls button,body .bom-management-dialog .bom-manager-columns-button{min-height:30px;padding:4px 8px;font-size:12px;white-space:nowrap}
+body .bom-management-dialog .bom-manager-field-settings tr[hidden]{display:none!important}

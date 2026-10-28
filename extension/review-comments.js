@@ -137,9 +137,11 @@ const KiCadReviewComments = (() => {
         return {provider:'gitlab',host,kind:remote.kind,repository:remote.repository,number:remote.number,url:url.href,publishedAt:remote.publishedAt};
       }
       if(collaboration.provider==='gitlab')throw new Error('GitHub thread references cannot be attached to GitLab notes.');
-      if(!remote||!["issue","discussion"].includes(remote.kind)||typeof remote.repository!=="string"||!REPOSITORY.test(remote.repository)||remote.repository.split("/").some(p=>p==="."||p==="..")||!Number.isSafeInteger(remote.number)||remote.number<1)throw new Error("Invalid GitHub annotation reference.");
+      if(!remote||!["issue","discussion","pull-request"].includes(remote.kind)||typeof remote.repository!=="string"||!REPOSITORY.test(remote.repository)||remote.repository.split("/").some(p=>p==="."||p==="..")||!Number.isSafeInteger(remote.number)||remote.number<1)throw new Error("Invalid GitHub annotation reference.");
       let url;try{url=new URL(remote.url);}catch{throw new Error("Invalid GitHub reference URL.");}
-      if(url.origin!=="https://github.com"||url.username||url.password||url.search||url.pathname!==`/${remote.repository}/${remote.kind==="issue"?"issues":"discussions"}/${remote.number}`||(url.hash&&!/^#(?:issuecomment|discussioncomment)-[0-9]+$/.test(url.hash)))throw new Error("Invalid GitHub reference URL.");
+      const section={issue:'issues',discussion:'discussions','pull-request':'pull'}[remote.kind];
+      const validHash=remote.kind==='pull-request'?/^#(?:issuecomment-|discussion_r|pullrequestreview-)[0-9]+$/:/^#(?:issuecomment|discussioncomment)-[0-9]+$/;
+      if(url.origin!=="https://github.com"||url.username||url.password||url.search||url.pathname!==`/${remote.repository}/${section}/${remote.number}`||(url.hash&&!validHash.test(url.hash)))throw new Error("Invalid GitHub reference URL.");
       if(typeof remote.publishedAt!=="string"||remote.publishedAt.length>40||!/^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d(?:\.\d{1,3})?Z$/.test(remote.publishedAt)||!Number.isFinite(Date.parse(remote.publishedAt)))throw new Error("Invalid GitHub publication time.");
       const nodeId=optional(remote.nodeId,"GitHub node ID",200);
       return {kind:remote.kind,repository:remote.repository,number:remote.number,url:url.href,publishedAt:remote.publishedAt,...(nodeId?{nodeId}:{})};
@@ -276,7 +278,7 @@ const KiCadReviewComments = (() => {
       if(source.startsWith('issue')||source.startsWith('pull'))return 'issue';
     }
     if(['issue','discussion'].includes(note?.threadType))return note.threadType;
-    const kinds=[...new Set((note?.remoteRefs||[]).map(ref=>ref.kind).filter(kind=>['issue','discussion'].includes(kind)))];
+    const kinds=[...new Set((note?.remoteRefs||[]).map(ref=>ref.kind==='pull-request'?'issue':ref.kind).filter(kind=>['issue','discussion'].includes(kind)))];
     return kinds.length===1?kinds[0]:null;
   }
   function createdDateRange(createdFrom, createdTo) {

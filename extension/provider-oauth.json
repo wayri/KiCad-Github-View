@@ -1,0 +1,8 @@
+{
+  "version": 1,
+  "gitlab": {
+    "https://gitlab.com": {
+      "clientId": "ea3496457b4d3a71d846ef9749af37559d2a71cf5efdb2a049ea8da164e0005c"
+    }
+  }
+}

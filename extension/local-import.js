@@ -7,11 +7,13 @@ async function readFiles(entries,{stripFolder=false}={}){
  if(!Array.isArray(entries)||!entries.length||entries.length>COUNT)throw Error('Choose 1–2000 files.');
  let items=entries.map(item=>({file:item.file||item,path:item.path||item.webkitRelativePath||item.name}));
  if(stripFolder&&items.every(i=>typeof i.path==='string'&&i.path.includes('/')&&i.path.split('/')[0]===items[0].path.split('/')[0]))items=items.map(i=>({...i,path:i.path.split('/').slice(1).join('/')}));
- const files=[],assets=[],seen=new Set();let total=0,ignored=0;
+ const files=[],assets=[],inventory=[],seen=new Set();let total=0,ignored=0;
  for(const {file,path}of items){
   if(!local.pathOK(path))throw Error('Invalid local path: '+String(path).slice(0,100));
-  if(!local.textFile(path)&&! /\.(step|stp|wrl|vrml|glb|pdf)$/i.test(path)){ignored++;continue;}
   if(seen.has(path))throw Error('Duplicate selected path: '+path);seen.add(path);
+  inventory.push({path,type:'blob'});
+  // Keep every selected filename in the tree without reading unsupported bytes.
+  if(!local.textFile(path)&&! /\.(step|stp|wrl|vrml|glb|pdf)$/i.test(path)){ignored++;continue;}
   if(!Number.isSafeInteger(file.size)||file.size<0||file.size>32*1024*1024||(total+=file.size)>MAX)throw Error('Local imports allow 32 MiB per file and 96 MiB per project.');
   const buffer=await file.arrayBuffer();if(buffer.byteLength!==file.size)throw Error('File changed while importing: '+path);
   const bytes=new Uint8Array(buffer);
@@ -20,7 +22,7 @@ async function readFiles(entries,{stripFolder=false}={}){
    files.push({path,content});
   }else {let text='';for(let i=0;i<bytes.length;i+=32768)text+=String.fromCharCode(...bytes.subarray(i,i+32768));assets.push({path,base64:root.btoa(text)});}
  }
- const project=local.validate({id:'imported',name:'Local project',files,assets});return{project,ignored};
+ const project=local.validate({id:'imported',name:'Local project',files,assets,repositoryTree:{entries:inventory,truncated:false}});return{project,ignored};
 }
 async function dropped(data){
  const entries=[...(data.items||[])].filter(i=>i.kind==='file').map(i=>i.webkitGetAsEntry?.()).filter(Boolean);

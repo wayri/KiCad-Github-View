@@ -9,12 +9,22 @@ export function viewportPixelRatio(width, height, deviceRatio = 1, maxDimension 
 }
 
 export function qualityName(value){return ['low','balanced','high'].includes(value)?value:'balanced';}
+// Touch input says nothing about GPU capacity. Use reported capabilities and
+// memory only; unknown devices retain the normal, bounded allocation policy.
+export function graphicsProfile({maxTextureSize=4096,maxRenderbufferSize=maxTextureSize,deviceMemory,hardwareConcurrency=0,floatTargets=false,android=false}={}){
+ const dimension=Math.min(...[maxTextureSize,maxRenderbufferSize].map(value=>Number.isFinite(value)&&value>0?value:4096));
+ const memory=Number.isFinite(deviceMemory)&&deviceMemory>0?deviceMemory:null;
+ const constrained=dimension<=4096||memory!==null&&memory<=2;
+ const premium=!constrained&&floatTargets&&dimension>=8192&&(memory!==null?memory>=6:dimension>=16384&&hardwareConcurrency>=8);
+ return{tier:constrained?'constrained':premium?'premium':'standard',constrained,premium,maxDimension:dimension,defaultQuality:android&&premium?'high':'balanced',highMaxPixels:constrained?1_000_000:premium?3_000_000:2_000_000};
+}
 // Includes HDR ping-pong buffers, G-buffer/depth, AO/denoise, SMAA buffers,
 // canvas and the cached shadow maps. This is a conservative allocation bound,
 // not a claim about a particular driver's private memory accounting.
 export function qualityViewport(width,height,deviceRatio=1,maxDimension=4096,quality='balanced',constrained=false){
  const mode=qualityName(quality),w=Number.isFinite(width)&&width>0?width:1,h=Number.isFinite(height)&&height>0?height:1;
- const maxPixels=mode==='high'?(constrained?1_000_000:2_000_000):mode==='low'?1_000_000:constrained?3_000_000:4_000_000;
+ const profile=constrained&&typeof constrained==='object'?constrained:null,limited=profile?profile.constrained:constrained;
+ const maxPixels=mode==='high'?(profile?profile.highMaxPixels:limited?1_000_000:2_000_000):mode==='low'?1_000_000:limited?3_000_000:4_000_000;
  const ratio=Math.min(viewportPixelRatio(w,h,deviceRatio,maxDimension),Math.sqrt(maxPixels/w/h));
  const pixels=Math.floor(w*ratio)*Math.floor(h*ratio),bytesPerPixel=mode==='high'?96:mode==='low'?12:24;
  return {quality:mode,ratio,width:Math.max(1,Math.floor(w*ratio)),height:Math.max(1,Math.floor(h*ratio)),pixels,maxPixels,estimatedBytes:pixels*bytesPerPixel+(mode==='low'?0:2*1024*1024*4)};

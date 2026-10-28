@@ -2,6 +2,13 @@
 
 Open **BoM & assembly** from the home screen or project overview. In a drawing, the BoM pane's **Open BoM manager** uses its saved schematic symbols or PCB footprints. **Manage variants** is available in drawing tools. Engineering calculators are available from home, project overview and drawing tools without an account.
 
+Use the **Columns** button above the table to choose standard and custom fields.
+Search the chooser, toggle individual columns or Actions, use **Show all columns**,
+or **Reset columns**. Reference stays visible for part selection. Choices are saved
+per project revision and schematic/PCB source; visible CSV export uses the same
+chosen columns. If preferences cannot be saved, the session choice remains usable
+and the manager reports the storage error.
+
 The manager provides individual parts or grouped quantities, natural reference ordering, full saved fields, search, fitted/DNP/exclusion/front/back filters, procurement states and assembly progress (not started, placed, soldered, verified). Management drafts include manufacturer, MPN, supplier/SKU, notes, unit price and currency. Manage a group to assign those fields together; the form explicitly lists the affected count. A board-count input calculates build quantities from fitted, nonexcluded parts. Costs are sums of entered prices, kept separate by currency, with unpriced parts counted. No live sourcing, exchange-rate conversion or purchases are performed.
 
 CSV exports reflect visible filters, grouping and board count, retain custom fields, and neutralize spreadsheet formulas. Quantity per board and build quantity are separate columns. Metadata JSON can be exported and restored only to the same saved revision/source scope. Browser storage failures are reported without pretending a draft was saved. For native drawings the saved-design metadata scope remains compatible with earlier drafts; other variants have separate scopes. Imported exports are scoped to their exact source SHA-256 and selected variant.

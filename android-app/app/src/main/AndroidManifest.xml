@@ -10,6 +10,7 @@
     <queries><package android:name="com.github.android" /><intent><action android:name="android.support.customtabs.action.CustomTabsService" /></intent></queries>
     <application
         android:allowBackup="false"
+        android:hardwareAccelerated="true"
         android:fullBackupContent="false"
         android:dataExtractionRules="@xml/data_extraction_rules"
         android:icon="@drawable/app_icon"

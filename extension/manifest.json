@@ -84,6 +84,7 @@
     "extension_pages": "script-src 'self' 'wasm-unsafe-eval'; object-src 'self';",
     "sandbox": "sandbox allow-scripts; default-src 'none'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'unsafe-inline'; frame-src about:; child-src about:; connect-src 'none'; img-src data:; object-src 'none'; form-action 'none'; base-uri 'none';"
   },
+  "optional_permissions": ["downloads", "nativeMessaging"],
   "optional_host_permissions": [
     "https://*/*"
   ]

@@ -29,6 +29,7 @@
     <p>Sign in to read repositories using your account and publish saved review notes to Issues or Discussions. Saving a note never posts it automatically.</p>
     <label for="githubAccess">Repository access</label>
     <select id="githubAccess" aria-describedby="scopeHelp"><option value="public_repo">Public repositories</option><option value="repo">Public and private repositories</option></select>
+    <label><input id="githubProjectsAccess" type="checkbox"> Include GitHub Projects boards</label>
     <p id="scopeHelp">Public access requests GitHub's <code>public_repo</code> scope. Tokens stay in this browser session.</p>
     <button id="connectGitHub" type="button">Sign in with GitHub</button>
     <button id="clearToken" type="button" hidden>Sign out</button>
@@ -67,15 +68,17 @@
     <p>Private projects and issue posting use credentials for the selected server. GitHub credentials are never sent to GitLab. Review notes post only when you choose Publish.</p>
     <label for="gitlabNewHost">Add a self-hosted server (HTTPS origin)</label><input id="gitlabNewHost" type="url" placeholder="https://gitlab.example.com" autocomplete="off">
     <button id="gitlabAddHost" type="button">Grant server access</button><button id="gitlabRemoveHost" type="button">Remove server</button>
+    <button id="gitlabOAuth" type="button">Sign in with GitLab</button><p>Use your normal GitLab account. Users do not need to register an application.</p>
+    <details><summary>Advanced server connection</summary>
     <label for="gitlabToken">GitLab access token</label><input id="gitlabToken" type="password" autocomplete="new-password" spellcheck="false">
     <p>Use an expiring token with access to your project. Reading needs <code>read_api</code>; posting issues and discussions needs <code>api</code>. Tokens use encrypted session storage and a background-memory key.</p>
     <button id="gitlabSaveToken" type="button">Connect with token</button><button id="gitlabSignOut" type="button">Sign out of GitLab</button><button id="gitlabReset" type="button">Reset GitLab connection</button>
-    <details><summary>Sign in with GitLab OAuth</summary>
-      <p>Register a <strong>non-confidential</strong> OAuth application on the selected server with the <code>api</code> scope and the exact redirect URI below. Each browser installation may have a different redirect URI. Enter its public Application ID; no client secret is used. OAuth uses PKCE. A configured publisher GitLab App ID is not bundled yet.</p>
+
+      <p>For server administrators: configure a non-confidential OAuth application with <code>api</code> scope and the exact browser redirect below. Publisher configuration is supplied with the build; users do not need to register their own application. Never enter a client secret.</p>
       <p><a id="gitlabAppLink" href="https://gitlab.com/user_settings/applications" target="_blank" rel="noopener noreferrer">Register or manage a GitLab OAuth application</a></p>
       <label for="gitlabRedirectUri">Browser redirect URI (copy into the GitLab application)</label><input id="gitlabRedirectUri" readonly>
       <label for="gitlabClientId">Public Application ID</label><input id="gitlabClientId" autocomplete="off" spellcheck="false">
-      <button id="gitlabOAuth" type="button">Sign in with GitLab</button>
+
       <p>If this browser does not support OAuth login windows, connect with an access token.</p>
     </details>
     <p id="gitlabStatus" role="status" aria-live="polite"></p>

@@ -39,6 +39,7 @@ final class GitHubClient {
     private final GitHubVault vault;
     private final GitHubVault deviceVault;
     private String userCode = "";
+    private String requestedDeviceScope = "";
     private long deviceWallExpiry;
     private final SharedPreferences reviewReceipts;
     private final ProviderWriteGuard writeGuard;
@@ -59,7 +60,7 @@ final class GitHubClient {
     GitHubClient(Context context, String namespace) { this(context,namespace,url->(HttpsURLConnection)url.openConnection()); }
     GitHubClient(Context context,String namespace,ConnectionFactory connections) { this.policyContext=context.getApplicationContext();this.connections=connections;diskStore = new DiskProjectStore(context); vault = new GitHubVault(context,namespace); deviceVault = new GitHubVault(context, namespace+"_device"); token = vault.read();
         try { String saved = deviceVault.read(); if (saved != null && token == null) {
-            JSONObject pending = new JSONObject(saved); long remaining = pending.getLong("expiresAt") - System.currentTimeMillis();
+            JSONObject pending = new JSONObject(saved); long remaining = pending.getLong("expiresAt") - System.currentTimeMillis();requestedDeviceScope=pending.optString("requestedScope","");
             if (remaining > 0 && remaining <= 1800000) { deviceCode = pending.getString("deviceCode"); userCode = pending.getString("userCode"); interval = Math.max(5, Math.min(60,pending.optInt("interval",5))); deviceWallExpiry = pending.getLong("expiresAt"); deviceExpiry = SystemClock.elapsedRealtime()+remaining; nextPoll = SystemClock.elapsedRealtime()+interval*1000L; }
             else deviceVault.clear();
         } else if (token != null) deviceVault.clear(); } catch(Exception ignored) { deviceVault.clear(); }
@@ -75,11 +76,11 @@ final class GitHubClient {
     synchronized String displayedCode() { return pendingDevice() ? userCode : ""; }
     synchronized void cancelDevice() { generation++; clearDevice(); }
     synchronized void cancelRequests() { generation++; clearDevice(); }
-    private synchronized void clearDevice() { deviceCode = null; userCode = ""; deviceVault.clear(); }
+    private synchronized void clearDevice() { deviceCode = null; userCode = ""; requestedDeviceScope="";deviceVault.clear(); }
     synchronized boolean deviceExpired() { return deviceCode != null && SystemClock.elapsedRealtime() >= deviceExpiry; }
     synchronized boolean pendingDevice() { if(deviceCode != null && SystemClock.elapsedRealtime() >= deviceExpiry) clearDevice(); return deviceCode != null; }
     private synchronized JSONObject deviceStatus() throws Exception { return new JSONObject().put("pending",pendingDevice()).put("userCode",userCode).put("interval",interval); }
-    private synchronized void saveDevice() throws Exception { deviceVault.write(new JSONObject().put("deviceCode",deviceCode).put("userCode",userCode).put("expiresAt",deviceWallExpiry).put("interval",interval).toString()); }
+    private synchronized void saveDevice() throws Exception { deviceVault.write(new JSONObject().put("deviceCode",deviceCode).put("userCode",userCode).put("expiresAt",deviceWallExpiry).put("interval",interval).put("requestedScope",requestedDeviceScope).toString()); }
     private void claimWrite(String category) throws Failure {
         try { writeGuard.claim(category); }
         catch (IOException error) { throw new Failure(error.getMessage()); }
@@ -92,7 +93,7 @@ final class GitHubClient {
     private synchronized String credential(int epoch) throws IOException { check(epoch); return token; }
 
     static boolean cancellableRead(String action) {
-        return java.util.Arrays.asList("repositories", "notifications", "import", "revision-import", "revision-resolve", "revision-branches", "revision-commits", "repository-tree", "repository-history", "repository-branches", "review-list", "chat-thread-list", "review-categories", "review-thread", "review-read", "review-contributors", "review-policy").contains(action);
+        return java.util.Arrays.asList("work-board-list", "work-board-read", "repositories", "notifications", "import", "revision-import", "revision-resolve", "revision-branches", "revision-commits", "repository-tree", "repository-history", "repository-branches", "review-list", "chat-thread-list", "review-categories", "review-thread", "review-read", "review-contributors", "review-policy").contains(action);
     }
     JSONObject handleLoad(JSONObject request, int epoch, NativeLoadOperation operation) throws Exception {
         if (!cancellableRead(request.optString("action"))) throw new IllegalArgumentException("Only project reads can be stopped");
@@ -109,7 +110,7 @@ final class GitHubClient {
                     } catch (IOException error) { if(authExpired() || !current(epoch)) throw error; }
                 }
                 synchronized (this) { check(epoch); return accountStatus(deviceStatus()); }
-            case "device-start": return start(request.optString("scope", "public"), epoch);
+            case "device-start": if(request.has("includeProjects")&&!(request.get("includeProjects")instanceof Boolean))throw new Failure("Invalid Projects permission selection");return start(request.optString("scope", "public"),request.optBoolean("includeProjects"), epoch);
             case "device-poll": return poll(epoch);
             case "device-cancel": case "sign-out": return new JSONObject().put("connected", credential(epoch) != null);
             case "repositories": return repositories(request, epoch);
@@ -128,6 +129,7 @@ final class GitHubClient {
             case "chat-thread-state": return chatThreadState(request,epoch);
             case "chat-message-write": return chatWrite(request,epoch);
             case "chat-thread-list": return chatThreadList(request,epoch);
+            case "work-board-list": case "work-board-read": case "work-board-move": return workBoard(request,epoch);
             case "review-publish": return publish(request, epoch);
             case "review-upload": return upload(request, epoch);
             case "review-read": return reviewRead(request, epoch);
@@ -144,12 +146,13 @@ final class GitHubClient {
             return accountStatus(new JSONObject());
         }
     }
-    private JSONObject start(String scope, int epoch) throws Exception {
+    private JSONObject start(String scope,boolean includeProjects, int epoch) throws Exception {
         if (!scope.equals("public") && !scope.equals("private")) throw new Failure("Invalid repository access scope");
-        JSONObject result = oauth("/login/device/code", "client_id=" + CLIENT + "&scope=" + encode((scope.equals("private") ? "repo" : "public_repo") + " notifications"), epoch);
+        String requested=(scope.equals("private") ? "repo" : "public_repo") + " notifications"+(includeProjects?" project":"");
+        JSONObject result = oauth("/login/device/code", "client_id=" + CLIENT + "&scope=" + encode(requested), epoch);
         if (result.has("error")) throw new Failure("GitHub device sign-in is unavailable; use a personal access token");
         synchronized (this) {
-            check(epoch); deviceCode = result.getString("device_code");
+            check(epoch); deviceCode = result.getString("device_code");requestedDeviceScope=requested;
             int expires = Math.max(1, Math.min(1800, result.getInt("expires_in")));
             interval = Math.max(5, Math.min(60, result.optInt("interval", 5)));
             deviceExpiry = SystemClock.elapsedRealtime() + expires * 1000L;
@@ -184,7 +187,7 @@ final class GitHubClient {
         }
         String accepted = result.getString("access_token");
         if (!accepted.matches("[A-Za-z0-9_]{20,255}")) throw new Failure("GitHub returned an invalid credential");
-        synchronized(this) { check(epoch); vault.write(accepted); token = accepted; scopes = result.optString("scope"); scopesKnown = result.has("scope"); authExpired = false; coreRemaining = -1; clearDevice(); }
+        synchronized(this) { check(epoch);try{NativeWorkBoards.verifyGithubScopes(requestedDeviceScope,result.optString("scope"));}catch(IOException denied){clearDevice();throw new Failure(denied.getMessage());}vault.write(accepted); token = accepted; scopes = result.optString("scope"); scopesKnown = result.has("scope"); authExpired = false; coreRemaining = -1; clearDevice(); }
         // The token endpoint already authorized this credential. Profile lookup belongs to auth-status,
         // so a second API request cannot delay or falsely undo successful authorization.
         JSONObject connected; synchronized(this){check(epoch);connected=accountStatus(new JSONObject());}
@@ -1007,6 +1010,15 @@ final class GitHubClient {
             public JSONObject get(String path,boolean missing)throws Exception {try{return api(path,epoch,1024*1024);}catch(Missing error){if(missing)return null;throw error;}}
             public JSONObject post(String path,JSONObject body,int expected)throws Exception {return new JSONObject(networkBytes("https://api.github.com"+path,body.toString().getBytes(StandardCharsets.UTF_8),"application/json",credential(epoch),epoch,1024*1024,expected));}
         });
+    }
+    private JSONObject workBoard(JSONObject request,int epoch)throws Exception {
+        try{return NativeWorkBoards.handle(request,true,"https://github.com",new NativeWorkBoards.Transport(){
+            public void authorize(boolean write)throws Exception {check(epoch);ManagedPolicy.requireTransport(policyContext,write);authenticated(epoch);if(write){JSONObject policy=policyStatus(repository(request),epoch);if(!policy.getBoolean("allowed"))throw new Failure("Repository policy blocks board changes");claimWrite("publish");}}
+            public JSONObject graphql(String query,JSONObject variables)throws Exception {return GitHubClient.this.graphql(query,variables,epoch);}
+            public JSONObject get(String path)throws Exception {return api(path,epoch,1024*1024);}
+            public JSONArray list(String path)throws Exception {throw new Failure("Unsupported GitHub board operation");}
+            public JSONObject put(String path,JSONObject body)throws Exception {throw new Failure("Unsupported GitHub board operation");}
+        });}catch(NativeWorkBoards.Failure error){throw new Failure(error.getMessage());}
     }
     private JSONObject api(String path, int epoch, int limit) throws Exception {
         return new JSONObject(network("https://api.github.com" + path, null, credential(epoch), epoch, limit));

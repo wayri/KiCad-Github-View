@@ -1,6 +1,6 @@
 "use strict";
 
-importScripts("managed-policy.js", "parsing.js", "browser-data.js", "review-comments.js", "review-file-store.js", "credential-vault.js", "revision-fork.js", "github-review-api.js", "gitlab-provider.js", "gitlab-review-api.js", "gitlab-hosts.js", "mention-users.js", "environment-diagnostics.js", "project-recents.js");
+importScripts("managed-policy.js", "parsing.js", "browser-data.js", "review-comments.js", "review-file-store.js", "credential-vault.js", "provider-oauth.js", "revision-fork.js", "github-review-api.js", "gitlab-provider.js", "gitlab-review-api.js", "gitlab-hosts.js", "mention-users.js", "environment-diagnostics.js", "project-recents.js", "native-kicad.js");
 globalThis.KiCadManagedPolicy?.installFetch();
 
 let mentionService=null;
@@ -749,29 +749,36 @@ function withCommentLock(key, task) {
   return work;
 }
 async function commentList(scope) {
-  if (scope.provider !== 'gitlab' && (await KiCadReviewFileStore.status()).connected) {
-    const key = commentKey(scope);
-    return withCommentLock(key, async () => (await KiCadReviewFileStore.read()).filter((note) =>
-      commentKey(note.anchor) === key));
-  }
   const key = commentKey(scope);
   return withCommentLock(key, async () => {
     const stored = (await chrome.storage.local.get(key))[key];
-    return Array.isArray(stored) ? stored.map(KiCadReviewComments.validateComment) : [];
+    const notes=Array.isArray(stored)?stored.map(KiCadReviewComments.validateComment).filter(note=>!note.remoteRefs?.length):[];
+    if((await KiCadReviewFileStore.status()).connected){
+      const legacy=(await KiCadReviewFileStore.read()).filter(note=>commentKey(note.anchor)===key&&!(note.remoteRefs?.length));
+      for(const note of legacy)if(!notes.some(item=>item.id===note.id))notes.push(note);
+    }
+    return notes;
   });
 }
 async function commentSave(value, expectedUpdatedAt) {
   const note = KiCadReviewComments.validateComment(value), key = commentKey(note.anchor);
-  if (note.anchor.provider !== 'gitlab' && (await KiCadReviewFileStore.status()).connected) {
-    return withCommentLock(key, () => KiCadReviewFileStore.save(note, expectedUpdatedAt));
-  }
   return withCommentLock(key, async () => {
     const existing = (await chrome.storage.local.get(key))[key] || [];
     if (!Array.isArray(existing) || existing.length > 100) throw new Error("Invalid saved comment data.");
     const notes = existing.map(KiCadReviewComments.validateComment);
+    if((await KiCadReviewFileStore.status()).connected){
+      const legacy=(await KiCadReviewFileStore.read()).filter(item=>commentKey(item.anchor)===key&&!(item.remoteRefs?.length));
+      for(const item of legacy)if(!notes.some(n=>n.id===item.id))notes.push(item);
+    }
     const index = notes.findIndex((item) => item.id === note.id);
     if (index >= 0 && expectedUpdatedAt !== undefined && notes[index].updatedAt !== expectedUpdatedAt)
       throw new Error("This annotation changed; reload before saving.");
+    if(note.remoteRefs?.length){
+      // A confirmed publication receipt retires its local draft. It cannot
+      // create or edit provider content: subsequent reads reconstruct that.
+      if((await KiCadReviewFileStore.status()).connected){const legacy=(await KiCadReviewFileStore.read()).find(item=>commentKey(item.anchor)===key&&item.id===note.id&&!item.remoteRefs?.length);if(legacy)await KiCadReviewFileStore.remove(note.anchor,note.id);}
+      await chrome.storage.local.set({[key]:notes.filter(item=>item.id!==note.id)});return note;
+    }
     if (index >= 0) notes[index] = note;
     else {
       if (notes.length >= 100) throw new Error("A KiCad file can have at most 100 saved comments.");
@@ -784,15 +791,14 @@ async function commentSave(value, expectedUpdatedAt) {
 async function commentDelete(scope, id) {
   const key = commentKey(scope);
   if (typeof id !== "string" || !/^[A-Za-z0-9_-]{1,100}$/.test(id)) throw new Error("Invalid comment id.");
-  if (scope.provider !== 'gitlab' && (await KiCadReviewFileStore.status()).connected) {
-    return withCommentLock(key, () => KiCadReviewFileStore.remove(scope, id));
-  }
   return withCommentLock(key, async () => {
     const existing = (await chrome.storage.local.get(key))[key] || [];
     if (!Array.isArray(existing)) throw new Error("Invalid saved comment data.");
     const notes = existing.map(KiCadReviewComments.validateComment).filter((item) => item.id !== id);
+    let legacyDeleted=false;
+    if((await KiCadReviewFileStore.status()).connected){const pending=(await KiCadReviewFileStore.read()).find(note=>commentKey(note.anchor)===key&&note.id===id&&!(note.remoteRefs?.length));if(pending)legacyDeleted=(await KiCadReviewFileStore.remove(scope,id)).deleted;}
     await chrome.storage.local.set({ [key]: notes });
-    return { deleted: notes.length !== existing.length };
+    return { deleted: legacyDeleted||notes.length !== existing.length };
   });
 }
 
@@ -878,7 +884,7 @@ async function githubAnnotations(request) {
   if(discussionNumber!==undefined&&issueNumber!==undefined)throw new Error('Choose one Issue or Discussion for annotation lookup.');
   if (pullNumber && !pullRepository) throw new Error("Pull request repository is required for annotation lookup.");
   const repository = pullRepository || scope.repository;
-  if(discussionNumber!==undefined)return KiCadGitHubReviewApi.readDiscussionAnnotations({repository,number:discussionNumber,scope});
+  if(discussionNumber!==undefined){const result=await KiCadGitHubReviewApi.readDiscussionAnnotations({repository,number:discussionNumber,scope});return cacheProviderAnnotations(scope,result,{sourceUrl:`https://github.com/${repository}/discussions/${discussionNumber}`,complete:!result.warnings?.length});}
   const endpoint = `/repos/${repository}/issues`;
   const annotationJson=await KiCadGitHubReviewApi.createAnnotationReader();
   const notes = [], warnings = [], seen = new Set();
@@ -939,7 +945,30 @@ async function githubAnnotations(request) {
     }
   }
   if (request.includeDiscussions) warnings.push("Discussion readback requires selecting an existing Discussion and entering its number.");
-  return { notes, warnings };
+  const selectedMeta=selectedNumber&&issueMeta.get(selectedNumber);
+  return cacheProviderAnnotations(scope,{notes,warnings},{sourceUrl:selectedMeta?`https://github.com/${repository}/${selectedMeta.source==='pull-request'?'pull':'issues'}/${selectedNumber}`:null,complete:Boolean(selectedMeta)&&!warnings.length});
+}
+
+// Provider content is authoritative. The optional file never supplies published
+// annotations to the viewer; only confirmed remote reads refresh this cache.
+async function cacheProviderAnnotations(scope,result,{sourceUrl=null,complete=false}={}){
+  let connected=false;
+  try{connected=typeof KiCadReviewFileStore!=='undefined'&&typeof KiCadReviewFileStore.status==='function'&&typeof KiCadReviewFileStore.sync==='function'&&(await KiCadReviewFileStore.status()).connected;}catch{return result;}
+  if(!connected)return result;
+  const incoming=[];let skipped=false;
+  for(const raw of result.notes||[]){
+    const meta=raw.github;if(!meta||!['issue','discussion','pull-request'].includes(meta.source)){skipped=true;continue;}
+    const publishedAt=meta.createdAt||raw.createdAt;
+    const githubRepository=scope.provider==='gitlab'?null:/^https:\/\/github\.com\/([A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+)\//.exec(meta.url||'')?.[1];
+    const remote={...(scope.provider==='gitlab'?{provider:'gitlab',host:scope.host}:{}),kind:meta.source,repository:githubRepository||scope.repository,number:meta.number,url:meta.url,publishedAt};
+    try{incoming.push(KiCadReviewComments.validateComment({...raw,remoteRefs:[remote]}));}catch{skipped=true;}
+  }
+  try{
+    const unique=[...new Map(incoming.map(note=>[note.id,note])).values()];
+    await KiCadReviewFileStore.sync(scope,unique,{sourceUrl,complete:complete&&!skipped});
+    if(skipped)result.warnings=[...(result.warnings||[]),'Some provider annotations could not be cached; the provider remains authoritative.'];
+  }catch{result.warnings=[...(result.warnings||[]),'The optional comment sync cache could not be refreshed; provider comments remain available.'];}
+  return result;
 }
 
 async function openFromAction(tab) {
@@ -1005,7 +1034,7 @@ async function gitlabAnnotations(api,scope){
     if(!response.next&&records.length<100)break;
     if(page===5)warnings.push('Readback stopped at 500 issue notes; open GitLab for the complete thread.');
   }
-  return {notes:[...new Map(notes.map(note=>[note.id,note])).values()],warnings};
+  return cacheProviderAnnotations(normalized,{notes:[...new Map(notes.map(note=>[note.id,note])).values()],warnings},{sourceUrl:issueUrl,complete:!warnings.length&&notes.length<100});
 }
 async function gitlabSessionResponse(host,contextRepository,url,limit,signal) {
   if(!chrome.tabs?.query)return null;
@@ -1129,6 +1158,9 @@ async function gitlabDispatch(message, sender,signal) {
     case 'github-thread-read': return auth.readThread({...message,provider:'gitlab',host});
     case 'chat-thread-state': return auth.chatThreadState({...message,provider:'gitlab',host});
     case 'chat-message-write': return auth.chatMessageWrite({...message,provider:'gitlab',host});
+    case 'work-board-list': return auth.boardList({...message,provider:'gitlab',host});
+    case 'work-board-read': return auth.boardRead({...message,provider:'gitlab',host});
+    case 'work-board-move': return auth.boardMove({...message,provider:'gitlab',host});
     case 'chat-thread-list': return auth.chatThreadList({...message,provider:'gitlab',host});
     case 'chat-reaction': throw new Error('Chat reactions are not supported by this provider bridge.');
     case 'comment-remote-list':
@@ -1178,10 +1210,14 @@ async function repositoryDetection(message,sender){
   return {repository:message.repository,ref,sha:listing.sha,projects,truncated:Boolean(listing.truncated||listing.hasMore||projects.length===100),warnings:[...new Set(listing.warnings||[])]};
 }
 
+let nativeKiCadService=null;
+function nativeKiCad(){const api=globalThis.KiCadNativeKiCad||(typeof require==='function'?require('./native-kicad.js'):null);if(!api)throw Error('Reload the extension to enable Open in KiCad.');return nativeKiCadService||=api.create({chrome,isViewer:viewerSender});}
+
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   const customHostSender=sender?.id===chrome.runtime.id&&typeof sender.url==='string'&&sender.url.startsWith('https://')&&message?.provider==='gitlab';
   if (!(senderAllowed(sender) || pdfSender(sender) || analysisSender(sender) || optionsSender(sender)||dashboardSender(sender)||localWorkspaceSender(sender)||customHostSender) || !message || typeof message !== "object") return false;
   (async () => {
+    if(message.type==='native-kicad-cancel')return nativeKiCad().cancel(message,sender);
     if(message.type?.startsWith('project-recents-')||message.type?.startsWith('dashboard-'))return dashboardDispatch(message,sender);
     if(dashboardSender(sender)||localWorkspaceSender(sender))throw Error('This project page only uses its scoped dashboard operations.');
     if(message.type==='managed-policy-status'){
@@ -1189,6 +1225,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       return KiCadManagedPolicy.read();
     }
     await globalThis.KiCadManagedPolicy?.authorize(message);
+    if(message.type==='native-kicad-open')return nativeKiCad().open(message,sender);
     if(message.type==='repository-detect')return repositoryDetection(message,sender);
     if(message.type==='viewer-diagnostics'){
       if(!optionsSender(sender))throw Error('Only extension settings can run environment diagnostics.');
@@ -1263,6 +1300,11 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       case 'chat-message-write':
         if (!viewerSender(sender)) throw new Error('Only extension viewers can write chat messages.');
         return KiCadGitHubReviewApi.chatMessageWrite(message);
+      case 'work-board-list':
+      case 'work-board-read':
+      case 'work-board-move':
+        if (!viewerSender(sender)) throw new Error('Only extension viewers can access work boards.');
+        return KiCadGitHubReviewApi[{'work-board-list':'boardList','work-board-read':'boardRead','work-board-move':'boardMove'}[message.type]](message);
       case 'chat-thread-list':
         if (!viewerSender(sender)) throw new Error('Only extension viewers can list chat conversations.');
         return KiCadGitHubReviewApi.chatThreadList(message);

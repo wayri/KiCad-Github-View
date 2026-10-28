@@ -10,7 +10,7 @@ function library(storage){
  const list=()=>{try{const items=JSON.parse(storage.getItem(key)||'[]');if(!Array.isArray(items))return[];return items.filter(v=>{try{return repository(v.repository)===v.repository&&typeof v.ref==='string'&&v.ref.length<=200&&!/[\x00-\x1f]/.test(v.ref);}catch{return false;}}).slice(0,100);}catch{return[];}};
  return{list,save:item=>{const value={repository:repository(item.repository),ref:String(item.ref||'').slice(0,200),sha:/^[a-f0-9]{40}$/.test(item.sha)?item.sha:'',private:Boolean(item.private)};if(/[\x00-\x1f]/.test(value.ref))throw Error('Invalid branch.');const items=list().filter(v=>v.repository!==value.repository||v.ref!==value.ref);items.unshift(value);storage.setItem(key,JSON.stringify(items.slice(0,100)));},remove:item=>storage.setItem(key,JSON.stringify(list().filter(v=>v.repository!==item.repository||v.ref!==item.ref)))};
 }
-const cancellableReads=new Set(['repositories','notifications','import','revision-import','revision-resolve','revision-branches','revision-commits','repository-tree','repository-history','repository-branches','review-list','review-categories','review-thread','chat-thread-list','review-read','review-contributors','review-policy','policy','threads','thread','contributors']);
+const cancellableReads=new Set(['work-board-list','work-board-read','repositories','notifications','import','revision-import','revision-resolve','revision-branches','revision-commits','repository-tree','repository-history','repository-branches','review-list','review-categories','review-thread','chat-thread-list','review-read','review-contributors','review-policy','policy','threads','thread','contributors']);
 function bridge(native,{setTimeout:later=root.setTimeout,clearTimeout:clear=root.clearTimeout}={}){
  let next=0;const pending=new Map();
  const abortError=()=>Object.assign(Error('Project loading cancelled.'),{name:'AbortError',cancelled:true});
@@ -69,7 +69,7 @@ function stopPolling(){pendingSignIn=false;authEpoch++;$('githubSignIn').disable
 }
 async function startSignIn(){
  stopPolling();const ticket=deviceEpoch;pending({pending:true});$('githubCode').textContent='';status('Starting GitHub authorization…');
- try{const value=await api.request({type:'device-start',scope:$('githubScope').value});if(ticket!==deviceEpoch)return;pending({...value,pending:true});status('The code is copied when authorization opens. Paste it on GitHub if requested, then return here.');api.request({type:'open-verification'}).catch(error=>{if(ticket===deviceEpoch&&!connected)status(error.message,true);});}
+ try{const value=await api.request({type:'device-start',scope:$('githubScope').value,includeProjects:!!$('githubProjectsAccess')?.checked});if(ticket!==deviceEpoch)return;pending({...value,pending:true});status('The code is copied when authorization opens. Paste it on GitHub if requested, then return here.');api.request({type:'open-verification'}).catch(error=>{if(ticket===deviceEpoch&&!connected)status(error.message,true);});}
  catch(error){if(ticket===deviceEpoch){stopPolling();status(error.message,true);}}
  finally{if(ticket===deviceEpoch)$('githubSignIn').disabled=pendingSignIn;}
 }

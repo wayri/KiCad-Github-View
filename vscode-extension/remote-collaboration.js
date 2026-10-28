@@ -2,6 +2,7 @@
 // Host-only collaboration. The webview never supplies credentials or destinations.
 const REMOTE_OPERATIONS=new Set(['chat-thread-list','chat-message-write','chat-thread-state','chat-reaction','comment-mention-users','mention-users','comment-policy-status','comment-remote-list','github-thread-read','github-annotations','github-discussion-categories','github-comment-policy','github-publish-comment','github-recover-publication','comment-publish','open-options']);
 const WRITE_OPERATIONS=new Set(['chat-message-write','chat-thread-state','chat-reaction','github-publish-comment','github-recover-publication','comment-publish']);
+for(const operation of ['work-board-list','work-board-read','work-board-move'])REMOTE_OPERATIONS.add(operation);WRITE_OPERATIONS.add('work-board-move');
 REMOTE_OPERATIONS.add('repository-fork-revision');WRITE_OPERATIONS.add('repository-fork-revision');
 // Application/user values only: repository settings never grant authority.
 function deploymentPolicy(vscode){
@@ -71,7 +72,7 @@ function createHost(vscode,{sameScope,comments,apiFactory,forkFactory,readCommit
   policy();
   if(vscode.workspace.isTrusted!==true)throw Error('Workspace trust was revoked.');
   if(ctx.provider==='github'){
-   const value=await vscode.authentication.getSession('github',['repo'],{createIfNone:create,silent:!create});
+   const value=await vscode.authentication.getSession('github',ctx.projects?['repo','project']:['repo'],{createIfNone:create,silent:!create});
    policy();
    return value?{token:value.accessToken,expiresAt:Date.now()+3600000}:null;
   }
@@ -92,7 +93,7 @@ function createHost(vscode,{sameScope,comments,apiFactory,forkFactory,readCommit
  }
  async function dispatch(message,session){
   policy(WRITE_OPERATIONS.has(message.type));
-  const ctx=await context(session);
+  const ctx={...await context(session),projects:message.type.startsWith('work-board-')};
   if(message.provider!==undefined&&message.provider!==ctx.provider||message.host!==undefined&&message.host!==ctx.host)throw Error('Remote provider or host does not match this Git workspace.');
   for(const key of ['repository','pullRepository','targetRepository'])if(message[key]!==undefined&&![session.scope.repository,ctx.repository].includes(message[key]))throw Error('Remote request belongs to another repository.');
   if(message.ref!==undefined&&![session.scope.ref,ctx.ref].includes(message.ref))throw Error('Remote request belongs to another revision.');
@@ -115,7 +116,7 @@ function createHost(vscode,{sameScope,comments,apiFactory,forkFactory,readCommit
    if(await vscode.window.showWarningMessage(action+' '+message.thread.kind+' #'+message.thread.number+' in '+ctx.repository+'?',{modal:true},action)!==action)throw Error('Conversation state change cancelled.');
    policy(true);await context(session);if(vscode.workspace.isTrusted!==true||session.disposed)throw Error('The trusted viewer is no longer active.');
   }
-  if(chat||threadState)await credential(ctx,ctx.provider==='github');
+  if(chat||threadState||ctx.projects)await credential(ctx,ctx.provider==='github',session.context.secrets);
   if(write||['github-annotations','comment-remote-list'].includes(message.type))await verify(session,ctx);
   if(write){if(!message.comment)throw Error('An explicit review note is required.');const a=message.comment.anchor;if(a?.repository!==session.scope.repository||a.ref!==session.scope.ref||!session.paths.has(a.file))throw Error('Publication anchor belongs to another workspace.');await credential(ctx,ctx.provider==='github');}
   let requests=0,bytes=0,projectId=null;const deadline=Date.now()+120000;
@@ -184,6 +185,7 @@ function createHost(vscode,{sameScope,comments,apiFactory,forkFactory,readCommit
   const api=(apiFactory||require('./media/'+ctx.provider+'-review-host-api.js'))(dependencies);api.hostProjectId=()=>projectId;
   const scope={provider:ctx.provider,...(ctx.provider==='gitlab'?{host:ctx.host}:{}),repository:ctx.repository,ref:ctx.ref,file:mapFile(ctx,file)};
   if(message.type==='github-thread-read'){const result=await api.readThread({...scope,kind:message.kind,number:message.number,includeCapabilities:message.includeCapabilities===true});if(!policy(false).providerWrites&&result.capabilities)result.capabilities={...result.capabilities,canClose:false,canReopen:false};return result;}
+  if(message.type.startsWith('work-board-'))return api[{'work-board-list':'boardList','work-board-read':'boardRead','work-board-move':'boardMove'}[message.type]]({...message,...scope});
   if(message.type==='chat-thread-list')return api.chatThreadList({...scope,kind:message.kind,page:message.page,cursor:message.cursor});
   if(message.type==='chat-reaction')throw Error('Chat reactions are not supported by this provider bridge.');
   if(threadState){const key=JSON.stringify(['thread-state',ctx.provider,ctx.host,ctx.repository,message.thread.kind,message.thread.number]);if(publicationLocks.has(key))throw Error('This conversation state is already being changed.');publicationLocks.set(key,true);try{return await api.chatThreadState({...message,...scope});}finally{publicationLocks.delete(key);}}

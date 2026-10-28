@@ -27,7 +27,7 @@ test('drawing field grid toggles custom columns, groups safely, and exports the 
   const layout=find(dialog,n=>n.className==='bom-manager-field-layout');assert.equal(layout.children.length,1);assert.equal(layout.children[0].className,'bom-manager-results','the table occupies the full layout without a permanent settings sidebar');
   assert.equal(fieldOptions.parent.className,'bom-manager-tools');assert.equal(find(dialog,n=>n.className==='bom-manager-filters').open,undefined);
   assert.ok(find(dialog,n=>n.className==='bom-manager-filters'&&find(n,c=>c.textContent==='Boards to build')),'build setup is in the expandable filters');
-  const primary=find(dialog,n=>n.className==='bom-manager-controls');assert.deepEqual(primary.children.map(n=>n.className||n.textContent),['bom-manager-search','bom-manager-group','bom-manager-grouping'],'default toolbar only contains search and grouping');
+  const primary=find(dialog,n=>n.className==='bom-manager-controls');assert.deepEqual(primary.children.map(n=>n.className||n.textContent),['bom-manager-search','bom-manager-columns-button','bom-manager-group','bom-manager-grouping'],'default toolbar keeps column visibility discoverable beside search and grouping');
   const sourceControl=find(dialog,n=>n.tag==='label'&&n.textContent==='Source');assert.equal(sourceControl.parent,find(dialog,n=>n.className==='bom-manager-filters').children[1],'source selection stays available in expandable filters');
   assert.equal(find(dialog,n=>n.tag==='label'&&n.textContent==='Assembly variant').parent,sourceControl.parent,'variant selection remains next to source in expandable filters');
   const totals=find(dialog,n=>n.className==='bom-manager-totals'),summary=find(dialog,n=>n.className==='bom-manager-summary');assert.equal(summary.parent,totals);assert.notEqual(totals.open,true,'build metrics do not consume table space by default');
@@ -41,7 +41,7 @@ test('drawing field grid toggles custom columns, groups safely, and exports the 
   const check=find(dialog,n=>n.className==='bom-manager-group').children[0];assert.equal(check.checked,true);
   grid=find(dialog,n=>n.className==='bom-manager-field-grid');assert.equal(grid.children[1].children.length,1);assert.equal(find(grid,n=>n.dataset.field==='MPN').textContent,'<mixed>');
   find(dialog,n=>n.textContent==='Manage group').events.click();const form=find(dialog,n=>n.tag==='form');find(form,n=>n.tag==='label'&&n.textContent==='Notes').children[0].value='Reviewed';form.events.submit({preventDefault(){}});
-  const records=JSON.parse([...saved.values()][0]).parts;assert.equal(records[api.identity(objects[0])].MPN,'AAA');assert.equal(records[api.identity(objects[1])].MPN,'BBB');assert.equal(records[api.identity(objects[1])].Notes,'Reviewed');
+  const records=JSON.parse(saved.get('kicad-bom-manager:v1:field-grid')).parts;assert.equal(records[api.identity(objects[0])].MPN,'AAA');assert.equal(records[api.identity(objects[1])].MPN,'BBB');assert.equal(records[api.identity(objects[1])].Notes,'Reviewed');
   find(dialog,n=>n.textContent==='Export visible CSV').events.click();assert.match(exports[0][1],/"MPN"/);assert.match(exports[0][1],/"R1, R2"/);assert.match(exports[0][1],/"<mixed>"/);assert.equal(objects[0].properties.Notes,undefined);dialog.close();
  }finally{global.document=original;}
 });

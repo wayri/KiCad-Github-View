@@ -24,3 +24,11 @@ test('folder drop consumes paginated directory entries and normalizes a single f
  const result=await api.dropped({items:[{kind:'file',webkitGetAsEntry:()=>directory}]});assert.equal(reads,3);assert.deepEqual(result.project.files.map(f=>f.path),['root.kicad_sch','board.kicad_pcb']);
  const plain=await api.dropped({files:[file('root.kicad_sch','(kicad_sch)')]});assert.equal(plain.project.files[0].path,'root.kicad_sch');
 });
+
+test('other file inventory preserves nested paths without reading unsupported bytes',async()=>{
+ let reads=0;const metadata={name:'firmware.bin',size:500000000,arrayBuffer:async()=>{reads++;throw Error('must not read');}};
+ const result=await api.readFiles([{path:'demo/board.kicad_pcb',file:file('board.kicad_pcb','(kicad_pcb)')},{path:'demo/docs/README.md',file:file('README.md','inert')},{path:'demo/firmware/firmware.bin',file:metadata}],{stripFolder:true});
+ assert.equal(reads,0);assert.deepEqual(result.project.repositoryTree.entries.map(e=>e.path),['board.kicad_pcb','docs/README.md','firmware/firmware.bin']);assert.equal(result.project.files.length,1);
+ const transport=local.transport(result.project,{getItem:()=>null,setItem(){}},{local:true});assert.equal((await transport.send({type:'project-file',file:'firmware/firmware.bin'})).ok,false);
+ await assert.rejects(api.readFiles([{path:'x.md',file:metadata},{path:'x.md',file:metadata}]),/Duplicate/);
+});

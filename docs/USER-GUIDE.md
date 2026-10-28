@@ -51,7 +51,11 @@ Rendering warnings matter: a visible preview is not proof that every source cons
 
 ## 3. Measure, probe and review board data
 
-Choose **Measure** in a PCB drawing, then select two points for a distance. Measurement options include angle, geometry/grid snapping, units and saved board extents. For an angle, select endpoint → vertex → endpoint. Exit measurement mode when finished. Desktop viewers also provide the **M** shortcut. Measurement uses saved 2D geometry; 3D measurement is unavailable.
+Choose **Measure** in a drawing, then select two points for a distance. Measurement options include angle, geometry/grid snapping, units and saved board extents. For an angle, select endpoint → vertex → endpoint. Choose **Corners only** or **Edges only**, and use **Targets** to limit snapping to the board outline, pads/pins, vias, tracks/wires, graphics or symbols. Hidden geometry is excluded. Track/wire and graphic-line edges use saved centerlines, not an inferred copper-clearance boundary. Desktop **Shift** constrains an axis and **Alt** bypasses snapping.
+
+On a phone, press and drag in measurement mode to preview a point in the magnifier, then release to place it. The magnifier can be disabled in measurement options. Cancellation or a second touch does not place a point. Exit measurement mode to return to ordinary drawing navigation.
+
+In 3D, choose surface, edge or corner snapping and filter the target object types. Snaps use visible rendered geometry with occlusion checks; imported model precision follows its tessellated mesh. Stand-in models remain marked approximate. The touch magnifier assists drag-to-place while keeping saved coordinates as the measurement source. Measurements inspect the saved drawing/model and do not run mechanical clearance validation.
 
 Use **Highlight testpoints** (pin icon) to highlight candidates on the active drawing. Toggle it off to retain your existing part/net selection. The overlay shows up to 200 testpoints; all remain searchable. In Explorer, choose **Testpoints** to filter the current drawing and focus its search field. Rows include saved net names; search by reference, value or `net:SENSE`. These actions are shared by Android, Chrome and VS Code.
 
@@ -310,3 +314,17 @@ projects reopen their saved revision; local entries say **Reselect files** becau
 the history does not cache imported sources. Search/filter by source, remove an
 entry, or explicitly clear the local history. Only projects opened after this
 update are recorded. Contextual toolbar actions on GitHub/GitLab remain available.
+
+## Generate drawing downloads in the browser
+
+Choose **Download drawing or BoM** in the drawing tools. Generate **PDF** or **PNG**
+from the full current schematic sheet/PCB layout, or just the current 2D viewport.
+The repository does not need to contain a PDF. The export uses the saved drawing's
+current layers and object visibility, without review panels or selection overlays.
+Each download covers one current sheet or layout, not the entire sheet hierarchy.
+
+PDFs contain raster viewer drawings, bounded to 4096 pixels per edge and 12
+megapixels; they are not native KiCad vector plots. PDF/image saving currently
+requires the browser viewer. **BoM CSV…** opens the BoM manager, where columns,
+filters and grouping can be reviewed before **Import / export → Export visible CSV**.
+BoM text export also supports the app's existing save dialog.
