@@ -511,6 +511,7 @@ test('repository main-page detection offers pinned project selection without hid
  await new Promise(setImmediate);
  assert.equal(ui.messages[0].type,'repository-detect');assert.equal(ui.messages[0].ref,'HEAD');
  const open=find(ui.body,node=>node.tag==='button'&&node.textContent==='Open KiCad project');assert.ok(open);open.click();
+ assert.match(open.className,/project-detected/);assert.match(open.title,/KiCad project detected/);
  const frame=find(ui.body,node=>node.tag==='iframe');assert.ok(frame);const query=new URL(frame.src).searchParams;
  assert.equal(query.get('head'),'c'.repeat(40));assert.equal(query.get('file'),'design/board.kicad_pro');assert.equal(ui.source.hidden,false);
  assert.equal(walk(ui.body).filter(node=>node.className.startsWith('top')).length,1,'repository picker and preview share one header');

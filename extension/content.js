@@ -22,6 +22,7 @@
     .menu{position:fixed;z-index:2147483647;background:#18242c;border:1px solid #739487;padding:5px;box-shadow:0 8px 24px #0008;display:grid;min-width:150px;gap:4px}.menu button{text-align:left}
     .list{display:flex;flex-wrap:wrap;gap:6px;padding:12px}.hint{color:#b6c4c7;padding:0 12px 12px;margin:0}.action{margin:8px}.code-toggle{padding:4px 9px}
     .shell{background:light-dark(#fff,#1e2128);border-color:light-dark(#d9dee7,#343944);color:light-dark(#252c38,#e6e9ef)}.top{border-color:light-dark(#d9dee7,#343944)}.controls button,.controls select{background:light-dark(#f4f5f8,#292d36);border-color:light-dark(#d9dee7,#343944);color:inherit}.controls button.active{background:light-dark(#e6eefb,#293c59);border-color:light-dark(#b9cceb,#526c91);color:inherit}.controls button:hover,.controls select:hover{border-color:light-dark(#336ac2,#91b9ff)}.status:not(.error){color:light-dark(#616d80,#9ca5b5)}
+    .controls button.project-detected{display:inline-flex;align-items:center;gap:6px;background:#176342;border-color:#56d99b;color:#fff;animation:kicad-project-found 1.2s ease-out 2}.project-detected::before{content:'▣';font-size:17px;line-height:1;color:#b9ffda}.controls button.project-detected:hover{background:#207b53;border-color:#adffd3}@keyframes kicad-project-found{50%{box-shadow:0 0 0 3px #56d99b55}}@media(prefers-reduced-motion:reduce){.controls button.project-detected{animation:none}}
     [hidden]{display:none!important}@media(max-width:760px){.body{grid-template-columns:1fr}.pages{flex-direction:row;border-right:0;border-bottom:1px solid #32424a;max-height:none}.pages button{white-space:nowrap}.viewport{height:55vh;min-height:280px}.viewport-row{flex-direction:column}}
   `;
   let currentUrl = "", mount = null, sequence = 0, checkTimer = null, focusPending = false;
@@ -189,11 +190,14 @@
       if(!files.length){if(result.truncated){setStatus(status,'No KiCad project found in this partial repository listing. Additional folders may contain projects. Open a KiCad file directly or connect your account for a fuller listing.');return;}owner.empty=true;top.host.remove();return;}
       const picker=element('select');picker.setAttribute('aria-label','KiCad project or standalone drawing');
       for(const file of files){const option=element('option','',file);option.value=file;picker.append(option);}picker.value=files[0];
-      const open=button('Open KiCad project','active',()=>{
+      const open=button('Open KiCad project','active project-detected',()=>{
         if(mount!==owner||!files.includes(picker.value))return;
         for(const panel of [...owner.panels])disposePanel(panel,owner);
         owner.panels.push(panelFor({repository:route.repository,file:picker.value,head:result.sha,...(route.provider?{provider:route.provider,host:route.host}:{})},null,picker.value,true,slot,controls));
-      });controls.prepend(picker,open);
+      });
+      open.title='KiCad project detected — open the selected project';
+      open.setAttribute('aria-label','KiCad project detected: open selected project');
+      controls.prepend(picker,open);
       setStatus(status,`${files.length} KiCad ${files.length===1?'entry':'entries'} · ${result.ref||ref} · ${result.sha.slice(0,10)}${result.truncated?' · Partial listing: additional projects may exist.':''}`);
       repositoryTitle.textContent=`KiCad · ${files.length}`;
       repositoryTitle.title=status.textContent; picker.title=status.textContent;
