@@ -11,6 +11,7 @@ SHORT DESCRIPTION
 Browser-only KiCad schematic and PCB review on GitHub, GitLab.com and configured GitLab servers, with issue comments.
 
 WHAT'S NEW — 0.12.68
+- Comment Locate now centers and zooms to the saved point, area or exact source object in 2D and 3D. On phones, obstructing panels close so the target stays visible. A high-contrast location marker and compact Back to comments control keep the conversation within reach without losing its draft. Locations from another repository or revision are rejected.
 - Full-net 3D inspection reveals selected outer/internal copper, vias and plated pad transitions through translucent grey board/context. Saved stackup depths and explicit via layer spans are used; display estimates and unsupported geometry are labelled.
 - Choose and retain BoM columns, including custom fields, and export the visible columns to CSV.
 - Browse project files in collapsible folders, including inventories of other file types.
@@ -43,6 +44,3 @@ https://wayri.github.io/KiCad-Github-View/privacy.html
 
 SUBMISSION NOTE — NOT LISTING COPY
 Update the existing Chrome Store listing; do not create a duplicate. This is the Chromium package, not a source/Firefox/Safari/Android archive. Keep privacy declarations aligned with local history, provider requests, optional authentication and user-directed publication. GitHub publication and Chrome Store approval are separate steps. Older screenshots may show earlier controls; retain that note when using them.
-
-
-Comment Locate now centers and zooms to the saved point, area or exact source object in 2D and 3D. On phones, obstructing panels close so the target stays visible. A high-contrast location marker and compact Back to comments control keep the conversation within reach without losing its draft. Locations from another repository or revision are rejected.
