@@ -65,3 +65,18 @@ test('analysis adapters preserve SI bases, complete eye contexts and malformed m
  assert.ok(r.fields.some(f=>f.path==='status'));
  const field=data.parse('thermal.json',JSON.stringify({x_centers_mm:['1'],y_centers_mm:['2'],values_c:[['25']]})).plots[0];assert.deepEqual(field.x,[1]);assert.deepEqual(field.y,[2]);assert.deepEqual(field.values,[[25]]);
 });
+
+
+test('saved HTML extracts text and table data without a DOM or executable resource sink',()=>{
+ const r=data.parse('report.html','<h1>Thermal &amp; PI</h1><script>fetch("https://evil.invalid")</script><iframe><table><tr><td>evil</td></tr></table></iframe><table><caption>Results</caption><tr><th>Net</th><th>T (&deg;C)</th></tr><tr><td onclick="evil()">&lt;img src=x&gt;</td><td>25&#xB0;</td></tr></table>');
+ assert.equal(r.fields[0].value,'Thermal & PI Results Net T (°C) <img src=x> 25°');
+ assert.deepEqual(r.tables,[{title:'Results',columns:['Net','T (°C)'],rows:[['<img src=x>','25°']]}]);
+ assert.equal(r.fields[0].value.includes('fetch'),false);assert.equal(r.fields[0].value.includes('evil'),false);
+ const malformed=data.htmlReport('<table><tr><th>A<th>B<tr><td>1<td>2');
+ assert.deepEqual(malformed.tables[0],{title:'Report table 1',columns:['A','B'],rows:[['1','2']]});
+ assert.equal(data.htmlReport('<'+'a-'.repeat(64000)).text.length,100000);
+ assert.throws(()=>data.htmlReport('<'+'a-'.repeat(64000)+'>'),/tag is too long/);
+ assert.throws(()=>data.htmlReport('<br>'.repeat(250001)),/complex/);
+ assert.throws(()=>data.htmlReport('<table>'.repeat(129)),/nesting/);
+ const text=data.htmlReport('&#0; &#xD800; &#x110000; &unknown;');assert.equal(text.text,'\ufffd \ufffd \ufffd &unknown;');
+});

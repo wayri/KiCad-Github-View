@@ -206,13 +206,63 @@
   const tabs=[];for(let i=0,n=count();i<n;i++){const tab={simulation_type:count(),command:line(),traces:[],measurements:[]};for(let t=0,n=count();t<n;t++)tab.traces.push({trace_type:count(),signal:line(),parameters:line()});if(version>4)for(let m=0,n=count();m<n;m++)tab.measurements.push({expression:line(),format:line()});tabs.push(tab);}
   const user_defined_signals=[];if(cursor<lines.length&&lines[cursor].trim())for(let i=0,n=count();i<n;i++)user_defined_signals.push(line());const last_sch_text_sim_command=version>=5&&cursor<lines.length?line():'';return{version,tabs,user_defined_signals,last_sch_text_sim_command};
  }
+ // Read saved HTML as bounded data tokens. No DOM parser, resource fetch,
+ // executable attributes, or HTML insertion is involved, including malformed input.
+ function htmlReport(source){
+  const entities={amp:'&',lt:'<',gt:'>',quot:'"',apos:"'",nbsp:' ',deg:'°',micro:'µ',Omega:'Ω'};
+  const decode=value=>value.replace(/&(#x[\da-f]{1,6}|#\d{1,7}|[a-z][a-z0-9]{1,31});/gi,(whole,key)=>{
+   if(key[0]!=='#')return Object.hasOwn(entities,key)?entities[key]:whole;
+   const code=key[1]?.toLowerCase()==='x'?parseInt(key.slice(2),16):Number(key.slice(1));
+   return code>0&&code<=0x10ffff&&!(code>=0xd800&&code<=0xdfff)?String.fromCodePoint(code):'\ufffd';
+  });
+  let cursor=0;
+  function nextToken(){
+   if(source[cursor]!=='<'){const end=source.indexOf('<',cursor),stop=end<0?source.length:end;const value=source.slice(cursor,stop);cursor=stop;return {text:value};}
+   if(source.startsWith('<!--',cursor)){const end=source.indexOf('-->',cursor+4);cursor=end<0?source.length:end+3;return {};}
+   const end=source.indexOf('>',cursor+1);
+   if(end<0){const value=source.slice(cursor);cursor=source.length;return {text:value};}
+   if(end-cursor>65536)throw Error('HTML tag is too long; export CSV or JSON.');
+   const raw=source.slice(cursor+1,end),closing=raw[0]==='/';cursor=end+1;
+   const name=/^([a-z][\w:-]{0,127})(?:[\s/]|$)/i.exec(closing?raw.slice(1):raw);
+   return name?{tag:name[1].toLowerCase(),closing}:{};
+  }
+  const blocked=new Set(['script','style','iframe','object','embed','svg','form','template']);
+  let text='',count=0,cells=0,table=null,row=null,cell=null,caption=false,depth=0,skip='';const tables=[];
+  const clean=value=>decode(value).replace(/\s+/g,' ').trim();
+  const endCell=()=>{if(cell===null)return;if(++cells>MAX_CELLS)throw Error('Too many HTML table cells.');if(row&&row.length<256)row.push(clean(cell));cell=null;};
+  const endRow=()=>{endCell();if(row?.length&&table&&table.rows.length<10000)table.rows.push(row);row=null;};
+  const endTable=()=>{endRow();if(table?.rows.length&&tables.length<30){const columns=table.rows.shift();tables.push({title:clean(table.title)||'Report table '+(tables.length+1),columns,rows:table.rows});}table=null;};
+  while(cursor<source.length){
+   const token=nextToken();
+   if(++count>250000)throw Error('HTML report is too complex; export CSV or JSON.');
+   if(token.tag){
+    const {tag,closing}=token;
+    if(skip){if(closing&&tag===skip)skip='';continue;}
+    if(blocked.has(tag)){if(!closing&&!['embed'].includes(tag))skip=tag;continue;}
+    if(tag==='table'){if(closing){if(depth===1)endTable();depth=Math.max(0,depth-1);}else{if(++depth>128)throw Error('HTML table nesting is too deep.');if(depth===1){table={title:'',rows:[]};caption=false;}}continue;}
+    if(table&&depth===1){
+     if(tag==='tr'){endRow();if(!closing)row=[];}
+     else if(tag==='td'||tag==='th'){endCell();if(!closing){row??=[];cell='';}}
+     else if(tag==='caption')caption=!closing;
+    }
+    if(['br','p','div','tr','td','th','li','h1','h2','h3'].includes(tag)){
+     if(text.length<100000)text+=' ';if(cell!==null&&cell.length<8192)cell+=' ';
+    }
+   }else if(token.text&&!skip){
+    const value=token.text;if(text.length<100000)text+=value.slice(0,100000-text.length);
+    if(table&&caption&&table.title.length<8192)table.title+=value.slice(0,8192-table.title.length);
+    if(cell!==null&&cell.length<8192)cell+=value.slice(0,8192-cell.length);
+   }
+  }
+  if(table)endTable();return {text:clean(text),tables};
+ }
  function parse(path,content){
   if(typeof content!=='string'||new TextEncoder().encode(content).length>MAX_BYTES)throw Error('Analysis file exceeds the 64 MiB viewer budget.');
   content=content.replace(/^\uFEFF/,'');let result;
   if(/\.(csv|tsv)$/i.test(path))result=csv(content,path);
   else if(/\.raw$/i.test(path))result=raw(content);
   else if(/\.(json|wbk)$/i.test(path)){try{result=json(/\.wbk$/i.test(path)?workbook(content):JSON.parse(content),path);}catch(e){if(e instanceof SyntaxError)throw Error('Unsupported or incomplete JSON workbook/report.');throw e;}}
-  else if(/\.html?$/i.test(path))result={kind:'Saved HTML report',fields:[],tables:[],plots:[],warnings:['Report scripts and external resources are never executed.'],html:content};
+  else if(/\.html?$/i.test(path)){const saved=htmlReport(content);result={kind:'Saved HTML report',fields:[{path:'Report text',value:saved.text}],tables:saved.tables,plots:[],warnings:['Report scripts and external resources are never executed. HTML is read as plain text and tables; styling and nested table layout are not preserved.'],html:content};}
   else if(/\.txt$/i.test(path))result={kind:'Saved text report',fields:[{path:'Report text',value:content.slice(0,512000)}],tables:[],plots:[],warnings:[]};
   else throw Error('Open a JSON report, KiCad .wbk, CSV/TSV export, HTML report or ASCII SPICE .raw file.');
   const sourceFamily=family(path,result);
@@ -253,5 +303,5 @@
   if(!a||!b||a.name!==b.name||a.unit!==b.unit||a.axis!==b.axis)return null;
   return {dx:b.x-a.x,...(Number.isFinite(a.y)&&Number.isFinite(b.y)?{dy:b.y-a.y,distance:Math.hypot(b.x-a.x,b.y-a.y)}:{}),delta:a.value===null||b.value===null?null:b.value-a.value};
  }
- const API={parse,candidate,family,familyLabels,numeric,delimited,tablePlot,cellBounds,frameValues,probe,probeDifference,MAX_BYTES};root.KiCadAnalysisData=API;if(typeof module==='object'&&module.exports)module.exports=API;
+ const API={htmlReport,parse,candidate,family,familyLabels,numeric,delimited,tablePlot,cellBounds,frameValues,probe,probeDifference,MAX_BYTES};root.KiCadAnalysisData=API;if(typeof module==='object'&&module.exports)module.exports=API;
 })(globalThis);

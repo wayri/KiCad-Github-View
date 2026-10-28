@@ -2,7 +2,7 @@
 
 The Firefox package is an unsigned Manifest V3 WebExtension for **Firefox desktop 140 or later**. It shares the owned schematic, PCB, project, comparison and 3D renderers with the Chromium extension. Packaging and event-page behavior are tested; an installed Firefox session has not yet been visually verified. Android Firefox is not a verified target.
 
-Current preview: [Firefox 0.12.66 ZIP](https://github.com/wayri/KiCad-Github-View/releases/download/v0.12.66/kicad-visual-review-firefox-0.12.66.zip). Verify the release's `SHA256SUMS.txt` as described in [download verification](INSTALL.md#verify-downloads). Use this Firefox-specific artifact, not the Chromium ZIP or automatic source archive.
+Current preview: [Firefox 0.12.67 ZIP](https://github.com/wayri/KiCad-Github-View/releases/download/v0.12.67/kicad-visual-review-firefox-0.12.67.zip). Verify the release's `SHA256SUMS.txt` as described in [download verification](INSTALL.md#verify-downloads). Use this Firefox-specific artifact, not the Chromium ZIP or automatic source archive.
 
 | Goal | Available route |
 | --- | --- |
@@ -106,3 +106,11 @@ python -m unittest discover -s tests -p test_package_firefox.py -v
 The builder uses the Chromium source inventory, transforms the manifest and background import list, injects a small API namespace adapter, and generates a deterministic ZIP under `.vizdiff`. It fails if the shared background or preview entry contract changes. Chromium's source manifest and renderer code are not rewritten.
 
 Implementation references: Mozilla documents [background scripts](https://developer.mozilla.org/en-US/docs/Mozilla/Add-ons/WebExtensions/manifest.json/background), [Promise APIs](https://developer.mozilla.org/en-US/docs/Mozilla/Add-ons/WebExtensions/API), [session storage](https://developer.mozilla.org/en-US/docs/Mozilla/Add-ons/WebExtensions/API/storage/session) and [temporary installation](https://extensionworkshop.com/documentation/develop/temporary-installation-in-firefox/). The static HTML path avoids relying on the much newer [manifest sandbox support](https://github.com/mdn/browser-compat-data/blob/main/webextensions/manifest/sandbox.json).
+
+## Firefox 0.12.67 validation corrections
+
+The Firefox archive uses its own unsupported-vault stub; provider modules retain encrypted event-page session credentials without Chromium offscreen APIs. Saved HTML analysis reports are tokenized as bounded text/table data, with no privileged HTML insertion. Desktop Firefox remains 140+; the Android manifest floor is 142 for built-in data consent, while Android installation remains unverified and is excluded from this AMO submission.
+
+The deterministic `scripts/firefox_pdf_csp.py` adapter checks full upstream PDF.js digests before replacing legacy `Function` global discovery and dynamic imports with `globalThis` and literal packaged worker/decoder imports. Packaged `vendor/pdfjs/FILES.json` records the adapter, upstream digests and actual output hashes; upstream vendor files and licenses are unchanged. Normal-worker and fake-worker PDF render checks pass under extension-like CSP, but installed Firefox visual acceptance remains separate.
+
+The initial AMO 0.12.66 listing was restricted by Mozilla during submission. The dashboard currently blocks new versions and failed to load the review reason; this is separate from package validation warnings. Do not treat the unsigned development ZIP or a clean validator report as Mozilla publication approval.

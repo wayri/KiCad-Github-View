@@ -1,4 +1,5 @@
 import importlib.util
+import hashlib
 import json
 from pathlib import Path
 import shutil
@@ -44,6 +45,20 @@ class PackageFirefoxTests(unittest.TestCase):
             'personallyIdentifyingInfo', 'websiteActivity', 'websiteContent',
         ]})
         self.assertGreaterEqual(int(gecko['strict_min_version'].split('.')[0]), 140)
+        self.assertEqual(json.loads(builder.payload()['manifest.json'])['browser_specific_settings']['gecko_android']['strict_min_version'], '142.0')
+        self.assertNotIn(b'offscreen.createDocument', builder.payload()['credential-vault.js'])
+        self.assertIn(b'supported: false', builder.payload()['credential-vault.js'])
+
+    def test_pdf_csp_inventory_matches_transformed_modules_and_retains_upstream_provenance(self):
+        packed = builder.payload()
+        inventory = json.loads(packed['vendor/pdfjs/FILES.json'])
+        self.assertEqual(inventory['firefoxCspAdapter']['upstreamVersion'], '6.4.299')
+        self.assertEqual(len(inventory['firefoxCspAdapter']['upstreamSha256']), 2)
+        for name, digest in inventory['files'].items():
+            self.assertEqual(hashlib.sha256(packed['vendor/pdfjs/' + name]).hexdigest(), digest, name)
+        for name in ('pdf.min.mjs', 'pdf.worker.min.mjs'):
+            self.assertNotIn(b'Function("return this")()', packed['vendor/pdfjs/build/' + name])
+        self.assertNotIn(b'.innerHTML', packed['analysis-viewer.js'])
 
     def test_repository_html_cannot_execute_and_shared_source_is_unchanged(self):
         original = (ROOT / 'extension/project-viewer.js').read_bytes()

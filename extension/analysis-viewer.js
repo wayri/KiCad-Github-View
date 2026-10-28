@@ -39,14 +39,9 @@
  function drawProbes(ctx,sx,sy){for(const [name,p]of [['A',probeA],['B',probeB]]){if(!p||p.value===null)continue;const x=sx(p.x),y=sy(p.y===undefined?p.value:p.y);if(!Number.isFinite(x)||!Number.isFinite(y))continue;ctx.fillStyle='#d56142';ctx.strokeStyle='#fff';ctx.lineWidth=2;ctx.beginPath();ctx.arc(x,y,5,0,Math.PI*2);ctx.fill();ctx.stroke();ctx.font='bold 12px system-ui';ctx.textAlign='left';ctx.fillText(name,x+8,y-7);}}
  async function request(type,extra={}){const response=await chrome.runtime.sendMessage({type,...context,...extra});if(!response?.ok)throw Error(response?.error||'Unable to read saved results.');return response.result;}
  function option(select,label,value){const n=make('option',label);n.value=value;select.append(n);}
- function inertHTML(text){
-  const template=document.createElement('template');template.innerHTML=text;const doc=template.content;for(const n of doc.querySelectorAll('script,style,iframe,object,embed,svg,form'))n.remove();
-  report.fields.push({path:'Report text',value:(doc.textContent||'').trim().slice(0,100000)});
-  for(const table of [...doc.querySelectorAll('table')].slice(0,30)){const rows=[...table.querySelectorAll('tr')].slice(0,10000).map(r=>[...r.querySelectorAll('th,td')].map(c=>c.textContent.trim()));if(rows.length){const columns=rows.shift();report.tables.push({title:table.caption?.textContent||'Report table '+(report.tables.length+1),columns,rows});}}
- }
  async function load(path){const generation=++ticket;$('status').textContent='Loading '+path+'…';try{
   const result=await request('project-file',{file:path});if(disposed||generation!==ticket)return;source=typeof result==='string'?result:result.content;
-  report=KiCadAnalysisData.parse(path,source);knownFamilies.set(path,report.family);familyFilter.value=report.family;filterFiles(path);void overlay.setReport(report.savedSource);if(report.html)inertHTML(report.html);$('sourceLabel').textContent=(report.familyLabel||familyLabels[report.family])+' · '+report.kind+' · '+path;
+  report=KiCadAnalysisData.parse(path,source);knownFamilies.set(path,report.family);familyFilter.value=report.family;filterFiles(path);void overlay.setReport(report.savedSource);$('sourceLabel').textContent=(report.familyLabel||familyLabels[report.family])+' · '+report.kind+' · '+path;
   $('warnings').replaceChildren(...report.warnings.map(w=>make('p',w)));$('sourceText').textContent=source.slice(0,512000);if(source.length>512000)$('sourceText').append(make('p','Source preview limited to 512,000 characters.'));
   $('plot').replaceChildren();report.plots.forEach((p,i)=>option($('plot'),p.title,i));$('table').replaceChildren();report.tables.forEach((t,i)=>option($('table'),t.title,i));rowLimit=100;fieldLimit=200;selectPlot();if(!$("tables").hidden)renderTable();else $("tableHost").replaceChildren();if(!$("fields").hidden)renderFields();else $("fieldList").replaceChildren();
   activateTab(report.plots.length?'graphs':report.tables.length?'tables':'fields');$('status').textContent=report.plots.length+' plots · '+report.tables.length+' tables · '+report.fields.length+' properties';
