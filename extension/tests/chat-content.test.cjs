@@ -71,3 +71,9 @@ test('large bodies, token storms and malformed Markdown have bounded DOM and exp
  const result=chat.render(document(),'line\n\n'.repeat(20000));assert.match(result.textContent,/Message shortened for display/);
  const malformed=chat.render(document(),'[unclosed **broken _text `literal');assert.match(malformed.textContent,/unclosed/);assert.equal(tags(malformed,'a').length,0);
 });
+
+
+test('old and coloured annotation bodies stay compact and retain severity without promoting code examples',()=>{
+ for(const severityBadge of [false,true]){const note={...sample(),severity:'major'},result=chat.content(comments.toMarkdown(note,{severityBadge}));assert.equal(result.text,note.text);assert.deepEqual(result.severities,['major']);assert.equal(result.anchors.length,1);}
+ const note={...sample(),severity:'level-1'},result=chat.content(comments.toMarkdown(note));assert.equal(result.text,note.text);assert.deepEqual(result.severities,['level-1']);assert.deepEqual(chat.content('```\n'+comments.toMarkdown(note)+'\n```').severities,[]);
+});

@@ -246,3 +246,11 @@ test('mixed clipboard text and image are retained and an image alone can be sent
  await h.byId('chatMessageText').onpaste(paste('caption '));assert.equal(h.byId('chatMessageText').value,'Before caption after');assert.equal(h.api.draft().capture.width,10);
  h.api.discard();await h.byId('chatMessageText').onpaste(paste(''));await h.find('chat-send').onclick();assert.equal(h.requests.at(-1).payload.body,'Screenshot');assert.ok(h.requests.at(-1).payload.annotation.capture);
 });
+
+
+test('attached review severity is selectable above the message and survives publication and compact thread rendering',async()=>{
+ const h=harness();h.api.render(thread());h.type('Review U3');await h.find('chat-attach-context').onclick();const row=h.find('chat-annotation-level');assert.equal(row.hidden,false);assert.equal(row.parentElement.className,'chat-composer');const severity=row.children[0];assert.deepEqual(severity.children.map(n=>n.value),['info','level-1','minor','major','critical']);severity.value='level-1';severity.onchange();assert.equal(severity.style.borderLeftColor,comments.severityInfo('level-1').color);
+ await h.find('chat-send').onclick();assert.equal(h.requests[0].payload.annotation.severity,'level-1');
+ const note={id:'remote-level',text:'Inspect this part',createdAt:'2026-10-27T05:00:00Z',severity:'level-1',anchor:{repository:'owner/board',ref:'a'.repeat(40),file:'board.kicad_pcb'}};
+ h.api.render(thread(2,{comments:[{id:'13',author:'reviewer',body:comments.toMarkdown(note),createdAt:'2026-10-27T05:00:00Z'}]}));const badge=h.find('chat-review-severity');assert.equal(badge.textContent,'🟢 Level 1');assert.equal(badge.style.borderColor,comments.severityInfo('level-1').color);assert.doesNotMatch(h.find('chat-messages').textContent,/Design context/);h.api.dispose();
+});

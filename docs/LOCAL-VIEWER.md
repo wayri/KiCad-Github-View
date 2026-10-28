@@ -87,3 +87,5 @@ Limits: 32 MiB/file and 96 MiB/project; host snapshot 512 files; browser selecti
 also apply. Missing models, external library paths and unsupported constructs
 retain the existing viewer diagnostics. This interface does not synchronize
 unsaved KiCad state or edit the design.
+
+The commenting pane shares the extension composer: visible Issue/Discussion, severity and state selectors, a compact text box and attachment menu. Local mode has a direct **Save comment** action. Five colour-coded review levels are available: Info, Level 1, Minor, Major and Critical. Local notes are not remotely published; export them through the review workflow when needed.

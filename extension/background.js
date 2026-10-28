@@ -825,7 +825,7 @@ async function stagedDraft(repository, destination, number, title, body) {
 async function openCommentDraft(value, options = {}) {
   const note = KiCadReviewComments.validateComment(value);
   const body = KiCadReviewComments.toMarkdown(note);
-  const title = `[${note.severity[0].toUpperCase()}${note.severity.slice(1)}] KiCad review: ${note.anchor.file}`;
+  const title = `[${KiCadReviewComments.severityInfo(note.severity).label}] KiCad review: ${note.anchor.file}`;
   const { pullNumber, pullRepository, targetType, targetNumber, targetRepository } = options;
   const destination = options.destination || targetType || (pullNumber ? "pull-request" : "issue");
   if (!DESTINATIONS.has(destination) || (targetType && targetType !== destination)) {

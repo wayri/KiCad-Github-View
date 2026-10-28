@@ -472,7 +472,7 @@ test('conversation catalog combines issues and discussions, filters by category 
  const category=view.get('commentConversationKind');assert.equal(category.value,'all');category.value='discussion';await category.onchange();
  assert.doesNotMatch(view.get('commentThreadReader').textContent,/Connector clearance/);assert.match(view.get('commentThreadReader').textContent,/Assembly review/);
  view.get('newConversation').click();assert.equal(view.get('editorThreadType').value,'discussion');assert.equal(view.get('editorDestination').value,'discussion');
- assert.equal(view.get('commentComposeTop').closest('#commentComposerMenu').id,'commentComposerMenu');assert.equal(view.get('saveComment').closest('#commentComposerMenu').id,'commentComposerMenu');assert.equal(view.get('commentFormatting').hidden,true);
+ assert.equal(view.get('commentComposeTop').parentElement.id,'commentEditor');assert.equal(view.get('commentComposeTop').closest('#commentComposerMenu'),null);assert.equal(view.get('saveComment').closest('#commentComposerMenu').id,'commentComposerMenu');assert.equal(view.get('commentFormatting').hidden,true);
  assert.equal(calls.some(message=>['github-publish-comment','comment-publish','chat-message-write'].includes(message.type)),false);view.workspace.dispose();
 });
 
@@ -946,7 +946,7 @@ test('Android review cards place comment content ahead of compact location metad
  const view=workspaceRuntime(async m=>m.type==='comment-list'?[note]:[],{android:true});view.load();await view.workspace.refreshComments();
  const card=view.get('commentList').children[0];assert.equal(card.attributes['data-note-id'],note.id);
  assert.equal(card.children[0].className,'note-heading');assert.equal(card.children[0].textContent,'Check VCC');assert.equal(card.children[1].className,'note-body');assert.match(card.children[1].textContent,/Confirm the supply/);
- assert.equal(card.children[2].className,'note-meta');assert.match(card.children[2].textContent,/major/);assert.equal(card.children[3].className,'note-meta note-location');view.workspace.dispose();
+ assert.equal(card.children[2].className,'note-meta');assert.match(card.children[2].textContent,/Major/);assert.equal(card.children[3].className,'note-meta note-location');view.workspace.dispose();
 });
 
 test('overview airwires join resolved global nets, not same-named local nets',()=>{
@@ -1329,4 +1329,10 @@ test('next affected item keeps a selected marker and note beyond the first twent
  const view=workspaceRuntime(undefined,{navigation:true});view.load();const items=Array.from({length:25},(_,i)=>({description:'Affected '+i,pos:{x:i,y:40}})),report={source:'board.kicad_pcb',date:'2026-10-29T00:00:00Z',kicad_version:'10.0',coordinate_units:'mm',violations:[{type:'clearance',description:'Review connected geometry',severity:'error',items}]};
  view.get('ruleReportFile').files=[{size:2000,name:'drc.json',text:async()=>JSON.stringify(report)}];await view.get('ruleReportFile').onchange();view.get('nextRule').click();for(let i=0;i<24;i++)view.get('nextRuleItem').click();
  const active=view.get('commentPins').children.filter(n=>n.className==='pin rule-marker active');assert.equal(active.length,1);assert.match(active[0].attributes['aria-label'],/Affected 24/);assert.match(view.get('commentPins').children.find(n=>n.className==='rule-location-note').textContent,/Affected 24/);assert.ok(view.get('commentPins').children.filter(n=>n.className.includes('rule-marker')).length<=20);view.workspace.dispose();
+});
+
+
+test('KiCad local composer shares visible review levels and primary save with the extension without remote publication',async()=>{
+ const calls=[],view=workspaceRuntime(async m=>{calls.push(m);return[];},{localRuntime:true});view.load();view.get('addCommentTab').click();const top=view.get('commentComposeTop');assert.equal(top.parentElement.id,'commentEditor');assert.equal(top.closest('#commentComposerMenu'),null);assert.equal(view.get('saveComment').parentElement.id,'commentPostRow');assert.equal(view.get('commentPublishSettings').hidden,true);
+ assert.ok(view.get('commentSeverity').children.some(n=>n.value==='level-1'));view.get('commentSeverity').value='level-1';view.get('commentSeverity').onchange();assert.ok(view.get('commentSeverity').className.includes('severity-level-1'));view.get('commentText').value='Inspect resistor\nCheck its rating';await view.get('saveComment').click();assert.equal(calls.find(m=>m.type==='comment-save').comment.severity,'level-1');assert.equal(calls.some(m=>m.type==='github-publish-comment'||m.type==='comment-publish'),false);view.workspace.dispose();
 });

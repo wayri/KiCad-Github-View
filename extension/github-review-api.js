@@ -963,7 +963,7 @@ const KiCadGitHubReviewApi = (() => {
     }
     if(note.threadType&&note.threadType!==(destination.includes("discussion")?"discussion":"issue"))throw fail("The destination does not match this note's Issue or Discussion type.",true);
     return { note, destination, repository, number, categoryId: message.categoryId,
-      title: message.title?.trim() || `[${note.severity[0].toUpperCase()}${note.severity.slice(1)}] KiCad review: ${note.anchor.file}` };
+      title: message.title?.trim() || `[${KiCadReviewComments.severityInfo(note.severity).label}] KiCad review: ${note.anchor.file}` };
   }
   function operationKey(args) {
     // Stable across note text edits: one remote publication per local note and target.

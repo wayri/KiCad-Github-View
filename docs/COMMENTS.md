@@ -1,6 +1,6 @@
 # Review comments and Git host integration
 
-KiCad Visual Review stores comments alongside the design context they refer to: repository, revision, KiCad file, optional object identity or reference, and a point or rectangular area in drawing coordinates. Each note can also carry severity (`info`, `minor`, `major`, or `critical`), tags, mentions, text, timestamps, and a local state (`open`, `skipped`, `resolved`, or `wont-fix`). Area captures can include a PNG. These annotations help reviewers discuss saved design data; they do not modify the schematic or board.
+KiCad Visual Review stores comments alongside the design context they refer to: repository, revision, KiCad file, optional object identity or reference, and a point or rectangular area in drawing coordinates. Each note can also carry severity (`info`, `level-1`, `minor`, `major`, or `critical`), tags, mentions, text, timestamps, and a local state (`open`, `skipped`, `resolved`, or `wont-fix`). Area captures can include a PNG. These annotations help reviewers discuss saved design data; they do not modify the schematic or board.
 
 ## Where notes are stored
 
@@ -107,3 +107,11 @@ The gear button at the top exposes state, severity, read status, sort/search and
 This screenshot uses a synthetic conversation. The reader is read-only and bounded to 200 comments, 10 requests, 64 KiB of text per entry and 1 MiB total. Truncation warnings direct users to the original provider thread. Public Issues can be read anonymously; Discussions and private threads require extension sign-in and repository access. Bodies are displayed as safe text, so arbitrary HTML and remote media cannot execute or load from a thread. GitLab also loads the selected issue description, ordinary notes and grouped discussion replies in Chrome, Android and VS Code. GitLab Discussions remain issue conversations. Its reader is bounded to 200 comments, eight discussion pages and 1 MiB of text, with explicit truncation warnings. There is no notification feed, full issue inbox or automatic refresh.
 
 Clipboard images must be PNG, JPEG or WebP, at most 8 MiB and 40 megapixels before normalization. Screenshot publication uses the existing authenticated attachment upload; failure retains the draft instead of silently omitting its image. Cancelling or replacing a draft discards any still-running paste conversion.
+
+### Review severity levels
+
+The five levels, in increasing severity, are **Info** (blue), **Level 1** (green), **Minor** (yellow), **Major** (orange), and **Critical** (red). Existing values retain their meaning; Level 1 is stored as `level-1`. Select the level in the always-visible composer row before saving or posting. Review-note filters, sorting, drawing markers and attached chat reviews use the same scale. Attached chat review controls appear above the message box.
+
+New GitHub Issue/Discussion posts and review replies include a self-contained coloured-symbol severity banner and a readable severity row. No external badge image is loaded. This is per-comment metadata in the message body; it does not automatically create repository labels or change the severity of an entire existing issue. Older annotations still load and display their saved severity.
+
+The KiCad launcher uses this same compact browser composer. Local mode presents **Save comment** directly beside the composer actions; it saves a local note and does not publish to GitHub. Its design sources remain read-only.

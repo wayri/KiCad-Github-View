@@ -81,7 +81,7 @@ test('GitHub body formats user text and drawing context safely while retaining t
  const note={...sample(),threadType:'discussion',severity:'major',state:'resolved',text:'Check **spacing** | fast\n@alice <script>alert(1)</script>',tags:['placement|clearance'],mentions:['alice'],
   anchor:{...sample().anchor,repository:'owner/repo',ref:'feature/review',file:'design/a (rev)#1.kicad_pcb',kind:'footprint',reference:'J1|A',variant:'prototype'}};
  const markdown=comments.toMarkdown(note);
- assert.ok(markdown.startsWith('## KiCad visual review\n\n### Check '));
+ assert.ok(markdown.startsWith('## KiCad visual review\n\n> 🟠 **Major** · review severity\n\n### Check '));
  assert.match(markdown, /Check.*\n@alice/s);
  assert.equal(markdown.includes('<script>'),false);
  assert.ok(markdown.includes('| Destination type | Discussion |'));
@@ -197,4 +197,14 @@ test('created date restrictions combine with type, state, severity, read, search
  const notes=[{...base,id:'old',createdAt:'2026-10-01T00:00:00Z',updatedAt:'2026-10-04T00:00:00Z'}, {...base,id:'matching',createdAt:'2026-10-03T00:00:00Z',updatedAt:'2026-10-03T00:00:00Z',github:{createdAt:'2026-10-01T00:00:00Z'}}, {...base,id:'other-type',threadType:'discussion'}, {...base,id:'read'}, {...base,id:'open',state:'open'}];
  const filters={createdFrom:'2026-10-03',createdTo:'2026-10-03',threadType:'issue',state:'closed',severity:'major',read:'unread',query:'@alice'.slice(1),order:'updated'};
  assert.deepEqual(comments.sortAndFilter(notes,filters,n=>n.id==='read'?'2026-10-05T00:00:00Z':undefined).map(n=>n.id),['matching']);
+});
+
+
+test('five review levels preserve old notes, sort consistently and publish self-contained coloured severity banners',()=>{
+ assert.deepEqual(comments.severityOptions.map(x=>x.value),['info','level-1','minor','major','critical']);
+ const notes=comments.severityOptions.map(level=>({...sample(),id:'note-'+level.value,severity:level.value}));
+ for(const [i,note]of notes.entries()){const level=comments.severityOptions[i],body=comments.toMarkdown(note);assert.ok(body.includes('> '+level.symbol+' **'+level.label+'** · review severity'));assert.ok(body.includes('| Severity | '+level.label+' |'));assert.deepEqual(comments.fromMarkdown(body),[comments.validateComment(note)]);assert.ok(!body.includes('shields.io'));assert.equal(comments.severityInfo(note.severity),level);}
+ assert.deepEqual(comments.sortAndFilter(notes).map(x=>x.severity),['critical','major','minor','level-1','info']);assert.equal(comments.sortAndFilter(notes,{severity:'level-1'})[0].id,'note-level-1');
+ assert.deepEqual(comments.parseComments(comments.exportComments(notes)),notes.map(comments.validateComment));for(const value of ['level1','Level 1','__proto__',0])assert.equal(comments.isSeverity(value),false);
+ assert.equal(comments.validateComment(sample()).severity,'info');
 });

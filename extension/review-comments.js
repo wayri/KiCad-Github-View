@@ -2,6 +2,15 @@
 
 // Pure validation and interchange helpers. Nothing here posts to GitHub.
 const KiCadReviewComments = (() => {
+  const severityOptions=Object.freeze([
+    {value:'info',label:'Info',color:'#69bbdd',symbol:'🔵'},
+    {value:'level-1',label:'Level 1',color:'#4fc08d',symbol:'🟢'},
+    {value:'minor',label:'Minor',color:'#d4c64f',symbol:'🟡'},
+    {value:'major',label:'Major',color:'#ed9b49',symbol:'🟠'},
+    {value:'critical',label:'Critical',color:'#e65b69',symbol:'🔴'}
+  ].map(Object.freeze));
+  const isSeverity=value=>severityOptions.some(item=>item.value===value);
+  const severityInfo=value=>severityOptions.find(item=>item.value===value)||severityOptions[0];
   // All bound views share the existing publication lock; binding is validation context only.
   const publicationReservations = new Map();
   function create(binding = null) {
@@ -11,7 +20,7 @@ const KiCadReviewComments = (() => {
   const REF = /^[A-Za-z0-9._/-]{1,200}$/;
   const ID = /^[A-Za-z0-9_-]{1,100}$/;
   const PATH = /^[^\\\x00-\x1f\x7f]+\.kicad_(?:sch|pcb)$/i;
-  const SEVERITIES = new Set(["info", "minor", "major", "critical"]);
+  const SEVERITIES = new Set(severityOptions.map(item=>item.value));
   const STATES = new Set(["open", "skipped", "resolved", "wont-fix"]);
   const MENTION = /^[A-Za-z0-9](?:[A-Za-z0-9-]{0,37}[A-Za-z0-9])?$/;
   const MARKER = /<!-- kicad-review:v1 ([A-Za-z0-9_-]{1,32000}) -->/g;
@@ -181,7 +190,7 @@ const KiCadReviewComments = (() => {
     return validateComment(JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(
       Uint8Array.from(binary, (character) => character.charCodeAt(0)))));
   }
-  function toMarkdown(value) {
+  function toMarkdown(value, {severityBadge=true} = {}) {
     const note = validateComment(value), anchor = note.anchor;
     const fileUrl = revisionUrl(anchor);
     const fileValue = fileUrl ? `[${escaped(anchor.file)}](<${fileUrl}>)` : escaped(anchor.file);
@@ -192,7 +201,7 @@ const KiCadReviewComments = (() => {
       targetValue = anchor.netName || anchor.reference || anchor.objectId || "Unnamed net";
     }
     const rows = [
-      ["Severity", note.severity[0].toUpperCase() + note.severity.slice(1)],
+      ["Severity", severityInfo(note.severity).label],
       ["Review state", note.state],
       ...(note.threadType ? [["Destination type", note.threadType === "discussion" ? "Discussion" : "Issue"]] : []),
       [targetLabel, targetValue],
@@ -210,7 +219,8 @@ const KiCadReviewComments = (() => {
       ["Updated (UTC)", note.updatedAt]
     ];
     const commentLines=note.text.split(/\r\n|\r|\n/);
-    const lines = ["## KiCad visual review", "", "### "+escaped(commentLines[0]), "", escapedComment(commentLines.slice(1).join("\n")), "",
+    const level=severityInfo(note.severity);
+    const lines = ["## KiCad visual review", "", ...(severityBadge?[`> ${level.symbol} **${level.label}** · review severity`, ""]:[]), "### "+escaped(commentLines[0]), "", escapedComment(commentLines.slice(1).join("\n")), "",
       "### Design context", "", "| Detail | Value |", "| --- | --- |",
       ...rows.map(([label, item, rawMarkdown]) => `| ${tableCell(label)} | ${rawMarkdown ? item : tableCell(item)} |`)];
     if(note.attachments?.length)for(const attachment of note.attachments)lines.push('',`![Captured drawing area (${attachment.width} × ${attachment.height})](${attachment.url})`);
@@ -302,7 +312,7 @@ const KiCadReviewComments = (() => {
       throw new Error("Invalid comment filter.");
     }
     const dates = createdDateRange(filters.createdFrom, filters.createdTo);
-    const rank = {critical:0,major:1,minor:2,info:3};
+    const rank = Object.fromEntries(severityOptions.map((item,index)=>[item.value,severityOptions.length-index-1]));
     return [...notes].filter((note) => {
       const unread = isUnread(note, readAt(note));
       const created = Date.parse(note.createdAt);
@@ -342,7 +352,7 @@ const KiCadReviewComments = (() => {
     publicationReservations.set(key,work);
     try { await work; } finally { if (publicationReservations.get(key) === work) publicationReservations.delete(key); }
   }
-  return { forWorkspace, normalizeScope, normalizeAnchor, validateComment, validateAttachment, toMarkdown, fromMarkdown, parseSidecar, serializeSidecar,
+  return { severityOptions, severityInfo, isSeverity, forWorkspace, normalizeScope, normalizeAnchor, validateComment, validateAttachment, toMarkdown, fromMarkdown, parseSidecar, serializeSidecar,
     reservePublication, exportComments, parseComments, receiptKey, isUnread, commentType, createdDateRange, sortAndFilter };
   }
   return create();

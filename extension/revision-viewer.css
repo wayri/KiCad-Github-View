@@ -374,3 +374,7 @@ body[data-workspace="true"] #projectButton,body[data-workspace="true"] #viewOppo
 /* Selected saved ERC/DRC evidence; one compact note per viewport. */
 #commentPins .rule-location-note{position:absolute;box-sizing:border-box;padding:7px 9px;background:var(--panel);color:var(--text);border:1px solid var(--line);border-left-width:3px;border-radius:6px;box-shadow:0 3px 14px #0005;overflow:auto;pointer-events:auto;font:12px/1.4 system-ui,sans-serif}
 .rule-location-note header{display:flex;align-items:center;gap:6px}.rule-location-note strong{flex:1;font-size:11px;text-transform:uppercase}.rule-location-note p{margin:5px 0;overflow-wrap:anywhere}.rule-location-note small{display:block;color:var(--muted);font-size:10px;overflow-wrap:anywhere;margin:3px 0}.rule-location-note button{min-height:28px;padding:3px 7px;font-size:11px}.rule-location-note header button{min-width:28px;flex:0 0 auto}
+
+.severity-level-1{border-left-color:#4fc08d!important}
+#commentComposeTop{margin:0 0 6px;align-items:end}#commentComposeTop label{min-width:0}#commentComposeTop select{width:100%;box-sizing:border-box}
+#commentPostRow>#saveComment{margin-left:auto;background:var(--selected);border-color:var(--accent);font-size:11px;min-height:32px}

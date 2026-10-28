@@ -159,7 +159,7 @@ function assertScope(request,session) {
 function validateComment(note,session=null,bindSession=session) {
   if(!note || typeof note!=="object" || typeof note.id!=="string" || !/^[A-Za-z0-9_-]{1,100}$/.test(note.id) ||
     typeof note.text!=="string" || !note.text.trim() || note.text.length>4000 ||
-    !["info","minor","major","critical"].includes(note.severity || "info") ||
+    !sharedReviewComments.isSeverity(note.severity || "info") ||
     !validTimestamp(note.createdAt))
     throw new Error("Invalid local review annotation.");
   const allowed=new Set(["id","text","severity","createdAt","updatedAt","anchor","tags","state","remoteRefs","capture","mentions","threadType","attachments"]);

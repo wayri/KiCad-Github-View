@@ -388,7 +388,7 @@
     }
     categoryTabs.addEventListener('keydown',event=>{if(!['ArrowLeft','ArrowRight','Home','End'].includes(event.key))return;event.preventDefault();event.stopPropagation();const types=[...categoryButtons.keys()],at=types.indexOf(commentCategory),type=event.key==='Home'?types[0]:event.key==='End'?types.at(-1):types[(at+(event.key==='ArrowLeft'?-1:1)+types.length)%types.length];setCommentCategory(type);categoryButtons.get(type).focus();});
     const commentTabs=make("div");commentTabs.className="comment-subtabs";commentTabs.setAttribute("role","tablist");commentTabs.setAttribute("aria-label","Comments");
-    const addTab=button("Add comment",()=>showCommentTab("add")),viewTab=button("View comments",()=>showCommentTab("view"));
+    const addTab=button("Add comment",()=>{showCommentTab("add");if(!editor)editComment();}),viewTab=button("View comments",()=>showCommentTab("view"));
     const addPane=make("section"),viewPane=make("section");addPane.id="addCommentPane";viewPane.id="viewCommentsPane";
     for(const [tab,id,pane]of [[addTab,"addCommentTab",addPane],[viewTab,"viewCommentsTab",viewPane]]){tab.id=id;tab.setAttribute("role","tab");tab.setAttribute("aria-controls",pane.id);pane.setAttribute("role","tabpanel");pane.setAttribute("aria-labelledby",id);commentTabs.append(tab);}
     const commentTools=make("div");commentTools.className="comment-tools";commentTools.append($("newComment"),$("pointComment"),$("areaComment"));
@@ -476,11 +476,11 @@
     const destinationDetails=make('div');destinationDetails.id='commentDestinationDetails';destinationDetails.append(...['editorNumberLabel','editorCategoryLabel','editorLoadCategories'].map($));
     const publishSettings=$('commentPublishSettings'),markdownPreview=$('editorMarkdown');
     const composerMenu=make('details');composerMenu.id='commentComposerMenu';composerMenu.className='comment-composer-menu';const composerMenuToggle=make('summary','+');composerMenuToggle.title='Attachments and comment options';composerMenuToggle.setAttribute('aria-label','Attachments and comment options');
-    const composerMenuBody=make('div');composerMenuBody.className='comment-composer-menu-body';composerMenuBody.append(commentTools,composeTop,screenshotTools,$('editorDestination').closest?.('label')||$('editorDestination'),destinationDetails,composerExtras,$('saveComment'),$('cancelComment'));composerMenu.append(composerMenuToggle,composerMenuBody);addHelp.hidden=true;
+    const composerMenuBody=make('div');composerMenuBody.className='comment-composer-menu-body';composerMenuBody.append(commentTools,screenshotTools,$('editorDestination').closest?.('label')||$('editorDestination'),destinationDetails,composerExtras,$('saveComment'),$('cancelComment'));composerMenu.append(composerMenuToggle,composerMenuBody);addHelp.hidden=true;
     const composerFormats=make('div');composerFormats.id='commentFormatting';composerFormats.className='chat-format-tools';composerFormats.hidden=true;composerFormats.setAttribute('role','toolbar');composerFormats.setAttribute('aria-label','Comment formatting');
     const composerFormatToggle=button('Aa',()=>{composerFormats.hidden=!composerFormats.hidden;composerFormatToggle.setAttribute('aria-expanded',String(!composerFormats.hidden));composerMenu.open=false;$('commentText').focus();});composerFormatToggle.className='chat-format-toggle';composerFormatToggle.title='Formatting';composerFormatToggle.setAttribute('aria-label','Formatting');composerFormatToggle.setAttribute('aria-controls',composerFormats.id);composerFormatToggle.setAttribute('aria-expanded','false');
     for(const [label,name,prefix,suffix]of [['B','Bold','**','**'],['I','Italic','_','_'],['</>','Code','`','`'],['≡','Bulleted list','- ','']]){const format=button(label,()=>{const box=$('commentText'),start=box.selectionStart??box.value.length,end=box.selectionEnd??start,selected=box.value.slice(start,end)||'text';box.value=box.value.slice(0,start)+prefix+selected+suffix+box.value.slice(end);box.setSelectionRange?.(start+prefix.length,start+prefix.length+selected.length);$('editorTitle').value=root.KiCadCommentCompose?.titleFromText(box.value)||'';box.focus();});format.title=name;format.setAttribute('aria-label',name);format.onpointerdown=event=>event.preventDefault();composerFormats.append(format);}
-    publishSettings.replaceChildren($('postComment'));postRow.replaceChildren(composerMenu,composerFormatToggle,publishSettings);$('commentEditor').replaceChildren($('commentAnchor'),composerFormats,composeBox,inlineMentions,postRow,markdownPreview,legacyFields);
+    publishSettings.replaceChildren($('postComment'));postRow.replaceChildren(composerMenu,composerFormatToggle,publishSettings);if(!remoteAvailable)postRow.append($('saveComment'));$('commentEditor').replaceChildren($('commentAnchor'),composeTop,composerFormats,composeBox,inlineMentions,postRow,markdownPreview,legacyFields);
     const threadReader=make('section');threadReader.id='commentThreadReader';threadReader.className='comment-thread-reader';threadReader.hidden=!remoteAvailable;
     const threadControls=make('div');threadControls.className='thread-read-controls';
     const threadKind=make('select');threadKind.id='commentThreadKind';threadKind.setAttribute('aria-label','Read thread type');for(const [value,label]of (provider==='gitlab'?[['issue','Issue']]:[['issue','Issue'],['discussion','Discussion']])){const option=make('option',label);option.value=value;threadKind.append(option);}threadKind.value='issue';
@@ -1093,7 +1093,7 @@
       try { const list = await request("comment-list",target); if (run !== loadId) return; notes = list; renderComments(); draw(); }
       catch (error) { if (run === loadId) { notes = []; commentStatus(error.message,true); renderComments(); } }
     }
-    const severityColors = {critical:"#e65b69",major:"#ed9b49",minor:"#d4c64f",info:"#69bbdd"};
+    const severityColors=Object.fromEntries(KiCadReviewComments.severityOptions.map(item=>[item.value,item.color]));
     function receipt(note) { try { return localStorage.getItem(KiCadReviewComments.receiptKey(note,receiptUser)); } catch { return null; } }
     function markRead(note,read) {
       try { const key=KiCadReviewComments.receiptKey(note,receiptUser);if(read)localStorage.setItem(key,new Date(note.updatedAt||note.createdAt).toISOString());else localStorage.removeItem(key);renderComments();draw(); }
@@ -1166,12 +1166,12 @@
         if(root.KiCadAndroidRuntime){
           const heading=make('h3',root.KiCadCommentCompose?.titleFromText(note.text)||'Review comment');heading.className='note-heading';
           const body=make('p',note.text.split(/\r\n|\r|\n/).slice(1).join('\n'));body.className='note-body';
-          const meta=make('small',`${KiCadReviewComments.commentType(note)==='discussion'?'Discussion':'Issue'} · ${note.severity||'info'} · ${reviewState}${threadState?' · '+threadState:''}${unread?' · Unread':''}`);meta.className='note-meta';
+          const meta=make('small',`${KiCadReviewComments.commentType(note)==='discussion'?'Discussion':'Issue'} · ${KiCadReviewComments.severityInfo(note.severity).label} · ${reviewState}${threadState?' · '+threadState:''}${unread?' · Unread':''}`);meta.className='note-meta';
           const location=make('small',anchorLabel(note.anchor));location.className='note-meta note-location';
           const date=make('small',new Date(note.updatedAt||note.createdAt).toLocaleString());date.className='note-meta';
           card.append(heading,body,meta,location,date);
         }else{
-        card.append(make("h3",root.KiCadCommentCompose?.titleFromText(note.text)||"Review comment"),make("strong",`${(note.severity||"info").toUpperCase()} · ${KiCadReviewComments.commentType(note)==='discussion'?'Discussion':KiCadReviewComments.commentType(note)==='issue'?'Issue':'Uncategorized'} · ${unread?"Unread":"Read"}`),make("small",anchorLabel(note.anchor)),make("p",note.text.split(/\r\n|\r|\n/).slice(1).join("\n")),
+        card.append(make("h3",root.KiCadCommentCompose?.titleFromText(note.text)||"Review comment"),make("strong",`${KiCadReviewComments.severityInfo(note.severity).label.toUpperCase()} · ${KiCadReviewComments.commentType(note)==='discussion'?'Discussion':KiCadReviewComments.commentType(note)==='issue'?'Issue':'Uncategorized'} · ${unread?"Unread":"Read"}`),make("small",anchorLabel(note.anchor)),make("p",note.text.split(/\r\n|\r|\n/).slice(1).join("\n")),
           make("small",`Created ${new Date(note.createdAt).toLocaleString()} · Updated ${new Date(note.updatedAt||note.createdAt).toLocaleString()} · ${reviewState} · ${note.github?`${providerName} ${note.github.source} #${note.github.number} · ${threadState} · ${note.github.author||""}`:"local"}`));
         }
         if(note.mentions?.length)card.append(make("small",`Mentions: ${note.mentions.map(login=>"@"+login).join(", ")}`));
@@ -1553,7 +1553,7 @@
             $('editorThreadType').value=type;if(editor)editor.threadType=type;$('githubCommentType').value=type;
             // Keep the transport's provider-specific destinations, using one visible selector.
             const item=make('option',selected[1]);item.value=value;$('editorDestination').replaceChildren(item);$('editorDestination').value=value;editorDestinationChanged();colorCommentControls();
-            summary.textContent=`${providerName} · ${targetRepository} · ${selected[1]} · ${$('commentSeverity').value||'info'}`;
+            summary.textContent=`${providerName} · ${targetRepository} · ${selected[1]} · ${KiCadReviewComments.severityInfo($('commentSeverity').value).label}`;
           };
           destinationLabel.append(destinationSelect);body.append(destinationLabel);
           const rulesLabel=make('label'),acceptRules=make('input');rulesLabel.className='content-rules-acceptance';acceptRules.type='checkbox';acceptRules.id='acceptContentRules';acceptRules.checked=localStorage.getItem(rulesKey)===contentRulesVersion;rulesLabel.append(acceptRules,make('span',' I agree to the Terms of Service and content rules: '+contentRules));body.append(button('Read Terms & disclaimers',showTerms),rulesLabel);
