@@ -5,7 +5,6 @@ Repository HTML is deliberately static: no unsupported manifest sandbox is used.
 """
 from pathlib import Path
 import importlib.util
-import hashlib
 import json
 import re
 import zipfile
@@ -25,13 +24,6 @@ DATA_COLLECTION_TYPES = (
 
 def chrome_builder():
     spec = importlib.util.spec_from_file_location('package_extension', ROOT / 'scripts/package_extension.py')
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
-    return module
-
-
-def pdf_adapter():
-    spec = importlib.util.spec_from_file_location('firefox_pdf_csp', ROOT / 'scripts/firefox_pdf_csp.py')
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module
@@ -84,6 +76,8 @@ def payload(root: Path = ROOT) -> dict[str, bytes]:
     files.update(dependencies)
     files.discard('html-sandbox.html')
     files.discard('html-sandbox.js')
+    # Firefox supplies its own maintained PDF renderer; do not fork PDF.js.
+    files = {name for name in files if not name.startswith('vendor/pdfjs/')}
     manifest['background'] = {'scripts': [SHIM, *dependencies, worker]}
     manifest['browser_specific_settings'] = {'gecko_android': {'strict_min_version': '142.0'}, 'gecko': {
         'id': ADDON_ID,
@@ -94,20 +88,13 @@ def payload(root: Path = ROOT) -> dict[str, bytes]:
     manifest['permissions'] = [permission for permission in manifest['permissions'] if permission != 'offscreen']
     manifest['content_security_policy'].pop('sandbox', None)
     data = {}
-    pdf = pdf_adapter()
     for name in sorted(files):
-        path = source / name
+        path = source / ('firefox/' + name if name in {'credential-vault.js', 'pdf-viewer.html', 'pdf-viewer.js'} else name)
         if not path.is_file() or path.is_symlink() or not path.resolve().is_relative_to(source.resolve()):
             raise ValueError(f'Unsafe or missing Firefox asset: {name}')
         content = path.read_bytes()
         if name == 'manifest.json':
             content = (json.dumps(manifest, indent=2) + '\n').encode()
-        elif name == 'credential-vault.js':
-            # Firefox uses the provider modules' encrypted event-page session fallback.
-            vault = source / 'firefox/credential-vault.js'
-            if not vault.is_file() or vault.is_symlink() or not vault.resolve().is_relative_to(source.resolve()):
-                raise ValueError('Unsafe or missing Firefox credential adapter.')
-            content = vault.read_bytes()
         elif name == worker:
             content = background
         elif name.endswith('.html'):
@@ -124,15 +111,7 @@ def payload(root: Path = ROOT) -> dict[str, bytes]:
         elif name == 'review-file-settings.js':
             content = content.replace(b'Connect .kicad-review.json inside your local Git checkout.', b'Firefox cannot write a selected local review file automatically. Export review JSON from the viewer and save .kicad-review.json in your Git checkout.')
             content = content.replace(b'File access requires a supported Chrome extension page.', b'Firefox does not support this file picker. Export review JSON from the viewer and save it in your checkout.')
-        data[name] = pdf.adapt(name, content)
-    # Keep upstream supply-chain metadata while recording exact transformed bytes.
-    inventory_name = 'vendor/pdfjs/FILES.json'
-    inventory = json.loads(data[inventory_name])
-    inventory['firefoxCspAdapter'] = pdf.provenance()
-    for short in pdf.SOURCE_SHA256:
-        name = 'build/' + short
-        inventory['files'][name] = hashlib.sha256(data['vendor/pdfjs/' + name]).hexdigest()
-    data[inventory_name] = (json.dumps(inventory, indent=2) + '\n').encode()
+        data[name] = content
     return data
 
 

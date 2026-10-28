@@ -1,5 +1,4 @@
 import importlib.util
-import hashlib
 import json
 from pathlib import Path
 import shutil
@@ -49,16 +48,13 @@ class PackageFirefoxTests(unittest.TestCase):
         self.assertNotIn(b'offscreen.createDocument', builder.payload()['credential-vault.js'])
         self.assertIn(b'supported: false', builder.payload()['credential-vault.js'])
 
-    def test_pdf_csp_inventory_matches_transformed_modules_and_retains_upstream_provenance(self):
+    def test_pdf_uses_browser_native_renderer_without_a_modified_third_party_library(self):
         packed = builder.payload()
-        inventory = json.loads(packed['vendor/pdfjs/FILES.json'])
-        self.assertEqual(inventory['firefoxCspAdapter']['upstreamVersion'], '6.4.299')
-        self.assertEqual(len(inventory['firefoxCspAdapter']['upstreamSha256']), 2)
-        for name, digest in inventory['files'].items():
-            self.assertEqual(hashlib.sha256(packed['vendor/pdfjs/' + name]).hexdigest(), digest, name)
-        for name in ('pdf.min.mjs', 'pdf.worker.min.mjs'):
-            self.assertNotIn(b'Function("return this")()', packed['vendor/pdfjs/build/' + name])
+        self.assertFalse(any(name.startswith('vendor/pdfjs/') for name in packed))
+        self.assertEqual(packed['pdf-viewer.js'], (ROOT/'extension/firefox/pdf-viewer.js').read_bytes())
+        self.assertIn(b'pdf-viewer.js', packed['pdf-viewer.html'])
         self.assertNotIn(b'.innerHTML', packed['analysis-viewer.js'])
+        self.assertNotIn(b'vendor/pdfjs', packed['pdf-viewer.js'])
 
     def test_repository_html_cannot_execute_and_shared_source_is_unchanged(self):
         original = (ROOT / 'extension/project-viewer.js').read_bytes()
