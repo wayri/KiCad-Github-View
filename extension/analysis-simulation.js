@@ -4,7 +4,7 @@
   const entries=[];
   for(const [plotIndex,plot]of (report?.plots||[]).entries())for(const [seriesIndex,series]of (plot.series||[]).entries()){
    const signal=series.signal;if(signal?.quantity!=='voltage'||typeof signal.net!=='string'||!signal.net||!series.points?.length)continue;
-   entries.push({plot,series,plotIndex,seriesIndex,net:signal.net,sourcePath:signal.sourcePath||null,resultPath:report.path});
+   entries.push({plot,series,plotIndex,seriesIndex,net:signal.net,sourcePath:signal.sourcePath||null,resultPath:report.path,family:report.family||'other',familyLabel:report.familyLabel||'Saved waveform export'});
   }
   return entries;
  }
@@ -37,7 +37,7 @@
    ctx.fillStyle='#657b89';ctx.font='10px system-ui';ctx.textAlign='left';ctx.fillText(format(xmin),8,h-3);ctx.textAlign='right';ctx.fillText(format(xmax),w-8,h-3);
    value.textContent=p?active.plot.xLabel+': '+format(p.x)+' · '+format(p.y)+(active.series.signal.unit?' '+active.series.signal.unit:'')+' · sample '+(index+1)+'/'+points.length:'';
   }
-  function choose(){active=entries[Number(select.value)]||null;if(!active)return;index=0;cursor.max=String(active.series.points.length-1);cursor.value='0';source.textContent=active.resultPath+' · '+active.plot.title+' · saved data';draw();onSelect?.(active);position();}
+  function choose(){active=entries[Number(select.value)]||null;if(!active)return;index=0;cursor.max=String(active.series.points.length-1);cursor.value='0';title.textContent=active.familyLabel;source.textContent=active.resultPath+' · '+active.plot.title+' · saved data';draw();onSelect?.(active);position();}
   function hide(){panel.hidden=true;entries=[];active=null;}
   close.onclick=hide;select.onchange=choose;cursor.oninput=()=>{index=Number(cursor.value);draw();};open.onclick=()=>{if(active)onOpen(active);};
   canvas.addEventListener('pointerdown',event=>{if(!active)return;const points=active.series.points,rect=canvas.getBoundingClientRect();let min=Infinity,max=-Infinity;for(const p of points)if(Number.isFinite(p.x)){min=Math.min(min,p.x);max=Math.max(max,p.x);}const x=min+Math.max(0,Math.min(1,(event.clientX-rect.left-8)/(rect.width-16)))*(max-min);let distance=Infinity;for(let i=0;i<points.length;i++){const next=Math.abs(points[i].x-x);if(next<distance){distance=next;index=i;}}cursor.value=String(index);draw();});

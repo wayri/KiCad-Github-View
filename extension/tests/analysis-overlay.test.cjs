@@ -21,3 +21,11 @@ test('stale report responses cannot attach geometry after file changes or dispos
 test('missing source binding never fetches or attaches an unrelated PCB',async()=>{
  let calls=0;const h=harness(async()=>{calls++;throw Error('unexpected');});await h.controller.setReport({model_sha256:sha,board_path:'board.kicad_pcb'});assert.equal(calls,0);assert.equal(h.builds(),0);
 });
+
+test('switching from a spatial result to a workbook or waveform hides spatial controls',()=>{
+ const h=harness(async()=>{throw Error('No source fetch expected.');});
+ const field={type:'mesh-field',points:[[0,0],[1,0],[0,1]],triangles:[[0,1,2]],values:[1],nodal:false};
+ h.controller.update(field);assert.equal(h.node('overlayControls').hidden,false);
+ h.controller.update(null);assert.equal(h.node('overlayControls').hidden,true);assert.equal(h.node('overlay2d').hidden,true);assert.equal(h.node('overlay3d').hidden,true);
+ h.controller.update({title:'Voltage',xLabel:'Time',series:[{name:'V(OUT)',points:[{x:0,y:1}]}]});assert.equal(h.node('overlayControls').hidden,true);assert.equal(h.node('chart').hidden,false);h.controller.dispose();
+});

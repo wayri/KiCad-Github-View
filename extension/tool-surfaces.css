@@ -160,6 +160,7 @@ body.tool-surface.analysis-tool :is(#overlayControls, #probeTools) {
   align-items: center;
   gap: 6px 12px;
 }
+body.tool-surface.analysis-tool :is(#overlayControls, #probeTools)[hidden] { display: none; }
 body.tool-surface.analysis-tool :is(#overlayControls, #probeTools) > label { flex: 1 1 160px; }
 body.tool-surface.analysis-tool :is(#overlayStatus, #overlayLegend, #probeResult) { flex-basis: 100%; margin: 2px 0; }
 body.tool-surface.analysis-tool #graphControls summary { min-height: 40px; display: flex; align-items: center; }

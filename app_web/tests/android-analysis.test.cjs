@@ -20,6 +20,14 @@ function shell(){
  const nodes=new Map();const get=id=>{if(!nodes.has(id))nodes.set(id,{value:'',hidden:true,children:[],addEventListener(name,fn){this[name]=fn;},removeAttribute(name){delete this[name];},replaceChildren(){this.children=[];this.value='';},append(node){this.children.push(node);if(!this.value)this.value=node.value;}});return nodes.get(id);};
  const loading=[],context={URLSearchParams,Event,KiCadAndroidLocal:local,document:{getElementById:get,createElement:()=>({})},dispatchEvent(){},KiCadAndroidUI:{loading:text=>loading.push(text)}};context.window=context;vm.runInNewContext(fs.readFileSync(require.resolve('../../android-app/web/index.js'),'utf8'),context);return{context,get,loading};
 }
+
+test('saved spatial view is an optional bounded hint in Android report navigation',async()=>{
+ const {context,get}=shell(),path='reports/quickpi.json';context.KiCadAndroidProject={id:'local',files:[{path,content:'{}'}]};
+ await context.KiCadAndroid.openAnalysis(path,undefined,{resultView:'3d'});
+ assert.equal(new URLSearchParams(get('viewer').src.split('?')[1]).get('resultView'),'3d');
+ await context.KiCadAndroid.openAnalysis(path,undefined,{resultView:'https://foreign.invalid'});
+ assert.equal(new URLSearchParams(get('viewer').src.split('?')[1]).has('resultView'),false);
+});
 test('native project Stop requires an explicit cancellable read and stale controls cannot stop a later load',()=>{
  const {context,get}=shell(),loading=[];let cancelled=0;
  context.AndroidKiCad={cancelProjectLoad(){cancelled++;}};context.KiCadAndroidUI.loading=(text,options)=>loading.push({text,options});

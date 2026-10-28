@@ -29,16 +29,17 @@
  function open(page,value={}){
   if(!PAGES.has(page))throw Error('Unsupported engineering viewer.');
   const source=context(value);
+  if(value.resultView!==undefined){if(page!=='analysis-viewer.html'||!['map','2d','3d'].includes(value.resultView))throw Error('Invalid saved result view.');source.resultView=value.resultView;}
   if(page==='analysis-viewer.html'&&(!source.repository||!source.ref||!source.file||!/\.(json|csv|tsv|wbk|raw|txt|html?)$/i.test(source.file)))throw Error('Choose a saved simulation or results report from the project tree.');
   let android;try{android=root.top?.KiCadAndroid;}catch{}
   if(android){
-   if(page==='analysis-viewer.html'&&android.openAnalysis)return android.openAnalysis(source.file,source.ref);
+   if(page==='analysis-viewer.html'&&android.openAnalysis)return source.resultView?android.openAnalysis(source.file,source.ref,{resultView:source.resultView}):android.openAnalysis(source.file,source.ref);
    if(android.openTools)return android.openTools(page,source.file||'',source.ref);
   }
   if(root.KiCadVSCodeContext){
    if(page!=='analysis-viewer.html')throw Error('Open these standalone engineering tools in the browser extension or Android app.');
    const drawing=root.KiCadVSCodeContext.drawingFile||new URLSearchParams(root.KiCadVSCodeContext.search||'').get('file');
-   return root.chrome.runtime.sendMessage({type:'open-analysis-viewer',repository:source.repository,ref:source.ref,file:drawing,path:source.file}).then(reply=>{if(!reply?.ok)throw Error(reply?.error||'Could not open the saved report.');return reply.result;});
+   return root.chrome.runtime.sendMessage({type:'open-analysis-viewer',repository:source.repository,ref:source.ref,file:drawing,path:source.file,...(source.resultView?{resultView:source.resultView}:{})}).then(reply=>{if(!reply?.ok)throw Error(reply?.error||'Could not open the saved report.');return reply.result;});
   }
   if(!root.chrome?.runtime?.getURL||typeof root.open!=='function')throw Error('Engineering tools require the installed extension or app.');
   const url=root.chrome.runtime.getURL(page)+(Object.keys(source).length?'?'+new URLSearchParams(source):'');

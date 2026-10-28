@@ -35,3 +35,11 @@ test('VS Code opens saved analysis through the scoped native host without extern
  await api.open('analysis-viewer.html',{repository:'local/repo',ref:'workspace',file:'reports/design.json'});
  assert.equal(messages[0].type,'open-analysis-viewer');assert.equal(messages[0].file,'board.kicad_pcb');assert.equal(messages[0].path,'reports/design.json');assert.equal(calls.length,0);
 });
+
+test('saved spatial view choice survives browser, Android and VS Code routing and rejects arbitrary values',async()=>{
+ const source={repository:'owner/repo',ref:'abc',file:'quickpi.json',resultView:'3d'};
+ const browser=host();assert.equal(new URL(browser.api.open('analysis-viewer.html',source)).searchParams.get('resultView'),'3d');
+ for(const resultView of ['https://evil.example',{},'3D'])assert.throws(()=>browser.api.open('analysis-viewer.html',{...source,resultView}),/Invalid saved result view/);
+ const delegated=[],android=host({KiCadAndroid:{openAnalysis:(...args)=>delegated.push(args)}});android.api.open('analysis-viewer.html',source);assert.equal(delegated[0][2].resultView,'3d');
+ const messages=[],native=host({KiCadVSCodeContext:{drawingFile:'board.kicad_pcb'},chrome:{runtime:{sendMessage:async m=>{messages.push(m);return{ok:true,result:{opened:true}};}}}});await native.api.open('analysis-viewer.html',source);assert.equal(messages[0].resultView,'3d');
+});

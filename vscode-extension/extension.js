@@ -461,11 +461,12 @@ async function openOverview(session){
 }
 async function openAnalysis(request,session){
   assertScope(request,session);
+  if(request.resultView!==undefined&&!['map','2d','3d'].includes(request.resultView))throw Error('Invalid saved result view.');
   if(typeof request.path!=='string'||!/\.(json|csv|tsv|wbk|raw|txt|html?)$/i.test(request.path))throw Error('Choose a supported saved analysis report.');
   await readProjectFile(request.path,session); // Enforce the existing workspace, symlink and byte boundaries.
   const panel=vscode.window.createWebviewPanel('kicadVisualReview.analysis','Results: '+request.path.split('/').at(-1),vscode.ViewColumn.Beside,{enableScripts:true,localResourceRoots:[vscode.Uri.joinPath(session.context.extensionUri,'media'),session.context.extensionUri]});
   const view=createSession(session.uri,{files:session.files,scope:session.scope,history:session.history},session.context);
-  view.analysisPath=request.path;view.closeAnalysis=()=>panel.dispose();view.closeForPolicy=()=>panel.dispose();view.post=message=>panel.webview.postMessage(message);
+  view.analysisPath=request.path;view.analysisResultView=request.resultView;view.closeAnalysis=()=>panel.dispose();view.closeForPolicy=()=>panel.dispose();view.post=message=>panel.webview.postMessage(message);
   const receiver=panel.webview.onDidReceiveMessage(message=>handleMessage(message,view,reply=>panel.webview.postMessage(reply)));
   panel.onDidDispose(()=>{view.disposed=true;liveSessions.delete(view);receiver.dispose();});
   try{panel.webview.html=await htmlFor(panel.webview,session.context,view);}catch(error){panel.dispose();throw error;}return{opened:true};
@@ -801,7 +802,7 @@ async function htmlFor(webview,context,session) {
   let html=new TextDecoder().decode(await vscode.workspace.fs.readFile(templateUri));
   const nonce=secret(),resource=(name)=>webview.asWebviewUri(vscode.Uri.joinPath(media,...name.split("/"))).toString();
   const collaboration=session.history?null:await remoteCollaboration.publicContext(session);
-  const contextData={...(collaboration?{collaboration}:{}),drawingFile:session.scope.rootFile,historical:!!session.history,canOpenHistorical:true,token:session.token,loadWorkerUrl:resource("load-worker-vscode.js"),stepWorkerUrl:resource("step-worker-vscode.js"),stepWasmUrl:resource("vendor/occt/occt-import-js.wasm"),search:new URLSearchParams({repository:session.scope.repository,ref:session.scope.ref,file:session.analysisPath||session.scope.rootFile}).toString()};
+  const contextData={...(collaboration?{collaboration}:{}),drawingFile:session.scope.rootFile,historical:!!session.history,canOpenHistorical:true,token:session.token,loadWorkerUrl:resource("load-worker-vscode.js"),stepWorkerUrl:resource("step-worker-vscode.js"),stepWasmUrl:resource("vendor/occt/occt-import-js.wasm"),search:new URLSearchParams({repository:session.scope.repository,ref:session.scope.ref,file:session.analysisPath||session.scope.rootFile,...(session.analysisResultView?{resultView:session.analysisResultView}:{})}).toString()};
   const bootstrap=JSON.stringify(contextData).replace(/</g,"\\u003c").replace(/\u2028/g,"\\u2028").replace(/\u2029/g,"\\u2029");
   const csp=`default-src 'none'; script-src 'nonce-${nonce}' ${webview.cspSource} 'wasm-unsafe-eval'; style-src ${webview.cspSource} 'unsafe-inline'; img-src ${webview.cspSource} data: blob: ${collaboration?(collaboration.provider==='github'?'https://github.com/user-attachments/':collaboration.host+'/'+collaboration.repository+'/uploads/ '+collaboration.host+'/-/project/') : ''}; font-src ${webview.cspSource}; connect-src ${resource('load-worker-vscode.js')} ${resource('step-worker-vscode.js')} ${resource('vendor/occt/occt-import-js.wasm')}; worker-src blob:; base-uri ${webview.cspSource}; frame-src ${resource('terms.html')};`;
   html=html.replace(/(src|href)="([^"#:]+)"/g,(match,attr,name)=>`${attr}="${escaped(resource(name))}"`);

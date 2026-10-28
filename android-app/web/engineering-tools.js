@@ -46,10 +46,10 @@
     root.KiCadAndroid.closeTools();return true;
    };
    const original=root.KiCadAndroid.openAnalysis;
-   root.KiCadAndroid.openAnalysis=(path,ref)=>{
+   root.KiCadAndroid.openAnalysis=(path,ref,options)=>{
     if(root.KiCadBomImport?.candidate(path))return root.KiCadAndroid.openTools('bom-viewer.html',path,ref);
     if(previous)root.KiCadAndroid.closeTools();
-    return original(path,ref);
+    return options===undefined?original(path,ref):original(path,ref,options);
    };
    const menu=d.querySelector('#appMenuDialog .android-sheet-content');
    for(const host of [welcome,menu])if(host){

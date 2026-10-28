@@ -4,6 +4,23 @@ In Pocket KiView, open **Project → Analysis & simulation**, then choose a save
 
 The viewer has Graphs, Data, Report and Source views. Select traces and linear/logarithmic axes for waveforms; point at a graph to read values. Thermal maps retain missing cells as gaps. Mechanical meshes can be rotated by dragging. Search Report for source hashes, assumptions, warnings, coverage and findings. Large property lists and tables load in batches.
 
+## Separate simulation sources
+
+The saved-report picker separates **KiCad / SPICE simulation**, **wayriCAD analysis**,
+and **Other / unclassified exports**. KiCad `.wbk` settings and ASCII `.raw` samples
+remain separate from wayriCAD PI, SI, thermal and mechanical reports. Generic CSV/JSON
+files remain unclassified unless a recognised producer contract or file path identifies
+their family; open these explicitly from Other or All. A family label is a browsing
+hint, not proof of origin or a match to the current design.
+
+wayriCAD entries offer **2D + probe** and **3D + probe** shortcuts. Saved spatial
+fields use the existing overlay, layer/time controls and A/B point probes; exports
+with only time/frequency samples remain graphs. Exact source-hash and coordinate
+checks still govern attachment to a PCB. Missing spatial fields, mechanical scalar
+values, or net identities are never inferred. Net waveform popups retain the source
+family label in both schematic/layout and 3D views. Viewing and probing saved results
+does not execute either KiCad or wayriCAD plugins or solvers.
+
 ## Inspect and compare saved results
 
 On a graph, select **Probe signal** for a waveform, then tap to inspect a saved sample. Choose **Mark A**, tap the first point, then **Mark B** and tap the second. The viewer retains both readouts and shows B minus A. Waveforms report the saved axis and signal name; thermal and PI fields show X/Y in millimetres, distance and the change in the saved field unit. **Clear probes** starts again. Changing plots, files or probe signals clears prior probes so unrelated results cannot be compared accidentally.

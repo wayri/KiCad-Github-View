@@ -3,6 +3,20 @@
  'use strict';
  const MAX_BYTES=64*1024*1024,MAX_ROWS=200000,MAX_FIELDS=4000,MAX_CELLS=4000000;
  const candidate=path=>/\.(wbk|raw|csv|tsv|html?|json|txt)$/i.test(path);
+ const familyLabels={kicad:'KiCad / SPICE simulation',wayricad:'wayriCAD analysis',other:'Other / unclassified exports'};
+ // Classification is a presentation hint, never proof of producer or source identity.
+ // Only source hashes and saved coordinate bindings authorize PCB overlay placement.
+ function family(path,report){
+  const source=report?.savedSource;
+  if(source&&typeof source==='object'&&!Array.isArray(source)){
+   const producer=['schema','generator','tool'].map(key=>typeof source[key]==='string'?source[key].slice(0,512):'').join(' ');
+   if(/(?:wayricad|quick[_. -]?(?:pi|si|therm)|mechanical[_. -]?check)/i.test(producer)||source.quick_therm||source.thermal_network||source.mesh?.triangles&&Array.isArray(source.result?.potential_V))return 'wayricad';
+  }
+  if(/\.(wbk|raw)$/i.test(path))return 'kicad';
+  if(/(?:^|[/_. -])(?:wayricad|quick[_. -]?(?:pi|si|therm)|mechanical[_. -]?check)(?:[/_. -]|$)/i.test(path))return 'wayricad';
+  // CSV alone cannot identify its producer; a user can open it explicitly.
+  return 'other';
+ }
  const numeric=value=>typeof value==='number'?Number.isFinite(value)?value:null:typeof value==='string'&&/^[+-]?(?:\d+\.?\d*|\.\d+)(?:[eE][+-]?\d+)?$/.test(value.trim())?(Number.isFinite(Number(value))?Number(value):null):null;
  function delimited(text,separator){
   const rows=[];let row=[],value='',quoted=false,cells=0;
@@ -201,7 +215,8 @@
   else if(/\.html?$/i.test(path))result={kind:'Saved HTML report',fields:[],tables:[],plots:[],warnings:['Report scripts and external resources are never executed.'],html:content};
   else if(/\.txt$/i.test(path))result={kind:'Saved text report',fields:[{path:'Report text',value:content.slice(0,512000)}],tables:[],plots:[],warnings:[]};
   else throw Error('Open a JSON report, KiCad .wbk, CSV/TSV export, HTML report or ASCII SPICE .raw file.');
-  return {...result,path,title:path.split('/').at(-1)};
+  const sourceFamily=family(path,result);
+  return {...result,path,title:path.split('/').at(-1),family:sourceFamily,familyLabel:familyLabels[sourceFamily]};
  }
  // Probe saved samples only. Waveforms use nearest samples; nodal mesh fields
  // interpolate within the saved triangle, never across missing nodes or holes.
@@ -238,5 +253,5 @@
   if(!a||!b||a.name!==b.name||a.unit!==b.unit||a.axis!==b.axis)return null;
   return {dx:b.x-a.x,...(Number.isFinite(a.y)&&Number.isFinite(b.y)?{dy:b.y-a.y,distance:Math.hypot(b.x-a.x,b.y-a.y)}:{}),delta:a.value===null||b.value===null?null:b.value-a.value};
  }
- const API={parse,candidate,numeric,delimited,tablePlot,cellBounds,frameValues,probe,probeDifference,MAX_BYTES};root.KiCadAnalysisData=API;if(typeof module==='object'&&module.exports)module.exports=API;
+ const API={parse,candidate,family,familyLabels,numeric,delimited,tablePlot,cellBounds,frameValues,probe,probeDifference,MAX_BYTES};root.KiCadAnalysisData=API;if(typeof module==='object'&&module.exports)module.exports=API;
 })(globalThis);
