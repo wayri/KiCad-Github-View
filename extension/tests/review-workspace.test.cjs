@@ -1306,3 +1306,27 @@ test('3D comment Locate focuses the saved source point and refreshes its marker 
  const anchor={...chat.options.getScope(),kind:'net',netName:'SIGNAL',position:{x:30,y:40}};assert.equal(chat.options.onLocate(anchor),true);assert.deepEqual(JSON.parse(JSON.stringify(calls[0])),{position:{x:30,y:40},options:{bounds:null,side:'front'}});
  const ring=view.get('drawingHost').querySelector('.comment-focus-ring');assert.equal(ring.style.left,'195px');projected={x:210,y:280};view.workspace.sceneViewChanged();assert.equal(ring.style.left,'210px');assert.equal(ring.style.top,'280px');view.workspace.dispose();
 });
+
+
+test('DRC notes show saved descriptions and exclusion comments as literal text, with independent hide controls',async()=>{
+ const view=workspaceRuntime(undefined,{navigation:true,width:390,android:true});view.load();view.get('viewRuleChecks').click();
+ const finding={type:'clearance',description:'Clearance <img src=x onerror=alert(1)>',severity:'warning',excluded:true,comment:'Reviewed spacing exception',items:[{description:'Track on F.Cu',pos:{x:30,y:40}}]};
+ const report={source:'board.kicad_pcb',date:'2026-10-29T00:00:00Z',kicad_version:'10.0',coordinate_units:'mm',violations:[finding]};
+ view.get('ruleReportFile').files=[{size:600,name:'check.json',text:async()=>JSON.stringify(report)}];await view.get('ruleReportFile').onchange();view.get('showExcludedRules').checked=true;view.get('showExcludedRules').oninput();view.get('nextRule').click();
+ const notes=()=>view.get('commentPins').children.filter(n=>n.className==='rule-location-note');assert.equal(notes().length,1);assert.match(notes()[0].textContent,/Reviewed spacing exception/);assert.match(notes()[0].textContent,/<img src=x/);assert.equal(notes()[0].querySelector('img'),null);assert.match(notes()[0].textContent,/revision unverified/);assert.equal(view.get('ruleWindow').hidden,true);
+ view.get('showRuleNotes').checked=false;view.get('showRuleNotes').onchange();assert.equal(notes().length,0);assert.ok(view.get('commentPins').children.some(n=>n.className.includes('rule-marker')));
+ view.get('showRuleNotes').checked=true;view.get('showRuleNotes').onchange();assert.equal(notes().length,1);notes()[0].querySelector('button').click();assert.equal(notes().length,0);view.get('nextRule').click();assert.equal(notes().length,1);view.get('clearRuleReports').click();assert.equal(notes().length,0);view.workspace.dispose();
+});
+
+test('ERC on-canvas notes require a resolved sheet association and retain explicit report coordinates',async()=>{
+ const focused=[],view=workspaceRuntime(undefined,{navigation:true,pcb:false,files:[{path:'root.kicad_sch',content:'(kicad_sch (version 20250114))'}],focus:p=>focused.push(p)});view.load();
+ const report={source:'root.kicad_sch',date:'2026-10-29T00:00:00Z',kicad_version:'10.0',coordinate_units:'mils',sheets:[{path:'/Power/',uuid_path:'/aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee',violations:[{type:'pin_not_connected',description:'Input pin is unconnected',severity:'error',items:[{description:'Pin 1',pos:{x:1000,y:2000}}]}]}]};
+ view.get('ruleReportFile').files=[{size:600,name:'erc.json',text:async()=>JSON.stringify(report)}];await view.get('ruleReportFile').onchange();view.get('nextRule').click();assert.equal(focused.length,0);assert.equal(view.get('commentPins').children.filter(n=>n.className==='rule-location-note').length,0);
+ const mapping=view.get('reportSheetMappings').children[0].querySelector('select');mapping.value='root.kicad_sch';mapping.onchange();view.get('nextRule').click();assert.deepEqual(focused[0],{x:25.4,y:50.8});assert.match(view.get('commentPins').children.find(n=>n.className==='rule-location-note').textContent,/ERC.*Input pin is unconnected/);view.workspace.dispose();
+});
+
+test('next affected item keeps a selected marker and note beyond the first twenty report items',async()=>{
+ const view=workspaceRuntime(undefined,{navigation:true});view.load();const items=Array.from({length:25},(_,i)=>({description:'Affected '+i,pos:{x:i,y:40}})),report={source:'board.kicad_pcb',date:'2026-10-29T00:00:00Z',kicad_version:'10.0',coordinate_units:'mm',violations:[{type:'clearance',description:'Review connected geometry',severity:'error',items}]};
+ view.get('ruleReportFile').files=[{size:2000,name:'drc.json',text:async()=>JSON.stringify(report)}];await view.get('ruleReportFile').onchange();view.get('nextRule').click();for(let i=0;i<24;i++)view.get('nextRuleItem').click();
+ const active=view.get('commentPins').children.filter(n=>n.className==='pin rule-marker active');assert.equal(active.length,1);assert.match(active[0].attributes['aria-label'],/Affected 24/);assert.match(view.get('commentPins').children.find(n=>n.className==='rule-location-note').textContent,/Affected 24/);assert.ok(view.get('commentPins').children.filter(n=>n.className.includes('rule-marker')).length<=20);view.workspace.dispose();
+});
