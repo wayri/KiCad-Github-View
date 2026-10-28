@@ -9,6 +9,7 @@
 Explore schematics and PCB layouts, follow nets, measure geometry, work through a BoM and carry review notes between devices. Use the Chromium extension, VS Code, or an Android phone/tablet. Ordinary viewing needs no KiCad installation or rendering server.
 
 [![CI](https://github.com/wayri/KiCad-Github-View/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/wayri/KiCad-Github-View/actions/workflows/ci.yml)
+[![Release asset downloads](https://img.shields.io/github/downloads/wayri/KiCad-Github-View/total?label=release%20downloads&color=2ea44f)](docs/DOWNLOAD-STATS.md)
 [![Status](https://img.shields.io/badge/status-preview-orange)](#downloads)
 [![License](https://img.shields.io/badge/license-source--available-blue)](LICENSE)
 [![Desktop](https://img.shields.io/badge/desktop-Windows%20%7C%20Linux%20%7C%20macOS-555)](docs/INSTALL.md)
@@ -17,6 +18,8 @@ Explore schematics and PCB layouts, follow nets, measure geometry, work through 
 [Illustrated user guide](USER-GUIDE.md) | [Installation](docs/INSTALL.md) | [Release notes](https://github.com/wayri/KiCad-Github-View/releases) | [Report an issue](https://github.com/wayri/KiCad-Github-View/issues) | [Contact support](mailto:support@sigharmonic.com)
 
 ## Downloads
+
+The live counter above totals GitHub release-asset downloads, including downloads initiated by KiCad PCM **when its package URL points to a GitHub release asset in this repository**. GitHub does not expose a browser-versus-PCM breakdown or unique install count. No PCM package/repository is currently configured here, and downloads hosted elsewhere are not included. [What the counter measures](docs/DOWNLOAD-STATS.md).
 
 [![Download Android APK](https://img.shields.io/badge/Android-Download%20APK%201.66-3DDC84?logo=android&logoColor=white)](https://github.com/wayri/KiCad-Github-View/releases/download/v0.12.64/pocket-kivi-android-phone-tablet-1.66-development.apk)
 [![Download Chromium extension](https://img.shields.io/badge/Chrome%20%2F%20Chromium-Download%20ZIP-4285F4?logo=googlechrome&logoColor=white)](https://github.com/wayri/KiCad-Github-View/releases/download/v0.12.64/kicad-visual-review-chrome-edge-brave-opera-vivaldi-chromium-0.12.64.zip)
