@@ -47,6 +47,8 @@ final class GitLabOAuthConfig {
         return Collections.unmodifiableMap(result);
     }
 
+    static String requestClientId(JSONObject request) { return request.optString("clientId", ""); }
+
     private static boolean validOrigin(String host) {
         try {
             if(host==null||host.length()>300)return false;URI uri=new URI(host);

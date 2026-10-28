@@ -707,7 +707,7 @@ public final class MainActivity extends Activity {
                         try (NativeChatScope.Scope chatLease=chatScoped?NativeChatScope.enter(chatGuard):null) {
                             JSONObject result;
                             if (action.equals("oauth-start")) {
-                                result = gitlab.startOAuth(host, request.getString("clientId"), epoch);
+                                result = gitlab.startOAuth(host, GitLabOAuthConfig.requestClientId(request), epoch);
                                 final String uri = result.getString("authorizationUri");
                                 runOnUiThread(() -> { if (gitlab.current(epoch) && !destroyed) openBrowser(Uri.parse(uri)); });
                                 result = new JSONObject().put("pending", true);

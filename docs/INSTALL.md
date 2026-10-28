@@ -1,12 +1,12 @@
 # Install Pocket KiView
 
-Current GitHub preview: extension 0.12.65 and Android 1.67. Download the packages below; store availability is separate from GitHub release availability.
+Current GitHub preview: extension 0.12.66 and Android 1.68. Download the packages below; store availability is separate from GitHub release availability.
 
 Choose a prepared package from the [README download buttons](../README.md#downloads) or [GitHub Releases](https://github.com/wayri/KiCad-Github-View/releases). GitHub's automatic **Source code** archives are source checkouts, not installable extensions. The source repository and release downloads are public.
 
 The browser and VS Code editions run on Windows, Linux and macOS. There is no standalone Windows `.exe`, Linux `.deb`/AppImage or macOS `.dmg` installer in the published release. Ordinary viewing does not require KiCad, Python or a rendering server. The optional local Python launcher has separate requirements.
 
-Current release assets: `kicad-visual-review-chrome-edge-brave-opera-vivaldi-chromium-0.12.65.zip`, `kicad-visual-review-firefox-0.12.65.zip`, `kicad-visual-review-vscode-0.12.65.vsix`, and `pocket-kivi-android-phone-tablet-1.67-development.apk`.
+Current release assets: `kicad-visual-review-chrome-edge-brave-opera-vivaldi-chromium-0.12.66.zip`, `kicad-visual-review-firefox-0.12.66.zip`, `kicad-visual-review-vscode-0.12.66.vsix`, and `pocket-kivi-android-phone-tablet-1.68-development.apk`.
 
 ## Choose your platform
 
@@ -35,7 +35,7 @@ code --install-extension wayri.kicad-visual-review
 For a downloaded VSIX, replace the filename with the actual package:
 
 ```sh
-code --install-extension ./kicad-visual-review-vscode-0.12.65.vsix
+code --install-extension ./kicad-visual-review-vscode-0.12.66.vsix
 ```
 
 On macOS, VS Code's **Shell Command: Install 'code' command in PATH** enables this optional terminal route. The Extensions UI does not need it.
@@ -72,7 +72,7 @@ For online projects, open a normal repository file page for `.kicad_sch` or `.ki
 
 ## Firefox and derivatives — Windows, Linux and macOS
 
-1. Download the [Firefox 0.12.65 ZIP](https://github.com/wayri/KiCad-Github-View/releases/download/v0.12.65/kicad-visual-review-firefox-0.12.65.zip), verify its checksum and extract it.
+1. Download the [Firefox 0.12.66 ZIP](https://github.com/wayri/KiCad-Github-View/releases/download/v0.12.66/kicad-visual-review-firefox-0.12.66.zip), verify its checksum and extract it.
 2. In desktop Firefox 128+, open `about:debugging#/runtime/this-firefox`, choose **Load Temporary Add-on**, and select the extracted `manifest.json`.
 3. Click the extension icon for local files/folders, or refresh a GitHub/GitLab design page. Preferences/Options contains optional provider accounts and approved servers.
 4. To update, reload its `about:debugging` card after replacing the extracted files and refresh design tabs. Load it again after restarting Firefox.
@@ -94,7 +94,7 @@ Safari cannot load the Chromium ZIP as a normal extension. The Safari developmen
 3. Open **Pocket KiView**. Import a project folder/ZIP through the app's file picker, or browse a supported repository.
 4. Updates are manual: download and install the newer APK over the existing app when its package and signing identity match.
 
-The current GitHub 1.67 APK is a **development-signed preview**. It is not a Play Store release. Development and future distribution/Play signing identities may differ. If Android reports a signature conflict, preserve/export projects and review state before deciding how to migrate; do not immediately uninstall or clear app data. Installing an older version over a newer version may also be rejected.
+The current GitHub 1.68 APK is a **development-signed preview**. It is not a Play Store release. Development and future distribution/Play signing identities may differ. If Android reports a signature conflict, preserve/export projects and review state before deciding how to migrate; do not immediately uninstall or clear app data. Installing an older version over a newer version may also be rejected.
 
 Android Chrome does not provide the desktop **Load unpacked** workflow. Use the Android app rather than trying to install the desktop extension in mobile Chrome.
 

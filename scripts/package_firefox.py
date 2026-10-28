@@ -12,6 +12,14 @@ import zipfile
 ROOT = Path(__file__).resolve().parents[1]
 SHIM = 'firefox/browser-api.js'
 ADDON_ID = 'kicad-visual-review@wayri.github.io'
+# Provider repository requests, optional account authentication, and explicit
+# review publication transmit these categories outside the local browser.
+# Required install consent covers the existing provider features; no optional
+# data permission is declared without a corresponding runtime consent gate.
+DATA_COLLECTION_TYPES = (
+    'authenticationInfo', 'browsingActivity', 'personalCommunications',
+    'personallyIdentifyingInfo', 'websiteActivity', 'websiteContent',
+)
 
 
 def chrome_builder():
@@ -69,7 +77,11 @@ def payload(root: Path = ROOT) -> dict[str, bytes]:
     files.discard('html-sandbox.html')
     files.discard('html-sandbox.js')
     manifest['background'] = {'scripts': [SHIM, *dependencies, worker]}
-    manifest['browser_specific_settings'] = {'gecko': {'id': ADDON_ID, 'strict_min_version': '128.0'}}
+    manifest['browser_specific_settings'] = {'gecko': {
+        'id': ADDON_ID,
+        'strict_min_version': '140.0',
+        'data_collection_permissions': {'required': list(DATA_COLLECTION_TYPES)},
+    }}
     manifest.pop('sandbox', None)
     manifest['permissions'] = [permission for permission in manifest['permissions'] if permission != 'offscreen']
     manifest['content_security_policy'].pop('sandbox', None)

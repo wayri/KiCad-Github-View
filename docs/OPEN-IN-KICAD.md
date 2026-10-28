@@ -16,7 +16,7 @@ the helper does not bypass those policies.
 
 Requirements: Python 3.10 or newer, an installed KiCad distribution containing
 `kicad.exe`, `eeschema.exe` and `pcbnew.exe` together, and the Pocket KiVi extension.
-Use a trusted checkout or source archive of this project. From its root, run:
+Download and extract the [Windows helper source ZIP](https://github.com/wayri/KiCad-Github-View/releases/download/v0.12.66/pocket-kivi-windows-kicad-helper-0.12.66.zip), or use a trusted checkout of this project. From its root, run:
 
 ```powershell
 python scripts/install_native_host.py --chrome-id YOUR_CHROME_EXTENSION_ID --kicad 'C:\Program Files\KiCad\9.0\bin\kicad.exe'

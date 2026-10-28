@@ -23,7 +23,7 @@ class PackageFirefoxTests(unittest.TestCase):
                 manifest = json.loads(archive.read('manifest.json'))
                 self.assertNotIn('service_worker', manifest['background'])
                 self.assertNotIn('sandbox', manifest)
-                self.assertEqual(manifest['browser_specific_settings']['gecko']['strict_min_version'], '128.0')
+                self.assertEqual(manifest['browser_specific_settings']['gecko']['strict_min_version'], '140.0')
                 for name in manifest['background']['scripts']:
                     self.assertIn(name, archive.namelist())
                 for entry in manifest['content_scripts']:
@@ -35,6 +35,15 @@ class PackageFirefoxTests(unittest.TestCase):
                 for name in archive.namelist():
                     if name.endswith('.html'):
                         self.assertIn(f'<script src="{builder.SHIM}"></script>'.encode(), archive.read(name))
+
+    def test_provider_data_consent_is_explicit_and_has_no_ungated_optional_types(self):
+        gecko = json.loads(builder.payload()['manifest.json'])['browser_specific_settings']['gecko']
+        self.assertEqual(gecko['id'], 'kicad-visual-review@wayri.github.io')
+        self.assertEqual(gecko['data_collection_permissions'], {'required': [
+            'authenticationInfo', 'browsingActivity', 'personalCommunications',
+            'personallyIdentifyingInfo', 'websiteActivity', 'websiteContent',
+        ]})
+        self.assertGreaterEqual(int(gecko['strict_min_version'].split('.')[0]), 140)
 
     def test_repository_html_cannot_execute_and_shared_source_is_unchanged(self):
         original = (ROOT / 'extension/project-viewer.js').read_bytes()

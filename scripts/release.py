@@ -249,6 +249,28 @@ def package_android(output: Path, root: Path = ROOT):
             'reproducibility': 'Build instructions and exact source commit recorded; signed binary bytes may differ between builds.'}
 
 
+def package_native_helper(output: Path, version: str):
+    """Explicit source-only Windows helper; no local registration or signing data."""
+    sources = {'kicad_vizdiff/__init__.py': 'kicad_vizdiff/__init__.py',
+               'kicad_vizdiff/native_host.py': 'kicad_vizdiff/native_host.py',
+               'scripts/install_native_host.py': 'scripts/install_native_host.py',
+               'README.md': 'docs/OPEN-IN-KICAD.md', 'LICENSE': 'LICENSE'}
+    path = output / f'pocket-kivi-windows-kicad-helper-{version}.zip'
+    with zipfile.ZipFile(path, 'w', zipfile.ZIP_DEFLATED) as archive:
+        for target, source in sorted(sources.items()):
+            info = zipfile.ZipInfo('pocket-kivi-native-helper/' + target, (2020, 1, 1, 0, 0, 0))
+            info.compress_type = zipfile.ZIP_DEFLATED
+            info.external_attr = 0o100644 << 16
+            archive.writestr(info, (ROOT / source).read_bytes())
+    with zipfile.ZipFile(path) as archive:
+        if len(archive.namelist()) != len(sources):
+            raise ValueError('Desktop helper inventory mismatch.')
+        for target, source in sources.items():
+            if archive.read('pocket-kivi-native-helper/' + target) != (ROOT / source).read_bytes():
+                raise ValueError('Desktop helper source mismatch.')
+    return len(sources)
+
+
 def build(output: Path, tag: str | None = None, android: bool = False):
     version = versions(tag=tag)
     commit = source_commit(tag=tag)
@@ -258,7 +280,7 @@ def build(output: Path, tag: str | None = None, android: bool = False):
         browser_files = set(browser.FILES) | set(browser.LEGAL_FILES) | set(manifest['icons'].values()) | {'manifest.json', manifest['background']['service_worker']}
         for entry in manifest['content_scripts']:
             browser_files.update(entry['js'])
-        required = {f'extension/{name}' for name in browser_files | set(native.ASSETS)} | {f'vscode-extension/{name}' for name in native.HOST_FILES}
+        required = {'kicad_vizdiff/native_host.py', 'scripts/install_native_host.py', 'docs/OPEN-IN-KICAD.md'} | {f'extension/{name}' for name in browser_files | set(native.ASSETS)} | {f'vscode-extension/{name}' for name in native.HOST_FILES}
         if android:
             # The source ZIP deliberately includes generated viewer copies. Their
             # inputs are covered by the browser assets and tracked Android web files.
@@ -269,7 +291,7 @@ def build(output: Path, tag: str | None = None, android: bool = False):
         raise ValueError("Release output must not follow symbolic links.")
     output = output.resolve()
     # Refuse any unknown/stale files so the publisher's wildcard cannot upload extras.
-    names = {f'kicad-visual-review-chrome-edge-brave-opera-vivaldi-chromium-{version}.zip', f'kicad-visual-review-vscode-{version}.vsix',
+    names = {f'pocket-kivi-windows-kicad-helper-{version}.zip', f'kicad-visual-review-chrome-edge-brave-opera-vivaldi-chromium-{version}.zip', f'kicad-visual-review-vscode-{version}.vsix',
              f'kicad-visual-review-firefox-{version}.zip', f'kicad-visual-review-safari-{version}.zip',
              f'kicad-visual-review-guides-{version}.zip', 'FIREFOX.md', 'SAFARI.md',
              f'kicad-visual-review-app-web-{version}.zip', f'kicad-visual-review-github-app-{version}.zip',
@@ -284,6 +306,7 @@ def build(output: Path, tag: str | None = None, android: bool = False):
     chrome = module('package_extension').package(output=output / f'kicad-visual-review-chrome-edge-brave-opera-vivaldi-chromium-{version}.zip')
     native = module('package_vscode').package(output=output / f'kicad-visual-review-vscode-{version}.vsix')
     evidence = audit_packages(chrome, native)
+    evidence['windowsNativeHelperSourceFiles'] = package_native_helper(output, version)
     local_builder = module('package_local_viewer')
     local_path = local_builder.package(output=output / f'pocket-kiview-local-preview-{version}.zip')
     with zipfile.ZipFile(local_path) as archive:

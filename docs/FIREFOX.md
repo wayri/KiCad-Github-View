@@ -1,8 +1,8 @@
 # Firefox and Mozilla-based browsers
 
-The Firefox package is an unsigned Manifest V3 WebExtension for **Firefox desktop 128 or later**. It shares the owned schematic, PCB, project, comparison and 3D renderers with the Chromium extension. Packaging and event-page behavior are tested; an installed Firefox session has not yet been visually verified. Android Firefox is not a verified target.
+The Firefox package is an unsigned Manifest V3 WebExtension for **Firefox desktop 140 or later**. It shares the owned schematic, PCB, project, comparison and 3D renderers with the Chromium extension. Packaging and event-page behavior are tested; an installed Firefox session has not yet been visually verified. Android Firefox is not a verified target.
 
-Current preview: [Firefox 0.12.64 ZIP](https://github.com/wayri/KiCad-Github-View/releases/download/v0.12.64/kicad-visual-review-firefox-0.12.64.zip). Verify the release's `SHA256SUMS.txt` as described in [download verification](INSTALL.md#verify-downloads). Use this Firefox-specific artifact, not the Chromium ZIP or automatic source archive.
+Current preview: [Firefox 0.12.66 ZIP](https://github.com/wayri/KiCad-Github-View/releases/download/v0.12.66/kicad-visual-review-firefox-0.12.66.zip). Verify the release's `SHA256SUMS.txt` as described in [download verification](INSTALL.md#verify-downloads). Use this Firefox-specific artifact, not the Chromium ZIP or automatic source archive.
 
 | Goal | Available route |
 | --- | --- |
@@ -36,7 +36,7 @@ Renaming an unsigned ZIP to `.xpi` does not sign it. Keep signature checks and o
 
 ## Firefox derivatives
 
-Install separately in each browser/profile. Check the underlying Gecko/API compatibility, not just the browser's marketing version. This package declares a Gecko minimum of 128.0; that does not establish acceptance in any derivative.
+Install separately in each browser/profile. Check the underlying Gecko/API compatibility, not just the browser's marketing version. This package declares a Gecko minimum of 140.0; that does not establish acceptance in any derivative.
 
 | Browser | Route and limits |
 | --- | --- |
@@ -56,7 +56,7 @@ After a mobile-compatible extension has been tested and signed, Mozilla supports
 
 ## Publish to Mozilla Add-ons or distribute a signed XPI
 
-**Current publishing blocker:** the 0.12.64 Firefox manifest includes the add-on ID and desktop minimum version but lacks `browser_specific_settings.gecko.data_collection_permissions`. New AMO submissions since 3 November 2025 must declare data collection/transmission. Review actual repository/account/comment transfers and implement the appropriate declarations and consent behavior, including older-version behavior if retained, before rebuilding a new version. Do not set `none` merely because rendering happens locally. See [Mozilla's consent requirements](https://extensionworkshop.com/documentation/develop/firefox-builtin-data-consent/). These instructions do not modify the immutable 0.12.64 package.
+**Data consent:** new packages require Firefox desktop 140 or later, which supplies Mozilla's built-in installation consent. The generated Firefox manifest declares required `authenticationInfo` (provider account credentials/usernames), `browsingActivity` (repository URLs), `personalCommunications` (issue/discussion messages), `personallyIdentifyingInfo` (author/account names and contact fields), `websiteActivity` (provider actions such as posting and downloading), and `websiteContent` (repository files and review content). These declarations cover existing provider transfers; they do not enable analytics or automatically post reviews. Account connection and publication still require user actions. No technical/interaction telemetry or ungated optional data permission is declared. Users who decline installation consent can cancel installation; Firefox 139 and earlier cannot install this package. See [Mozilla's consent requirements](https://extensionworkshop.com/documentation/develop/firefox-builtin-data-consent/). Earlier immutable release archives retain their original manifests and are not made submission-ready by this documentation.
 
 1. Sign in at the [AMO Developer Hub](https://addons.mozilla.org/developers/); the owner completes any account/agreement requirements.
 2. Preserve the add-on ID **`kicad-visual-review@wayri.github.io`**. Update an existing AMO item instead of creating a duplicate.
