@@ -88,7 +88,7 @@ export function padSourceDetails(ast){
    if(typeof id!=='string'||!id||id.length>128)continue;
    if(seen.has(id)){result.delete(id);continue;}seen.add(id);
    const ratio=child(pad,'roundrect_rratio')?.[1],drill=child(pad,'drill');
-   const record={type:'Pad',uuid:id,ownerUuid:value(child(footprint,'uuid')?.[1]??child(footprint,'tstamp')?.[1]),pinNumber:String(value(pad[1])??''),pinName:String(value(child(pad,'pinfunction')?.[1])??'')};if(typeof ratio==='number')record.roundrectRatio=ratio;
+   const record={type:'Pad',nativeType:String(value(pad[2])||''),uuid:id,ownerUuid:value(child(footprint,'uuid')?.[1]??child(footprint,'tstamp')?.[1]),pinNumber:String(value(pad[1])??''),pinName:String(value(child(pad,'pinfunction')?.[1])??'')};if(typeof ratio==='number')record.roundrectRatio=ratio;
    if(drill){const oval=value(drill[1])==='oval';record.drillShape=oval?'oval':'circle';record.drillWidth=drill[oval?2:1];record.drillHeight=oval?drill[3]:record.drillWidth;const offset=child(drill,'offset');if(offset)record.drillOffset=[offset[1],offset[2]];}
    result.set(id,record);if(result.size>=200000)return result;
   }

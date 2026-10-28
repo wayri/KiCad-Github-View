@@ -1,0 +1,11 @@
+# Full-net 3D inspection
+
+Choose a net in a schematic, PCB or the 3D net selection mode. The 3D viewer shows saved copper on every supported copper layer, including layers hidden by ordinary display filters. Open **Display → Full net 3D** to switch this inspection mode off. It is enabled by default. Its translucent grey context takes precedence over the ordinary dim-context setting while a net is selected. It never changes the saved design, camera or layer visibility preferences.
+
+Tracks and arcs, pad copper, filled-zone polygons, via barrels and plated through-hole pad transitions retain their saved net identity and XY coordinates. Filled polygons are translucent so they do not hide routing on other selected layers. Unfilled zones appear only as boundaries. Missing routes, missing fills and airwire connectivity are not synthesized.
+
+Complete saved stackups determine copper center elevations, including unequal dielectric thicknesses. Otherwise layer depths and missing foil thicknesses are estimates identified in Display notes. Barrel plating wall thickness is an illustrative 25 µm; native drill dimensions and explicit via endpoint spans are retained. Unsupported/ambiguous via spans are omitted instead of being stretched through the whole board. NPTH pads never receive a plated barrel. Unknown pad native types cannot establish plating. Unused-layer annulus trimming is not independently evaluated.
+
+The overlay has a 200,000 selected-primitive intake limit, 512 unique shape/fill batches and at most 64 copper layers. Source zone polygon/point limits also apply. Omissions and estimated geometry are disclosed; a limited view is not evidence of complete fabrication copper. The separate 2,000 bounding-box limit does not truncate net copper. Clearing or changing selection restores original scene materials and releases owned GPU buffers.
+
+The feature uses the same generated shared renderer in browser extensions, VS Code, the standalone viewer and Android. Synthetic fixture: `extension/tests/fixtures/net3d/inspection.kicad_pcb`. Tests cover asymmetric depths, blind/buried/microvias, plated pads versus NPTH, exact net identity, internal fills, geometry budgets, disposal and reversible translucency.

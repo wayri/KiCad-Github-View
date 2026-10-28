@@ -23,3 +23,9 @@ test('source polygon and point budgets disclose omitted geometry',()=>{
  const result=sourceZoneGeometry(ast,1,3);assert.equal(result.records.length,1);assert.equal(result.truncated,true);
  assert.equal(sourceZoneGeometry(ast,100,2).records.length,0);
 });
+
+
+test('internal saved fills and boundaries retain their source layer and exact net identity',()=>{
+ const ast=parse(`(kicad_pcb (net 1 "GND") (zone (uuid "inner") (net 1) (layers "In1.Cu" "In2.Cu") (filled_polygon (layer "In1.Cu") ${triangle})) (zone (uuid "outline") (net 1) (layer "In2.Cu") (polygon ${triangle})))`);
+ const result=sourceZoneGeometry(ast);assert.deepEqual(result.records.map(r=>[r.layer,r.net,r.filled]),[['In1.Cu','GND',true],['In2.Cu','GND',false]]);
+});

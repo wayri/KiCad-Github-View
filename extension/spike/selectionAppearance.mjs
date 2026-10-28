@@ -1,6 +1,6 @@
 /** Reversible selection display. Geometry, visibility and source materials are retained. */
 export function createSelectionAppearance(THREE, objects) {
-  const saved=new Map();
+  const saved=new Map();let translucentMode=false;
   const list=value=>Array.isArray(value)?value:[value];
   function restore(){for(const [object,state]of saved){object.material=state.material;if(object.isInstancedMesh){if(object.instanceColor!==state.instanceColor)object.dispose?.();object.instanceColor=state.instanceColor;}for(const material of state.owned)material.dispose();}saved.clear();}
   function capture(object){
@@ -12,11 +12,17 @@ export function createSelectionAppearance(THREE, objects) {
     material.onBeforeCompile=(shader,renderer)=>{originalCompile?.call(material,shader,renderer);shader.fragmentShader=shader.fragmentShader.replace('#include <opaque_fragment>','outgoingLight = vec3(dot(outgoingLight, vec3(0.2126, 0.7152, 0.0722))) * 0.60;\n#include <opaque_fragment>');};
     material.customProgramCacheKey=()=>source.customProgramCacheKey()+':selection-grey';state.owned.push(material);return material;
   }
-  function update(matches,enabled){
-    if(!enabled){restore();return;}
+  function ghostMaterials(state){
+    if(!state.ghost)state.ghost=list(state.material).map(source=>{const material=dimMaterial(source,state);material.transparent=true;material.opacity=Math.min(Number.isFinite(source.opacity)?source.opacity:1,.14);material.depthWrite=false;return material;});
+    return Array.isArray(state.material)?state.ghost:state.ghost[0];
+  }
+  function update(matches,enabled,{translucent=false}={}){
+    if(!enabled){restore();translucentMode=false;return;}
+    if(translucentMode!==translucent){restore();translucentMode=translucent;}
     for(const object of objects()){
       if(!object.material)continue;
       const state=capture(object),records=object.userData.records;
+      if(translucent){object.material=ghostMaterials(state);if(object.isInstancedMesh&&object.instanceColor!==state.instanceColor){object.dispose?.();object.instanceColor=state.instanceColor;}continue;}
       if(object.isInstancedMesh&&records){
         if(!state.white){state.white=list(state.material).map(source=>{const material=source.clone();material.color?.setHex(0xffffff);state.owned.push(material);return material;});object.instanceColor=state.instanceColor?.clone()||null;}
         object.material=Array.isArray(state.material)?state.white:state.white[0];

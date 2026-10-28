@@ -1,14 +1,19 @@
-/** Match saved geometry identities without treating net zero as a connected net. */
-export function selectionMatcher(selection = {}, board = {}) {
-  const strings = values => new Set(Array.isArray(values) ? values.filter(v => typeof v === 'string' && v) : []);
-  const references = strings(selection.references), uuids = strings(selection.uuids);
-  const nets = strings(selection.netNames);
+export function selectionNetNames(selection = {}, board = {}) {
+  const nets = new Set(Array.isArray(selection.netNames) ? selection.netNames.filter(value => typeof value === 'string' && value) : []);
   for (const code of Array.isArray(selection.netCodes) ? selection.netCodes : []) {
     if (code === 0 || code === '0' || code == null || code === '') continue;
     const name = board.nets?.[String(code)];
     if (name) nets.add(name);
     else if (typeof code === 'string' && !/^\d+$/.test(code)) nets.add(code);
   }
+  return nets;
+}
+
+/** Match saved geometry identities without treating net zero as a connected net. */
+export function selectionMatcher(selection = {}, board = {}) {
+  const strings = values => new Set(Array.isArray(values) ? values.filter(v => typeof v === 'string' && v) : []);
+  const references = strings(selection.references), uuids = strings(selection.uuids);
+  const nets = selectionNetNames(selection, board);
   // A selected net includes the bodies of parts whose saved pads belong to it.
   const connectedParts = new Set();
   for (const pad of board.pads || []) if (nets.has(pad.net) && pad.ref) connectedParts.add(pad.ref);

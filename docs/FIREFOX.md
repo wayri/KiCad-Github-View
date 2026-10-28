@@ -2,7 +2,7 @@
 
 The Firefox package is an unsigned Manifest V3 WebExtension for **Firefox desktop 140 or later**. It shares the owned schematic, PCB, project, comparison and 3D renderers with the Chromium extension. Packaging and event-page behavior are tested; an installed Firefox session has not yet been visually verified. Android Firefox is not a verified target.
 
-Current preview: [Firefox 0.12.67 ZIP](https://github.com/wayri/KiCad-Github-View/releases/download/v0.12.67/kicad-visual-review-firefox-0.12.67.zip). Verify the release's `SHA256SUMS.txt` as described in [download verification](INSTALL.md#verify-downloads). Use this Firefox-specific artifact, not the Chromium ZIP or automatic source archive.
+Current preview: [Firefox 0.12.68 ZIP](https://github.com/wayri/KiCad-Github-View/releases/download/v0.12.68/kicad-visual-review-firefox-0.12.68.zip). Verify the release's `SHA256SUMS.txt` as described in [download verification](INSTALL.md#verify-downloads). Use this Firefox-specific artifact, not the Chromium ZIP or automatic source archive.
 
 | Goal | Available route |
 | --- | --- |

@@ -55,12 +55,12 @@ function workspaceRuntime(respond=async()=>[], hooks={}){
   const file=hooks.files?.[0]||{path:'board.kicad_pcb',content:'(kicad_pcb (net 1 "SIGNAL") (footprint "Resistor" (layer "F.Cu") (at 30 40) (uuid "fp") (property "Reference" "R1") (property "Value" "10k") (pad "1" smd rect (at 1 0) (size 2 2) (layers "F.Cu") (net 1 "SIGNAL") (uuid "pad"))))'};
   if(hooks.source)file.content=hooks.source;
   const diff=require('../design-diff.js'),design=require(hooks.pcb===false?'../schematic-renderer.js':'../pcb-renderer.js').build(diff.parse(file.content),file.path),designs=new Map();
-  const canvas=new EventTarget();canvas.canvas=new Element();canvas.visibleLayers=new Set(['F.Cu']);canvas.viewport={camera:new(require('../owned-canvas.js').Camera)(800,600)};canvas.setNetHighlight=net=>canvas.netHighlight=net;canvas.resize=()=>{};canvas.draw=()=>workspace.draw();
+  const canvas=new EventTarget();canvas.canvas=new Element();canvas.visibleLayers=new Set(['F.Cu']);canvas.viewport={camera:new(require('../owned-canvas.js').Camera)(hooks.width||800,hooks.frameHeight||600)};canvas.setNetHighlight=net=>canvas.netHighlight=net;canvas.resize=()=>{};canvas.draw=()=>workspace.draw();
   const receipts=new Map(hooks.unacceptedRules?[]:[['kivi:content-rules','2026-10-10-terms-1']]),localStorage={getItem:key=>receipts.get(key)||null,setItem:(key,value)=>receipts.set(key,value),removeItem:key=>receipts.delete(key)};
   const keyHandlers=new Set();
   let resizeCallback;
   const context={innerWidth:hooks.width||800,innerHeight:hooks.frameHeight||600,EventTarget,CustomEvent,TextEncoder,Map,Set,console,crypto:require('node:crypto').webcrypto,localStorage,document:{body,addEventListener(){},removeEventListener(){},querySelectorAll:selector=>{const found=[];const visit=n=>{if(selector==='dialog[open]'&&n.tagName==='DIALOG'&&n.open)found.push(n);for(const c of n.children)visit(c);};visit(body);return found;},getElementById:id=>{const node=elements.get(id);return node&&body.contains(node)?node:null;},createElement:tag=>new Element(tag),createElementNS:(_,tag)=>new Element(tag)},addEventListener:(type,fn)=>{if(type==='keydown')keyHandlers.add(fn);if(type==='resize')resizeCallback=fn;},removeEventListener:(type,fn)=>{if(type==='keydown')keyHandlers.delete(fn);},matchMedia:()=>({matches:true}),
-    KiCadAnalysisData:require('../analysis-data.js'),KiCadViewState:require('../view-state.js'),KiCadBomManager:require('../bom-manager.js'),KiCadReviewHandoff:hooks.handoff,KiCadEngineeringLauncher:hooks.engineeringLauncher,KiCadCommentCompose:{...require('../comment-compose.js'),...(hooks.compose||{})},KiCadReviewTools:require('../review-tools.js'),KiCadDesignModel:require('../design-model.js'),KiCadNetModel:require('../net-model.js'),KiCadReviewComments:require('../review-comments.js'),KiCadBrowserData:require('../browser-data.js'),KiCadOwnedCanvas:require('../owned-canvas.js'),
+    KiCadCommentFocus:require('../comment-focus.js'),KiCadAnalysisData:require('../analysis-data.js'),KiCadViewState:require('../view-state.js'),KiCadBomManager:require('../bom-manager.js'),KiCadReviewHandoff:hooks.handoff,KiCadEngineeringLauncher:hooks.engineeringLauncher,KiCadCommentCompose:{...require('../comment-compose.js'),...(hooks.compose||{})},KiCadReviewTools:require('../review-tools.js'),KiCadDesignModel:require('../design-model.js'),KiCadNetModel:require('../net-model.js'),KiCadReviewComments:require('../review-comments.js'),KiCadBrowserData:require('../browser-data.js'),KiCadOwnedCanvas:require('../owned-canvas.js'),
     top:hooks.top||{},KiCadRevisionActions:require('../revision-actions.js'),KiCadRepositoryExplorer:hooks.repositoryExplorer,KiCadRatsnest:require('../ratsnest.js'),KiCadTestpointTools:hooks.testpointTools,KiCadPhotoReview:hooks.photoReview,KiCadComponentLinks:require('../component-links.js'),KiCadPairedReview:require('../paired-review.js'),KiCadBomAnalytics:require('../bom-analytics.js'),
     chrome:{storage:{local:hooks.chromeStorage||{get:async()=>({}),set:async()=>{}}},runtime:{sendMessage:async message=>({ok:true,result:await respond(message)})}},setTimeout,clearTimeout,URL,Blob};
   if(hooks.android){context.KiCadAndroidRuntime=true;context.KiCadAndroidOnline=hooks.androidOnline!==false;}
@@ -1279,4 +1279,30 @@ test('annotation polling mounts with foreground lifecycle and source-scoped upda
  const result=await sync.load(started);assert.equal(result.syncFile,'board.kicad_pcb');sync.onUpdate(result);assert.ok(calls.some(m=>m.type==='github-annotations'));
  sync.onUpdate({notes:[{text:'Foreign result'}],syncFile:'other.kicad_pcb'});assert.equal(view.get('commentList').textContent.includes('Foreign result'),false);
  view.workspace.dispose();assert.equal(disposed,true);
+});
+
+
+test('phone comment Locate centers the saved point, clears obstructing panes and returns to the same draft',()=>{
+ const chat=captureChat(),view=workspaceRuntime(undefined,{chatPanel:chat.panel,android:true,width:390});view.load();
+ view.get('commentsButton').click();assert.equal(view.get('commentsSidebar').hidden,false);
+ const anchor={...chat.options.getScope(),kind:'net',netName:'SIGNAL',position:{x:30,y:40}};
+ assert.equal(chat.options.onLocate(anchor),true);assert.equal(view.get('commentsSidebar').hidden,true);assert.equal(view.get('designInspector').hidden,true);
+ const box=view.canvas.viewport.camera.bbox;assert.ok(Math.abs(box.x+box.w/2-30)<1e-8);assert.ok(Math.abs(box.y+box.h/2-40)<1e-8);assert.equal(box.w,8);assert.ok(box.h<20);
+ const overlay=view.get('drawingHost').querySelector('.comment-focus-overlay');assert.equal(overlay.hidden,false);assert.equal(overlay.querySelector('.comment-focus-ring').hidden,false);
+ overlay.querySelector('.comment-focus-return').dispatchEvent(new Event('click'));assert.equal(view.get('commentsSidebar').hidden,false);assert.equal(overlay.hidden,true);assert.equal(view.chatDraft().hasDraft(),true);assert.deepEqual(chat.calls,[]);view.workspace.dispose();
+});
+
+test('comment Locate fits a saved area and rejects a missing object instead of guessing another location',()=>{
+ const chat=captureChat(),view=workspaceRuntime(undefined,{chatPanel:chat.panel});view.load();
+ const anchor={...chat.options.getScope(),kind:'drawing',area:{x:100,y:200,width:30,height:10}};
+ assert.equal(chat.options.onLocate(anchor),true);const box=view.canvas.viewport.camera.bbox;
+ assert.ok(box.x<=100&&box.x+box.w>=130&&box.y<=200&&box.y+box.h>=210);assert.equal(box.x+box.w/2,115);assert.equal(box.y+box.h/2,205);
+ const snapshot=JSON.stringify(box);assert.equal(chat.options.onLocate({...anchor,kind:'footprint',uuid:'missing'}),false);assert.equal(JSON.stringify(view.canvas.viewport.camera.bbox),snapshot);view.workspace.dispose();
+});
+
+test('3D comment Locate focuses the saved source point and refreshes its marker when the view changes',()=>{
+ const chat=captureChat(),view=workspaceRuntime(undefined,{chatPanel:chat.panel,android:true,width:390});view.load();const calls=[];let projected={x:195,y:300};
+ view.workspace.setScene({setPopulation(){},setSelection(){},focusPosition(position,options){calls.push({position,options});return true;},projectAnchor(){return projected;}});
+ const anchor={...chat.options.getScope(),kind:'net',netName:'SIGNAL',position:{x:30,y:40}};assert.equal(chat.options.onLocate(anchor),true);assert.deepEqual(JSON.parse(JSON.stringify(calls[0])),{position:{x:30,y:40},options:{bounds:null,side:'front'}});
+ const ring=view.get('drawingHost').querySelector('.comment-focus-ring');assert.equal(ring.style.left,'195px');projected={x:210,y:280};view.workspace.sceneViewChanged();assert.equal(ring.style.left,'210px');assert.equal(ring.style.top,'280px');view.workspace.dispose();
 });

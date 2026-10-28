@@ -20,8 +20,8 @@ android {
         applicationId 'dev.kicadvizdiff.android'
         minSdk 26
         targetSdk 36
-        versionCode 72
-        versionName '1.69'
+        versionCode 73
+        versionName '1.70'
         testInstrumentationRunner 'dev.kicadvizdiff.android.LibraryInstrumentation'
     }
 

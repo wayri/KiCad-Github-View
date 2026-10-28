@@ -21,7 +21,7 @@ export function sourceZoneGeometry(ast,maxPolygons=1000,maxPoints=500000){
   const layerNode=child(zone,'layers'),layers=layerNode?layerNode.slice(1).map(value):[value(child(zone,'layer')?.[1])];
   for(const polygon of polygons){const pts=children(child(polygon,'pts')||[],'xy').map(node=>[Number(value(node[1])),Number(value(node[2]))]).filter(point=>point.every(Number.isFinite));
    if(pts.length<3)continue;
-   const ownLayer=value(child(polygon,'layer')?.[1]);for(const layer of ownLayer?[ownLayer]:layers){if(!['F.Cu','B.Cu'].includes(layer))continue;
+   const ownLayer=value(child(polygon,'layer')?.[1]);for(const layer of ownLayer?[ownLayer]:layers){if(typeof layer!=='string'||!/^(?:F|B|In[1-9]\d*)\.Cu$/.test(layer))continue;
     if(records.length>=maxPolygons||points+pts.length>maxPoints){truncated=true;continue;}points+=pts.length;
     records.push({points:pts,layer,filled:Boolean(filled.length),id:String(value(child(zone,'uuid')?.[1])||value(child(zone,'tstamp')?.[1])||'saved-zone-'+records.length),net:String(value(child(zone,'net_name')?.[1])||nets.get(value(child(zone,'net')?.[1]))||'')});
    }

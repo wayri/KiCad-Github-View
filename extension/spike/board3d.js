@@ -22,6 +22,8 @@ import { viewportSceneIdentity } from "@spike/viewportScenePolicy";
 import { populationMask, uniqueComponentIndexes } from "./componentState.mjs";
 import { footprintProxies } from "./footprintProxies.mjs";
 import {createAnchorProjector} from "./projectAnchor.mjs";
+import {sourceCopperPlan} from "./copperStack.mjs";
+import {createNetInspection} from "./netInspection.mjs";
 import {createSelectionAppearance} from "./selectionAppearance.mjs";
 import { selectionMatcher, selectableRecord, tapGesture, holdGesture } from "./selectionState.mjs";
 import { sphereFitDistance,boxFitDistance } from "./fitPolicy.mjs";
@@ -172,6 +174,7 @@ export function mountBoard3D(container, source, options = {}) {
   const thickness = board.stackup?.filter((layer) => Number.isFinite(layer.thickness))
     .reduce((sum, layer) => sum + layer.thickness, 0) || 1.6;
   const top = thickness / 2, bottom = -top;
+  const copperPlan=sourceCopperPlan(board,sourceAST,thickness);
   const scene = new THREE.Scene(); scene.background = new THREE.Color(initialDark ? 0x151820 : 0xe7ebf1);
   const camera = new THREE.PerspectiveCamera(45, 1, 0.1, Math.max(3000, extent * 30));
   // OrbitControls captures its up basis at construction. Use the board's
@@ -273,7 +276,7 @@ export function mountBoard3D(container, source, options = {}) {
   const drilled=new Set();let drillCount=0,drillPoints=0,omittedDrills=0;
   const inside=(point,loop)=>{let result=false;for(let i=0,j=loop.length-1;i<loop.length;j=i++){const [a,b]=[loop[i],loop[j]];if((a[1]>point[1])!==(b[1]>point[1])&&point[0]<(b[0]-a[0])*(point[1]-a[1])/(b[1]-a[1])+a[0])result=!result;}return result;};
   const outer=board.outlineLoops?.[0],outlineHoles=board.outlineLoops?.slice(1)||[];
-  for(const item of [...nativePads,...board.vias.map(via=>({...via,shape:'circle',width:via.size,height:via.size,drillShape:'circle',rotation:0}))]){
+  for(const item of [...nativePads,...board.vias.filter(via=>copperPlan.viaSpans.get(via.id)?.through).map(via=>({...via,shape:'circle',width:via.size,height:via.size,drillShape:'circle',rotation:0}))]){
     if(!(item.drill>0))continue;const loop=nativeDrillOutline(item);if(!loop){omittedDrills++;continue;}
     const angle=(item.rotation||0)*Math.PI/180,c=Math.cos(angle),s=Math.sin(angle),[cx,cy]=world(item.at);
     if(outlineHoles.some(hole=>inside(item.at,hole)))continue;
@@ -335,10 +338,21 @@ export function mountBoard3D(container, source, options = {}) {
     }
   }
   const viaBatches=new Map();let omittedVias=0;
-  for(const via of board.vias){const outline=nativePadOutline({shape:'circle',width:via.size,height:via.size,drill:via.drill,drillShape:'circle'});if(!outline){omittedVias++;continue;}const key=JSON.stringify([via.size,via.drill]);if(!viaBatches.has(key)){if(viaBatches.size>=128){omittedVias++;continue;}viaBatches.set(key,{outline,vias:[]});}viaBatches.get(key).vias.push(via);}
-  if(omittedVias)geometryDiagnostics.push(`${omittedVias} unsupported via annuli omitted.`);
+  for(const via of board.vias){const span=copperPlan.viaSpans.get(via.id),outline=nativePadOutline({shape:'circle',width:via.size,height:via.size,drill:via.drill,drillShape:'circle'});if(!outline||!span){omittedVias++;continue;}const key=JSON.stringify([via.size,via.drill,span.zMin,span.zMax]);if(!viaBatches.has(key)){if(viaBatches.size>=128){omittedVias++;continue;}viaBatches.set(key,{outline,span,vias:[]});}viaBatches.get(key).vias.push(via);}
+  if(omittedVias)geometryDiagnostics.push(`${omittedVias} via bodies with unsupported annuli or unknown saved spans omitted.`);
   const viaMaterial=new THREE.MeshStandardMaterial({color:physicalColors.exposedCopper,...studioMaterials.copper});
-  for(const[key,batch]of viaBatches){const geometry=new THREE.ExtrudeGeometry(padShape(batch.outline),{depth:thickness+.08,bevelEnabled:false,curveSegments:8});const mesh=makeInstanced(boardGroup,geometry,viaMaterial,batch.vias,(object,via)=>{const[x,y]=world(via.at);object.position.set(x,y,bottom-.04);},viewportSceneIdentity('via-barrel','through',key));if(mesh){visibilityRecord(mesh,'vias','through');pickables.push(mesh);}}
+  for(const[key,batch]of viaBatches){const geometry=new THREE.ExtrudeGeometry(padShape(batch.outline),{depth:batch.span.zMax-batch.span.zMin,bevelEnabled:false,curveSegments:8});const mesh=makeInstanced(boardGroup,geometry,viaMaterial,batch.vias,(object,via)=>{const[x,y]=world(via.at);object.position.set(x,y,batch.span.zMin);},viewportSceneIdentity('via-barrel',batch.span.from+'-'+batch.span.to,key));if(mesh){visibilityRecord(mesh,'vias',batch.span.through?'through':batch.span.from+'-'+batch.span.to);pickables.push(mesh);}}
+  // Surface annuli remain on the ordinary outer copper planes; blind/buried
+  // barrel endpoints still follow their saved internal spans.
+  for(const layer of ['F.Cu','B.Cu'])for(const [key,batch]of viaBatches){
+    if(batch.span.from!==layer&&batch.span.to!==layer)continue;
+    const z=layer==='F.Cu'?top+.025:bottom-.025,geometry=new THREE.ExtrudeGeometry(padShape(batch.outline),{depth:.04,bevelEnabled:false,curveSegments:8});
+    const cap=makeInstanced(groupFor(layer),geometry,viaMaterial,batch.vias,(object,via)=>{const[x,y]=world(via.at);object.position.set(x,y,z-.02);},viewportSceneIdentity('via-annulus',layer,key));
+    if(cap){visibilityRecord(cap,'vias',layer);pickables.push(cap);}
+  }
+  const netInspection=createNetInspection(THREE,{board,plan:copperPlan,zones:savedZones.records,sourceLimited:savedZones.truncated,pads:nativePads,world,colorForLayer:layerThreeColor});scene.add(netInspection.group);
+  let fullNet3D=true;
+  const netInspectionHelp=document.createElement('p');netInspectionHelp.className='quality-help';netInspectionHelp.hidden=true;renderingOptions.append(netInspectionHelp);
   applyAppearance();
   const parts = new THREE.Group(); boardGroup.add(parts);
   const proxyPoses = footprintProxies(board);
@@ -532,6 +546,7 @@ export function mountBoard3D(container, source, options = {}) {
   toggle("Front copper", true, (visible) => { groupFor("F.Cu").visible = visible; });
   toggle("Back copper", true, (visible) => { groupFor("B.Cu").visible = visible; });
   toggle("Parts", true, (visible) => { parts.visible = visible; renderer.shadowMap.needsUpdate=true; });
+  toggle("Full net 3D", true, (enabled) => { fullNet3D=enabled;setSelection(externalSelection); });
   // A bounded, opt-in set of depth-tested terminal labels. The sprite material
   // preserves board/model occlusion; labels do not participate in picking or fit.
   let showTerminalLabels=false;
@@ -680,6 +695,19 @@ export function mountBoard3D(container, source, options = {}) {
     invalidate();
     externalSelection = selection || {};
     const matches = selectionMatcher(externalSelection, board);
+    const netState=netInspection.update(externalSelection,fullNet3D);
+    netInspectionHelp.hidden=!netState.active;
+    netInspectionHelp.textContent='Full net 3D reveals saved copper on all layers, including hidden layers, through translucent grey context. '+netState.warnings.slice(0,2).join(' ');
+    netInspectionHelp.title=netState.warnings.join('\n');
+    hint.textContent=netState.active?'Full net 3D · '+netState.nets.join(', ')+' · '+netState.tracks+' track segments · '+netState.vias+' vias'+(netState.omitted?' · '+netState.omitted+' omitted (see Display)':''):'Drag to orbit · right-drag to pan · wheel to zoom · click to inspect';
+    if(netState.active){
+      groupGeometry.setDrawRange(0,0);highlight.visible=false;
+      selectionNotice.hidden=!netState.omitted;selectionNotice.style.display=netState.omitted?'block':'none';
+      selectionNotice.textContent=netState.omitted+' selected primitives omitted; see Display for geometry notes.';
+      selectionAppearance.update(matches,true,{translucent:true});
+      const visible=netState.tracks+netState.pads+netState.vias+netState.platedPads+netState.fills+netState.boundaries;
+      return {highlighted:visible,matched:visible,limited:netState.omitted>0||netState.sourceLimited,fullNet3D:true};
+    }
     const matrix = new THREE.Matrix4(), local = new THREE.Matrix4(), box = new THREE.Box3();
     const center = new THREE.Vector3(), size = new THREE.Vector3();
     let count = 0, total = 0;
@@ -721,7 +749,7 @@ export function mountBoard3D(container, source, options = {}) {
     selectionNotice.textContent = `Showing ${count} of ${total} selected 3D objects`;
     selectionNotice.style.display = total > selectionLimit ? 'block' : 'none';
     highlight.visible = false;
-    selectionAppearance.update(matches,total>0&&selectionDim);
+    selectionAppearance.update(matches,total>0&&selectionDim||netState.active,{translucent:netState.active});
     return { highlighted: count, matched: total, limited: total > selectionLimit };
   }
   const highlight = new THREE.LineSegments(outlineGeometry, outlineMaterial());
@@ -756,7 +784,7 @@ export function mountBoard3D(container, source, options = {}) {
     setSelection(mode==='net'&&record.net?{netNames:[record.net]}:record.type==='Component'||typeof record.library==='string'?{references:[record.ref]}:{uuids:[record.uuid||record.id]});
     selected = { record, point: point.clone() };
     groupGeometry.setDrawRange(0, 0);
-    showHighlight(object, instanceId);
+    if(netInspection.state().active)highlight.visible=false;else showHighlight(object, instanceId);
     options.onSelect?.(record);
     inspector.replaceChildren();
     const heading = document.createElement("h2"); heading.textContent = record.ref || record.name || record.type || "Board object";
@@ -780,7 +808,7 @@ export function mountBoard3D(container, source, options = {}) {
       if (result) { options.onAnalysisProbe?.(result); return; }
     }
     const visible = item => { for (let node = item; node; node = node.parent) if (!node.visible) return false; return true; };
-    const hits = raycaster.intersectObjects(pickables.filter(visible), false);
+    const hits = raycaster.intersectObjects([...pickables,...netInspection.group.children].filter(visible), false);
     const mode = options.getSelectionMode?.() || selectionMode;
     const hit = hits.find(hit=>selectableRecord(hit.object.userData.records?.[hit.instanceId] || hit.object.userData.record,mode));
     if (!hit) { clearSelection(); return; }
@@ -891,8 +919,18 @@ export function mountBoard3D(container, source, options = {}) {
     projectAnchor,
     setAnchor(anchor){activeAnchor=anchor&&typeof anchor==='object'?anchor:null;anchorSignature='';if(activeAnchor)notifyAnchor();else options.onAnchor?.({anchor:null,point:null});},
     setSelectionDim(enabled){selectionDim=Boolean(enabled);setSelection(externalSelection);return selectionDim;},
-    selectionAppearanceCapabilities(){return {dim:true,instanceColors:true,desaturatesTextures:true};},
+    selectionAppearanceCapabilities(){return {dim:true,instanceColors:true,desaturatesTextures:true,fullNet3d:true,internalCopper:true,viaSpans:true,translucentContext:true};},
+    getNetInspectionState(){return netInspection.state();},
+    setFullNet3D(enabled){fullNet3D=Boolean(enabled);setSelection(externalSelection);return fullNet3D;},
     setSelectionMode(mode){selectionMode=['all','part','net','pin'].includes(mode)?mode:'all';},
+    focusPosition(position,{bounds,side='front'}={}){
+      if(!active||![position?.x,position?.y].every(value=>Number.isFinite(value)&&Math.abs(value)<=1e6))return false;
+      sizeViewport();const [x,y]=world([position.x,position.y]),target=new THREE.Vector3(x,y,side==='back'?bottom:top),direction=camera.position.clone().sub(controls.target);
+      if(direction.lengthSq()<1e-10)direction.set(.45,-.38,1);direction.normalize();direction.z=(side==='back'?-1:1)*Math.abs(direction.z||.3);direction.normalize();
+      const w=Number.isFinite(bounds?.w)?Math.max(8,Math.min(1e6,bounds.w*1.3)):8,h=Number.isFinite(bounds?.h)?Math.max(8,Math.min(1e6,bounds.h*1.3)):8;
+      const distance=boxFitDistance([w,h,thickness+4],direction.toArray(),camera.fov,camera.aspect,.8,camera.up.toArray());if(!distance)return false;
+      userAdjustedCamera=true;controls.maxDistance=Math.max(controls.maxDistance,distance*2);camera.position.copy(target).addScaledVector(direction,Math.max(controls.minDistance,distance));controls.target.copy(target);controls.update();updateClipping();invalidate();return true;
+    },
     fit(topView=false){if(active)fit(topView);},
     setView(view){if(!active||!boardViewPresets.some(preset=>preset.id===view))return false;userAdjustedCamera=true;fit(view);return true;},
     zoom(factor){if(!active||!Number.isFinite(factor)||factor<=0)return;const offset=camera.position.clone().sub(controls.target);const distance=Math.max(controls.minDistance,Math.min(controls.maxDistance,offset.length()/factor));if(offset.length()>0)camera.position.copy(controls.target).add(offset.setLength(distance));controls.update();},
@@ -935,7 +973,7 @@ export function mountBoard3D(container, source, options = {}) {
       }
     },
     dispose() { if(measuring)options.onMeasurementMode?.(false);active = false; analysisOverlay?.dispose(); stepClient?.dispose(); cancelAnimationFrame(frame); cancelAnimationFrame(layoutFrame); observer.disconnect();controls.removeEventListener('change',invalidate); controls.removeEventListener("change", updateClipping); controls.removeEventListener("start", cameraInteraction); controls.dispose();disposePipeline();environment?.dispose();renderer.domElement.removeEventListener('webglcontextlost',onContextLost);renderer.domElement.removeEventListener('webglcontextrestored',onContextRestored);document.removeEventListener('pointerdown',closeVisibility);shadow.removeEventListener('keydown',escapeVisibility,true);shadow.removeEventListener('keydown',escapeMeasurement);
-    renderer.domElement.removeEventListener('pointerdown',measurementTouchCapture,true);selectionAppearance.dispose();const resources = new Set(); scene.traverse((object) => {object.shadow?.dispose?.(); if (object.geometry) resources.add(object.geometry);
+    renderer.domElement.removeEventListener('pointerdown',measurementTouchCapture,true);netInspection.dispose();selectionAppearance.dispose();const resources = new Set(); scene.traverse((object) => {object.shadow?.dispose?.(); if (object.geometry) resources.add(object.geometry);
       const materials = Array.isArray(object.material) ? object.material : object.material ? [object.material] : [];
       materials.forEach((item) => resources.add(item)); }); resources.forEach((item) => item.dispose());terminalLabelCache.forEach(texture=>texture.dispose()); labelGeometry.dispose(); hold.dispose(); renderer.dispose(); host.remove(); } };
 }

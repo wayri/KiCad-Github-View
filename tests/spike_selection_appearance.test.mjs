@@ -27,3 +27,21 @@ test('selection appearance leaves selected textured materials intact and desatur
 test('explicit numeric-looking net names never resolve as different net codes',()=>{
  const match=selectionMatcher({netNames:['1']},{nets:{1:'VCC'},pads:[]});assert.equal(match({net:'1'}),true);assert.equal(match({net:'VCC'}),false);
 });
+
+
+test('net inspection makes substrate cap and edge materials translucent grey, then restores them exactly',{skip:!THREE},()=>{
+ const cap=new THREE.MeshPhysicalMaterial({color:0x126933}),edge=new THREE.MeshStandardMaterial({color:0x92734b}),board=new THREE.Mesh(new THREE.BoxGeometry(2,2,1),[cap,edge]);
+ const materialArray=board.material,mesh=new THREE.InstancedMesh(new THREE.BoxGeometry(1,1,1),new THREE.MeshStandardMaterial({color:0xffaa00}),1);mesh.userData.records=[{net:'GND'}];mesh.setColorAt(0,new THREE.Color(0x20ff30));const colors=mesh.instanceColor;
+ const appearance=createSelectionAppearance(THREE,()=>[board,mesh]);
+ appearance.update(()=>false,true,{translucent:true});assert.notEqual(board.material,materialArray);
+ for(const material of board.material){assert.equal(material.transparent,true);assert.equal(material.depthWrite,false);assert.equal(material.opacity,.14);const shader={fragmentShader:'#include <opaque_fragment>'};material.onBeforeCompile(shader);assert.match(shader.fragmentShader,/dot\(outgoingLight/);}
+ assert.equal(mesh.material.transparent,true);assert.equal(mesh.instanceColor,colors);
+ appearance.restore();assert.equal(board.material,materialArray);assert.equal(cap.opacity,1);assert.equal(cap.depthWrite,true);assert.equal(cap.transparent,false);assert.equal(mesh.instanceColor,colors);
+});
+
+
+test('part → full-net → part mode transitions never mutate saved source instance colors',{skip:!THREE},()=>{
+ const material=new THREE.MeshStandardMaterial({color:0xffffff}),mesh=new THREE.InstancedMesh(new THREE.BoxGeometry(1,1,1),material,2);mesh.userData.records=[{id:'a'},{id:'b'}];mesh.setColorAt(0,new THREE.Color('#ff2040'));mesh.setColorAt(1,new THREE.Color('#20ff40'));const colors=mesh.instanceColor,bytes=[...colors.array];
+ const appearance=createSelectionAppearance(THREE,()=>[mesh]);appearance.update(r=>r?.id==='a',true);appearance.update(()=>false,true,{translucent:true});appearance.update(r=>r?.id==='b',true);appearance.restore();
+ assert.equal(mesh.instanceColor,colors);assert.deepEqual([...colors.array],bytes);assert.equal(mesh.material,material);
+});

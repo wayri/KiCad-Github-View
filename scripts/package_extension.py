@@ -17,7 +17,7 @@ FILES = {'analysis-data.js', 'analysis-viewer.html', 'analysis-viewer.css', 'ana
 FILES.update({'overview-routing.js','dashboard.html','dashboard.css','dashboard.js','project-recents.js'})
 FILES.update({'workspace-chrome.css','workspace-chrome.js','revision-actions.js','revision-fork.js','analysis-simulation.js','analysis-simulation.css'})
 FILES.update({'provider-oauth.js','provider-oauth.json'})
-FILES.update({'native-kicad.js'})
+FILES.update({'native-kicad.js', 'comment-focus.js'})
 FILES.update({'chat-content.js','chat-panel.js','chat-panel.css','review-sync.js','work-board-panel.js'})
 FILES.update({'compact-surfaces.css','compact-surfaces.js'})
 FILES.update({'managed-policy.js','managed-policy-schema.json','managed-policy-options.js'})

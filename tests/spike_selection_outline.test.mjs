@@ -11,7 +11,7 @@ function setup(pickables){
  const source=readFileSync(new URL('../extension/spike/board3d.js',import.meta.url),'utf8');
  const code=source.slice(source.indexOf('  const selectionLimit ='),source.indexOf('  function clearSelection()'));
  let redraws=0;
- const ui=Function('THREE','initialDark','scene','document','stage','selectionMatcher','board','pickables','invalidate','selectionAppearance','selectionDim',code+';return {setSelection,showHighlight,highlight,groupHighlight};')(THREE,true,new THREE.Scene(),{createElement:()=>({style:{}})},{append(){}},selectionMatcher,{nets:{},pads:[]},pickables,()=>redraws++,{update(){}},true);
+ const ui=Function('THREE','initialDark','scene','document','stage','selectionMatcher','board','pickables','invalidate','selectionAppearance','selectionDim','netInspection','fullNet3D','netInspectionHelp','hint',code+';return {setSelection,showHighlight,highlight,groupHighlight};')(THREE,true,new THREE.Scene(),{createElement:()=>({style:{}})},{append(){}},selectionMatcher,{nets:{},pads:[]},pickables,()=>redraws++,{update(){}},true,{update(){return {active:false,warnings:[]};}},true,{},{});
  ui.redraws=()=>redraws;return ui;
 }
 test('component cross-selection uses twelve clean edges for its body and pads together',{skip:!THREE},()=>{
