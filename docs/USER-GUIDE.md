@@ -328,3 +328,7 @@ megapixels; they are not native KiCad vector plots. PDF/image saving currently
 requires the browser viewer. **BoM CSV…** opens the BoM manager, where columns,
 filters and grouping can be reviewed before **Import / export → Export visible CSV**.
 BoM text export also supports the app's existing save dialog.
+
+### 3D lighting
+
+Open **3D → Display → Lighting** and choose **Universal** for neutral, even illumination from above, below and the board edges. It disables cast shadows and ambient occlusion while preserving source materials, reflections and selection colours. **Studio** restores directional lighting and quality-dependent shadows/occlusion. The preference is remembered on the current device and is independent of the light/dark theme and rendering quality. Both modes use a bounded reusable light rig with no additional network assets. This shared control is included in subsequent browser, VS Code and Android builds; previously published binaries are unchanged.
