@@ -74,7 +74,7 @@ Local browser file/folder viewing works offline once the extension is installed.
 | Inspect layout | Snapped 2D measurements, saved copper/zone statistics, trace-length summaries, testpoint/net tables and imported ERC/DRC markers |
 | Assemble a board | BoM field tables, grouping, fitted/DNP filters, variants, progress and procurement fields; confirmed per-part and bulk resets in current source |
 | Inspect fabrication and documents | Gerber/drill screening, PDF viewing and supported saved analysis plots/overlays |
-| Continue a WayriCAD workflow | Open supported quickTherm, quickPI and quickSI saved results; inspect exported plots, fields and reports in Android/browser |
+| Continue a [wayriCAD workflow](https://github.com/wayri/WayriCAD) | Open supported quickTherm, quickPI and quickSI saved results; inspect exported plots, fields and reports in Android/browser |
 | Review in 3D | Supported accessible model assets; unresolved models are identified and may use approximate proxies |
 | Review with a team | Local annotations and portable review exports; optional GitHub/GitLab publication where supported by the host |
 | Resolve a Git conflict | VS Code visual comparison of marker-based conflicts, with validated candidate export and explicit source replacement |
@@ -84,13 +84,13 @@ Local browser file/folder viewing works offline once the extension is installed.
 
 ## Works with WayriCAD simulation results
 
-Run simulations in **WayriCAD / kiWay**, then open their supported saved results in **Pocket KiView on Android or in the browser**. Bring the result files with the project to inspect them offline, or share those exports with another reviewer.
+Run simulations in **[wayriCAD / kiWay](https://github.com/wayri/WayriCAD)**, then open their supported saved results in **Pocket KiView on Android or in the browser**. Bring the result files with the project to inspect them offline, or share those exports with another reviewer.
 
 | WayriCAD tool | Review in KiView |
 | --- | --- |
-| **quickTherm** | Saved temperature fields, component tables and supported transient frames/history |
-| **quickPI** | Saved voltage/current waveforms, copper-layer potential, power and current-density fields |
-| **quickSI** | Saved eye traces, step responses, impedance/screening curves and report metadata |
+| **[quickTherm](https://github.com/wayri/WayriCAD/tree/develop/quick_therm_plugin)** | Saved temperature fields, component tables and supported transient frames/history |
+| **[quickPI](https://github.com/wayri/WayriCAD/tree/develop/quick_pi_plugin)** | Saved voltage/current waveforms, copper-layer potential, power and current-density fields |
+| **[quickSI](https://github.com/wayri/WayriCAD)** | Saved eye traces, step responses, impedance/screening curves and report metadata |
 | **Other WayriCAD exports** | Supported JSON/CSV/TSV fields and tables; specialized plots depend on a recognized schema and saved numerical data |
 
 Inspect plots and probe saved values. Supported spatial exports provide **2D/3D overlays**; placing an overlay on a PCB requires a matching saved board hash and spatial/layer metadata. Results remain read-only, and KiView does not rerun the simulation. Compatibility applies to documented export formats, rather than every WayriCAD version or arbitrary result file. Current source also opens saved results in a dedicated VS Code panel.
@@ -110,6 +110,131 @@ storage; imported source contents are not retained by this history.
 > **Screenshot note:** Some images show older versions of the UI. The latest app, browser extension and VS Code extension may have updated controls, layouts and styling.
 
 Click any image to open it at full size. [Capture sources and attribution](docs/images/README.md).
+
+### Capability gallery | retained releases and source previews
+
+These **37 screenshots** cover the main implemented workflows discussed during development. Images labelled **unreleased source** are not a promise that the current store/download package includes that feature. Local source previews can be ahead of both the published source and release packages. Older UI and synthetic/provider fixtures are identified below. Click an image for full size; screenshots alone do not establish security, solver accuracy, live provider actions or physical-device acceptance.
+
+<details>
+<summary><strong>Projects · 3 views</strong></summary>
+
+| View | Context |
+| --- | --- |
+| <a href="docs/images/current/dashboard-0.12.65.png"><img src="docs/images/current/dashboard-0.12.65.png" width="440" alt="Dashboard and recent projects"></a> | **Dashboard and recent projects**<br>Release 0.12.65 · browser UI with demonstration history. |
+| <a href="docs/images/current/dashboard-phone-0.12.65.png"><img src="docs/images/current/dashboard-phone-0.12.65.png" width="210" alt="Dashboard on a phone-width screen"></a> | **Dashboard on a phone-width screen**<br>Release 0.12.65 · responsive browser preview. |
+| <a href="docs/images/features/file-tree-hierarchy.png"><img src="docs/images/features/file-tree-hierarchy.png" width="440" alt="Folders and all project filenames"></a> | **Folders and all project filenames**<br>Unreleased source preview · expand/collapse, search and pagination; unsupported files are listed without reading their contents. |
+
+</details>
+
+<details>
+<summary><strong>Viewing · 3 views</strong></summary>
+
+| View | Context |
+| --- | --- |
+| <a href="docs/images/current/schematic-workspace-0.12.64.png"><img src="docs/images/current/schematic-workspace-0.12.64.png" width="440" alt="Schematic workspace and navigation"></a> | **Schematic workspace and navigation**<br>Earlier 0.12.64 UI · retained feature preview. |
+| <a href="docs/images/current/pcb-workspace-0.12.64.png"><img src="docs/images/current/pcb-workspace-0.12.64.png" width="440" alt="PCB workspace"></a> | **PCB workspace**<br>Earlier 0.12.64 UI · retained feature preview. |
+| <a href="docs/images/features/refined-all-sheets.png"><img src="docs/images/features/refined-all-sheets.png" width="440" alt="All sheets in one viewport"></a> | **All sheets in one viewport**<br>Release preparation UI · hierarchy/net link toggles and single-sheet navigation. |
+
+</details>
+
+<details>
+<summary><strong>3D · 3 views</strong></summary>
+
+| View | Context |
+| --- | --- |
+| <a href="docs/images/current/pcb-3d-dark-0.12.64.jpg"><img src="docs/images/current/pcb-3d-dark-0.12.64.jpg" width="440" alt="3D PCB with linked component models"></a> | **3D PCB with linked component models**<br>Earlier 0.12.64 renderer · linked models 56/63; material preview. |
+| <a href="docs/images/current/pcb-3d-light-0.12.64.jpg"><img src="docs/images/current/pcb-3d-light-0.12.64.jpg" width="440" alt="Light theme and real model geometry"></a> | **Light theme and real model geometry**<br>Earlier 0.12.64 renderer · retained preview. |
+| <a href="docs/images/features/measurement-3d-snap-phone.png"><img src="docs/images/features/measurement-3d-snap-phone.png" width="210" alt="Phone measurement magnifier in 3D"></a> | **Phone measurement magnifier in 3D**<br>Unreleased WebGL browser preview · surface/edge/corner modes and target filters. This fixture uses approximate stand-in bodies. |
+
+</details>
+
+<details>
+<summary><strong>Selection · 3 views</strong></summary>
+
+| View | Context |
+| --- | --- |
+| <a href="docs/images/features/refined-layout-selection.png"><img src="docs/images/features/refined-layout-selection.png" width="440" alt="Selected parts with grey context"></a> | **Selected parts with grey context**<br>Release preparation UI · public KiCad demo. |
+| <a href="docs/images/features/refined-3d-selection.png"><img src="docs/images/features/refined-3d-selection.png" width="440" alt="3D selection and grey context"></a> | **3D selection and grey context**<br>Release preparation UI · stand-in bodies in this fixture. |
+| <a href="docs/images/features/refined-3d-simulation.png"><img src="docs/images/features/refined-3d-simulation.png" width="440" alt="3D net selection and saved waveform popup"></a> | **3D net selection and saved waveform popup**<br>Release preparation UI · synthetic waveform on a public demo; stand-in bodies. |
+
+</details>
+
+<details>
+<summary><strong>Assembly · 2 views</strong></summary>
+
+| View | Context |
+| --- | --- |
+| <a href="docs/images/features/refined-bom-tracker.png"><img src="docs/images/features/refined-bom-tracker.png" width="440" alt="Grouped BoM and assembly tracker"></a> | **Grouped BoM and assembly tracker**<br>Release preparation UI · searchable grouping, status counts and part selection. |
+| <a href="docs/images/features/bom-columns-desktop.png"><img src="docs/images/features/bom-columns-desktop.png" width="440" alt="Choose BoM columns"></a> | **Choose BoM columns**<br>Unreleased source preview · select standard/custom fields, hide Actions, and retain column choices. |
+
+</details>
+
+<details>
+<summary><strong>Review · 2 views</strong></summary>
+
+| View | Context |
+| --- | --- |
+| <a href="docs/images/current/comments-thread-0.12.64.png"><img src="docs/images/current/comments-thread-0.12.64.png" width="210" alt="Conversation thread and composer"></a> | **Conversation thread and composer**<br>Earlier 0.12.64 UI · synthetic issue discussion, no provider write. |
+| <a href="docs/images/current/comments-workspace-0.12.64.png"><img src="docs/images/current/comments-workspace-0.12.64.png" width="440" alt="Comments workspace"></a> | **Comments workspace**<br>Earlier 0.12.64 UI · synthetic discussion content. |
+
+</details>
+
+<details>
+<summary><strong>Git · 3 views</strong></summary>
+
+| View | Context |
+| --- | --- |
+| <a href="docs/images/features/features-commit-actions.png"><img src="docs/images/features/features-commit-actions.png" width="440" alt="Commit view, compare, download, copy and fork"></a> | **Commit view, compare, download, copy and fork**<br>Synthetic commit transport · action availability preview, no fork performed. |
+| <a href="docs/images/features/selected-movement-comparison.png"><img src="docs/images/features/selected-movement-comparison.png" width="440" alt="Visual comparison with movement arrows"></a> | **Visual comparison with movement arrows**<br>Synthetic conflict fixture · current/incoming selection, value changes and properties. |
+| <a href="docs/images/features/part-presence-comparison.png"><img src="docs/images/features/part-presence-comparison.png" width="440" alt="Part presence and comparison properties"></a> | **Part presence and comparison properties**<br>Synthetic conflict fixture · saved part identities and property differences. |
+
+</details>
+
+<details>
+<summary><strong>Tools · 8 views</strong></summary>
+
+| View | Context |
+| --- | --- |
+| <a href="docs/images/features/object-filter-desktop.png"><img src="docs/images/features/object-filter-desktop.png" width="440" alt="Object-type and board-side filters"></a> | **Object-type and board-side filters**<br>Release preparation UI · unavailable types are explicitly disabled. |
+| <a href="docs/images/features/object-filter-3d.png"><img src="docs/images/features/object-filter-3d.png" width="440" alt="3D object visibility controls"></a> | **3D object visibility controls**<br>Release preparation UI · available object types differ between 2D and 3D. |
+| <a href="docs/images/features/floating-layers-v28.png"><img src="docs/images/features/floating-layers-v28.png" width="440" alt="Floating copper layer selector"></a> | **Floating copper layer selector**<br>Earlier UI capture · floating layer access. |
+| <a href="docs/images/features/ecad-measurement-history.png"><img src="docs/images/features/ecad-measurement-history.png" width="440" alt="Measurements and pinned readouts"></a> | **Measurements and pinned readouts**<br>Synthetic PCB fixture · dimensions and measurement history. |
+| <a href="docs/images/features/floating-drc.png"><img src="docs/images/features/floating-drc.png" width="440" alt="Saved DRC findings and jump-to-location"></a> | **Saved DRC findings and jump-to-location**<br>Earlier UI · synthetic saved DRC report; does not run DRC in the browser. |
+| <a href="docs/images/features/net-colors-pcb.png"><img src="docs/images/features/net-colors-pcb.png" width="440" alt="Net-class colours"></a> | **Net-class colours**<br>Earlier UI · saved colour toggles on a test design. |
+| <a href="docs/images/features/measurement-touch-lens.png"><img src="docs/images/features/measurement-touch-lens.png" width="440" alt="Phone measurement magnifier in 2D"></a> | **Phone measurement magnifier in 2D**<br>Unreleased responsive browser preview · corner/edge target filters, drag to preview and release to place; synthetic touch input. |
+| <a href="docs/images/features/generated-pdf-render.png"><img src="docs/images/features/generated-pdf-render.png" width="440" alt="Browser-generated schematic PDF"></a> | **Browser-generated schematic PDF**<br>Unreleased source preview · actual generated single-sheet raster PDF rendered by PDF.js; no PDF was required in the repository. |
+
+</details>
+
+<details>
+<summary><strong>Analysis · 4 views</strong></summary>
+
+Run the analytics in [wayriCAD](https://github.com/wayri/WayriCAD), then bring supported saved results into KiView. [Quick PI](https://github.com/wayri/WayriCAD/tree/develop/quick_pi_plugin) and [QuickTherm](https://github.com/wayri/WayriCAD/tree/develop/quick_therm_plugin) fields can provide saved spatial data for overlays and probing. Quick SI exports provide plots when the recognised format includes samples. KiCad workbooks are a separate source and do not contain waveform samples. These captures display exported data; they do not run a solver.
+
+| View | Context |
+| --- | --- |
+| <a href="docs/images/features/showcase-wayricad-2d.png"><img src="docs/images/features/showcase-wayricad-2d.png" width="440" alt="wayriCAD saved field in 2D with A/B probes"></a> | **wayriCAD saved field in 2D with A/B probes**<br>Fresh unreleased source 25e3de6 · actual QuickPI producer fixture; standalone field, no PCB attached. |
+| <a href="docs/images/features/showcase-wayricad-3d.png"><img src="docs/images/features/showcase-wayricad-3d.png" width="440" alt="wayriCAD saved field in WebGL 3D"></a> | **wayriCAD saved field in WebGL 3D**<br>Fresh unreleased source 25e3de6 · saved flat PI field; no board identity inferred. |
+| <a href="docs/images/features/showcase-kicad-workbook.png"><img src="docs/images/features/showcase-kicad-workbook.png" width="440" alt="KiCad workbook as a separate source"></a> | **KiCad workbook as a separate source**<br>Fresh unreleased source 25e3de6 · synthetic .wbk settings, no invented waveform samples. |
+| <a href="docs/images/features/showcase-waveform.png"><img src="docs/images/features/showcase-waveform.png" width="440" alt="Saved waveform graph and signal probes"></a> | **Saved waveform graph and signal probes**<br>Fresh unreleased source 25e3de6 · synthetic CSV remains unclassified rather than claiming a producer. |
+
+</details>
+
+<details>
+<summary><strong>Mobile · 6 views</strong></summary>
+
+| View | Context |
+| --- | --- |
+| <a href="docs/images/android/phone-layout.png"><img src="docs/images/android/phone-layout.png" width="210" alt="Android phone layout"></a> | **Android phone layout**<br>Earlier Android UI · retained cropped demonstration capture. |
+| <a href="docs/images/android/tablet-portrait.png"><img src="docs/images/android/tablet-portrait.png" width="210" alt="Android tablet schematic"></a> | **Android tablet schematic**<br>Earlier Android UI · retained cropped demonstration capture. |
+| <a href="docs/images/features/android-library-phone-1.6.png"><img src="docs/images/features/android-library-phone-1.6.png" width="210" alt="Offline copies and starred projects"></a> | **Offline copies and starred projects**<br>Earlier Android UI · synthetic library preview; current placement can differ. |
+| <a href="docs/images/features/android-smart-selection.png"><img src="docs/images/features/android-smart-selection.png" width="440" alt="Smart part/net selection"></a> | **Smart part/net selection**<br>Earlier Android UI · selection-mode preview. |
+| <a href="docs/images/features/bom-columns-phone.png"><img src="docs/images/features/bom-columns-phone.png" width="210" alt="BoM column chooser on a narrow screen"></a> | **BoM column chooser on a narrow screen**<br>Unreleased responsive browser preview · custom-field column selection; not a new device capture. |
+| <a href="docs/images/features/file-tree-phone.png"><img src="docs/images/features/file-tree-phone.png" width="210" alt="Folder search on a narrow screen"></a> | **Folder search on a narrow screen**<br>Unreleased responsive browser preview · nested matching paths; unsupported files remain metadata-only. |
+
+</details>
+
+[Capture provenance and limitations](docs/images/README.md#capability-gallery-added-2026-10-29) · [wayriCAD export compatibility](docs/ANALYSIS_VIEWER.md)
 
 ### Current renderer and compact workspace | 0.12.64
 
@@ -247,7 +372,7 @@ Local browser fixture captures. The calculator shows analytical estimates, not a
 
 The linked-model fixture loads one actual WRL asset. Marble's pictured bodies are proxies, not resolved mechanical models. These are retained local renderer captures.
 
-**Read WayriCAD-compatible saved results.** Open supported quickTherm, quickPI and quickSI exports for plots, probing and available spatial overlays. The thermal-field image below illustrates the saved-analysis viewer. Its retained capture does not establish a solver run, native-device testing or independent numerical validation.
+**Read [wayriCAD-compatible saved results](https://github.com/wayri/WayriCAD).** Open supported quickTherm, quickPI and quickSI exports for plots, probing and available spatial overlays. The thermal-field image below illustrates the saved-analysis viewer. Its retained capture does not establish a solver run, native-device testing or independent numerical validation.
 
 [![Saved thermal analysis field displayed as a color plot](docs/images/tools/saved-analysis.png)](docs/images/tools/saved-analysis.png)
 

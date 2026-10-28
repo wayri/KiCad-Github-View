@@ -140,3 +140,14 @@ The application toolbars, drawing areas and relevant editor context remain. PNG 
 
 
 `current/comments-thread-0.12.64.png` (390 × 844) and `comments-workspace-0.12.64.png` (1280 × 800) show the actual production viewer and chat UI with a synthetic footprint fixture and mocked provider thread/publication responses. The test exercises explicit final review before a simulated write, thread draft preservation, message menus, search and responsive sizing. No live account or provider post was used. They are responsive browser previews, not physical Android screenshots, and contain no OS/browser bars.
+
+
+## Capability gallery added 2026-10-29
+
+The README capability gallery adds the 30 retained views shown in the local gallery plus seven source previews of column selection, folder browsing, measurement assistance and generated PDF output. Existing tracked images are reused; the additional captures live in `features/`. These are actual application/browser pixels, not generated imagery.
+
+The gallery mixes 0.12.64/0.12.65 captures and subsequent unreleased source previews. Captions identify historical UI, synthetic provider/commit/waveform data, stand-in component bodies and responsive browser previews. Phone-sized browser captures do not establish physical-device validation. No new live GitHub/GitLab post or remote fork is demonstrated.
+
+The new analysis-family views were captured from source `25e3de6`. The wayriCAD field uses the retained actual QuickPI analytical-strip producer fixture, in standalone saved-field coordinates with no source PCB attached. Its 2D view contains A/B probes; its flat 3D surface does not imply invented physical thickness. `showcase-kicad-workbook.png` uses a synthetic empty version-8 workbook to demonstrate the separate settings view, and `showcase-waveform.png` uses an unclassified synthetic CSV. These inspect saved values rather than rerunning or qualifying a solver. See [wayriCAD](https://github.com/wayri/WayriCAD) and [the compatibility contracts](../ANALYSIS_VIEWER.md).
+
+The new BoM/folder/measurement/download captures are source previews from 29 October 2026. The folder and drawing previews use KiCad’s public PIC Programmer demo with synthetic documentation/binary filenames; unsupported bytes are not loaded. The generated PDF is raster output from the browser viewer, rendered with bundled PDF.js. The 3D measurement fixture uses approximate stand-in component bodies. All were captured without OS/browser status or task bars; retained older Android pictures reuse the previously documented cropped assets.
