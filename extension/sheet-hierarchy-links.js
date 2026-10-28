@@ -64,7 +64,7 @@
       result.links.push({from, to, label, count: group.placements.length, parentPath: group.parentPath, childPath: group.childPath,
         parentIds: [...new Set(group.placements.map(p => p.parentId))], childIds: group.placements.map(p => p.id)});
     }
-    return result;
+    if(root.KiCadOverviewRouting){const routed=root.KiCadOverviewRouting.route(pages,result.links);result.links=routed.links;result.omitted+=routed.omitted;result.routing=routed;}return result;
   }
 
   function draw(view, graph, dark = false) {
@@ -72,19 +72,19 @@
     if (!ctx || !camera || !graph?.links?.length) return;
     ctx.save();
     for (const link of graph.links) {
-      const a = camera.world_to_screen(link.from), b = camera.world_to_screen(link.to);
-      const length = Math.hypot(b.x - a.x, b.y - a.y);
+      const path=(link.points||[link.from,link.to]).map(p=>camera.world_to_screen(p)),a=path[0],b=path.at(-1),tail=path.at(-2)||a;
+      const length = Math.hypot(b.x - tail.x, b.y - tail.y);
       if (length < 12) continue;
-      const ux = (b.x - a.x) / length, uy = (b.y - a.y) / length;
+      const ux = (b.x - tail.x) / length, uy = (b.y - tail.y) / length;
       const tip = {x: b.x - ux * 4, y: b.y - uy * 4};
-      ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(tip.x, tip.y);
+      ctx.beginPath(); ctx.moveTo(a.x, a.y);for(const p of path.slice(1,-1))ctx.lineTo(p.x,p.y);ctx.lineTo(tip.x, tip.y);
       ctx.setLineDash([]); ctx.strokeStyle = dark ? '#10212b' : '#ffffff'; ctx.lineWidth = 6; ctx.stroke();
       ctx.strokeStyle = dark ? '#69e2cf' : '#087b70'; ctx.lineWidth = 2.5; ctx.stroke();
       ctx.beginPath(); ctx.moveTo(tip.x, tip.y);
       ctx.lineTo(tip.x - ux * 11 - uy * 5, tip.y - uy * 11 + ux * 5);
       ctx.lineTo(tip.x - ux * 11 + uy * 5, tip.y - uy * 11 - ux * 5);
       ctx.closePath(); ctx.fillStyle = dark ? '#69e2cf' : '#087b70'; ctx.fill();
-      const text = link.label.slice(0, 96), x = a.x + (tip.x - a.x) * .55 - uy * 13, y = a.y + (tip.y - a.y) * .55 + ux * 13;
+      const segment=path.slice(1).map((p,i)=>({a:path[i],b:p,length:Math.hypot(p.x-path[i].x,p.y-path[i].y)})).sort((a,b)=>b.length-a.length)[0];const text=link.label.slice(0,96),x=(segment.a.x+segment.b.x)/2,y=(segment.a.y+segment.b.y)/2-12;
       ctx.font = '600 12px sans-serif';
       const width = Math.min(250, ctx.measureText(text).width + 12);
       ctx.fillStyle = dark ? '#10212b' : '#ffffff'; ctx.fillRect(x - width / 2, y - 10, width, 20);

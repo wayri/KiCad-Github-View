@@ -12,7 +12,7 @@
  if(online)window.top.KiCadAndroid.ensureSnapshots();
  const source=async(ref,options)=>ref&&online?window.top.KiCadAndroidRevisionCache.get(ref,options):project;
  const reviewAdapters=new Map();
- const remoteTypes=new Set(['chat-message-write','chat-thread-list','github-auth-status','comment-policy-status','comment-mention-users','github-discussion-categories','github-thread-read','github-annotations','comment-remote-list','github-publish-comment','comment-publish','github-recover-publication']);
+ const remoteTypes=new Set(['chat-thread-state','chat-message-write','chat-thread-list','github-auth-status','comment-policy-status','comment-mention-users','github-discussion-categories','github-thread-read','github-annotations','comment-remote-list','github-publish-comment','comment-publish','github-recover-publication']);
  const loadReads=new Set(['project','revision','project-inventory','project-file']),loads=new Map(),cancelledLoads=new Set();
  const validLoadId=id=>typeof id==='string'&&id.length>0&&id.length<=160;
  const dispatch=async message=>{let load=null;try{
@@ -29,7 +29,7 @@
   if(message.type==='open-options'){window.top.document.getElementById(provider==='gitlab'?'gitlabButton':'githubButton').click();return{ok:true,result:{opened:true}};}
   if(message.type==='open-project-drawing'||message.type==='open-viewer-window'){window.top.KiCadAndroid.openDrawing(message.file);return{ok:true,result:{opened:true}};}
   if(online&&(message.repository&&message.repository.toLowerCase()!==info.repository.toLowerCase()||message.provider&&message.provider!==provider||message.host&&message.host!==project.remote?.host))throw Error('Request belongs to another repository or server.');
-  if(online&&['revision-resolve','revision-branches','revision-commits','repository-tree','repository-history','repository-branches'].includes(message.type))return{ok:true,result:await nativeRequest(message)};
+  if(online&&['repository-fork-revision','revision-resolve','revision-branches','revision-commits','repository-tree','repository-history','repository-branches'].includes(message.type))return{ok:true,result:await nativeRequest(message)};
   const snapshot=await source(message.ref||message.comment?.anchor?.ref||frameRef,load?{signal:load.controller.signal}:undefined);
   if(load?.controller.signal.aborted)throw Object.assign(Error('Loading cancelled.'),{name:'AbortError'});
   if(online&&remoteTypes.has(message.type)){

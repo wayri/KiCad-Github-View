@@ -38,6 +38,36 @@ global.chrome = {
   windows: { create: async (options) => { calls.windows.push(options); return { id: 41 }; } }
 };
 const background = require('../background.js');
+test('remote fork requests are viewer-only and preserve their selected-commit scope',async t=>{
+ const original=KiCadGitHubReviewApi.forkRevision;let received;
+ KiCadGitHubReviewApi.forkRevision=async value=>{received=value;return {created:true,partial:false};};t.after(()=>KiCadGitHubReviewApi.forkRevision=original);
+ const request={type:'repository-fork-revision',repository:'owner/repo',ref:'main',file:'board.kicad_pcb',sha:'a'.repeat(40),confirmed:true};
+ for(const sender of [options,githubTab(1,'/owner/repo/blob/main/board.kicad_pcb')])assert.equal((await message(request,sender)).ok,false);
+ assert.equal(received,undefined);assert.equal((await message(request)).ok,true);assert.deepEqual(received,request);
+});
+
+test('dashboard history is owned-page-only and imported local entries contain no source content',async()=>{
+ const R=require('../project-recents.js'),dashboard={id:'test-id',url:extensionOrigin+'dashboard.html'},local={id:'test-id',url:extensionOrigin+'local-viewer.html'};await message({type:'project-recents-clear',confirmed:true},dashboard);
+ for(const sender of [viewer,options,githubTab(1,'/owner/repo'),{id:'wrong',url:dashboard.url},{...dashboard,frameId:2}])assert.notEqual((await message({type:'project-recents-list'},sender)).ok,true);
+ assert.equal((await message({type:'project-recents-record-local',name:'Bench board',localId:'c'.repeat(64)},local)).ok,true);assert.equal((await message({type:'project-recents-record-local',name:'Bad',localId:'d'.repeat(64),content:'private source'},local)).ok,false);
+ const listed=await message({type:'project-recents-list'},dashboard);assert.equal(listed.ok,true);assert.equal(listed.result.entries.length,1);assert.equal(listed.result.entries[0].name,'Bench board');assert.equal(JSON.stringify(localStore.get(R.KEY)).includes('private source'),false);
+ assert.equal((await message({type:'github-auth-status'},dashboard)).ok,false);assert.equal((await message({type:'project-recents-clear'},dashboard)).ok,false);await message({type:'project-recents-clear',confirmed:true},dashboard);
+});
+
+test('only successful owned drawing loads record remote project metadata and recent opens use the stored pinned viewer scope',async()=>{
+ const dashboard={id:'test-id',url:extensionOrigin+'dashboard.html'},request={type:'project',repository:'owner/repo',ref:sha('a'),file:'hardware/board.kicad_pcb'},files=[{path:request.file,content:'(kicad_pcb)'}];await message({type:'project-recents-clear',confirmed:true},dashboard);
+ await background.recordLoadedProject(request,githubTab(1,'/owner/repo'),files);await background.recordLoadedProject({...request,type:'project-file',file:'analysis/report.json'},viewer,{content:'{}'});await background.recordLoadedProject(request,viewer,[]);assert.equal((await message({type:'project-recents-list'},dashboard)).result.entries.length,0);
+ await background.recordLoadedProject(request,viewer,files);const entry=(await message({type:'project-recents-list'},dashboard)).result.entries[0];assert.equal(entry.ref,sha('a'));assert.equal(entry.name,'board');calls.created.length=0;assert.equal((await message({type:'dashboard-open-recent',id:entry.id},dashboard)).ok,true);const url=new URL(calls.created[0].url);assert.equal(url.pathname,'/browser-viewer.html');assert.equal(url.searchParams.get('head'),sha('a'));assert.equal(url.searchParams.get('file'),request.file);
+ await message({type:'project-recents-remove',id:entry.id},dashboard);assert.equal((await message({type:'project-recents-list'},dashboard)).result.entries.length,0);
+});
+
+test('dashboard policy allows local history and local reopening offline but blocks remote opens and unapproved servers',async t=>{
+ const dashboard={id:'test-id',url:extensionOrigin+'dashboard.html'},local={id:'test-id',url:extensionOrigin+'local-viewer.html'},priorPolicy=global.KiCadManagedPolicy,priorHosts=global.KiCadGitLabHosts;t.after(()=>{global.KiCadManagedPolicy=priorPolicy;global.KiCadGitLabHosts=priorHosts;});
+ global.KiCadManagedPolicy={read:async()=>({valid:true,networkEnabled:false}),assertNetwork:async()=>{throw Error('Network access is disabled');}};await message({type:'project-recents-clear',confirmed:true},dashboard);await message({type:'project-recents-record-local',name:'Local board',localId:'c'.repeat(64)},local);const listed=await message({type:'project-recents-list'},dashboard);assert.equal(listed.result.networkEnabled,false);assert.equal((await message({type:'dashboard-open-recent',id:listed.result.entries[0].id},dashboard)).ok,true);
+ assert.equal((await message({type:'dashboard-open-project',url:'https://github.com/owner/repo'},dashboard)).ok,false);global.KiCadManagedPolicy={assertNetwork:async()=>{},read:async()=>({valid:true,networkEnabled:true})};global.KiCadGitLabHosts={allowed:async host=>host==='https://gitlab.com'};
+ for(const url of ['javascript:alert(1)','https://user:token@github.com/owner/repo','https://unapproved.example/group/repo'])assert.equal((await message({type:'dashboard-open-project',url},dashboard)).ok,false);
+ assert.equal((await message({type:'dashboard-open-project',url:'https://gitlab.com/group/repo'},dashboard)).ok,true);await message({type:'project-recents-clear',confirmed:true},dashboard);
+});
 const sha = (char) => char.repeat(40);
 const json = (value) => new Response(JSON.stringify(value), {
   status: 200, headers: { 'content-type': 'application/json' }
@@ -538,7 +568,7 @@ test('toolbar action focuses the inline blob, navigates a PR, and opens its work
   assert.deepEqual(calls.messages[1], { id: 3, message: { type: 'focusReview' } });
   await background.openFromAction({ id: 3, url: 'https://github.com/owner/repo' });
   await background.openFromAction({ id: 3, url: 'https://example.com/' });
-  assert.deepEqual(calls.created,[{url:extensionOrigin+'local-viewer.html'},{url:extensionOrigin+'local-viewer.html'}]);
+  assert.deepEqual(calls.created,[{url:extensionOrigin+'dashboard.html'},{url:extensionOrigin+'dashboard.html'}]);
   assert.equal(calls.messages.length, 2);
   assert.equal(typeof actionListener, 'function');
 });
@@ -549,7 +579,7 @@ test('toolbar action opens a visible workspace for missing URLs and unavailable 
  chrome.tabs.sendMessage=async()=>{throw Error('No receiving content script');};
  await background.openFromAction({id:3,url:'https://github.com/owner/repo/blob/main/board.kicad_pcb'});
  await background.openFromAction({id:3,url:'https://github.com/owner/repo/pull/12/files'});
- assert.equal(calls.created.length,7);assert.ok(calls.created.every(c=>c.url===extensionOrigin+'local-viewer.html'));
+ assert.equal(calls.created.length,7);assert.ok(calls.created.every(c=>c.url===extensionOrigin+'dashboard.html'));
 });
 test('GitLab toolbar action focuses drawings and merge requests with a visible fallback',async t=>{
  const previous=global.KiCadGitLabHosts;t.after(()=>{global.KiCadGitLabHosts=previous;});global.KiCadGitLabHosts={allowed:async host=>host==='https://gitlab.com'};
@@ -1284,4 +1314,11 @@ test('environment diagnostics endpoint is options-only and forwards no repositor
  chrome.runtime.getManifest=()=>({version:'test-version'});t.after(()=>{global.KiCadEnvironmentDiagnostics=previous;chrome.runtime.getManifest=manifest;});
  for(const sender of [viewer,githubTab(2,'/owner/repo'),{...options,url:options.url+'/other'}])assert.notEqual((await message({type:'viewer-diagnostics'},sender)).ok,true);
  assert.equal(checked,0);assert.deepEqual((await message({type:'viewer-diagnostics'},options)).result,{ok:true});assert.equal(checked,1);
+});
+
+test('conversation state writes require exact extension viewer identity',async t=>{
+ let called=0;const before=KiCadGitHubReviewApi.chatThreadState;KiCadGitHubReviewApi.chatThreadState=async()=>{called++;return{state:'closed'};};t.after(()=>KiCadGitHubReviewApi.chatThreadState=before);
+ const request={type:'chat-thread-state',repository:'owner/repo',ref:'main',file:'board.kicad_pcb',thread:{kind:'issue',number:42},state:'closed',expectedUpdatedAt:'2026-10-27T00:00:00Z',confirmed:true};
+ for(const sender of [options,githubTab(1,'/owner/repo/blob/main/board.kicad_pcb'),{id:'other',url:viewer.url}])assert.notEqual((await message(request,sender)).ok,true);
+ assert.equal(called,0);assert.equal((await message(request)).ok,true);assert.equal(called,1);
 });

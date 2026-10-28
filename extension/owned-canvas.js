@@ -6,7 +6,7 @@
 
   const finitePoint = p => Number.isFinite(p?.x) && Number.isFinite(p?.y);
   const schematicPalettes=Object.freeze({
-    dark:Object.freeze({'#000000':'#dce3ed','#840000':'#e8ba83','#a90000':'#e8a5a5','#008400':'#77c8ad','#008484':'#8ebdd8','#000080':'#91b7ec','#a0a0a0':'#667386','#725600':'#a8c8ef'}),
+    dark:Object.freeze({'#000000':'#e8edf5','#840000':'#f2bb74','#a90000':'#ff8587','#008400':'#59dba8','#008484':'#65c6ed','#000080':'#71aaff','#a0a0a0':'#718298','#725600':'#8bbcff'}),
     light:Object.freeze({'#000000':'#283447','#840000':'#8e4358','#a90000':'#9a4051','#008400':'#217864','#008484':'#2c6f89','#000080':'#3e64a3','#a0a0a0':'#a3adbb','#725600':'#48678f'})
   });
   function schematicColor(color,dark){return schematicPalettes[dark?'dark':'light'][String(color).toLowerCase()]||color;}
@@ -116,14 +116,39 @@
     if(!(zoom>0)||!Number.isFinite(zoom))return output;
     const add=(p,name,x,y,angle,size)=>{
       if(output.length>=limit||!Number.isFinite(x+y+angle+size))return;
-      const at=camera.world_to_screen({x,y}),r=angle*Math.PI/180,w=size*(name.length*.65+1),h=size*1.4;
+      const at=camera.world_to_screen({x,y}),r=angle*Math.PI/180,w=size*(Math.max(...name.split('\n').map(line=>line.length))*.65+1),h=size*1.4*name.split('\n').length;
       const bw=Math.abs(Math.cos(r))*w+Math.abs(Math.sin(r))*h,bh=Math.abs(Math.sin(r))*w+Math.abs(Math.cos(r))*h;
       const box={x:at.x-bw/2-3,y:at.y-bh/2-3,w:bw+6,h:bh+6};
       if(box.x<0||box.y<0||box.x+box.w>camera.width||box.y+box.h>camera.height||boxes.some(b=>box.x<b.x+b.w&&box.x+box.w>b.x&&box.y<b.y+b.h&&box.y+box.h>b.y))return;
       boxes.push(box);output.push({text:name,x:at.x,y:at.y,angle,size,primitive:p});
     };
-    for(const [p,name] of entries){
+    const labeledPads=new Set();
+    for(const [p,rawName] of entries){
       if(output.length>=limit)break;
+      let name=rawName;
+      if(p.kind==='pad'&&!p.hole&&p.layer?.endsWith('.Cu')){
+        // Most saved pads already carry exact dimensions. Reject unreadable
+        // labels before allocating identity keys or walking polygon vertices.
+        if(p.padWidth&&p.padHeight&&Math.min(p.padWidth,p.padHeight)*zoom<13)continue;
+        const number=String(p.pinNumber??p.name??'');
+        if(number.length>160||String(p.pinName||'').length>160||/[\x00-\x1f\x7f]/.test(number+String(p.pinName||'')))continue;
+        const key=JSON.stringify([p.ownerUuid,p.uuid,number,p.padCenter]);
+        if(labeledPads.has(key))continue;
+        const b=p.padCenter&&p.padWidth&&p.padHeight?null:spatialBounds(p),center=p.padCenter||(b?{x:b.x+b.w/2,y:b.y+b.h/2}:null);
+        if(!center)continue;
+        const width=(p.padWidth||b?.w||0)*zoom,height=(p.padHeight||b?.h||0)*zoom;
+        if(Math.min(width,height)<13)continue;
+        const size=Math.min(18,Math.max(9,Math.min(width,height)*.25));
+        const net=typeof name==='string'&&name.length<=160?name:'';
+        const title=[number,p.pinName].filter(Boolean).join(' ');
+        const lines=[title,net].filter(Boolean);
+        if(!lines.length)continue;
+        const label=lines.join('\n'),maxLength=Math.max(...lines.map(line=>line.length));
+        if(maxLength*size*.65>Math.max(width,height)*1.7)continue;
+        const start=output.length;add(p,label,center.x,center.y,0,size);
+        if(output.length>start)labeledPads.add(key);
+        continue;
+      }
       if(typeof name!=='string'||!name.trim()||name.length>160||p.hole||!p.layer?.endsWith('.Cu'))continue;
       if(p.kind==='track'&&p.type==='line'&&p.points?.length===2){
         const [a,b]=p.points,dx=b.x-a.x,dy=b.y-a.y,size=Math.min(11,p.width*zoom*.8);
@@ -169,6 +194,28 @@
 
   }
 
+  const objectTypes=Object.freeze([
+    ['arcs','Arcs'],['pads','Pads'],['vias','Vias'],['tracks','Tracks'],['texts','Texts'],
+    ['fills','Fills'],['polygons','Polygons'],['regions','Regions'],['graphics','Graphics'],
+    ['bodies','3D bodies'],['dimensions','Dimensions'],['rooms','Rooms']
+  ].map(([id,label])=>Object.freeze({id,label})));
+  function objectCategory(p){
+    if(!p||p.frame||p.kind==='footprint-hit')return null;
+    if(p.objectCategory)return p.objectCategory;
+    if(p.kind==='drill')return p.ownerUuid?'pads':'vias';
+    if(p.kind==='pad')return 'pads';if(p.kind==='via')return 'vias';
+    if(p.type==='text')return 'texts';if(p.type==='arc')return 'arcs';
+    if(p.kind==='track'||p.kind==='segment')return 'tracks';
+    if(p.kind==='zone')return 'fills';if(p.kind==='zone-outline')return 'polygons';
+    if(['gr_poly','fp_poly'].includes(p.kind))return p.fill?'regions':'polygons';
+    if(p.fill)return 'fills';return 'graphics';
+  }
+  function objectVisible(p,state={}){
+    if(!p||p.frame)return true;
+    const category=objectCategory(p),hidden=state.hiddenTypes;
+    if(category&&(hidden?.has?.(category)||Array.isArray(hidden)&&hidden.includes(category)))return false;
+    const layer=p.layer||'';return !(state.side==='top'&&layer.startsWith('B.'))&&!(state.side==='bottom'&&layer.startsWith('F.'));
+  }
   class Viewport extends EventTarget {
 
     constructor(host,options={}){
@@ -178,7 +225,7 @@
       this.ctx=this.canvas.getContext('2d');if(!this.ctx)throw new Error('Canvas2D rendering is unavailable.');this.viewport={camera:new Camera()};this.primitives=[];this.visibleLayers=new Set();this.dark=Boolean(options.dark);this.pcb=Boolean(options.pcb);this.grid=false;this.selected=null;this.drag=null;this.netHighlight=null;this.netPrimitives=new Set();this.isolateNet=false;this.paperVisible=!this.pcb;this.activeLayer='F.Cu';this.focusedLayer=null;this.layerFocusMode='dim';this.layerSnapshot=null;
       this.acceleration=options.acceleration==='off'?'off':'auto';this.motion=null;this.motionActive=false;this.motionFailed=false;this.motionTimer=null;this.wheelMotion=false;
 
-      this.layers={query_point:at=>this.query(at).map(p=>({bbox:{context:{uuid:p.uuid,reference:p.reference,kind:p.kind,pinNumber:p.pinNumber,connectPoint:p.connectPoint,parent:p.ownerUuid?{uuid:p.ownerUuid}:null},primitive:p}}))};
+      this.layers={query_point:at=>this.query(at).map(p=>({bbox:{context:{uuid:p.uuid,reference:p.reference,kind:p.kind,name:p.name,pinNumber:p.pinNumber,pinName:p.pinName,ownerUuid:p.ownerUuid,connectPoint:p.connectPoint,parent:p.ownerUuid?{uuid:p.ownerUuid}:null},primitive:p}}))};
 
       this.handlers=[];const listen=(name,fn,opts)=>{this.canvas.addEventListener(name,fn,opts);this.handlers.push(()=>this.canvas.removeEventListener(name,fn,opts));};
 
@@ -188,7 +235,7 @@
 
       listen('pointerup',e=>{if(this.drag){this.drag=null;this.finishMotion();}if(this.canvas.hasPointerCapture(e.pointerId))this.canvas.releasePointerCapture(e.pointerId);});listen('pointercancel',()=>{this.drag=null;this.finishMotion();});listen('lostpointercapture',()=>{if(this.drag){this.drag=null;this.finishMotion();}});
 
-      listen('click',e=>{if(e.pointerType==='touch'&&this.touchNetPick?.(e))return;const r=this.canvas.getBoundingClientRect(),at=this.viewport.camera.screen_to_world({x:e.clientX-r.left,y:e.clientY-r.top});const hit=this.query(at)[0];this.select(hit?{primitive:hit,context:{uuid:hit.uuid,reference:hit.reference,kind:hit.kind,pinNumber:hit.pinNumber,connectPoint:hit.connectPoint,parent:hit.ownerUuid?{uuid:hit.ownerUuid}:null}}:null,{multi:Boolean(e.ctrlKey||e.metaKey||e.shiftKey)});});
+      listen('click',e=>{if(e.pointerType==='touch'&&this.touchNetPick?.(e))return;const r=this.canvas.getBoundingClientRect(),at=this.viewport.camera.screen_to_world({x:e.clientX-r.left,y:e.clientY-r.top});const hit=this.query(at)[0];this.select(hit?{primitive:hit,context:{uuid:hit.uuid,reference:hit.reference,kind:hit.kind,name:hit.name,pinNumber:hit.pinNumber,pinName:hit.pinName,ownerUuid:hit.ownerUuid,connectPoint:hit.connectPoint,parent:hit.ownerUuid?{uuid:hit.ownerUuid}:null}}:null,{multi:Boolean(e.ctrlKey||e.metaKey||e.shiftKey)});});
 
       listen('wheel',e=>{e.preventDefault();this.prepareMotion();const r=this.canvas.getBoundingClientRect(),p={x:e.clientX-r.left,y:e.clientY-r.top},c=this.viewport.camera,before=c.screen_to_world(p);c.zoom=Math.max(.001,Math.min(10000,c.zoom* Math.exp(-Math.max(-100,Math.min(100,e.deltaY))*.004)));const after=c.screen_to_world(p);c.center.x+=before.x-after.x;c.center.y+=before.y-after.y;if(typeof setTimeout==='function'){this.wheelMotion=true;if(this.motionTimer!==null)clearTimeout(this.motionTimer);this.motionTimer=setTimeout(()=>this.finishMotion(),120);}this.requestDraw();},{passive:false});
 
@@ -203,29 +250,37 @@
     setDocument(design,path){this.resize();this.design=design;this.document={filename:path};this.primitives=design.primitives;this.visibleLayers=new Set((design.layers||[]).filter(layer=>!this.pcb||['F.Cu','B.Cu','F.SilkS','B.SilkS','Edge.Cuts'].includes(layer)));this.selected=null;this.focusedLayer=null;this.layerSnapshot=null;this.setNetHighlight(null);this.zoom_to_board();this.draw();}
 
     get primitives(){return this._primitives;}
-    set primitives(value){this._primitives=value;this.spatialIndex=null;this.geometryBounds=new WeakMap();this.textBoundsCache=new WeakMap();}
+    set primitives(value){this._primitives=value;this.spatialIndex=null;this.geometryBounds=new WeakMap();this.textBoundsCache=new WeakMap();this.ownedGeometry=new Map();for(const p of value||[])if(p.ownerUuid&&p.kind!=='footprint-hit'){const list=this.ownedGeometry.get(p.ownerUuid)||[];list.push(p);this.ownedGeometry.set(p.ownerUuid,list);}}
     candidates(box){
       if(this.primitives.length<512)return this.primitives;
       if(!this.spatialIndex||this.spatialIndex.length!==this.primitives.length)this.spatialIndex=new SpatialIndex(this.primitives);
       return this.spatialIndex.query(box);
     }
-    geometryVisible(p){return !p.hidden&&(p.kind!=='zone'||this.showFilledCopper!==false)&&(p.kind!=='zone-outline'||this.showZoneOutlines!==false);}
+    geometryVisible(p){if(p.hidden||!objectVisible(p,this.objectVisibility)||(p.kind==='zone'&&this.showFilledCopper===false)||(p.kind==='zone-outline'&&this.showZoneOutlines===false))return false;if(p.kind==='footprint-hit'){const children=this.ownedGeometry?.get(p.ownerUuid||p.uuid);if(children?.length)return children.some(child=>this.geometryVisible(child)&&(!child.layer||this.visibleLayers.has(child.layer)));}return true;}
+    setObjectVisibility({hiddenTypes=[],side='all'}={}){this.objectVisibility={hiddenTypes:new Set(hiddenTypes.filter(id=>objectTypes.some(type=>type.id===id))),side:['all','top','bottom'].includes(side)?side:'all'};if(this.selected&&!this.geometryVisible(this.selected))this.selected=null;this.finishMotion();}
     setZoneVisibility({filled=this.showFilledCopper!==false,outlines=this.showZoneOutlines!==false}={}){this.showFilledCopper=Boolean(filled);this.showZoneOutlines=Boolean(outlines);this.finishMotion();}
     setNetNames(nets){this.netNames=new Map();for(const net of nets||[])for(const p of net.primitives||[])this.netNames.set(p,net.name);}
     drawNetNames(){
-      if(!this.pcb||!this.showNetNames||!this.netNames)return;
-      const visible=this.candidates(this.viewport.camera.bbox).filter(p=>this.netNames.has(p)&&this.geometryVisible(p)&&this.visibleLayers.has(p.layer)&&(!this.focusedLayer||p.layer===this.focusedLayer)&&(!this.isolateNet||this.netPrimitives.has(p)));
-      const labels=netLabels(visible.map(p=>[p,this.netNames.get(p)]),this.viewport.camera),ctx=this.ctx;
+      if(!this.pcb||!this.showNetNames||!this.netNames||this.objectVisibility?.hiddenTypes.has('texts'))return;
+      const viewport=this;
+      // Consume in saved draw order, stopping visibility/name work at the cap.
+      function* entries(){for(const p of viewport.candidates(viewport.viewport.camera.bbox))if((viewport.netNames.has(p)||p.kind==='pad')&&viewport.geometryVisible(p)&&viewport.visibleLayers.has(p.layer)&&(!viewport.focusedLayer||p.layer===viewport.focusedLayer)&&(!(viewport.netHighlight&&viewport.highlightMode!=='bright')||viewport.netPrimitives.has(p)))yield [p,viewport.netNames.get(p)||p.netName||''];}
+      const labels=netLabels(entries(),this.viewport.camera),ctx=this.ctx;
       ctx.save();ctx.font='11px monospace';ctx.textAlign='center';ctx.textBaseline='middle';ctx.lineJoin='round';ctx.lineWidth=3;
       ctx.fillStyle=this.dark?'#f3f8fa':'#17212b';ctx.strokeStyle=this.dark?'#101820':'#ffffff';
-      for(const label of labels){ctx.save();ctx.translate(label.x,label.y);ctx.rotate(label.angle*Math.PI/180);ctx.font=label.size+'px monospace';ctx.strokeText(label.text,0,0);ctx.fillText(label.text,0,0);ctx.restore();}ctx.restore();
+      for(const label of labels){ctx.save();ctx.translate(label.x,label.y);ctx.rotate(label.angle*Math.PI/180);ctx.font=label.size+'px monospace';const lines=label.text.split('\n');lines.forEach((line,i)=>{const y=(i-(lines.length-1)/2)*label.size*1.4;ctx.strokeText(line,0,y);ctx.fillText(line,0,y);});ctx.restore();}ctx.restore();
     }
-    query(at,pixels=5){const tolerance=pixels/this.viewport.camera.zoom;return this.candidates({x:at.x-tolerance,y:at.y-tolerance,w:2*tolerance,h:2*tolerance}).filter(p=>this.geometryVisible(p)&&p.pick!==false&&(p.uuid||p.reference)&&(!p.layer||this.visibleLayers.has(p.layer))&&(!this.focusedLayer||this.layerFocusMode!=='isolate'||p.layer===this.focusedLayer)&&hitPrimitive(p,at,tolerance)).sort((a,b)=>{const priority=p=>p.kind==='pad'?0:p.kind==='footprint'||p.kind==='symbol'?1:p.kind==='zone'?4:2;const focus=p=>this.focusedLayer&&p.layer===this.focusedLayer?0:1;return focus(a)-focus(b)||priority(a)-priority(b);}).slice(0,40);}
+    setSelectionMode(mode){this.selectionMode=['all','part','net','pin'].includes(mode)?mode:'all';}
+    query(at,pixels=5){const tolerance=pixels/this.viewport.camera.zoom;return this.candidates({x:at.x-tolerance,y:at.y-tolerance,w:2*tolerance,h:2*tolerance}).filter(p=>this.geometryVisible(p)&&p.pick!==false&&(this.selectionMode!=='pin'||['pad','pin','pin-marker','pin-name','pin-number'].includes(p.kind))&&(p.uuid||p.reference)&&(!p.layer||this.visibleLayers.has(p.layer))&&(!this.focusedLayer||this.layerFocusMode!=='isolate'||p.layer===this.focusedLayer)&&hitPrimitive(p,at,tolerance)).sort((a,b)=>{const priority=p=>p.kind==='pad'?0:p.kind==='footprint'||p.kind==='symbol'?1:p.kind==='zone'?4:2;const focus=p=>this.focusedLayer&&p.layer===this.focusedLayer?0:1;return focus(a)-focus(b)||priority(a)-priority(b);}).slice(0,40);}
 
     select(hit,options={}){this.selected=hit?.primitive||null;this.draw();this.dispatchEvent(new CustomEvent('kicad:select',{detail:{item:hit?.context||null,multi:Boolean(options.multi)}}));}
 
     setNetHighlight(net,options={}){this.setNetHighlights(net?[net]:[],options);}
-    setNetHighlights(nets,options={}){const list=Array.isArray(nets)?nets.slice(0,200):[];this.netHighlight=list.length?list[0]:null;this.highlightCount=list.length;this.netPrimitives=new Set(list.flatMap(net=>net.primitives||[]));this.isolateNet=Boolean(options.isolate);this.highlightMode=['bright','dim','isolate'].includes(options.mode)?options.mode:(this.isolateNet?'isolate':'dim');this.isolateNet=this.highlightMode==='isolate';}
+    setNetHighlights(nets,options={}){const list=Array.isArray(nets)?nets.slice(0,200):[];this.netHighlight=list.length?list[0]:null;this.highlightCount=list.length;
+      // Rebuild from live arrays on every call; avoid a second, potentially
+      // board-sized flatMap array without caching mutable selection inputs.
+      const primitives=new Set();list.forEach(net=>{const members=net.primitives||[];if(Array.isArray(members))members.forEach(p=>primitives.add(p));else primitives.add(members);});this.netPrimitives=primitives;
+      this.isolateNet=Boolean(options.isolate);this.highlightMode=['bright','dim','isolate'].includes(options.mode)?options.mode:(this.isolateNet?'isolate':'dim');this.isolateNet=this.highlightMode==='isolate';this.selectionColor=options.selectionColor==='source'?'source':'accent';}
 
     focusLayer(layer,mode='dim'){
 
@@ -342,7 +397,7 @@
 
         if(dim&&this.isolateNet&&!p.hole&&p.layer!=='Edge.Cuts')continue;
 
-        this.paint(p,{color:matches&&!p.hole?(this.pcb?'#ffe18b':this.dark?'#78d5ff':'#006ca8'):this.netClassColors?.get(p)||null,opacity:Math.min(dim&&!p.hole&&this.highlightMode!=='bright'&&p.layer!=='Edge.Cuts'?(this.pcb?.16:.28):1,layerDim&&!p.hole?.18:1)});
+        this.paint(p,{color:dim&&this.highlightMode!=='bright'&&!p.hole?(this.dark?'#87919d':'#8b919a'):matches&&!p.hole&&this.selectionColor!=='source'?(this.pcb?'#ffe18b':this.dark?'#78d5ff':'#006ca8'):this.netClassColors?.get(p)||null,opacity:Math.min(dim&&!p.hole&&this.highlightMode!=='bright'&&p.layer!=='Edge.Cuts'?(this.pcb?.42:.38):1,layerDim&&!p.hole?.18:1)});
 
       }
 
@@ -375,7 +430,7 @@
 
   }
 
-  root.KiCadOwnedCanvas={netLabels,Camera,arcThrough,bounds,hitPrimitive,schematicColor,mount:(host,options)=>new Viewport(host,options)};
+  root.KiCadOwnedCanvas={netLabels,Camera,arcThrough,bounds,hitPrimitive,schematicColor,objectTypes,objectCategory,objectVisible,mount:(host,options)=>new Viewport(host,options)};
 
   if(typeof module==='object'&&module.exports)module.exports=root.KiCadOwnedCanvas;
 

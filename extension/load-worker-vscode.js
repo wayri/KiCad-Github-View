@@ -1059,7 +1059,7 @@
       const inner = { x: at.x + length * dx, y: at.y + length * dy };
       const name = form(pin, "name"), number = form(pin, "number"), style = value(pin[2]);
       const pinOwner = { ...owner, ownerUuid: owner.uuid, kind: "pin", pinNumber: String(value(number?.[1]) ?? ""),
-        pinType: value(pin[1]), pinStyle: style, connectPoint: map(at) };
+        pinName:String(value(name?.[1]) ?? ""), pinType: value(pin[1]), pinStyle: style, connectPoint: map(at) };
       const hidden = hasFlag(pin, "hide") || isHidden(pin);
       if (hidden) {
         line(map(at), map(at), COLOR.pin, 0, { ...pinOwner, hidden: true, stroke: false, pick: false });
@@ -1069,7 +1069,7 @@
       const r = 0.635, h = 1.27;
       const local = (along, across) => ({ x: inner.x + along * dx - across * dy,
         y: inner.y + along * dy + across * dx });
-      const marker = { ...owner, kind: "pin-marker", pinNumber: pinOwner.pinNumber };
+      const marker = { ...pinOwner, kind: "pin-marker" };
       const poly = (positions) => emit({ type: "polyline", points: positions.map(map), color: COLOR.pin, width: 0.1524, ...marker });
       let lineEnd = inner;
       if (["inverted", "inverted_clock"].includes(style)) {
@@ -1099,7 +1099,7 @@
         if (finite(offset) && offset > 0) { place = map(local(offset,0)); align = insideAlign; }
         else { place = { x: (start.x + end.x)/2 - (horizontal ? 0 : size/2 + 0.3556),
           y: (start.y + end.y)/2 - (horizontal ? size/2 + 0.3556 : 0) }; align = "center"; }
-        text(place, value(name[1]), size, textAngle, "#008484", { ...owner, kind: "pin-name", ...fontStyle(name), align });
+        text(place, value(name[1]), size, textAngle, "#008484", { ...pinOwner, kind: "pin-name", ...fontStyle(name), align });
       }
       if (!hideNumbers && number && !isHidden(number) && value(number[1]) && value(number[1]) !== "~") {
         const size = fontSize(number), gap = size/2 + 0.3556;
@@ -1107,7 +1107,7 @@
         const side = !hideNames && value(name?.[1]) !== "~" && offset === 0 ? -1 : 1;
         const place = { x: (start.x + end.x)/2 - (horizontal ? 0 : gap * side),
           y: (start.y + end.y)/2 - (horizontal ? gap * side : 0) };
-        text(place, value(number[1]), size, textAngle, "#a90000", { ...owner, kind: "pin-number", ...fontStyle(number), align: "center" });
+        text(place, value(number[1]), size, textAngle, "#a90000", { ...pinOwner, kind: "pin-number", ...fontStyle(number), align: "center" });
       }
     }
     function renderSymbol(node) {
@@ -1276,7 +1276,7 @@
  // Presentation hues keep the familiar front-red/back-blue identities while
  // avoiding neon masks and muddy low-contrast copper on each canvas theme.
  // The native lookup above remains available for source/default comparisons.
- const reviewDark=Object.freeze({'F.Cu':'#ef827b','B.Cu':'#82aef2','F.SilkS':'#e8dcae','B.SilkS':'#b5c8df','F.Fab':'#b2bbc9','B.Fab':'#8d9ab0','F.CrtYd':'#c59be0','B.CrtYd':'#7bc6cf','Edge.Cuts':'#d6deea','F.Mask':'#b197d7','B.Mask':'#77bdb5','F.Paste':'#d2afa0','B.Paste':'#98c9ce'});
+ const reviewDark=Object.freeze({'F.Cu':'#fa6f68','B.Cu':'#63a5ff','F.SilkS':'#e8dcae','B.SilkS':'#b5c8df','F.Fab':'#b2bbc9','B.Fab':'#8d9ab0','F.CrtYd':'#c59be0','B.CrtYd':'#7bc6cf','Edge.Cuts':'#d6deea','F.Mask':'#b197d7','B.Mask':'#77bdb5','F.Paste':'#d2afa0','B.Paste':'#98c9ce'});
  const reviewLight=Object.freeze({'F.Cu':'#b9474c','B.Cu':'#3268ae','F.SilkS':'#766126','B.SilkS':'#596a87','F.Fab':'#647086','B.Fab':'#606c83','F.CrtYd':'#8c519e','B.CrtYd':'#257b85','Edge.Cuts':'#465368','F.Mask':'#9279b8','B.Mask':'#4d968a','F.Paste':'#9d796a','B.Paste':'#448b93'});
  function reviewColorFor(layer,dark=true){
   const hex=(dark?reviewDark:reviewLight)[String(layer)]||hexFor(layer),alpha=opacityFor(layer);
@@ -1400,7 +1400,9 @@
     function base(node, layer, owner = {}) {
       return { layer, color: colorFor(layer), uuid: uuid(node) || owner.uuid || undefined,
         ownerUuid: owner.ownerUuid || owner.uuid || undefined,
-        reference: owner.reference || undefined, kind: owner.kind || kind(node) };
+        reference: owner.reference || undefined, kind: owner.kind || kind(node),
+        ...(owner.kind==='pad'?{name:owner.name,pinNumber:owner.pinNumber,pinName:owner.pinName,netName:owner.netName,
+          padCenter:owner.padCenter,padWidth:owner.padWidth,padHeight:owner.padHeight,padAngle:owner.padAngle}:{}) };
     }
     function isFilled(node) {
       const fill = child(node,"fill");
@@ -1474,7 +1476,9 @@
       for (const layer of selected) {
         const meta = { layer, color:colorFor(layer), uuid:padUUID, ownerUuid:footprint.uuid,
           reference:footprint.reference,
-          kind:"pad", name:String(value(node[1]) || ""), padType:String(value(node[2])||""), fill:true };
+          kind:"pad", name:String(value(node[1]) || ""), pinNumber:String(value(node[1]) || ""),
+          padCenter:{...center}, padWidth:width, padHeight:height, padAngle:-localAngle,
+          pinName:String(field(node,"pinfunction") || ""), netName:String(value(child(node,"net")?.[2]) || ""), padType:String(value(node[2])||""), fill:true };
         if (shape === "circle") push({ type:"pad", x:center.x, y:center.y, r:width/2, ...meta });
         else if (shape === "custom") {
           const options = child(node,"options"), anchor = String(field(options,"anchor") || "");
@@ -1494,8 +1498,7 @@
             if (["gr_line","gr_arc"].includes(primitiveKind) && explicitWidth !== undefined && num(explicitWidth) <= 0) {
               warn(`Zero-width custom pad ${primitiveKind}`,node); continue;
             }
-            drawShape(primitive,layer,orient,{ uuid:padUUID, ownerUuid:footprint.uuid,
-              reference:footprint.reference, kind:"pad" });
+            drawShape(primitive,layer,orient,meta);
           }
         }
         else {
@@ -1508,7 +1511,7 @@
         }
         if (drill > 0 && drillHeight > 0) {
           const holeMeta = { layer, color:"#111b25", fill:true, hole:true,
-            uuid:padUUID, ownerUuid:footprint.uuid, reference:footprint.reference, kind:"drill" };
+            uuid:padUUID, ownerUuid:footprint.uuid, reference:footprint.reference, kind:"drill", objectCategory:"pads" };
           if (ovalDrill && Math.abs(drill-drillHeight) > 1e-9) {
             const holeTransform = transformed(holeCenter,localAngle);
             push({ type:"polygon", points:oval(drill,drillHeight).map(holeTransform), ...holeMeta });
@@ -1539,7 +1542,7 @@
           push({ type:"circle", ...at, r:diameter/2, layer:copper, color:colorFor(copper), fill:true,
             uuid:uuid(node) || undefined, kind:"via" });
           if (drill > 0) push({ type:"circle", ...at, r:drill/2, layer:copper, color:"#111b25", fill:true,
-            hole:true, uuid:uuid(node) || undefined, kind:"drill" });
+            hole:true, uuid:uuid(node) || undefined, kind:"drill", objectCategory:"vias" });
         }
       } else if (type === "footprint") {
         const origin = point(node,"at");

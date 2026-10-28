@@ -652,7 +652,7 @@ public final class MainActivity extends Activity {
                     } else if (action.equals("device-cancel")) { github.cancelDevice(); clearCopiedGitHubCode(); }
 
                     final int epoch = github.generation();
-                    final boolean chatScoped=action.equals("chat-message-write")||action.equals("chat-thread-list")||request.optBoolean("chatContext")||action.equals("review-thread")&&request.optBoolean("includeCapabilities");
+                    final boolean chatScoped=action.equals("repository-fork-revision")||action.equals("chat-message-write")||action.equals("chat-thread-state")||action.equals("chat-thread-list")||request.optBoolean("chatContext")||action.equals("review-thread")&&request.optBoolean("includeCapabilities");
                     final JSONObject chatProject=activeProject;final int chatProjectEpoch=downloadGeneration.get();
                     final NativeChatScope.Guard chatGuard=()->{if(downloadGeneration.get()!=chatProjectEpoch||activeProject!=chatProject||!"https://github.com".equals(activeProviderHost)||!NativeChatRequest.matchesProject(chatProject,"github","https://github.com",request))throw new java.io.IOException("The chat project changed; reopen its conversation before posting");};
                     if(chatScoped)chatGuard.check();
@@ -694,7 +694,7 @@ public final class MainActivity extends Activity {
                     if (action.equals("sign-out") || action.equals("token-connect") || action.equals("oauth-start")) { purgeProject(host); gitlab.reset(host); }
 
                     final int epoch = gitlab.generation();
-                    final boolean chatScoped=action.equals("chat-message-write")||action.equals("chat-thread-list")||request.optBoolean("chatContext")||action.equals("thread")&&request.optBoolean("includeCapabilities");
+                    final boolean chatScoped=action.equals("repository-fork-revision")||action.equals("chat-message-write")||action.equals("chat-thread-state")||action.equals("chat-thread-list")||request.optBoolean("chatContext")||action.equals("thread")&&request.optBoolean("includeCapabilities");
                     final JSONObject chatProject=activeProject;final int chatProjectEpoch=downloadGeneration.get();
                     final NativeChatScope.Guard chatGuard=()->{if(downloadGeneration.get()!=chatProjectEpoch||activeProject!=chatProject||!host.equals(activeProviderHost)||!NativeChatRequest.matchesProject(chatProject,"gitlab",host,request))throw new java.io.IOException("The chat project changed; reopen its conversation before posting");};
                     if(chatScoped)chatGuard.check();

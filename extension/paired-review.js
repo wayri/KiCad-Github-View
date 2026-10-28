@@ -13,11 +13,12 @@
    for(const item of value.items)if(!item||item.kind==='group'||!validSelection(item))return false;
    return true;
   }
-  if(!value||typeof value!=='object'||!['part','net'].includes(value.kind))return false;
+  if(!value||typeof value!=='object'||!['part','net','pin'].includes(value.kind))return false;
   const bounded=(v,n)=>typeof v==='string'&&v.length>0&&v.length<=n&&!/[\x00-\x1f\x7f]/.test(v);
   if(!bounded(value.path,1000)||!/^.+\.kicad_(?:sch|pcb)$/i.test(value.path)||value.path.startsWith('/')||value.path.split('/').some(p=>!p||p==='.'||p==='..'||/[\\:]/.test(p)))return false;
-  const keys=value.kind==='part'?['kind','reference','path','uuid','symbolUuid']:['kind','netName','qualifiedNetName','path'];if(Object.keys(value).some(k=>!keys.includes(k)))return false;
+  const keys=value.kind==='pin'?['kind','reference','path','uuid','ownerUuid','symbolUuid','pinNumber']:value.kind==='part'?['kind','reference','path','uuid','symbolUuid']:['kind','netName','qualifiedNetName','path'];if(Object.keys(value).some(k=>!keys.includes(k)))return false;
   if(value.kind==='net')return bounded(value.netName,500)&&(value.qualifiedNetName===undefined||bounded(value.qualifiedNetName,500));
+  if(value.kind==='pin'&&(!bounded(value.pinNumber,200)||(value.ownerUuid!==undefined&&!bounded(value.ownerUuid,200))))return false;
   return bounded(value.reference,200)&&(value.uuid===undefined||bounded(value.uuid,200))&&(value.symbolUuid===undefined||bounded(value.symbolUuid,200));
  }
  function relatedPart(objects,selection){
@@ -33,6 +34,23 @@
   // A saved link that disagrees is evidence against reference-only matching.
   if(sourceId&&(board?symbolUuid(refs[0]):selection.symbolUuid))return {error:'Saved schematic identity does not match this part; update the design association.'};
   return {object:refs[0]};
+ }
+ // Pin numbers establish electrical terminals only after resolving a unique saved parent.
+ function relatedPin(objects,designs,selection){
+  if(!validSelection(selection)||selection.kind!=='pin')return {error:'Invalid cross-highlight pin.'};
+  const fromSchematic=/\.kicad_sch$/i.test(selection.path);
+  const match=relatedPart(objects,{kind:'part',reference:selection.reference,path:selection.path,
+   ...(fromSchematic&&(selection.ownerUuid||selection.uuid)?{uuid:selection.ownerUuid||selection.uuid}:{}),
+   ...(!fromSchematic&&selection.symbolUuid?{symbolUuid:selection.symbolUuid}:{})});
+  if(!match.object)return match;
+  const object=match.object;
+  const design=designs instanceof Map?designs.get(object.path):Array.isArray(designs)?designs.find(d=>d.path===object.path):designs?.[object.path];
+  const primitives=(design?.primitives||[]).filter(p=>!p.hidden&&!p.hole&&
+   (fromSchematic?p.kind==='pad':p.kind==='pin')&&
+   (fromSchematic?p.ownerUuid===object.uuid:(p.ownerUuid||p.uuid)===object.uuid)&&
+   String(p.pinNumber??p.name??'')===selection.pinNumber);
+  if(!primitives.length)return {error:'The corresponding saved pin/pad number is unavailable in the paired drawing.'};
+  return {object,primitives,pinNumber:selection.pinNumber};
  }
  function sheetTarget(object){
   const name=object.properties?.Sheetfile??object.properties?.['Sheet file'];
@@ -77,7 +95,7 @@
   for(const item of selection.items){
    // A group spans sheets: the currently displayed sheet must not resolve an
    // otherwise ambiguous local name on behalf of the whole selection.
-   const match=item.kind==='part'?relatedPart(objects,item):relatedNet(nets,objects,item);
+   const match=item.kind==='part'?relatedPart(objects,item):item.kind==='pin'?{error:'Pin groups require drawing geometry; select one terminal explicitly.'}:relatedNet(nets,objects,item);
    if(match.object)matchedObjects.add(match.object);
    if(match.net)matchedNets.add(match.net);
    if(match.error)errors.add(match.error);
@@ -85,6 +103,6 @@
   result.objects=[...matchedObjects];result.nets=[...matchedNets];result.errors=[...errors];
   return result;
  }
- root.KiCadPairedReview={validSelection,relatedPart,symbolUuid,sheetPrefix,qualifiedNetName,relatedNet,relatedGroup};
+ root.KiCadPairedReview={validSelection,relatedPart,relatedPin,symbolUuid,sheetPrefix,qualifiedNetName,relatedNet,relatedGroup};
  if(typeof module==='object'&&module.exports)module.exports=root.KiCadPairedReview;
 })(globalThis);

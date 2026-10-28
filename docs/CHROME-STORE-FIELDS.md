@@ -12,7 +12,7 @@ Upload only the extension ZIP as the package, not this folder or a VSIX. The upl
 - Homepage URL: https://github.com/wayri/kiview-marketplace-assets/blob/main/CHROME-HOME.md
 - Support URL: https://github.com/wayri/kiview-marketplace-assets/blob/main/SUPPORT.md
 - Mature content: Off.
-- Contact/support email where requested: support@sigharmonic.com.
+- Contact/support email where requested: support.kivi@sigharmonic.com.
 - Screenshots: genuine Chrome-extension captures, 1280×800 or 640×400, JPEG or 24-bit PNG without alpha. At least one is required; up to five. Three actual Chrome captures are available in screenshots/ and chrome-store-screenshots.zip.
 - Small promo tile: small-promo-440x280.png. Marquee promo tile: marquee-promo-1400x560.png. Both are RGB PNGs without alpha; upload them to their separate promo fields.
 

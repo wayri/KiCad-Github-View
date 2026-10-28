@@ -1,6 +1,6 @@
 # Pocket KiView Privacy Policy
 
-Policy date: 2026-10-11. Applies to the Pocket KiView Android app (`dev.kicadvizdiff.android`).
+Policy date: 2026-10-28. Covers the Pocket KiView Android app (`dev.kicadvizdiff.android`) and the browser extension as described below.
 
 ## What the app accesses
 
@@ -34,8 +34,20 @@ Pocket KiView does not create a separate Pocket KiView service account. Connecti
 
 ## Privacy inquiries and changes
 
-Project maintainers can be contacted through the [Pocket KiView project support page](https://github.com/wayri/KiCad-Github-View/issues). GitHub issues are public: do not post credentials, private designs or other sensitive data there. For private support, privacy inquiries and content/user reports, email support@sigharmonic.com. The mailbox is monitored by the publisher, responding as Pocket KiView team; report drafts are only sent when you send them in your email app. Do not include credentials or private project files. Blocking hides a user’s comments in the current app profile; it does not block the provider account.
+Project maintainers can be contacted through the [Pocket KiView project support page](https://github.com/wayri/KiCad-Github-View/issues). GitHub issues are public: do not post credentials, private designs or other sensitive data there. For private support, privacy inquiries and content/user reports, email support.kivi@sigharmonic.com. The mailbox is monitored by the publisher, responding as Pocket KiView team; report drafts are only sent when you send them in your email app. Do not include credentials or private project files. Blocking hides a user’s comments in the current app profile; it does not block the provider account.
 
 This policy should be updated when the app's data handling changes. The policy date above identifies this source version.
 
 Population inspection photos and reviewed reference data remain local unless you explicitly export or publish them. Preparing an inspection Discussion draft does not upload anything. Publishing the draft sends its summary and compressed, labelled photo sheet to your chosen repository; full-resolution originals are not attached automatically.
+
+## Browser extension project history
+
+The browser extension dashboard stores up to 50 recent project names and
+locations in that browser profile's extension-local storage. Remote entries
+include the provider/server, repository, saved revision, drawing path and access
+time. Local imports retain a display name and project identity, not their source
+contents or a reusable filesystem permission. Local files must be selected again
+after the workspace closes. The dashboard does not import earlier browser history
+or upload these records to an analytics service. Remove entries or use Clear
+history to delete this metadata; source files, credentials and review notes are
+separate. This browser section supplements the Android-specific details above.

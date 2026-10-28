@@ -58,6 +58,27 @@ function runtime(dpr=1,extra={}){
   const canvas=env.KiCadOwnedCanvas.mount(host,{pcb:true,dark:true});return{canvas,element,operations,listeners};
 }
 
+test('object categories distinguish copper, graphics, text and drill ownership',()=>{
+ for(const [primitive,category]of [
+  [{kind:'pad',type:'polygon',fill:true},'pads'],[{kind:'drill',objectCategory:'pads'},'pads'],
+  [{kind:'via',type:'circle',fill:true},'vias'],[{kind:'drill',objectCategory:'vias'},'vias'],
+  [{kind:'track',type:'line'},'tracks'],[{kind:'arc',type:'arc'},'arcs'],
+  [{kind:'fp_text',type:'text'},'texts'],[{kind:'zone',type:'polygon',fill:true},'fills'],
+  [{kind:'zone-outline',type:'polygon'},'polygons'],[{kind:'gr_poly',fill:true},'regions'],
+  [{kind:'gr_poly',fill:false},'polygons'],[{kind:'gr_rect',fill:true},'fills'],
+  [{kind:'fp_line',type:'line'},'graphics'],[{kind:'worksheet',frame:true},null]
+ ])assert.equal(core.objectCategory(primitive),category);
+});
+test('object filters compose with source hiding, layer flags, picking and neutral geometry without changing the camera',()=>{
+ const {canvas}=runtime(),pad={type:'pad',kind:'pad',ownerUuid:'fp',uuid:'pad',layer:'F.Cu',fill:true,points:[{x:0,y:0},{x:2,y:0},{x:2,y:2},{x:0,y:2}]},hole={...pad,kind:'drill',hole:true,objectCategory:'pads'},hit={...pad,kind:'footprint-hit',uuid:'fp',fill:false,opacity:0};
+ const back={type:'text',kind:'fp_text',layer:'B.SilkS',uuid:'back',x:5,y:5,text:'back'},edge={type:'line',kind:'gr_line',layer:'Edge.Cuts',uuid:'edge',points:[{x:10,y:10},{x:20,y:10}]},sourceHidden={...pad,uuid:'hidden',hidden:true};
+ const primitives=[pad,hole,hit,back,edge,sourceHidden],source=JSON.stringify(primitives);canvas.setDocument({primitives,layers:['F.Cu','B.SilkS','Edge.Cuts']},'board');
+ const camera=canvas.cameraState(),painted=[];canvas.paint=p=>painted.push(p);canvas.setObjectVisibility({hiddenTypes:['pads'],side:'top'});
+ assert.ok(!painted.includes(pad));assert.ok(!painted.includes(hole));assert.ok(!painted.includes(back));assert.ok(painted.includes(edge));assert.equal(canvas.query({x:1,y:1}).length,0);assert.equal(canvas.geometryVisible(sourceHidden),false);assert.equal(canvas.geometryVisible(hit),false);assert.deepEqual(canvas.cameraState(),camera);
+ canvas.setObjectVisibility({side:'bottom'});assert.equal(canvas.geometryVisible(pad),false);assert.equal(canvas.geometryVisible(back),true);assert.equal(canvas.geometryVisible(edge),true);
+ canvas.setObjectVisibility();assert.equal(canvas.query({x:1,y:1})[0],pad);canvas.visibleLayers.delete('F.Cu');assert.equal(canvas.query({x:1,y:1}).length,0);assert.equal(JSON.stringify(primitives),source);canvas.dispose();
+});
+
 test('zone fill and outline toggles independently control drawing and picking without changing source',()=>{
  const {canvas}=runtime();
  const polygon={type:'polygon',points:[{x:0,y:0},{x:10,y:0},{x:10,y:10},{x:0,y:10}],layer:'F.Cu',uuid:'z'};
@@ -167,14 +188,14 @@ test('net highlight respects layer visibility, dims unrelated copper and preserv
  const {canvas}=runtime(),pad={type:'circle',x:20,y:30,r:1,uuid:'pad',layer:'F.Cu'},other={...pad,uuid:'other',x:30},back={...pad,uuid:'back',layer:'B.Cu'},hole={...pad,uuid:'hole',hole:true},hidden={...pad,uuid:'hidden',hidden:true};
  canvas.setDocument({layers:['F.Cu','B.Cu'],primitives:[pad,other,back,hole,hidden]},'board.kicad_pcb');canvas.visibleLayers.delete('B.Cu');
  const painted=[];canvas.paint=(p,style)=>painted.push({p,style});canvas.setNetHighlight({primitives:[pad,back]});canvas.draw();
- assert.deepEqual(painted.map(item=>item.p.uuid),['pad','other','hole']);assert.equal(painted[0].style.color,'#ffe18b');assert.equal(painted[1].style.opacity,.16);assert.equal(painted[2].style.opacity,1);
+ assert.deepEqual(painted.map(item=>item.p.uuid),['pad','other','hole']);assert.equal(painted[0].style.color,'#ffe18b');assert.equal(painted[1].style.opacity,.42);assert.equal(painted[1].style.color,'#87919d');assert.equal(painted[2].style.opacity,1);
  painted.length=0;canvas.setNetHighlight({primitives:[pad]},{isolate:true});canvas.draw();assert.deepEqual(painted.map(item=>item.p.uuid),['pad','hole']);
  canvas.setNetHighlight(null);painted.length=0;canvas.draw();assert.equal(painted.find(item=>item.p===other).style.opacity,1);
 });
 
 test('schematic net highlight contrasts with white paper and retains readable surrounding geometry',()=>{
  const {canvas}=runtime();canvas.pcb=false;canvas.dark=false;const pin={type:'line',points:[{x:1,y:1},{x:4,y:1}],uuid:'pin'},wire={...pin,uuid:'wire'};canvas.primitives=[pin,wire];
- const painted=[];canvas.paint=(p,style)=>painted.push(style);canvas.setNetHighlight({primitives:[pin]});canvas.draw();assert.equal(painted[0].color,'#006ca8');assert.equal(painted[1].opacity,.28);
+ const painted=[];canvas.paint=(p,style)=>painted.push(style);canvas.setNetHighlight({primitives:[pin]});canvas.draw();assert.equal(painted[0].color,'#006ca8');assert.equal(painted[1].opacity,.38);assert.equal(painted[1].color,'#8b919a');
 });
 
  test('layer focus dims context, prioritizes focused picking and isolate excludes other copper',()=>{
@@ -218,4 +239,35 @@ test('net label overlay follows hidden layers, zone visibility and isolated net 
  operations.length=0;canvas.visibleLayers.delete('B.Cu');canvas.drawNetNames();assert.deepEqual(drawn(),['FRONT']);
  operations.length=0;canvas.visibleLayers.add('B.Cu');canvas.setNetHighlights([{primitives:[back]}],{mode:'isolate'});canvas.drawNetNames();assert.deepEqual(drawn(),['BACK']);
  operations.length=0;canvas.showNetNames=false;canvas.drawNetNames();assert.deepEqual(drawn(),[]);canvas.dispose();
+});
+
+test('close-zoom pad labels retain terminal identity and bounded readable scaling',()=>{
+ const camera=new core.Camera(1200,800);camera.center={x:0,y:0};camera.zoom=50;
+ const pad={kind:'pad',type:'pad',uuid:'p1',ownerUuid:'u1',layer:'F.Cu',name:'1',pinNumber:'1',pinName:'OUT',padCenter:{x:0,y:0},padWidth:2,padHeight:1,r:.5,x:0,y:0};
+ const before=JSON.stringify(pad),labels=core.netLabels([[pad,'VCC'],[{...pad,layer:'B.Cu'},'VCC']],camera);
+ assert.equal(labels.length,1);assert.equal(labels[0].text,'1 OUT\nVCC');assert.ok(labels[0].size>=9&&labels[0].size<=18);assert.equal(JSON.stringify(pad),before);
+ camera.zoom=5;assert.equal(core.netLabels([[pad,'VCC']],camera).length,0);
+ camera.zoom=1000;assert.equal(core.netLabels([[pad,'VCC']],camera)[0].size,18);
+});
+
+test('terminal-only canvas picking excludes bodies, traces and text without terminal identity',()=>{
+ const {canvas}=runtime();canvas.viewport.camera.zoom=20;canvas.visibleLayers=new Set(['F.Cu']);
+ const body={type:'polygon',kind:'footprint',uuid:'u1',fill:true,layer:'F.Cu',points:[{x:0,y:0},{x:3,y:0},{x:3,y:3},{x:0,y:3}]};
+ const pad={type:'pad',kind:'pad',uuid:'p1',ownerUuid:'u1',name:'1',pinNumber:'1',layer:'F.Cu',x:1,y:1,r:.3,fill:true};canvas.primitives=[body,pad];
+ canvas.setSelectionMode('pin');assert.deepEqual(canvas.query({x:1,y:1}),[pad]);assert.deepEqual(canvas.query({x:2,y:2}),[]);
+ canvas.setSelectionMode('all');assert.equal(canvas.query({x:2,y:2})[0],body);canvas.dispose();
+});
+
+test('label traversal stops at the cap and leaves saved pad geometry untouched',()=>{
+ const camera=new core.Camera(20000,20000);camera.center={x:0,y:0};camera.zoom=20;
+ let visited=0;const pads=Array.from({length:500},(_,i)=>({kind:'pad',type:'pad',uuid:String(i),ownerUuid:'owner',layer:'F.Cu',pinNumber:'1',padCenter:{x:(i%25)*5-60,y:Math.floor(i/25)*5-40},padWidth:2,padHeight:2,points:[{x:0,y:0},{x:1,y:0},{x:1,y:1}]}));
+ const source=JSON.stringify(pads);function* entries(){for(const p of pads){visited++;yield [p,''];}}
+ const labels=core.netLabels(entries(),camera,300);assert.equal(labels.length,300);assert.ok(visited<=301);assert.equal(JSON.stringify(pads),source);
+ const fallback={...pads[0],uuid:'fallback',padCenter:undefined,padWidth:undefined,padHeight:undefined,points:[{x:-1,y:-1},{x:1,y:-1},{x:1,y:1},{x:-1,y:1}]};
+ assert.equal(core.netLabels([[fallback,'']],camera).length,1);
+});
+test('highlight union honors live mutable members and the 200-net cap',()=>{
+ const {canvas}=runtime(),a={},b={},c={};const members=[a],nets=[{primitives:members},...Array.from({length:199},()=>({primitives:[]})),{primitives:[c]}];
+ canvas.setNetHighlights(nets);assert.equal(canvas.highlightCount,200);assert.equal(canvas.netPrimitives.has(a),true);assert.equal(canvas.netPrimitives.has(c),false);
+ members.push(b);canvas.setNetHighlights(nets);assert.equal(canvas.netPrimitives.has(b),true);members.shift();canvas.setNetHighlights(nets);assert.equal(canvas.netPrimitives.has(a),false);canvas.dispose();
 });

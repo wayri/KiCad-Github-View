@@ -49,3 +49,30 @@ test('historical open rejects traversal, missing sources and unavailable Git wit
  assert.equal(h.panels.length,0);h.vscode.extensions.getExtension=()=>undefined;
  const missing=await h.send({type:'repository-tree',sha:OLD,directory:''});assert.equal(missing.ok,false);assert.match(missing.error,/No working files were substituted/);
 });
+
+test('commit comparison uses unsaved current text and immutable saved source, with no writable receiver',async()=>{
+ const h=harness(),uri=Uri.joinPath(h.session.scope.boundary,'root.kicad_sch');
+ h.vscode.workspace.fs.stat=async target=>({type:target.path.endsWith('.kicad_sch')?1:2,size:12});
+ h.vscode.workspace.textDocuments=[{uri,isDirty:true,getText:()=>'(kicad_sch (version 999))'}];
+ const result=await h.send({type:'repository-compare-current',sha:OLD,path:'root.kicad_sch'});assert.equal(result.ok,true);assert.equal(result.result.unsaved,true);assert.equal(result.result.readOnly,true);
+ const panel=h.panels[0],token=JSON.parse(panel.webview.html.match(/globalThis.KiCadVSCodeContext=(.*?);<\/script>/)[1]).token;
+ await panel.receive({channel:h.api.CHANNEL,token,id:1,request:{type:'conflict-load'}});
+ const loaded=panel.messages.at(-1).reply.result;assert.equal(loaded.current,'(kicad_sch (version 999))');assert.equal(loaded.incoming,h.data.get('hardware/root.kicad_sch'));assert.equal(loaded.readOnly,true);assert.equal(loaded.sha,OLD);
+ for(const type of ['conflict-save','conflict-stage']){await panel.receive({channel:h.api.CHANNEL,token,id:panel.messages.length+1,request:{type}});assert.equal(panel.messages.at(-1).reply.ok,false);assert.match(panel.messages.at(-1).reply.error,/read-only/);}
+ h.vscode.workspace.isTrusted=false;await panel.receive({channel:h.api.CHANNEL,token,id:9,request:{type:'conflict-load'}});assert.equal(panel.messages.at(-1).reply.ok,false);panel.dispose();
+});
+
+test('revision actions bind the current drawing, immutable scope and trust; export cancellation has no writes',async()=>{
+ const h=harness();for(const request of [{type:'repository-compare-current',path:'board.kicad_pcb'},{type:'repository-compare-current',path:'../root.kicad_sch'},{type:'repository-export-revision',path:'root.kicad_sch',copy:'yes'},{type:'repository-export-revision',path:'root.kicad_sch',copy:true,ref:OLD}])assert.equal((await h.send({sha:OLD,...request})).ok,false);
+ h.vscode.window.showSaveDialog=async()=>undefined;const cancelled=await h.send({type:'repository-export-revision',path:'root.kicad_sch',sha:OLD,copy:false});assert.equal(cancelled.ok,true);assert.equal(cancelled.result.cancelled,true);
+ h.vscode.workspace.isTrusted=false;assert.equal((await h.send({type:'repository-export-revision',path:'root.kicad_sch',sha:OLD,copy:true})).ok,false);assert.equal(h.panels.length,0);
+});
+
+test('revision actions permit loaded child sheets while keeping unrelated workspace drawings outside the session',async()=>{
+ const h=harness(),child='sub/child.kicad_sch',uri=Uri.joinPath(h.session.scope.boundary,...child.split('/'));h.session.paths.add(child);h.session.files.push({path:child,content:'(kicad_sch)'});
+ h.vscode.workspace.fs.stat=async target=>({type:target.path.endsWith('.kicad_sch')?1:2,size:12});h.vscode.workspace.textDocuments=[{uri,isDirty:true,getText:()=>'(kicad_sch (version 999))'}];
+ const compared=await h.send({type:'repository-compare-current',file:child,path:child,sha:OLD});assert.equal(compared.ok,true);assert.equal(compared.result.unsaved,true);
+ const panel=h.panels[0],token=JSON.parse(panel.webview.html.match(/globalThis.KiCadVSCodeContext=(.*?);<\/script>/)[1]).token;await panel.receive({channel:h.api.CHANNEL,token,id:1,request:{type:'conflict-load'}});assert.equal(panel.messages.at(-1).reply.result.path,child);assert.equal(panel.messages.at(-1).reply.result.incoming,'(kicad_sch)');panel.dispose();
+ h.vscode.window.showSaveDialog=async()=>undefined;assert.equal((await h.send({type:'repository-export-revision',file:child,path:child,sha:OLD,copy:true})).result.cancelled,true);
+ for(const path of ['board.kicad_pcb','../outside.kicad_sch','sub/missing.kicad_sch'])assert.equal((await h.send({type:'repository-compare-current',file:child,path,sha:OLD})).ok,false);
+});

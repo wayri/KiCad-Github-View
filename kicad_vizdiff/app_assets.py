@@ -11,7 +11,7 @@ VENDOR_ASSETS = ('spike-board3d.bundle.js', 'SPIKE-ENGINE-NOTICE.md',
                  'THREE-LICENSE', 'occt/occt-import-js.js', 'occt/occt-import-js.wasm',
                  'occt/license.occt-import-js.txt', 'occt/license.occt.txt', 'occt/NOTICE.md',
                  'occt/OCCT_LGPL_EXCEPTION.txt', 'occt/EMSCRIPTEN-LICENSE.txt')
-RENDERER_ASSETS += ('ui-foundation.css',)
+RENDERER_ASSETS += ('ui-foundation.css','analysis-simulation.js','analysis-simulation.css','revision-actions.js','overview-routing.js')
 RENDERER_ASSETS += ('pdf-tools.js','pdf-viewer.html','pdf-viewer.css','pdf-viewer.js')
 VENDOR_ASSETS += _PDF_VENDOR
 PUBLIC_ASSETS = (frozenset(VIEWER_PAGES) | frozenset(RENDERER_ASSETS) |

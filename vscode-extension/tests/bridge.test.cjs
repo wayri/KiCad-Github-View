@@ -41,6 +41,22 @@ test("paired selection and comment-change exports use authenticated request IDs"
   await h.sandbox.KiCadVSCodeBridge.selection({...selection,reference:"bad\nreference"});assert.equal(h.outgoing.length,2);
 });
 
+test("pin terminal selection roundtrips while malformed identity remains outside the bridge",async()=> {
+ const h=harness(),selection={kind:"pin",reference:"J1",path:"root.kicad_sch",pinNumber:"A1",uuid:"terminal",ownerUuid:"owner",symbolUuid:"symbol"};
+ const promise=h.sandbox.KiCadVSCodeBridge.selection(selection);assert.deepEqual(h.outgoing[0].request.selection,selection);h.respond(h.outgoing[0]);await promise;
+ h.events.message({source:h.host,origin:h.sandbox.location.origin,data:{channel:"kicad-vscode:v1",token:h.token,eventId:1,event:{type:"related",selection}}});assert.deepEqual(h.dispatched[0].detail,selection);
+ for(const changes of [{pinNumber:""},{pinNumber:"x".repeat(201)},{ownerUuid:"bad\n"},{symbolUuid:4},{extra:true}]){await h.sandbox.KiCadVSCodeBridge.selection({...selection,...changes});h.events.message({source:h.host,origin:h.sandbox.location.origin,data:{channel:"kicad-vscode:v1",token:h.token,eventId:2,event:{type:"related",selection:{...selection,...changes}}}});}
+ assert.equal(h.outgoing.length,1);assert.equal(h.dispatched.length,1);
+});
+
+test("analysis net focus authenticates exact bounded net names without fabricating drawing paths",async()=> {
+ const h=harness(),event=(eventId,event,changes={})=>h.events.message({origin:h.sandbox.location.origin,source:h.host,data:{channel:"kicad-vscode:v1",token:h.token,eventId,event},...changes});
+ const focus={type:"analysis-net-focus",netName:"/POWER/VCC"};
+ event(1,focus,{origin:"https://other.example"});event(1,{...focus,file:"invented.kicad_sch"});event(1,{...focus,netName:"bad\n"});event(1,{...focus,netName:"x".repeat(501)});assert.equal(h.dispatched.length,0);
+ event(1,focus);assert.equal(h.dispatched[0].type,"kicad-review:analysis-net-focus");assert.deepEqual(JSON.parse(JSON.stringify(h.dispatched[0].detail)),{netName:"/POWER/VCC"});
+ event(1,focus);event(2,focus,{source:{}});assert.equal(h.dispatched.length,1);
+});
+
 test("incoming related and refresh events reject wrong sender, malformed data and event replay",async()=> {
   const h=harness(),selection={kind:"net",path:"board.kicad_pcb",netName:"GND"};
   const event=(eventId,event,changes={})=>h.events.message({origin:h.sandbox.location.origin,source:h.host,data:{channel:"kicad-vscode:v1",token:h.token,eventId,event},...changes});

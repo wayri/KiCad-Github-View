@@ -79,3 +79,11 @@ for(const provider of ['github','gitlab'])test('Android trusted runtime routes '
  for(const type of ['chat-thread-list','chat-message-write'])assert.equal((await context.chrome.runtime.sendMessage({type,repository:info.repository,ref:sha,file:p.files[0].path,...(provider==='gitlab'?{provider,host:info.host}:{})})).ok,true);
  assert.equal(requests.length,2);assert.equal((await context.chrome.runtime.sendMessage({type:'chat-message-write',repository:'foreign/project',ref:sha,file:p.files[0].path})).ok,false);assert.equal(requests.length,2);
 });
+
+test('thread state adapter requires exact saved source, explicit confirmation, supported kind and passes no credentials',async()=>{
+ for(const lab of [false,true]){
+  const sent=[],api=create(project(lab),async message=>{sent.push(message);return{state:message.state};},comments,store()),request={type:'chat-thread-state',repository:lab?'group/sub/board':'owner/board',ref:sha,file:'design/board.kicad_sch',thread:{kind:'issue',number:42,title:'Not sent'},state:'closed',expectedUpdatedAt:time,confirmed:true};
+  for(const override of [{confirmed:false},{state:'delete'},{ref:'main'},{file:'other.kicad_sch'},{host:'https://foreign.example'},...(lab?[{thread:{kind:'discussion',number:42}}]:[])])assert.equal((await api.send({...request,...override})).ok,false);
+  assert.equal(sent.length,0);assert.equal((await api.send(request)).ok,true);const write=sent.find(row=>row.type==='chat-thread-state');assert.deepEqual(write.thread,{kind:'issue',number:42});assert.equal(write.ref,sha);assert.equal(write.confirmed,true);assert.equal(write.expectedUpdatedAt,time);assert.equal(write.body,undefined);if(lab)assert.equal(sent[0].type,'auth-status');
+ }
+});

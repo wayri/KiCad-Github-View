@@ -59,7 +59,8 @@
   const footer=make('p','Read-only repository browsing. Graph lines follow real commit parent IDs.','repo-footnote');page.append(footer);
   const origin=d.activeElement,inert=new Map();d.body.append(page);for(const node of d.body.children)if(node!==page){inert.set(node,node.inert);node.inert=true;}back.focus();
   function close(){if(closed)return;closed=true;generation++;d.removeEventListener('keydown',key);for(const [node,value]of inert)node.inert=value;page.remove();origin?.focus?.();if(current?.page===page)current=null;}
-  function key(e){if(e.key==='Escape'){e.preventDefault();e.stopPropagation();close();}}
+  function key(e){if(e.key==='Escape'){e.preventDefault();e.stopPropagation();const menu=page.querySelector('.repo-commit-more[open]');if(menu){menu.open=false;menu.querySelector('summary')?.focus();}else close();}}
+  page.addEventListener('pointerdown',event=>{for(const menu of page.querySelectorAll('.repo-commit-more[open]'))if(!menu.contains(event.target))menu.open=false;});
   d.addEventListener('keydown',key);current={page,close};
   const fields=()=>({repository:options.repository,provider:options.provider||'github',...(options.host?{host:options.host}:{}),ref,file:options.file});
   async function call(type,extra={}){const request={...fields(),...extra};if(options.local){request.ref=options.ref;const selected=SHA.test(ref)?ref:branchHeads.find(b=>b.name===ref)?.sha;if(!request.sha&&selected)request.sha=selected;}else if(request.sha)request.ref=request.sha;const value=await options.request(type,request);if(value?.ok===false)throw Error(value.error||'Repository request failed');return value?.ok===true?value.result:value;}
@@ -93,7 +94,11 @@
     const body=make('pre',c.message||'');details.append(body);const parents=make('p','Parents: '+((c.parents||[]).map(p=>p.slice(0,8)).join(', ')||'Root commit'),'repo-commit-parents');details.append(parents);
     if(row.earlier.length)details.append(make('p','Parent links above: '+row.earlier.map(p=>p.slice(0,8)).join(', ')));
     const actions=make('div',undefined,'repo-commit-actions');actions.append(button('Browse files',()=>{ref=c.sha;if(![...branch.options].some(o=>o.value===ref))branch.append(new Option('Commit · '+ref.slice(0,12),ref));branch.value=ref;reload();page.dataset.tab='files';for(const [i,b]of tabButtons.entries())b.setAttribute('aria-pressed',String(i===0));}));
-    if(options.onOpenRevision)actions.append(button('Open revision',()=>Promise.resolve(options.onOpenRevision(c.sha)).catch(error=>warn(error.message))));
+    const invoke=async(action,label)=>{if(!SHA.test(c.sha))return;try{const result=await action(c.sha);if(!closed&&result?.message)warn(result.message);}catch(error){if(!closed)warn(label+': '+error.message);}};
+    const more=make('details',undefined,'repo-commit-more'),moreLabel=make('summary','More'),moreItems=make('div',undefined,'repo-commit-menu');more.append(moreLabel,moreItems);
+    for(const [key,label]of [['onOpenRevision','View this commit'],['onCompareCurrent','Compare with current'],['onDownloadRevision','Download committed project'],['onCopyRevision','Make local copy'],['onForkRevision','Fork from this commit']])if(typeof options[key]==='function'){
+      const secondary=['onDownloadRevision','onCopyRevision','onForkRevision'].includes(key);(secondary?moreItems:actions).append(button(label,()=>{more.open=false;return invoke(options[key],label);}));
+    }if(moreItems.children.length)actions.append(more);
     try{const url=new URL(c.url);if(url.protocol==='https:'&&!url.username&&!url.password){const a=make('a','Open commit');a.href=url.href;a.target='_blank';a.rel='noopener noreferrer';actions.append(a);}}catch{}
     details.append(actions);item.append(details);history.append(item);
    }

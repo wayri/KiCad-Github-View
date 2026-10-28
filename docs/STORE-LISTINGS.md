@@ -1,6 +1,6 @@
 # Store listing drafts
 
-Current Chrome update: [0.12.64 upload file and ready-to-copy text](store-submissions/chrome-0.12.64.txt). Support contact: `support.kivi@sigharmonic.com`. The older preparation notes below are retained as historical guidance; use the current submission text and release artifacts.
+Current Chrome update: [0.12.65 upload file and ready-to-copy text](store-submissions/chrome-0.12.65.txt). Support contact: `support.kivi@sigharmonic.com`. The older preparation notes below are retained as historical guidance; use the current submission text and release artifacts.
 
 For a Mozilla listing, adapt the browser description to the [Firefox-specific limits and submission steps](FIREFOX.md). Use the Firefox ZIP, preserve add-on ID `kicad-visual-review@wayri.github.io`, resolve the current data-consent declaration blocker, and obtain genuine Firefox captures before advertising installed acceptance. A Chrome Store listing/ZIP is not an AMO listing or signed XPI. Both public AMO and unlisted signed distribution are described in that guide.
 
@@ -19,7 +19,7 @@ and extension IDs. Account registration, final previews and submission are pendi
   measurements and local annotations.
 - Category: Visualization.
 - Support: https://github.com/wayri/KiCad-Github-View/issues
-- Private support: support@sigharmonic.com
+- Private support: support.kivi@sigharmonic.com
 
 Open saved KiCad schematics and PCB layouts directly in VS Code. Inspect parts,
 nets and layers, measure geometry, review assembly variants and keep source-linked
@@ -47,7 +47,7 @@ Version 0.12.49 adds Pocket KiView Source-Available License 1.0, copyright Yawar
 - Summary: Browser-only KiCad schematic and PCB review on GitHub, GitLab.com and
   configured GitLab servers, with issue comments.
 - Support: https://github.com/wayri/KiCad-Github-View/issues
-- Private support: support@sigharmonic.com
+- Private support: support.kivi@sigharmonic.com
 
 Inspect KiCad schematics and boards inside supported GitHub and GitLab pages, or
 click the extension icon to open a local file/folder workspace. Explore parts,

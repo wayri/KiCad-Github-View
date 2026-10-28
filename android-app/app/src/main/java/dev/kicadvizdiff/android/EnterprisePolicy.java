@@ -6,7 +6,7 @@ import java.util.Set;
 /** Managed state is independent of user preferences and project metadata. */
 final class EnterprisePolicy {
     static final Set<String> KEYS=Set.of("disable_network","disable_provider_writes","secure_screen","restrictions_pending");
-    private static final Set<String> WRITES=Set.of("review-publish","review-upload","publish","upload","chat-message-write","chat-reaction");
+    private static final Set<String> WRITES=Set.of("repository-fork-revision","review-publish","review-upload","publish","upload","chat-message-write","chat-thread-state","chat-reaction");
     final boolean network,providerWrites,secureScreen;
     private EnterprisePolicy(boolean network,boolean writes,boolean secure){this.network=network;providerWrites=network&&writes;secureScreen=secure;}
     static EnterprisePolicy denied(){return new EnterprisePolicy(false,false,true);}

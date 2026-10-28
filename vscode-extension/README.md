@@ -72,6 +72,6 @@ Screenshots use the public KiCad PIC Programmer demo. The conflict fixture inten
 
 Copyright © 2026 Yawar B (wayri). Source-available license; paid software distribution and monetized hosting require written permission. See the packaged `LICENSE.txt`. Third-party licenses remain applicable.
 
-[GitHub project](https://github.com/wayri/KiCad-Github-View) · [Support](mailto:support@sigharmonic.com)
+[GitHub project](https://github.com/wayri/KiCad-Github-View) · [Support](mailto:support.kivi@sigharmonic.com)
 
 The GitHub repository is public; browse the source, guides and release downloads there.

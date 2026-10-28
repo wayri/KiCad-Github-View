@@ -13,7 +13,8 @@ FILES = {'analysis-data.js', 'analysis-viewer.html', 'analysis-viewer.css', 'ana
          'schematic-renderer.js', 'pcb-renderer.js', 'vendor/spike-board3d.bundle.js',
          'vendor/SPIKE-ENGINE-NOTICE.md', 'vendor/THREE-LICENSE', 'credential-vault.js',
          'credential-vault-host.html', 'credential-vault-host.js', 'credential-vault-worker.js'}
-FILES.update({'workspace-chrome.css','workspace-chrome.js'})
+FILES.update({'overview-routing.js','dashboard.html','dashboard.css','dashboard.js','project-recents.js'})
+FILES.update({'workspace-chrome.css','workspace-chrome.js','revision-actions.js','revision-fork.js','analysis-simulation.js','analysis-simulation.css'})
 FILES.update({'chat-content.js','chat-panel.js','chat-panel.css'})
 FILES.update({'compact-surfaces.css','compact-surfaces.js'})
 FILES.update({'managed-policy.js','managed-policy-schema.json','managed-policy-options.js'})

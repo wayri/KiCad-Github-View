@@ -26,7 +26,7 @@ function bridge(native,{setTimeout:later=root.setTimeout,clearTimeout:clear=root
    if(pending.size>=8){reject(Error('Wait for the current GitHub request.'));return;}
    if(cancellableReads.has(message.type)&&options.signal?.aborted){reject(abortError());return;}
    const id=++next;requestId=id;
-   const timer=later(()=>cancelRequest(id,Error('GitHub request timed out. Try again.')),message.type.endsWith('import')?(message.downloadLarge?2100000:600000):message.type==='token-connect'?300000:60000);
+   const timer=later(()=>cancelRequest(id,Error(message.type==='repository-fork-revision'?'Fork request timed out. Inspect the destination before retrying.':'GitHub request timed out. Try again.')),message.type.endsWith('import')?(message.downloadLarge?2100000:600000):message.type==='token-connect'?300000:message.type==='repository-fork-revision'?180000:60000);
    const signal=cancellableReads.has(message.type)?options.signal:null,abort=()=>cancelRequest(id);
    pending.set(id,{resolve,reject,timer,type:message.type,canStop,signal,abort});signal?.addEventListener?.('abort',abort,{once:true});
    try{const {type,...fields}=message;native().githubRequest(id,{...fields,action:type});}

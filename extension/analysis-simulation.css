@@ -1,0 +1,9 @@
+.simulation-result-popover{position:fixed;z-index:1200;box-sizing:border-box;width:min(330px,calc(100vw - 16px));max-height:calc(100dvh - 16px);overflow:auto;padding:10px;border:1px solid var(--border,#b5c3cc);border-radius:10px;background:var(--panel,#fff);color:var(--text,#203341);box-shadow:0 7px 25px #102a3c33;font:12px system-ui}
+.simulation-result-popover[hidden]{display:none}
+.simulation-result-heading{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:6px}
+.simulation-result-heading strong{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.simulation-result-popover button{font:inherit;min-height:28px;cursor:pointer}
+.simulation-result-popover select,.simulation-result-popover input{box-sizing:border-box;width:100%;min-width:0;font:inherit}
+.simulation-result-popover canvas{display:block;width:100%;height:130px;touch-action:pan-y}
+.simulation-result-popover output,.simulation-result-popover small{display:block;overflow-wrap:anywhere;margin:5px 0}
+.simulation-result-popover small{opacity:.75}

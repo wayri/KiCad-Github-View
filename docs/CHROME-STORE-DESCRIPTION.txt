@@ -60,6 +60,6 @@ Each edition works independently. Feature availability differs by host; portable
 PROJECT, LICENSE AND SUPPORT
 
 GitHub: https://github.com/wayri/KiCad-Github-View
-Support: support@sigharmonic.com
+Support: support.kivi@sigharmonic.com
 
 Copyright 2026 Yawar B (wayri). Source-available license. Paid software distribution and monetized hosted access require written permission. Third-party terms remain applicable. Your designs and outputs remain yours.

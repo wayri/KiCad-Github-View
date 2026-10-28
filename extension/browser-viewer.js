@@ -155,6 +155,7 @@
     const viewer = element("iframe");viewer.allow="camera";
     viewer.title = `${file} at ${ref.slice(0, 12)}`;
     const query = new URLSearchParams({ repository, ref, file, workspace: '1', ...providerContext });
+    if(file===entryFile&&params.get('focusNet')&&params.get('focusNet').length<=500)query.set('focusNet',params.get('focusNet'));
     if (request.pullNumber) { query.set("pullNumber", request.pullNumber); query.set("pullRepository", request.pullRepository); }
     if(!position&&file===entryFile&&params.has('focusX')&&params.has('focusY')&&[params.get('focusX'),params.get('focusY')].every(n=>Number.isFinite(Number(n))&&Math.abs(Number(n))<=1e6))position={x:Number(params.get('focusX')),y:Number(params.get('focusY')),uuid:params.get('focusUuid')};
     if(position?.uuid&&typeof position.uuid==='string'&&position.uuid.length<=200)query.set('focusUuid',position.uuid);

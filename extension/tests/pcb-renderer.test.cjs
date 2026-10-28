@@ -178,3 +178,12 @@ test('worksheet preserves sparse numbered comments in their native title-block s
  assert.deepEqual(result.page.titleBlock.comments.slice(0,4),['','','Third line','']);
  const third=result.primitives.find(p=>p.frame&&p.text==='Third line');assert.ok(third);assert.ok(result.primitives.some(p=>p.frame&&p.text==='Title: Review board'));
 });
+
+test('pads retain saved terminal names, net labels and source-centered label dimensions',()=>{
+ const source=`(kicad_pcb (version 20241229) (layers (0 "F.Cu" signal))
+ (footprint "Test" (at 10 20 90) (uuid "fp") (property "Reference" "U1")
+  (pad "2" smd rect (at 3 0 45) (size 1 2) (layers "F.Cu") (uuid "pad") (pinfunction "OUT") (net 1 "SIGNAL"))))`;
+ const pad=build(parse(source),'board.kicad_pcb').primitives.find(p=>p.type==='pad');
+ assert.deepEqual([pad.pinNumber,pad.pinName,pad.netName,pad.ownerUuid],['2','OUT','SIGNAL','fp']);
+ assert.deepEqual(pad.padCenter,{x:10,y:17});assert.deepEqual([pad.padWidth,pad.padHeight,pad.padAngle],[1,2,-45]);
+});

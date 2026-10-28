@@ -38,7 +38,7 @@ KiCad workbooks contain simulation setup, not the waveform samples needed to rec
 
 The saved-result viewer bounds each source at 64 MiB, tabular data at 200,000 rows / four million cells, and SPICE data at four million values. Eye plots display all saved contexts up to 512 traces. Source preview is limited to 512,000 characters; report-property inspection is limited to 4,000 fields. Native import/download and repository discovery retain their separate project budgets. Unsupported schemas remain searchable as saved JSON rather than being treated as new analysis results.
 
-VS Code's existing webview CSP prohibits nested frames; its project view currently explains that graphical analysis is available in Pocket KiView or the browser extension. No CSP permissions were expanded for this feature.
+Current source opens saved reports in a dedicated VS Code panel rather than a nested frame. The selected voltage trace can locate its exact net in the original drawing session. No CSP permissions were expanded for this feature. See [saved waveform linking](REVISION-REVIEW.md#link-saved-samples-to-a-net) for matching requirements and limits.
 
 ## Format evidence
 

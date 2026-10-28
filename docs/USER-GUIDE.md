@@ -138,7 +138,7 @@ See the illustrated [VS Code conflict guide](../vscode-extension/GUIDE.md#resolv
 - **Drafts missing on another device:** export/import their metadata. Local storage is separate for each app/browser profile, and loopback ports have separate browser storage.
 - **Large project is incomplete:** inspect truncation and parser diagnostics; reduce the imported set rather than assuming a partial view is complete.
 
-Contact [support@sigharmonic.com](mailto:support@sigharmonic.com) with the app/extension version, operating system, exact steps and a non-confidential minimal example. Do not include account tokens or private project data without authorization.
+Contact [support.kivi@sigharmonic.com](mailto:support.kivi@sigharmonic.com) with the app/extension version, operating system, exact steps and a non-confidential minimal example. Do not include account tokens or private project data without authorization.
 
 
 Review cards distinguish **Review: open / skipped / resolved / wont-fix** from
@@ -187,6 +187,48 @@ combines a component body, model meshes and matching pads into one component
 boundary. Outlines respect scene depth so hidden edges do not show through the
 board. Clearing selection removes the outline without changing model materials.
 
+The default **Dim context** style now keeps selected parts, terminals or nets
+coloured and greys the surrounding geometry in 2D and 3D. **Bright only** leaves
+the context colours unchanged. Source geometry, model materials and visibility
+settings are restored when highlights are cleared. A single cross-selected part
+replaces the previous related selection; an explicit multi-selection is relayed
+as a group. Selecting an individual reference in the BoM focuses that part.
+
+The BoM manager shows colour-and-text assembly states, progress, mixed-state
+counts and assembly/procurement grouping presets. Its checklist is local review
+data, not a claim that physical assembly has been verified.
+
+### Conversations and provider thread state
+
+Open a conversation's **⋯** menu for **Close issue**, **Close discussion**, or
+**Reopen**. Actions appear only when the connected provider reports permission.
+Review the destination before confirming. GitHub issues and discussions, and
+GitLab issues, are supported; GitLab discussion notes belong to their issue.
+This changes the provider thread, separately from the local review-note state.
+Drafts are retained. Administrator policies, workspace/source checks and Terms
+acceptance still apply. Provider revision checks cannot make the subsequent
+provider mutation atomic; stale and uncertain outcomes are reported.
+
+### Project files and all-sheet review
+
+The explorer's **Files** tab provides a searchable directory tree. The local
+viewer and project preview retain their left file tree; narrow screens can hide
+it with the file/menu control. Explicit hide/show preferences are preserved.
+
+**All sheets** displays pages on one pan-and-zoom canvas with names above them.
+Select a part or net, or double-click a sheet to enter it. Reused files retain
+their placement stack. **Hierarchy links** and **Net links** can be toggled
+independently. Relationship paths use the page gutters rather than running
+through drawing content; dense graphs can still share routes or cross. Only
+resolved saved relationships are shown, with bounded routing and omission notes
+in **Guide**. The Fit view adapts to rotation until you pan or zoom manually.
+
+Linked saved-simulation popups also work in 3D and follow their projected saved
+net anchor without resetting the sample cursor. Comment anchors project into
+3D from their saved PCB object or position (up to 64 pins). Projection checks
+the camera frustum; it is not an occlusion test. These are saved-data views and
+do not run a solver.
+
 
 ### KiCad layer colours
 
@@ -199,6 +241,31 @@ intentional review/net-class overrides are retained. This is the built-in defaul
 palette, not an import of a user-customized KiCad colour theme.
 
 Palette reference: [KiCad built-in colour themes](https://docs.kicad.org/doxygen/builtin__color__themes_8h_source.html).
+
+### Object visibility
+
+In a PCB drawing, open **View options → Objects**. Toggle individual types or
+**All objects**, and choose **Both**, **Top** or **Bottom**. Choices are saved
+locally and shared between the 2D and 3D views. **Reset objects** restores every
+type and both sides; layer visibility and saved copper-fill/outline controls
+remain independent. Hidden geometry is excluded from picking. Filtering does
+not move the camera or edit the project.
+
+| Filter | Saved geometry |
+| --- | --- |
+| Arcs, Pads, Vias, Tracks | Their corresponding PCB geometry, including pad/via drill cutouts |
+| Texts | Visible drawing text and generated close-zoom net/pad labels in 2D; source-hidden fields stay hidden |
+| Fills | Saved filled copper zones and filled graphic rectangles/circles in 2D; saved filled copper in 3D |
+| Polygons | Zone boundaries and unfilled graphic polygons in 2D; unfilled zone boundaries in 3D |
+| Regions | Filled graphic polygons in 2D |
+| Graphics | Other saved graphic lines, circles and unfilled rectangles in 2D |
+| 3D bodies | Linked component models and identified stand-ins in 3D |
+
+Dimmed rows are unavailable in the current view. Dimensions are not currently
+rendered, and Rooms are not a KiCad object type. In 3D, text, graphic and region
+rows remain unavailable rather than pretending to show unsupported geometry.
+Through vias and common board geometry remain available on either side;
+front/back object filters compose with the separate layer controls.
 
 
 ### Stop a load
@@ -234,3 +301,12 @@ SecretStorage. The workspace must be trusted and have a supported, unambiguous
 Git remote. Thread reading can work on a changed drawing; publishing and pinned
 annotation readback require its displayed sources to match raw committed Git
 objects. Commit changes and reopen if the source-verification check rejects them.
+
+### Browser project dashboard
+
+Open the extension directly away from a supported repository page, or choose
+**Projects** from viewer tools / **Project dashboard** in Settings. Recent remote
+projects reopen their saved revision; local entries say **Reselect files** because
+the history does not cache imported sources. Search/filter by source, remove an
+entry, or explicitly clear the local history. Only projects opened after this
+update are recorded. Contextual toolbar actions on GitHub/GitLab remain available.

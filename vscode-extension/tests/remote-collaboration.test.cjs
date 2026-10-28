@@ -3,13 +3,13 @@ const test=require('node:test'),assert=require('node:assert/strict');
 const {createHost,remoteURL}=require('../remote-collaboration.js'),comments=require('../../extension/review-comments.js');
 const {deploymentPolicy}=require('../remote-collaboration.js');
 const sha='a'.repeat(40),content='(kicad_pcb)',uri=path=>({scheme:'file',path,toString(){return 'file://'+path;}});
-function harness({remote='git@github.com:owner/board.git',factory,dirty=false,transport,commentAPI=comments}={}){
+function harness({remote='git@github.com:owner/board.git',factory,forkFactory,dirty=false,transport,commentAPI=comments}={}){
  const values=new Map(),secrets=new Map(),auth=[],fetches=[],invocations=[];
  const repo={rootUri:uri('/repo'),state:{HEAD:{commit:sha},remotes:[{name:'origin',fetchUrl:remote}]},show:async(ref,path)=>dirty?'different':content};
  const vscode={workspace:{isTrusted:true,getConfiguration:()=>({inspect:()=>({defaultValue:true})})},extensions:{getExtension:()=>({isActive:true,exports:{getAPI:()=>({repositories:[repo]})}})},authentication:{getSession:async(...args)=>{auth.push(args);return{accessToken:'gho_SUPERSECRET000000000000'};}},window:{showInputBox:async()=> 'glpat_SECRET000000000000000'}};
  const session={uri:uri('/repo/workspace/board.kicad_pcb'),scope:{boundary:uri('/repo/workspace'),repository:'local/workspace',ref:'workspace',rootFile:'board.kicad_pcb'},paths:new Set(['board.kicad_pcb']),files:[{path:'board.kicad_pcb',content}],context:{secrets:{get:async k=>secrets.get(k),store:async(k,v)=>secrets.set(k,v)},workspaceState:{get:k=>values.get(k),update:async(k,v)=>values.set(k,v)}}};
  const apiFactory=deps=>factory?factory(deps):({readThread:async args=>{invocations.push(args);const credential=await deps.credential(args.host);await deps.fetch(args.provider==='github'?'https://api.github.com/repos/owner/board/issues/1':'https://gitlab.com/api/v4/projects/owner%2Fboard',{headers:{Authorization:'Bearer '+credential?.token}});return{kind:'issue',number:1,body:'Thread',comments:[],warnings:[]};},publish:async args=>{invocations.push(args);await deps.credential(args.host);return{remoteRef:{kind:'issue',repository:args.repository,number:1,url:'https://github.com/'+args.repository+'/issues/1',publishedAt:'2026-10-26T00:00:00Z'}};},commentPolicyStatus:async()=>({allowed:true}),categories:async()=>({categories:[{id:'id',name:'Help'}]})});
- const host=createHost(vscode,{sameScope:(file,root)=>file.path.startsWith(root.path+'/'),comments:commentAPI,apiFactory,readCommitted:async(ctx,path)=>dirty?'different':content,fetch:async(url,init)=>{fetches.push({url,init});return transport?transport(url,init):new Response(JSON.stringify({path_with_namespace:'owner/board',id:42}));}});
+ const host=createHost(vscode,{sameScope:(file,root)=>file.path.startsWith(root.path+'/'),comments:commentAPI,apiFactory,forkFactory,readCommitted:async(ctx,path)=>dirty?'different':content,fetch:async(url,init)=>{fetches.push({url,init});return transport?transport(url,init):new Response(JSON.stringify({path_with_namespace:'owner/board',id:42}));}});
  const request=(type,extra={})=>host.dispatch({type,repository:'local/workspace',ref:'workspace',file:'board.kicad_pcb',...extra},session);
  const note={id:'note',text:'Review R1',severity:'info',createdAt:'2026-10-26T00:00:00Z',anchor:{repository:'local/workspace',ref:'workspace',file:'board.kicad_pcb'}};
  return{host,request,session,vscode,repo,note,secrets,auth,fetches,invocations};
@@ -18,6 +18,80 @@ test('remote parsing excludes credentials, ambiguous paths and local/network des
  assert.deepEqual(remoteURL('git@github.com:owner/board.git'),{provider:'github',host:'https://github.com',repository:'owner/board'});
  assert.equal(remoteURL('https://gitlab.com/group/sub/board.git').repository,'group/sub/board');
  for(const remote of ['https://user:secret@github.com/owner/repo','http://github.com/o/r','https://127.0.0.1/o/r','https://localhost/o/r','https://git.local/o/r','https://github.com/o/../r','git@github.com:../r','https://github.com/o/r?token=secret'])assert.equal(remoteURL(remote),null,remote);
+});
+
+const forkRequest={sha:'b'.repeat(40),namespace:'reviewer',name:'board-copy',branch:'review/selected',confirmed:true};
+test('remote fork host binds selected commit to workspace and keeps native credentials inside exact routes',async()=>{
+ let received;
+ const h=harness({forkFactory:{async create(message,{request,authorize}){received=message;await authorize();await request('GET','/user');await request('GET','/repos/owner/board/commits/'+message.sha);await request('POST','/repos/owner/board/forks',{name:message.name});await request('GET','/repos/reviewer/board-copy');await request('POST','/repos/reviewer/board-copy/git/refs',{ref:'refs/heads/'+message.branch,sha:message.sha});return{created:true,url:'https://github.com/reviewer/board-copy'};}},transport:async url=>new Response(JSON.stringify(url.endsWith('/user')?{login:'reviewer'}:{}))});
+ let prompts=0;h.vscode.window.showWarningMessage=async(_message,_options,action)=>{prompts++;return action;};
+ const result=await h.request('repository-fork-revision',forkRequest);assert.equal(result.created,true);assert.equal(prompts,1);assert.equal(received.repository,'owner/board');assert.equal(received.sha,forkRequest.sha);assert.equal(received.ref,forkRequest.sha);assert.equal(received.file,'workspace/board.kicad_pcb');assert.equal(received.destinationNamespace,'reviewer');assert.equal(h.fetches.length,5);assert.ok(h.fetches.every(item=>item.init.redirect==='error'&&item.init.credentials==='omit'));assert.equal(JSON.stringify(result).includes('SECRET'),false);
+});
+test('fork host rejects unconfirmed requests, disabled writes, cancel and foreign route before network writes',async()=>{
+ const factory={async create(_message,{request}){return request('POST','/repos/stranger/board/git/refs',{});}};
+ for(const extra of [{confirmed:false},{sha:'HEAD'},{name:'../board'},{branch:'bad\nbranch'}]){const h=harness({forkFactory:factory});await assert.rejects(h.request('repository-fork-revision',{...forkRequest,...extra}),/Confirm/);assert.equal(h.auth.length,0);assert.equal(h.fetches.length,0);}
+ const disabled=harness({forkFactory:factory});setDeployment(disabled,{providerWrites:false});await assert.rejects(disabled.request('repository-fork-revision',forkRequest),/Provider writes/);assert.equal(disabled.auth.length,0);
+ const cancel=harness({forkFactory:factory});cancel.vscode.window.showWarningMessage=async()=>undefined;await assert.rejects(cancel.request('repository-fork-revision',forkRequest),/cancelled/);assert.equal(cancel.auth.length,0);
+ const foreign=harness({forkFactory:factory});foreign.vscode.window.showWarningMessage=async(_m,_o,a)=>a;await assert.rejects(foreign.request('repository-fork-revision',forkRequest),/outside this workspace/);assert.equal(foreign.fetches.length,0);
+ const revoked=harness({forkFactory:factory});revoked.vscode.window.showWarningMessage=async(_m,_o,a)=>{revoked.vscode.workspace.isTrusted=false;return a;};await assert.rejects(revoked.request('repository-fork-revision',forkRequest),/Trust|trusted/);assert.equal(revoked.auth.length,0);
+});
+
+test('real fork workflow passes the host route gate for GitHub and nested GitLab namespace with synthetic HTTP only',async()=>{
+ const forkFactory=require('../../extension/revision-fork.js');
+ for(const provider of ['github','gitlab']){
+  const gh=provider==='github',namespace=gh?'reviewer':'123',target=gh?'reviewer/board-copy':'hardware/lab/board-copy',source=gh?'/repos/owner/board':'/api/v4/projects/owner%2Fboard',destination=gh?'/repos/'+target:'/api/v4/projects/'+encodeURIComponent(target),sourceObject=gh?source:'/api/v4/projects/42',destinationObject=gh?destination:'/api/v4/projects/99';let made=false;
+  const h=harness({forkFactory,remote:gh?'https://github.com/owner/board.git':'https://gitlab.com/owner/board.git',transport:async(url,init)=>{
+   const p=new URL(url).pathname,method=init.method;let data,status=200;
+   if(p===(gh?'/user':'/api/v4/user'))data={id:7,login:'reviewer',username:'reviewer'};
+   else if(p==='/api/v4/namespaces/123')data={id:123,kind:'group',full_path:'hardware/lab'};
+   else if(p===source)data={id:42,full_name:'owner/board',path_with_namespace:'owner/board'};
+   else if(p===sourceObject+(gh?'/commits/':'/repository/commits/')+forkRequest.sha||p===destinationObject+(gh?'/commits/':'/repository/commits/')+forkRequest.sha)data={sha:forkRequest.sha,id:forkRequest.sha};
+   else if(p===destination||p===destinationObject){if(!made){status=404;data=null;}else data={id:99,full_name:target,path_with_namespace:target,default_branch:'main',import_status:'finished'};}
+   else if(p===sourceObject+(gh?'/forks':'/fork')&&method==='POST'){made=true;status=gh?202:201;data={id:99,full_name:target,path_with_namespace:target,fork:true,parent:{id:42},forked_from_project:{id:42}};}
+   else if(p===destinationObject+(gh?'/git/ref/heads/':'/repository/branches/')+encodeURIComponent(forkRequest.branch)){status=404;data=null;}
+   else if(p===destinationObject+(gh?'/git/refs':'/repository/branches')&&method==='POST')data=gh?{ref:'refs/heads/'+forkRequest.branch,object:{sha:forkRequest.sha}}:{name:forkRequest.branch,commit:{id:forkRequest.sha}};
+   else throw Error('Unexpected synthetic route '+method+' '+p);
+   return new Response(JSON.stringify(data),{status});
+  }});
+  h.vscode.window.showWarningMessage=async(_m,_o,a)=>a;if(!gh)h.secrets.set('kiview:gitlab:https://gitlab.com','synthetic-provider-secret');
+  const result=await h.request('repository-fork-revision',{...forkRequest,namespace});assert.equal(result.created,true);assert.equal(result.partial,false);assert.equal(result.sha,forkRequest.sha);assert.equal(result.repository,target);assert.ok(h.fetches.some(value=>value.init.method==='POST'));
+ }
+});
+
+test('fork credentials stay pinned across account replacement and sign-out, including partial creation',async()=>{
+ const forkFactory=require('../../extension/revision-fork.js');
+ for(const provider of ['github','gitlab'])for(const phase of ['before-create','after-create'])for(const replacement of ['synthetic-account-B',null]){
+  const gh=provider==='github',target='reviewer/board-copy',source=gh?'/repos/owner/board':'/api/v4/projects/owner%2Fboard',sourceObject=gh?source:'/api/v4/projects/42',destination=gh?'/repos/'+target:'/api/v4/projects/'+encodeURIComponent(target);
+  let token='synthetic-account-A',writes=0;
+  const h=harness({forkFactory,remote:gh?'https://github.com/owner/board.git':'https://gitlab.com/owner/board.git',transport:async(url,init)=>{
+   assert.equal(init.headers.Authorization,'Bearer synthetic-account-A');
+   const p=new URL(url).pathname;let data,status=200;
+   if(p===(gh?'/user':'/api/v4/user'))data={id:7,login:'reviewer',username:'reviewer'};
+   else if(p===source)data={id:42,full_name:'owner/board',path_with_namespace:'owner/board'};
+   else if(p===sourceObject+(gh?'/commits/':'/repository/commits/')+forkRequest.sha){data={sha:forkRequest.sha,id:forkRequest.sha};if(phase==='before-create')token=replacement;}
+   else if(p===destination){status=404;data=null;}
+   else if(p===sourceObject+(gh?'/forks':'/fork')&&init.method==='POST'){writes++;status=gh?202:201;data={id:99,full_name:target,path_with_namespace:target,fork:true,parent:{id:42},forked_from_project:{id:42}};token=replacement;}
+   else throw Error('A request continued after credentials changed: '+p);
+   return new Response(JSON.stringify(data),{status});
+  }});
+  h.vscode.window.showWarningMessage=async(_m,_o,a)=>a;
+  h.vscode.authentication.getSession=async()=>token?{accessToken:token}:null;
+  h.session.context.secrets.get=async()=>token;
+  const pending=h.request('repository-fork-revision',{...forkRequest,namespace:undefined});
+  if(phase==='before-create'){await assert.rejects(pending,/account changed or signed out/);assert.equal(writes,0);assert.equal(h.fetches.length,3);}
+  else{const result=await pending;assert.equal(result.created,true);assert.equal(result.partial,true);assert.equal(result.uncertain,false);assert.equal(writes,1);assert.equal(h.fetches.length,5);}
+ }
+});
+
+test('fork credentials are rechecked after asynchronous workspace provenance lookup',async()=>{
+ let token='synthetic-account-A',switchOnLookup=false;
+ const h=harness({forkFactory:{async create(_message,{request}){switchOnLookup=true;return request('GET','/user');}}});
+ h.vscode.window.showWarningMessage=async(_m,_o,a)=>a;
+ h.vscode.authentication.getSession=async()=>({accessToken:token});
+ const original=h.vscode.extensions.getExtension;
+ h.vscode.extensions.getExtension=(...args)=>{if(switchOnLookup)token='synthetic-account-B';return original(...args);};
+ await assert.rejects(h.request('repository-fork-revision',forkRequest),/account changed or signed out/);
+ assert.equal(h.fetches.length,0);
 });
 
 function setDeployment(h,values={},workspace={}){h.vscode.workspace.getConfiguration=()=>({inspect:key=>({defaultValue:true,globalValue:values[key],workspaceValue:workspace[key],workspaceFolderValue:workspace[key]})});}
@@ -234,4 +308,29 @@ test('real conversation discovery adapter uses workspace-bound host transport',a
  const h=harness({factory:realFactory('github'),transport:async(url,init)=>{assert.ok(url.includes('/repos/owner/board/issues?'));assert.equal(init.method,'GET');return json([{...issue,pull_request:{}},{...issue,number:2,title:'Conversation'}]);}});
  const result=await h.request('chat-thread-list',{kind:'issue',page:2});assert.equal(result.threads.length,1);assert.equal(result.threads[0].url,'https://github.com/owner/board/issues/2');assert.ok(h.fetches[0].url.endsWith('page=2'));
  await assert.rejects(h.request('chat-thread-list',{kind:'issue',repository:'foreign/repo'}),/another repository/);
+});
+
+test('thread state host requires native confirmation and binds provider scope without exposing credentials',async()=>{
+ let received;const h=harness({factory:()=>({chatThreadState:async args=>{received=args;return{state:args.state};}})});h.vscode.window.showWarningMessage=async(_message,_options,action)=>action;
+ const args={thread:{kind:'issue',number:42},state:'closed',expectedUpdatedAt:'2026-10-27T00:00:00Z',confirmed:true};
+ assert.equal((await h.request('chat-thread-state',args)).state,'closed');assert.equal(received.repository,'owner/board');assert.equal(received.ref,sha);assert.equal(received.file,'workspace/board.kicad_pcb');assert.equal(received.provider,'github');assert.equal(JSON.stringify(received).includes('SECRET'),false);
+ await assert.rejects(h.request('chat-thread-state',{...args,confirmed:false}),/Confirm/);h.vscode.window.showWarningMessage=async()=>undefined;await assert.rejects(h.request('chat-thread-state',args),/cancelled/);
+ setDeployment(h,{providerWrites:false});await assert.rejects(h.request('chat-thread-state',args),/Provider writes/);
+});
+
+for(const provider of ['github','gitlab'])test('real '+provider+' state adapter uses the host-pinned provider transport',async()=>{
+ const lab=provider==='gitlab';let writes=0;
+ const h=harness({remote:lab?'https://gitlab.com/owner/board.git':'git@github.com:owner/board.git',factory:realFactory(provider),transport:async(url,init)=>{
+  if(url.endsWith('/user'))return json(lab?{id:7,username:'reviewer'}:{login:'reviewer'});
+  if(url.includes('/contents/')||url.includes('/repository/files/'))return new Response(null,{status:404});
+  if(url.includes('/repository/tree?'))return json([]);
+  if(url.endsWith('/graphql')){const input=JSON.parse(init.body),mutation=input.query.startsWith('mutation'),value={id:'I_verified',number:1,closed:mutation,updatedAt:timestamp,viewerCanClose:true,viewerCanReopen:false};if(mutation){writes++;assert.equal(input.variables.input.issueId,'I_verified');return json({data:{closeIssue:{issue:value}}});}return json({data:{repository:{nameWithOwner:'owner/board',issue:value}}});}
+  if(lab&&url.endsWith('/issues/1')){const mutation=init.method==='PUT';if(mutation){writes++;assert.deepEqual(JSON.parse(init.body),{state_event:'close'});}return json({id:11,iid:1,project_id:42,title:'Issue',updated_at:timestamp,state:mutation?'closed':'opened',author:{id:7,username:'reviewer'}});}
+  return json({id:42,path_with_namespace:'owner/board',full_name:'owner/board',visibility:'public',private:false,default_branch:'main'});
+ }});h.vscode.window.showWarningMessage=async(_message,_options,action)=>action;if(lab)await h.host.connect(h.session);
+ const request={thread:{kind:'issue',number:1},state:'closed',expectedUpdatedAt:timestamp,confirmed:true};const result=await h.request('chat-thread-state',request);assert.equal(result.state,'closed');assert.equal(result.repository,'owner/board');assert.equal(writes,1);assert.equal((await h.request('chat-thread-state',request)).duplicate,true);assert.equal(writes,1);assert.ok(h.fetches.every(row=>row.init.redirect==='error'&&row.init.credentials==='omit'));
+});
+test('host state changes serialize across separately created provider adapters',async()=>{
+ let release;const h=harness({factory:()=>({chatThreadState:()=>new Promise(resolve=>release=resolve)})});h.vscode.window.showWarningMessage=async(_message,_options,action)=>action;
+ const request={thread:{kind:'issue',number:1},state:'closed',expectedUpdatedAt:timestamp,confirmed:true},first=h.request('chat-thread-state',request);while(!release)await new Promise(setImmediate);await assert.rejects(h.request('chat-thread-state',request),/already being changed/);release({state:'closed'});await first;
 });

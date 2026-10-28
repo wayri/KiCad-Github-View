@@ -99,3 +99,38 @@ test('GitLab uses verified Discussion ID and can convert individual notes into r
  const h=await harness('gitlab');await h.write({action:'reply',replyTo:'13'});assert.ok(mutations(h.calls)[0].url.endsWith('/discussions/verified_group/notes'));
  const single=await harness('gitlab',url=>url.includes('/discussions?')?[{id:'individual',individual_note:true,notes:[glComment()]}]:undefined);await single.write({action:'reply',replyTo:'11'});assert.ok(mutations(single.calls)[0].url.endsWith('/discussions/individual/notes'));
 });
+
+for(const provider of ['github','gitlab']){
+ function stateFixture(extra={}){return (url,init)=>{
+  const kind=extra.kind||'issue',closed=extra.closed===true;
+  if(provider==='github'&&url.endsWith('/graphql')){
+   const query=JSON.parse(init.body).query,mutation=query.startsWith('mutation'),operation=(closed?'reopen':'close')+(kind==='issue'?'Issue':'Discussion');
+   const value={id:'I_verified',number:42,closed:mutation?!closed:closed,updatedAt:stamp,viewerCanClose:extra.allowed!==false,viewerCanReopen:extra.allowed!==false};
+   if(extra.foreign)value.number=99;if(extra.stale&&!mutation)value.updatedAt='2026-10-26T00:00:00Z';
+   if(mutation&&extra.uncertain)return new Response('unavailable',{status:503});
+   return mutation?{data:{[operation]:{[kind]:value}}}:{data:{repository:{nameWithOwner:'owner/repo',[kind]:value}}};
+  }
+  if(provider==='gitlab'&&url.endsWith('/issues/42')){
+   const mutation=init.method==='PUT';if(mutation&&extra.uncertain)return new Response('unavailable',{status:503});
+   return {id:1,iid:extra.foreign?99:42,project_id:9,title:'Issue',description:'Root',created_at:stamp,updated_at:extra.stale&&!mutation?'2026-10-26T00:00:00Z':stamp,state:(mutation?!closed:closed)?'closed':'opened',author:{id:extra.allowed===false?99:7,username:'reviewer'}};
+  }
+ };}
+ test(provider+' explicit state changes require confirmation, verified permission and exact thread revision',async()=>{
+  for(const extra of [{confirmed:false},{state:'deleted'},{expectedUpdatedAt:'invalid'},{file:'../foreign.kicad_pcb'},{provider:'other'}]){
+   const h=await harness(provider,stateFixture());await assert.rejects(h.api.chatThreadState({...h.request,state:'closed',expectedUpdatedAt:stamp,confirmed:true,...extra}));assert.equal(mutations(h.calls).length,0);
+  }
+  for(const fixture of [{allowed:false},{stale:true},{foreign:true}]){
+   const h=await harness(provider,stateFixture(fixture));await assert.rejects(h.api.chatThreadState({...h.request,state:'closed',expectedUpdatedAt:stamp,confirmed:true}));assert.equal(mutations(h.calls).length,0);
+  }
+ });
+ test(provider+' close/reopen use provider-bound IDs, preserve content and deduplicate confirmed writes',async()=>{
+  for(const closed of [false,true])for(const kind of provider==='github'?['issue','discussion']:['issue']){
+   const h=await harness(provider,stateFixture({closed,kind})),input={...h.request,thread:{kind,number:42},state:closed?'open':'closed',expectedUpdatedAt:stamp,confirmed:true};
+   const result=await h.api.chatThreadState(input);assert.equal(result.state,input.state);assert.equal(result.number,42);assert.equal((await h.api.chatThreadState(input)).duplicate,true);assert.equal(mutations(h.calls).length,1);
+   const sent=JSON.parse(mutations(h.calls)[0].init.body);assert.equal(sent.body,undefined);if(provider==='gitlab')assert.deepEqual(sent,{state_event:closed?'reopen':'close'});else assert.equal(sent.variables.input[kind+'Id'],'I_verified');
+  }
+ });
+ test(provider+' ambiguous state changes are journaled and cannot silently retry',async()=>{
+  const h=await harness(provider,stateFixture({uncertain:true})),input={...h.request,state:'closed',expectedUpdatedAt:stamp,confirmed:true};await assert.rejects(h.api.chatThreadState(input));await assert.rejects(h.api.chatThreadState(input),/unconfirmed outcome/);assert.equal(mutations(h.calls).length,1);
+ });
+}

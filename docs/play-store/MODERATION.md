@@ -6,7 +6,7 @@ Prepared 2026-10-10 for publisher adoption. This is an operational procedure, no
 
 Shared comment source provides versioned content rules with acceptance before publishing, Report content/user, and persistent provider/profile-scoped local block/unblock. The rules prohibit harassment, hate, threats, sexual exploitation, illegal content, spam, private personal information and designs the user cannot share.
 
-Report dialogs collect a reason and available provider/author/permalink identifiers, then open an email draft to the fixed address **support@sigharmonic.com**. The user reviews and sends it in their email app. No screenshot/project attachment is automatically included. Opening the draft does not deliver a report and creates no submission receipt. A provider moderation link is offered where available. Blocking hides content in the current app profile; it does not block the provider account or remove posts for other users.
+Report dialogs collect a reason and available provider/author/permalink identifiers, then open an email draft to the fixed address **support.kivi@sigharmonic.com**. The user reviews and sends it in their email app. No screenshot/project attachment is automatically included. Opening the draft does not deliver a report and creates no submission receipt. A provider moderation link is offered where available. Blocking hides content in the current app profile; it does not block the provider account or remove posts for other users.
 
 The publisher must verify that this external-compose route satisfies the applicable in-app reporting requirements, or replace it with a supported secure submission service. No direct service/report backend is configured by this procedure. Google's [UGC policy](https://support.google.com/googleplay/android-developer/answer/9876937?hl=en) requires ongoing moderation as well as controls, including for specialized clients.
 
@@ -35,7 +35,7 @@ Controls, email address and this document do not themselves close the operationa
 
 ## Confirmed responsibility and initial automation
 
-The publisher confirmed that they monitor **support@sigharmonic.com**, signing responses as **Pocket KiView team**. Mail delivery/end-to-end report checks remain pending. The Play account exists; its personal/organization type is not yet established.
+The publisher confirmed that they monitor **support.kivi@sigharmonic.com**, signing responses as **Pocket KiView team**. Mail delivery/end-to-end report checks remain pending. The Play account exists; its personal/organization type is not yet established.
 
 Report drafts include a category (spam, harassment, hate, threats, child safety, privacy, rights or other), provider, author, content link and the user's explanation. Configure mailbox rules for the Pocket KiView report subject to label/queue cases. Prioritize `Category: threats` and `Category: child-safety`, then privacy concerns. Keep reports private. Do not auto-forward private repository links into public issues.
 

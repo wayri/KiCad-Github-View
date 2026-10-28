@@ -11,10 +11,11 @@
       return true;
     }
     const bounded=(item,n)=>typeof item==="string" && item.length>0 && item.length<=n && !/[\x00-\x1f\x7f]/.test(item);
-    if(!value || typeof value!=="object" || Array.isArray(value) || !["part","net"].includes(value.kind) || !bounded(value.path,1000))return false;
+    if(!value || typeof value!=="object" || Array.isArray(value) || !["part","net","pin"].includes(value.kind) || !bounded(value.path,1000))return false;
     if(!/^.+\.kicad_(?:sch|pcb)$/i.test(value.path) || value.path.startsWith("/") || value.path.split("/").some((part)=>!part || part==="." || part===".." || /[\\:]/.test(part)))return false;
-    const fields=value.kind==="part"?["kind","path","reference","uuid","symbolUuid"]:["kind","path","netName","qualifiedNetName"];
+    const fields=value.kind==="pin"?["kind","path","reference","pinNumber","uuid","ownerUuid","symbolUuid"]:value.kind==="part"?["kind","path","reference","uuid","symbolUuid"]:["kind","path","netName","qualifiedNetName"];
     if(Object.keys(value).some((key)=>!fields.includes(key)))return false;
+    if(value.kind==="pin"&&(!bounded(value.pinNumber,200)||(value.ownerUuid!==undefined&&!bounded(value.ownerUuid,200))))return false;
     return value.kind==="net"?bounded(value.netName,500)&&(value.qualifiedNetName===undefined||bounded(value.qualifiedNetName,500)):bounded(value.reference,200)&&["uuid","symbolUuid"].every((key)=>value[key]===undefined||bounded(value[key],200));
   };
   const request=(message)=>new Promise((resolve,reject)=> {
@@ -36,6 +37,9 @@
       } else if(msg.event.type==="comments-refresh" && Object.keys(msg.event).length===1) {
         lastEventId=msg.eventId;if(hostSource===undefined)hostSource=event.source;
         dispatchEvent(new CustomEvent("kicad-review:comments-refresh"));
+      } else if(msg.event.type==="analysis-net-focus" && Object.keys(msg.event).length===2 && typeof msg.event.netName==="string" && msg.event.netName.length>0 && msg.event.netName.length<=500 && !/[\x00-\x1f\x7f]/.test(msg.event.netName)) {
+        lastEventId=msg.eventId;if(hostSource===undefined)hostSource=event.source;
+        dispatchEvent(new CustomEvent("kicad-review:analysis-net-focus",{detail:{netName:msg.event.netName}}));
       }
       return;
     }

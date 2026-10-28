@@ -45,12 +45,12 @@ test('PCB selection opens one drawing preview; explicit setup retains saved laye
  await view.get('fileTree').children.find(n=>n.textContent==='board.kicad_pcb').onclick();
  assert.equal(view.get('overviewPanel').hidden,false);assert.equal(view.get('drawingPreview').children.filter(n=>n.src).length,1);assert.match(view.get('drawingPreview').children.find(n=>n.src).src,/file=board.kicad_pcb/);
  view.get('openDesign').onclick();await tick();assert.equal(view.get('drawingPreview').children.filter(n=>n.src).length,1);
- assert.equal(view.bodyClasses.has('focus-drawing'),true);
+ assert.equal(view.bodyClasses.has('focus-drawing'),false,'project files remain visible when a drawing opens');
  const previewFrame=view.get('drawingPreview').children.find(n=>n.src);
  const focusControl=view.get('drawingPreview').children[0].children[0];
- assert.equal(focusControl.textContent,'Show project controls');assert.equal(focusControl.attributes['aria-pressed'],'true');
- focusControl.onclick();assert.equal(view.bodyClasses.has('focus-drawing'),false);assert.equal(focusControl.textContent,'Focus drawing');assert.equal(focusControl.attributes['aria-pressed'],'false');
- focusControl.onclick();assert.equal(view.bodyClasses.has('focus-drawing'),true);assert.equal(view.get('drawingPreview').children.find(n=>n.src),previewFrame,'focus toggles preserve drawing and draft state');
+ assert.equal(focusControl.textContent,'Focus drawing');assert.equal(focusControl.attributes['aria-pressed'],'false');
+ focusControl.onclick();assert.equal(view.bodyClasses.has('focus-drawing'),true);assert.equal(focusControl.textContent,'Show project controls');assert.equal(focusControl.attributes['aria-pressed'],'true');
+ focusControl.onclick();assert.equal(view.bodyClasses.has('focus-drawing'),false);assert.equal(view.get('drawingPreview').children.find(n=>n.src),previewFrame,'focus toggles preserve drawing and draft state');
 
  view.get('projectTreeToggle').onclick();assert.equal(view.get('projectTreeToggle').attributes['aria-expanded'],'false');view.get('projectTreeToggle').onclick();assert.equal(view.get('projectTreeToggle').attributes['aria-expanded'],'true');
  view.get('drawingPreview').children[0].children.find(n=>n.textContent==='Close preview').onclick();assert.equal(view.get('drawingPreview').children.length,0);

@@ -11,6 +11,8 @@
 .repo-file-status[data-status='!']{color:#ee929d}.repo-file-status[data-status=C]{color:#69b9f8}.repo-file-status[data-staged=true]{font-weight:800;background:color-mix(in srgb,currentColor 10%,transparent)}
 
 /* Navigation rows are flat; buttons are reserved for explicit actions. */
+.repo-commit-more{min-width:0}.repo-commit-more>summary{font-size:12px;padding:5px 8px}.repo-commit-menu{display:grid;gap:3px;padding:5px;border:1px solid var(--line);border-radius:6px;background:var(--panel);max-width:280px}.repo-commit-menu button{text-align:left;white-space:normal;font-size:12px;padding:5px 8px}
+.revision-action-dialog{width:min(480px,calc(100vw - 24px));max-height:calc(100dvh - 24px);overflow:auto;box-sizing:border-box;padding:16px;color:var(--text);background:var(--panel);border:1px solid var(--line);border-radius:10px}.revision-action-dialog h2{font-size:16px;margin:0 0 8px}.revision-action-dialog p{font-size:12px;line-height:1.5;overflow-wrap:anywhere}.revision-action-dialog label{display:grid;gap:4px;margin:10px 0;font-size:12px}.revision-action-dialog input{min-width:0;width:100%;box-sizing:border-box;font:inherit;padding:7px}.revision-action-dialog button{font:inherit;font-size:12px;min-height:34px;margin:4px 5px 0 0}
 .repository-explorer .repo-icon-button{display:inline-flex;align-items:center;justify-content:center;width:36px;min-width:36px;height:36px;padding:8px;border:0;background:transparent;flex:none}
 .repository-explorer>header>strong{font-size:15px;font-weight:600;white-space:nowrap}.repo-context{min-width:0;flex:1;text-align:right}
 .repo-file-row:focus-within{background:color-mix(in srgb,var(--accent,#79d7c0) 12%,transparent)}

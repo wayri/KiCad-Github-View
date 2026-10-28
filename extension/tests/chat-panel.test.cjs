@@ -188,3 +188,13 @@ test('typing a new draft clears the previous send status without posting again',
  assert.match(h.find('chat-status').textContent,/Message sent/);h.type('A new unsent draft');
  assert.equal(h.find('chat-status').textContent,'');assert.equal(h.requests.filter(row=>row.type==='chat-message-write').length,1);
 });
+
+test('Close/Reopen stays in More, requires verified capability and explicit confirmation, preserves drafts',async()=>{
+ const calls=[],confirmations=[],h=harness({onThreadState:async value=>calls.push(value),confirmThreadState:async value=>{confirmations.push(value);return false;}}),action=h.find('chat-thread-state');
+ h.api.render(thread());assert.equal(action.hidden,true);h.api.render(thread(1,{capabilities:{create:true,canClose:true}}));assert.equal(action.hidden,false);assert.equal(action.parentElement.hidden,true);assert.equal(action.textContent,'Close issue');h.type('Keep my draft');await action.onclick();assert.equal(calls.length,0);
+ h.options.confirmThreadState=async()=>true;await action.onclick();assert.equal(calls.length,1);assert.equal(calls[0].confirmed,true);assert.equal(calls[0].state,'closed');assert.equal(calls[0].expectedUpdatedAt,thread().updatedAt);assert.equal(h.byId('chatMessageText').value,'Keep my draft');assert.equal(h.requests.length,0);assert.equal(h.reads.length,1);
+ h.api.render(thread(1,{state:'closed',capabilities:{canReopen:true}}));assert.equal(action.textContent,'Reopen issue');await action.onclick();assert.equal(calls[1].state,'open');
+});
+test('thread and source changes during state confirmation cancel the write',async()=>{
+ for(const change of ['thread','scope']){let resolve;const calls=[],h=harness({onThreadState:async value=>calls.push(value),confirmThreadState:()=>new Promise(r=>resolve=r)});h.api.render(thread(1,{capabilities:{canClose:true}}));const pending=h.find('chat-thread-state').onclick();if(change==='thread')h.api.render(thread(2,{capabilities:{canClose:true}}));else h.setScope({repository:'other/board',ref:'b'.repeat(40),file:'board.kicad_pcb'});resolve(true);await pending;assert.equal(calls.length,0);}
+});

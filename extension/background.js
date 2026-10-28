@@ -1,6 +1,6 @@
 "use strict";
 
-importScripts("managed-policy.js", "parsing.js", "browser-data.js", "review-comments.js", "review-file-store.js", "credential-vault.js", "github-review-api.js", "gitlab-provider.js", "gitlab-review-api.js", "gitlab-hosts.js", "mention-users.js", "environment-diagnostics.js");
+importScripts("managed-policy.js", "parsing.js", "browser-data.js", "review-comments.js", "review-file-store.js", "credential-vault.js", "revision-fork.js", "github-review-api.js", "gitlab-provider.js", "gitlab-review-api.js", "gitlab-hosts.js", "mention-users.js", "environment-diagnostics.js", "project-recents.js");
 globalThis.KiCadManagedPolicy?.installFetch();
 
 let mentionService=null;
@@ -10,6 +10,39 @@ function mentionUsers(message){
 }
 const SHA = /^[0-9a-f]{40}$/i;
 const REPOSITORY = /^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/;
+let projectRecentStore=null;
+function recents(){const api=globalThis.KiCadProjectRecents||(typeof require==='function'?require('./project-recents.js'):null);if(!api)throw Error('Project history is unavailable. Reload the extension.');return projectRecentStore||=(api.createStore(chrome.storage.local));}
+function recentSnapshot(result,sha){if(Array.isArray(result)&&SHA.test(sha||''))Object.defineProperty(result,'recentSnapshotRef',{value:sha.toLowerCase()});return result;}
+function dashboardSender(sender){return sender?.id===chrome.runtime.id&&(sender.frameId??0)===0&&sender.url?.split(/[?#]/,1)[0]===chrome.runtime.getURL('dashboard.html');}
+function localWorkspaceSender(sender){return sender?.id===chrome.runtime.id&&(sender.frameId??0)===0&&sender.url?.split(/[?#]/,1)[0]===chrome.runtime.getURL('local-viewer.html');}
+async function recentHostAllowed(entry){if(entry.provider==='gitlab'&&!(globalThis.KiCadGitLabHosts?await KiCadGitLabHosts.allowed(entry.host):entry.host==='https://gitlab.com'))throw Error('Configure and grant access to this GitLab server in Settings first.');}
+async function dashboardDispatch(message,sender){
+ if(message.type==='project-recents-record-local'){
+  if(!localWorkspaceSender(sender))throw Error('Only the local workspace can record imported project names.');
+  if(Object.keys(message).some(key=>!['type','name','localId'].includes(key)))throw Error('Local project history accepts names and identities only.');
+  const item=await recents().record({kind:'local',name:message.name,localId:message.localId});return{id:item.id};
+ }
+ if(!dashboardSender(sender))throw Error('Only the project dashboard can access recent project history.');
+ if(message.type==='project-recents-list'){const policy=await globalThis.KiCadManagedPolicy?.read();return{entries:await recents().list(),networkEnabled:policy?policy.valid===true&&policy.networkEnabled===true:true};}
+ if(message.type==='project-recents-remove')return{entries:await recents().remove(message.id)};
+ if(message.type==='project-recents-clear'){if(message.confirmed!==true)throw Error('Confirm clearing local project history.');await recents().clear();return{cleared:true};}
+ if(message.type==='dashboard-open-project'){
+  await globalThis.KiCadManagedPolicy?.assertNetwork();
+  const api=globalThis.KiCadProjectRecents||(typeof require==='function'?require('./project-recents.js'):null),entry=api.parseURL(message.url);await recentHostAllowed(entry);await chrome.tabs.create({url:entry.url});return{opened:true};
+ }
+ if(message.type==='dashboard-open-recent'){
+  const entry=(await recents().list()).find(item=>item.id===message.id);if(!entry)throw Error('This recent project is no longer in local history.');
+  if(entry.kind==='remote'){await globalThis.KiCadManagedPolicy?.assertNetwork();await recentHostAllowed(entry);}
+  const api=globalThis.KiCadProjectRecents||(typeof require==='function'?require('./project-recents.js'):null);await chrome.tabs.create({url:api.viewerURL(entry,name=>chrome.runtime.getURL(name))});return{opened:true,requiresFiles:entry.kind==='local'};
+ }
+ throw Error('Unsupported dashboard operation.');
+}
+async function recordLoadedProject(message,sender,result){
+ if(!viewerSender(sender)||!['project','project-file'].includes(message.type)||! /\.kicad_(sch|pcb|pro)$/i.test(message.file||''))return;
+ const ref=result?.recentSnapshotRef||message.ref;if(!/^[a-f0-9]{40}(?:[a-f0-9]{24})?$/i.test(ref||''))return;
+ if(message.type==='project'&&(!Array.isArray(result)||!result.some(file=>file?.path===message.file&&typeof file.content==='string'))||message.type==='project-file'&&typeof result?.content!=='string')return;
+ const entry={kind:'remote',provider:message.provider||'github',host:message.provider==='gitlab'?(message.host||'https://gitlab.com'):'https://github.com',repository:message.repository,ref,file:message.file};await recentHostAllowed(entry);await recents().record(entry);
+}
 
 // Only explicitly tagged, owned-viewer read operations participate in cancellation.
 const projectLoads=new Map();
@@ -32,7 +65,7 @@ async function cancellableProject(message,signal){
  try{
   if(/\.kicad_sch$/i.test(file)){
    const snapshot=await githubSchematicSnapshot(repository,ref,signal);checkLoad(signal);
-   return await KiCadBrowserData.loadProject(repository,snapshot.sha,file,read,directory,'github',()=>githubSchematicInventory(repository,snapshot.sha,snapshot.treeSha,signal));
+   return recentSnapshot(await KiCadBrowserData.loadProject(repository,snapshot.sha,file,read,directory,'github',()=>githubSchematicInventory(repository,snapshot.sha,snapshot.treeSha,signal)),snapshot.sha);
   }
   return await KiCadBrowserData.loadProject(repository,ref,file,read,directory);
  }catch(error){checkLoad(signal);if(!/HTTP (401|403|404)|rate limit/i.test(error.message))throw error;return githubSessionProject(repository,ref,file,error,signal);}
@@ -68,14 +101,14 @@ async function githubSessionRead(repository,ref,action,path='',limit=8*1024*1024
 async function githubSessionProject(repository,ref,file,originalError,signal) {
   const snapshot=await githubSessionRead(repository,ref,'resolve','',8*1024*1024,signal);
   if(!snapshot)throw originalError;
-  return KiCadBrowserData.loadProject(repository,snapshot.sha,file,async(repo,sha,path)=>{
+  return recentSnapshot(await KiCadBrowserData.loadProject(repository,snapshot.sha,file,async(repo,sha,path)=>{
     const result=await githubSessionRead(repo,sha,'file',path,KiCadBrowserData.fileByteLimit(path),signal);
     return result?.content??null;
   },async(repo,sha,directory)=>{
     const result=await githubSessionRead(repo,sha,'directory',directory,8*1024*1024,signal);
     if(!result)throw Error('GitHub session directory unavailable. Keep the repository tab open.');
     return result.items.filter(item=>item.type==='file'&&/\.kicad_sch$/i.test(item.path)).map(item=>item.path);
-  });
+  }),snapshot.sha);
 }
 async function githubSessionInventory(repository,ref,originalError,acceptPath=KiCadGitHub.filePath,signal) {
   const snapshot=await githubSessionRead(repository,ref,'resolve','',8*1024*1024,signal);if(!snapshot)throw originalError;
@@ -910,7 +943,7 @@ async function githubAnnotations(request) {
 }
 
 async function openFromAction(tab) {
-  const home = () => chrome.tabs.create({ url: chrome.runtime.getURL('local-viewer.html') });
+  const home = () => chrome.tabs.create({ url: chrome.runtime.getURL('dashboard.html') });
   if(globalThis.KiCadManagedPolicy){const policy=await KiCadManagedPolicy.read();if(!policy.valid||!policy.networkEnabled)return home();}
   const focus = async type => {
     try { if ((await chrome.tabs.sendMessage(tab.id, { type }))?.focused) return; } catch {}
@@ -1020,6 +1053,7 @@ async function gitlabDispatch(message, sender,signal) {
   if (!viewerSender(sender) && !(pdfSender(sender)&&['pdf-file','project-inventory'].includes(message.type)) && !(analysisSender(sender)&&['project-inventory','project-file'].includes(message.type)) && !['project','gitlab-merge-request'].includes(message.type)) throw new Error('Only extension viewers can use GitLab repository tools.');
   if (optionsSender(sender)) throw new Error('Options cannot load GitLab projects.');
   switch(message.type) {
+    case 'repository-fork-revision': return auth.forkRevision({...message,host});
     case 'gitlab-merge-request': {
       authorizeHostRead(message,sender);
       if(!viewerSender(sender)){
@@ -1031,7 +1065,7 @@ async function gitlabDispatch(message, sender,signal) {
     case 'project': {
       authorizeHostRead(message,sender);
       const snapshot=await api.resolve(repository,ref,file);
-      return KiCadBrowserData.loadProject(repository,snapshot.sha,file,api.file,api.directory,'gitlab',api.schematics);
+      return recentSnapshot(await KiCadBrowserData.loadProject(repository,snapshot.sha,file,api.file,api.directory,'gitlab',api.schematics),snapshot.sha);
     }
     case 'project-inventory': return api.inventory(repository,ref,file);
     case 'repo-model-index': return api.modelIndex(repository,ref);
@@ -1093,6 +1127,7 @@ async function gitlabDispatch(message, sender,signal) {
     case 'comment-publish':
     case 'github-publish-comment': return auth.publish({...message,host,destination:message.discussion?'discussion':message.destination});
     case 'github-thread-read': return auth.readThread({...message,provider:'gitlab',host});
+    case 'chat-thread-state': return auth.chatThreadState({...message,provider:'gitlab',host});
     case 'chat-message-write': return auth.chatMessageWrite({...message,provider:'gitlab',host});
     case 'chat-thread-list': return auth.chatThreadList({...message,provider:'gitlab',host});
     case 'chat-reaction': throw new Error('Chat reactions are not supported by this provider bridge.');
@@ -1145,8 +1180,10 @@ async function repositoryDetection(message,sender){
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   const customHostSender=sender?.id===chrome.runtime.id&&typeof sender.url==='string'&&sender.url.startsWith('https://')&&message?.provider==='gitlab';
-  if (!(senderAllowed(sender) || pdfSender(sender) || analysisSender(sender) || optionsSender(sender)||customHostSender) || !message || typeof message !== "object") return false;
+  if (!(senderAllowed(sender) || pdfSender(sender) || analysisSender(sender) || optionsSender(sender)||dashboardSender(sender)||localWorkspaceSender(sender)||customHostSender) || !message || typeof message !== "object") return false;
   (async () => {
+    if(message.type?.startsWith('project-recents-')||message.type?.startsWith('dashboard-'))return dashboardDispatch(message,sender);
+    if(dashboardSender(sender)||localWorkspaceSender(sender))throw Error('This project page only uses its scoped dashboard operations.');
     if(message.type==='managed-policy-status'){
       if(!optionsSender(sender))throw Error('Only extension settings can inspect administrator policy.');
       return KiCadManagedPolicy.read();
@@ -1180,6 +1217,9 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     if(message.provider==='gitlab'){const host=message.host||'https://gitlab.com';if(senderOrigin?.startsWith('https://')&&senderOrigin!==host)throw new Error('GitLab host does not match the sender.');return gitlabDispatch(message,sender);}
     if(message.comment?.anchor?.provider==='gitlab')throw new Error('GitLab annotations must use the GitLab provider.');
     switch (message.type) {
+      case 'repository-fork-revision':
+        if(!viewerSender(sender))throw Error('Only extension viewers can create a repository fork.');
+        return KiCadGitHubReviewApi.forkRevision(message);
       case "github-auth-status":
         if (!viewerSender(sender) && !optionsSender(sender)) throw new Error("Only extension pages can inspect GitHub settings.");
         return KiCadGitHubReviewApi.tokenStatus();
@@ -1217,6 +1257,9 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       case "github-thread-read":
         if (!viewerSender(sender)) throw new Error("Only extension viewers can read GitHub threads.");
         return KiCadGitHubReviewApi.readThread(message);
+      case 'chat-thread-state':
+        if (!viewerSender(sender)) throw new Error('Only extension viewers can change conversation state.');
+        return KiCadGitHubReviewApi.chatThreadState(message);
       case 'chat-message-write':
         if (!viewerSender(sender)) throw new Error('Only extension viewers can write chat messages.');
         return KiCadGitHubReviewApi.chatMessageWrite(message);
@@ -1320,8 +1363,8 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         if (/\.kicad_sch$/i.test(file || '')) {
           revisionScope(repository,ref,file);
           const snapshot=await githubSchematicSnapshot(repository,ref);
-          return await KiCadBrowserData.loadProject(repository,snapshot.sha,file,githubFile,githubDirectory,'github',
-            () => githubSchematicInventory(repository,snapshot.sha,snapshot.treeSha));
+          return recentSnapshot(await KiCadBrowserData.loadProject(repository,snapshot.sha,file,githubFile,githubDirectory,'github',
+            () => githubSchematicInventory(repository,snapshot.sha,snapshot.treeSha)),snapshot.sha);
         }
         return await KiCadBrowserData.loadProject(repository, ref, file, githubFile, githubDirectory);
         } catch(error) {
@@ -1340,6 +1383,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       default: throw new Error("Unsupported extension request.");
     }
   })().then(async (result) => {
+               void recordLoadedProject(message,sender,result).catch(()=>{});
                if (message.provider !== 'gitlab' && /^github-(auth|device)-/.test(message.type)) {
                  await updateGitHubBadge().catch(() => {});
                  if (result?.state === 'pending') scheduleDeviceCheck(result.retryAfterMs);
@@ -1359,7 +1403,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
 if (typeof module === "object" && module.exports) {
   module.exports = { githubFile, githubPull, githubFiles, githubDirectory, githubSchematicInventory, drawingFiles, openViewerWindow,
-    githubAsset, designChanges, senderAllowed, viewerSender, analysisSender, optionsSender, openFromAction,
+    githubAsset, designChanges, senderAllowed, viewerSender, analysisSender, optionsSender, dashboardSender, dashboardDispatch, recordLoadedProject,openFromAction,
     commentList, commentSave, commentDelete, openCommentDraft, claimCommentDraft,
     acknowledgeCommentDraft, githubAnnotations, revisionBranches,revisionCommits,revisionResolve,repositoryTree,repositoryHistory,repositoryBranches };
 }

@@ -1,0 +1,22 @@
+const test=require('node:test'),assert=require('node:assert/strict'),fs=require('node:fs'),vm=require('node:vm'),path=require('node:path'),R=require('../project-recents.js');
+const source=fs.readFileSync(path.join(__dirname,'../dashboard.js'),'utf8'),tick=()=>new Promise(resolve=>setImmediate(resolve));
+function fixture({networkEnabled=true,entries=[],failure=false}={}){
+ class Node{constructor(tag){this.tag=tag;this.children=[];this.textContent='';this.attributes={};this.value='';this.hidden=false;this.classList={toggle(){}};}append(...nodes){this.children.push(...nodes);}replaceChildren(){this.children=[];}setAttribute(key,value){this.attributes[key]=value;}showModal(){this.open=true;}close(){this.open=false;}focus(){this.focused=true;}}
+ const elements=new Map(),get=id=>{if(!elements.has(id))elements.set(id,new Node('div'));return elements.get(id);},calls=[];get('projectFilter').value='all';let saved=entries;
+ const context={document:{getElementById:get,createElement:tag=>new Node(tag)},URL,KiCadProjectRecents:R,chrome:{runtime:{sendMessage:async request=>{calls.push(request);if(failure)return{ok:false,error:'Storage is unavailable'};if(request.type==='project-recents-remove')saved=saved.filter(entry=>entry.id!==request.id);if(request.type==='project-recents-clear')saved=[];return{ok:true,result:request.type==='project-recents-list'?{entries:saved,networkEnabled}:{opened:true}};}},storage:{onChanged:{addListener(){}}}}};vm.runInNewContext(source,context);return{get,calls};
+}
+const entry=value=>{const normalized=R.normalize(value);return{...normalized,id:R.identity(normalized),lastOpened:1770000000000};};
+const remote=entry({kind:'remote',provider:'github',repository:'public/board',ref:'a'.repeat(40),file:'hardware/board.kicad_pcb'}),local=entry({kind:'local',name:'Local bench',localId:'b'.repeat(64)});
+test('dashboard renders bounded metadata safely, filters locally and opens the stored recent identity',async()=>{
+ const f=fixture({entries:[remote,local]});await tick();const cards=f.get('recentProjects').children;assert.equal(cards.length,2);assert.equal(cards[0].children[1].textContent,'board');assert.match(cards[1].children[2].textContent,/Requires files/);const open=cards[0].children.at(-1).children.at(-1);await open.onclick();assert.deepEqual(JSON.parse(JSON.stringify(f.calls.at(-1))),{type:'dashboard-open-recent',id:remote.id});
+ const before=f.calls.length;f.get('searchProjects').value='bench';f.get('searchProjects').oninput();assert.equal(f.get('recentProjects').children.length,1);assert.equal(f.calls.length,before);f.get('projectFilter').value='github';f.get('projectFilter').onchange();assert.match(f.get('recentProjects').children[0].textContent,/No projects match/);
+});
+test('empty history states that recording starts with the feature and clear requires the explicit dialog action',async()=>{
+ const f=fixture({entries:[remote]});await tick();f.get('clearHistory').onclick();assert.equal(f.get('clearDialog').open,true);assert.equal(f.get('cancelClear').focused,true);assert.equal(f.calls.some(call=>call.type==='project-recents-clear'),false);f.get('cancelClear').onclick();assert.equal(f.get('clearDialog').open,false);
+ f.get('clearHistory').onclick();await f.get('confirmClear').onclick();assert.equal(f.calls.find(call=>call.type==='project-recents-clear').confirmed,true);assert.equal(f.get('emptyProjects').hidden,false);assert.equal(f.get('clearHistory').disabled,true);
+ const html=fs.readFileSync(path.join(__dirname,'../dashboard.html'),'utf8');assert.match(html,/Earlier browsing history is not imported/);assert.match(html,/Local files must be selected again/);assert.match(html,/connect-src 'none'/);assert.equal(/<script(?![^>]*\bsrc=)[^>]*>/i.test(html),false);
+});
+test('offline deployment leaves local reopening and history controls usable while disabling online projects',async()=>{
+ const f=fixture({networkEnabled:false,entries:[remote,local]});await tick();const cards=f.get('recentProjects').children;assert.equal(cards[0].children.at(-1).children.at(-1).disabled,true);assert.equal(cards[1].children.at(-1).children.at(-1).disabled,false);assert.equal(f.get('openOnline').disabled,true);assert.equal(f.get('clearHistory').disabled,false);assert.match(f.get('dashboardStatus').textContent,/administrator policy/);
+ const failed=fixture({failure:true});await tick();assert.match(failed.get('dashboardStatus').textContent,/Storage is unavailable/);assert.equal(failed.get('clearHistory').disabled,false,'explicit clear can recover invalid metadata');
+});

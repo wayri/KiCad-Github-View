@@ -20,6 +20,7 @@ def payload(root=ROOT):
     spec = importlib.util.spec_from_file_location('extension_builder', root / 'scripts/package_extension.py')
     module = importlib.util.module_from_spec(spec); spec.loader.exec_module(module)
     excluded = {'managed-policy.js', 'managed-policy-schema.json', 'managed-policy-options.js', 'merge-conflicts.js', 'conflict-viewer.html', 'conflict-viewer.js', 'conflict-viewer.css', 'conflict-properties.js', 'manifest.json', 'options.html', 'options.js', 'gitlab-options.js', 'gitlab-hosts.js', 'gitlab-provider.js', 'gitlab-review-api.js', 'github-review-api.js', 'mention-users.js', 'review-file-store.js', 'review-file-settings.js', 'html-sandbox.html', 'html-sandbox.js', 'credential-vault.js', 'credential-vault-host.html', 'credential-vault-host.js', 'credential-vault-worker.js'}
+    excluded.update({'dashboard.html','dashboard.css','dashboard.js','project-recents.js'})
     names = ((module.FILES | module.LEGAL_FILES) - excluded) | {'parsing.js'}
     result = {}
     for name in sorted(names):

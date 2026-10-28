@@ -302,8 +302,8 @@ const KiCadGitHubReviewApi = (() => {
       "GitHub sign-in failed. Check the OAuth App client ID and start again.", true);
   }
 
-  async function request(path, token, body, epoch = authEpoch, method) {
-    if (typeof path !== "string" || !path.startsWith("/repos/") && path !== "/graphql" ||
+  async function request(path, token, body, epoch = authEpoch, method, forkOptions) {
+    if (typeof path !== "string" || !path.startsWith("/repos/") && path !== "/graphql" && !(forkOptions && (path === '/user' || /^\/user\/memberships\/orgs\/[A-Za-z0-9-]+$/.test(path))) ||
         path.includes("//") || path.includes("..")) throw fail("Invalid GitHub API path.", true);
     await assertCurrentToken(token, epoch);
     const controller = new AbortController();
@@ -320,6 +320,7 @@ const KiCadGitHubReviewApi = (() => {
     } catch {
       throw fail("GitHub did not confirm the request. Publishing may have succeeded; inspect the thread before retrying.");
     } finally { clearTimeout(timeout); }
+    if (forkOptions && response.status === 404) return {status:404,data:null};
     if (!response.ok) {
       if (response.status === 401 || response.status === 403) throw fail("GitHub denied access. Check the token and repository permissions.", true);
       if (response.status === 404) throw fail("GitHub repository or thread was not found, or token access is missing.", true);
@@ -328,18 +329,36 @@ const KiCadGitHubReviewApi = (() => {
       throw fail(`GitHub returned HTTP ${response.status}; inspect the thread before retrying.`);
     }
     try {
-      const data = await response.json();
+      let data;
+      if(forkOptions){
+        if(Number(response.headers.get('content-length'))>1024*1024||!response.body?.getReader)throw fail('Provider response cannot be read within its size limit.',!forkOptions.stateChange);
+        const reader=response.body.getReader(),chunks=[],readTimer=setTimeout(()=>controller.abort(),30000);let size=0;
+        try{for(;;){const item=await reader.read();if(item.done)break;size+=item.value.byteLength;if(size>1024*1024){await reader.cancel();throw fail('Provider response exceeds its size limit.',!forkOptions.stateChange);}chunks.push(item.value);}}
+        finally{clearTimeout(readTimer);reader.releaseLock();}
+        const bytes=new Uint8Array(size);let offset=0;for(const chunk of chunks){bytes.set(chunk,offset);offset+=chunk.length;}data=JSON.parse(new TextDecoder().decode(bytes));
+        await assertCurrentToken(token,epoch);
+      }else data = await response.json();
       if (path === "/graphql" && Array.isArray(data.errors) && data.errors.length) {
         throw fail("GitHub rejected or did not confirm the discussion request. Check token permissions and inspect the thread.",
           !body?.query?.includes("mutation"));
       }
-      return data;
+      return forkOptions ? {status:response.status,data} : data;
     } catch (error) {
       if (error.definitive) throw error;
       throw fail("GitHub returned an unreadable response; inspect the thread before retrying.");
     }
   }
   const graphql = (token, query, variables, epoch = authEpoch) => request("/graphql", token, { query, variables }, epoch);
+  async function forkRevision(message){
+    KiCadRevisionFork.validate({...message,provider:'github'});
+    await globalThis.KiCadManagedPolicy?.assertWrites();
+    const epoch=authEpoch,token=await getToken();
+    await KiCadReviewComments.reservePublication(chrome.storage.local,JSON.stringify(['github','https://github.com']),Date.now());
+    return KiCadRevisionFork.create({...message,provider:'github'},{
+      authorize:async()=>{await globalThis.KiCadManagedPolicy?.assertWrites();await assertCurrentToken(token,epoch);},
+      request:(method,path,body)=>request(path,token,body,epoch,method,true)
+    });
+  }
   function repoParts(repository) {
     if (!validRepository(repository)) throw fail("Invalid target GitHub repository.", true);
     return repository.split("/");
@@ -490,7 +509,48 @@ const KiCadGitHubReviewApi = (() => {
     if(includeCapabilities&&session.token){try{const policy=await commentPolicyStatus(repository);allowed=policy.allowed===true;login=policy.login||null;}catch{warn('Chat permissions could not be verified.');}}
     allowed=allowed&&LOGIN.test(login||'')&&!thread.locked&&!thread.isPullRequest;
     for(const comment of comments)comment.canEdit=allowed&&!!login&&comment.author?.toLowerCase()===login.toLowerCase()&&(kind==='issue'||comment.viewerCanUpdate&&comment.viewerDidAuthor)&&!comment.bodyTruncated&&!comment.body.includes('kicad-review:');
-    await session.check();return {...thread,comments,warnings,capabilities:{create:allowed,reply:allowed,edit:allowed,reactions:false,replyMode:kind==='issue'?'quoted':'native'}};
+    let canClose=false,canReopen=false;
+    if(allowed&&includeCapabilities){try{await globalThis.KiCadManagedPolicy?.assertWrites();const state=await threadStateSnapshot(repository,kind,number,session.token,authEpoch);if(state.updatedAt===thread.updatedAt&&state.closed===(thread.state==='closed')){canClose=!state.closed&&state.viewerCanClose;canReopen=state.closed&&state.viewerCanReopen;}}catch{warn('Conversation state permissions could not be verified.');}}
+    await session.check();return {...thread,comments,warnings,capabilities:{canClose,canReopen,create:allowed,reply:allowed,edit:allowed,reactions:false,replyMode:kind==='issue'?'quoted':'native'}};
+  }
+
+  const threadStateGraphql=async(token,query,variables,current)=>(await request('/graphql',token,{query,variables},current,undefined,{stateChange:true})).data;
+  async function threadStateSnapshot(repository,kind,number,token,current) {
+    const [owner,name]=repository.split('/');
+    const result=await threadStateGraphql(token,`query($owner:String!,$name:String!,$number:Int!){repository(owner:$owner,name:$name){nameWithOwner ${kind}(number:$number){id number closed updatedAt viewerCanClose viewerCanReopen}}}`,{owner,name,number},current);
+    const repo=result.data?.repository,value=repo?.[kind];
+    if(repo?.nameWithOwner?.toLowerCase()!==repository.toLowerCase()||!validId(value?.id)||value.number!==number||typeof value.closed!=='boolean'||typeof value.updatedAt!=='string'||!Number.isFinite(Date.parse(value.updatedAt))||typeof value.viewerCanClose!=='boolean'||typeof value.viewerCanReopen!=='boolean')throw fail('Thread identity or state permission could not be verified.',true);
+    return value;
+  }
+  async function chatThreadState(message) {
+    await globalThis.KiCadManagedPolicy?.assertWrites();
+    if(message?.provider!==undefined&&message.provider!=='github'||message?.host!==undefined&&message.host!=='https://github.com')throw fail('Invalid GitHub chat provider.',true);
+    const {repository,ref,file}=KiCadReviewComments.normalizeScope(message||{}),{kind,number}=message.thread||{},state=message.state,expected=message.expectedUpdatedAt;
+    if(message.confirmed!==true||!['issue','discussion'].includes(kind)||!NUMBER(number)||!['open','closed'].includes(state)||typeof expected!=='string'||!/^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d(?:\.\d{1,3})?Z$/.test(expected)||!Number.isFinite(Date.parse(expected)))throw fail('Confirm a valid thread state and fetched revision.',true);
+    const lock='github-thread-state:'+JSON.stringify([repository.toLowerCase(),kind,number]);
+    if(locks.has(lock))throw fail('A state change is already in progress.',true);
+    const work=(async()=>{
+      const current=authEpoch,token=await getToken(),policy=await commentPolicyStatus(repository);
+      if(!policy.allowed||!LOGIN.test(policy.login||''))throw fail('Repository policy or account verification blocked this state change.',true);
+      await assertCurrentToken(token,current);
+      const key=lock+JSON.stringify([policy.login.toLowerCase(),expected,state,ref,file]),saved=(await chrome.storage.local.get(key))[key];
+      if(saved?.status==='done')return {...saved.result,duplicate:true};
+      if(saved)throw fail('Previous state change has an unconfirmed outcome. Refresh and inspect GitHub before retrying.');
+      const fresh=await threadStateSnapshot(repository,kind,number,token,current);
+      if(fresh.updatedAt!==expected||fresh.closed===(state==='closed'))throw fail('Conversation state or revision changed. Refresh before changing it.',true);
+      if(!fresh[state==='closed'?'viewerCanClose':'viewerCanReopen'])throw fail('GitHub does not permit this state change for your account.',true);
+      await KiCadReviewComments.reservePublication(chrome.storage.local,JSON.stringify(['github','https://github.com']),Date.now());
+      await globalThis.KiCadManagedPolicy?.assertWrites();await assertCurrentToken(token,current);
+      await chrome.storage.local.set({[key]:{status:'pending'}});
+      try{
+        const verb=state==='closed'?'close':'reopen',type=kind==='issue'?'Issue':'Discussion',operation=verb+type,inputType=verb[0].toUpperCase()+verb.slice(1)+type+'Input';
+        const input={[kind+'Id']:fresh.id},value=await threadStateGraphql(token,`mutation($input:${inputType}!){${operation}(input:$input){${kind}{id number closed updatedAt}}}`,{input},current),result=value.data?.[operation]?.[kind];
+        await assertCurrentToken(token,current);
+        if(result?.id!==fresh.id||result.number!==number||result.closed!==(state==='closed')||typeof result.updatedAt!=='string'||!Number.isFinite(Date.parse(result.updatedAt)))throw fail('GitHub did not confirm the state change. Refresh and inspect the conversation before retrying.');
+        const response={provider:'github',repository,kind,number,state,updatedAt:result.updatedAt,url:`https://github.com/${repository}/${kind==='issue'?'issues':'discussions'}/${number}`};
+        await chrome.storage.local.set({[key]:{status:'done',result:response}});return response;
+      }catch(error){if(error.definitive)await chrome.storage.local.remove(key);throw error;}
+    })();locks.set(lock,work);try{return await work;}finally{locks.delete(lock);}
   }
 
   async function chatMessageWrite(message) {
@@ -1045,8 +1105,8 @@ const KiCadGitHubReviewApi = (() => {
       throw error;
     }
   }
-  return { tokenStatus, setToken, clearToken, resetAuth, authorizationHeaders, deviceStatus, startDevice, pollDevice, cancelDevice,
-    commentPolicyStatus, validatePolicy, categories, publish, recoverPublication, publishArgs, validRepository, createAnnotationReader, createPullReader, readDiscussionAnnotations, readThread, chatMessageWrite, chatThreadList };
+  return { forkRevision, tokenStatus, setToken, clearToken, resetAuth, authorizationHeaders, deviceStatus, startDevice, pollDevice, cancelDevice,
+    commentPolicyStatus, validatePolicy, categories, publish, recoverPublication, publishArgs, validRepository, createAnnotationReader, createPullReader, readDiscussionAnnotations, readThread, chatThreadState, chatMessageWrite, chatThreadList };
 })();
 
 if (typeof globalThis === "object") globalThis.KiCadGitHubReviewApi = KiCadGitHubReviewApi;

@@ -27,6 +27,7 @@ test('stacked canvas preserves front-copy picking identity and routes airwires t
  const result=composeSheetOverview(entries,[{from:{path:'root',position:{x:10,y:20}},to:{path:'channel',instanceId:'right',position:{x:10,y:20}}}]);
  const channel=result.pages[1],wire=result.design.primitives.find(p=>p.uuid==='wire');
  assert.equal(wire.sourceInstanceId,'left');assert.deepEqual(source.points,[{x:1,y:2},{x:3,y:4}]);
- assert.deepEqual(result.airwires[0].points[1],{x:channel.x+13,y:channel.y+23});
+ assert.deepEqual(result.airwires[0].toAnchor,{x:channel.x+13,y:channel.y+23});
+ assert.ok(result.airwires[0].points.length>=2,'relationship is routed through page gutters while preserving its source-instance anchor');
  assert.ok(result.design.primitives.some(p=>p.text==='Root / Left'));
 });

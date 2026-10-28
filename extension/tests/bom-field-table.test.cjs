@@ -40,6 +40,12 @@ test('part bound rejects excessive inputs and empty tables are valid',()=>{
  assert.throws(()=>api.rows(new Array(100001),[],false),/limit/);
 });
 
+test('assembly and procurement grouping preserve exact part members and keep selection identities individual',()=>{
+ const parts=[part('R1',{management:{Assembly:'placed',status:'received'}}),part('R2',{management:{Assembly:'verified',status:'received'}}),part('R3',{management:{Assembly:'placed',status:'ordered'}})],fields=api.fields(parts);
+ const assembly=api.rows(parts,api.preset(fields,'assembly'),true);assert.equal(assembly.length,2);assert.deepEqual(assembly[0].parts,[parts[0],parts[2]]);assert.equal(assembly[0].values.Assembly,'placed');
+ const procurement=api.rows(parts,api.preset(fields,'procurement'),true);assert.equal(procurement.length,2);assert.equal(procurement[0].quantity,2);assert.equal(procurement[0].values.Assembly,'<mixed>');assert.equal(procurement[0].parts[1],parts[1]);assert.equal(api.preset(fields,'procurement').find(f=>f.key==='status').show,true);
+});
+
 test('grouping presets support value, footprint and numeric rate while keeping currencies and unknown prices distinct',()=>{
  const parts=[part('R1',{value:'10k',footprint:'0603',management:{'Unit price':'1.00',Currency:'USD'}}),part('R2',{value:'1k',footprint:'0805',management:{'Unit price':'1',Currency:'USD'}}),part('R3',{value:'10k',footprint:'0805',management:{'Unit price':'1',Currency:'EUR'}}),part('R4',{value:'10k',footprint:'0603',management:{'Unit price':'',Currency:'USD'}}),part('R5',{value:'10k',footprint:'0603',management:{'Unit price':'0',Currency:'USD'}})];
  const fields=api.fields(parts),rate=api.preset(fields,'rate');assert.equal(fields.find(f=>f.key==='Unit price').groupBy,false);assert.equal(rate.find(f=>f.key==='Unit price').show,true);

@@ -13,7 +13,7 @@ public final class EnterprisePolicyTest {
         check(offline.allowsAction("sign-out"));check(offline.allowsAction("device-cancel"));
         EnterprisePolicy readOnly=EnterprisePolicy.from(Map.of("disable_provider_writes",true));
         check(readOnly.network&&!readOnly.providerWrites);check(readOnly.allowsAction("import"));check(readOnly.allowsAction("device-start"));
-        for(String action:new String[]{"review-publish","review-upload","publish","upload","chat-message-write","chat-reaction"})check(!readOnly.allowsAction(action));
+        for(String action:new String[]{"repository-fork-revision","review-publish","review-upload","publish","upload","chat-message-write","chat-thread-state","chat-reaction"})check(!readOnly.allowsAction(action));
         check(EnterprisePolicy.from(Map.of("secure_screen",true)).secureScreen);
         for(String key:EnterprisePolicy.KEYS)for(Object malformed:new Object[]{"false",0,List.of(),Map.of()}){
             EnterprisePolicy denied=EnterprisePolicy.from(Map.of(key,malformed));check(!denied.network&&!denied.providerWrites&&denied.secureScreen);

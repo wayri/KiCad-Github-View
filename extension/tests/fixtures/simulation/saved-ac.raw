@@ -1,0 +1,20 @@
+Title: Synthetic saved AC fixture (not solver output)
+Date: 2026-10-28
+Plotname: AC Analysis
+Flags: complex
+No. Variables: 3
+No. Points: 3
+Variables:
+0 frequency frequency
+1 v(/filter/out) voltage
+2 i(v1) current
+Values:
+0 10,0
+1,-1
+0.001,0.002
+1 100,0
+0.5,-0.5
+0.003,0.004
+2 1000,0
+0.1,-0.1
+0.005,0.006

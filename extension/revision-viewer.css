@@ -356,3 +356,17 @@ body[data-workspace="true"] #projectButton,body[data-workspace="true"] #viewOppo
 }
 
 .loading-surface .loading-stop{pointer-events:auto;align-self:flex-end;min-height:44px;min-width:72px;padding:8px 16px;font:600 13px/1.2 system-ui;border:1px solid currentColor;border-radius:6px;background:transparent;color:inherit;cursor:pointer}.loading-surface .loading-stop[hidden]{display:none}.loading-surface .loading-stop:focus-visible{outline:2px solid currentColor;outline-offset:2px}.loading-surface .loading-stop:disabled{cursor:wait;opacity:.65}
+.object-visibility-filter{margin:6px 0;border-top:1px solid var(--line,#405362);padding-top:6px}
+.object-visibility-filter>summary{font-size:12px;font-weight:600;cursor:pointer;padding:4px 0}
+.object-visibility-filter>section{display:grid;gap:7px;padding:5px 0;min-width:0;max-width:360px}
+.object-side-controls{display:flex;gap:4px}.object-side-controls button{flex:1;min-width:0;font-size:11px}
+.object-visibility-filter label{display:flex;align-items:center;gap:7px;font-size:12px;min-width:0;margin:0}
+.object-visibility-filter input[type=checkbox]{flex:none;width:14px;height:14px;min-height:0;padding:0;margin:0;accent-color:var(--accent,#69b9f8)}
+.object-visibility-rows{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:3px 12px}
+.object-visibility-rows label{min-height:28px}.object-visibility-rows svg{width:19px;height:19px;flex:none;fill:none;stroke:currentColor;stroke-width:1.6;color:var(--accent,#69b9f8)}
+.object-visibility-rows .unsupported{opacity:.45}.object-visibility-filter small{font-size:10px;color:var(--muted,#899ba8);line-height:1.4}.object-visibility-filter .quiet-button{justify-self:start;font-size:11px}
+@media(max-width:360px){.object-visibility-rows{gap:2px 6px}.object-visibility-rows label{font-size:11px}}
+.object-view-options-heading{display:flex;align-items:center;justify-content:space-between;gap:8px;position:sticky;top:-6px;background:var(--panel);z-index:1;padding:2px 0 5px;font-size:12px}
+.object-view-options-heading button{font-size:17px;min-width:28px;min-height:28px;padding:0}
+.project-files-tree{display:grid;gap:2px;min-width:0;font-size:12px}.project-files-tree details{min-width:0;margin-left:10px;border-left:1px solid var(--line,#405362);padding-left:5px}.project-files-tree>details{margin-left:0}.project-files-tree summary{cursor:pointer;padding:5px 2px;overflow-wrap:anywhere;font-size:11px;color:var(--muted,#9bafc0)}.project-files-tree .project-file-tree-row{display:block;width:100%;min-width:0;text-align:left;border:0;background:transparent;border-radius:4px;padding:5px 7px;margin:1px 0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:12px}.project-files-tree .project-file-tree-row[aria-current=page]{background:var(--selected,#244354);color:var(--accent,#71c4fa)}.project-files-tree .project-file-tree-row:disabled{opacity:.5}
+.sheet-overview-guide{position:relative;font-size:11px}.sheet-overview-guide>summary{cursor:pointer;padding:5px 8px;border:1px solid var(--line);border-radius:4px}.sheet-overview-guide>small{position:absolute;top:100%;right:0;width:min(340px,80vw);z-index:10;padding:10px;background:var(--panel);color:var(--text);border:1px solid var(--line);border-radius:5px;line-height:1.5;box-shadow:0 5px 14px #0004}

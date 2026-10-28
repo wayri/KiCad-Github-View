@@ -238,7 +238,7 @@
       const inner = { x: at.x + length * dx, y: at.y + length * dy };
       const name = form(pin, "name"), number = form(pin, "number"), style = value(pin[2]);
       const pinOwner = { ...owner, ownerUuid: owner.uuid, kind: "pin", pinNumber: String(value(number?.[1]) ?? ""),
-        pinType: value(pin[1]), pinStyle: style, connectPoint: map(at) };
+        pinName:String(value(name?.[1]) ?? ""), pinType: value(pin[1]), pinStyle: style, connectPoint: map(at) };
       const hidden = hasFlag(pin, "hide") || isHidden(pin);
       if (hidden) {
         line(map(at), map(at), COLOR.pin, 0, { ...pinOwner, hidden: true, stroke: false, pick: false });
@@ -248,7 +248,7 @@
       const r = 0.635, h = 1.27;
       const local = (along, across) => ({ x: inner.x + along * dx - across * dy,
         y: inner.y + along * dy + across * dx });
-      const marker = { ...owner, kind: "pin-marker", pinNumber: pinOwner.pinNumber };
+      const marker = { ...pinOwner, kind: "pin-marker" };
       const poly = (positions) => emit({ type: "polyline", points: positions.map(map), color: COLOR.pin, width: 0.1524, ...marker });
       let lineEnd = inner;
       if (["inverted", "inverted_clock"].includes(style)) {
@@ -278,7 +278,7 @@
         if (finite(offset) && offset > 0) { place = map(local(offset,0)); align = insideAlign; }
         else { place = { x: (start.x + end.x)/2 - (horizontal ? 0 : size/2 + 0.3556),
           y: (start.y + end.y)/2 - (horizontal ? size/2 + 0.3556 : 0) }; align = "center"; }
-        text(place, value(name[1]), size, textAngle, "#008484", { ...owner, kind: "pin-name", ...fontStyle(name), align });
+        text(place, value(name[1]), size, textAngle, "#008484", { ...pinOwner, kind: "pin-name", ...fontStyle(name), align });
       }
       if (!hideNumbers && number && !isHidden(number) && value(number[1]) && value(number[1]) !== "~") {
         const size = fontSize(number), gap = size/2 + 0.3556;
@@ -286,7 +286,7 @@
         const side = !hideNames && value(name?.[1]) !== "~" && offset === 0 ? -1 : 1;
         const place = { x: (start.x + end.x)/2 - (horizontal ? 0 : gap * side),
           y: (start.y + end.y)/2 - (horizontal ? gap * side : 0) };
-        text(place, value(number[1]), size, textAngle, "#a90000", { ...owner, kind: "pin-number", ...fontStyle(number), align: "center" });
+        text(place, value(number[1]), size, textAngle, "#a90000", { ...pinOwner, kind: "pin-number", ...fontStyle(number), align: "center" });
       }
     }
     function renderSymbol(node) {

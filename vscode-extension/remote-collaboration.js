@@ -1,7 +1,8 @@
 "use strict";
 // Host-only collaboration. The webview never supplies credentials or destinations.
-const REMOTE_OPERATIONS=new Set(['chat-thread-list','chat-message-write','chat-reaction','comment-mention-users','mention-users','comment-policy-status','comment-remote-list','github-thread-read','github-annotations','github-discussion-categories','github-comment-policy','github-publish-comment','github-recover-publication','comment-publish','open-options']);
-const WRITE_OPERATIONS=new Set(['chat-message-write','chat-reaction','github-publish-comment','github-recover-publication','comment-publish']);
+const REMOTE_OPERATIONS=new Set(['chat-thread-list','chat-message-write','chat-thread-state','chat-reaction','comment-mention-users','mention-users','comment-policy-status','comment-remote-list','github-thread-read','github-annotations','github-discussion-categories','github-comment-policy','github-publish-comment','github-recover-publication','comment-publish','open-options']);
+const WRITE_OPERATIONS=new Set(['chat-message-write','chat-thread-state','chat-reaction','github-publish-comment','github-recover-publication','comment-publish']);
+REMOTE_OPERATIONS.add('repository-fork-revision');WRITE_OPERATIONS.add('repository-fork-revision');
 // Application/user values only: repository settings never grant authority.
 function deploymentPolicy(vscode){
  try{
@@ -23,7 +24,7 @@ function remoteURL(value){
  const provider=host==='github.com'?'github':'gitlab';if(provider==='github'&&path.split('/').length!==2)return null;
  return{provider,host:'https://'+host,repository:path};
 }
-function createHost(vscode,{sameScope,comments,apiFactory,readCommitted,fetch:fetcher=globalThis.fetch}={}){
+function createHost(vscode,{sameScope,comments,apiFactory,forkFactory,readCommitted,fetch:fetcher=globalThis.fetch}={}){
  const memory=new Map(),publicationLocks=new Map();
  function policy(write=false){const value=deploymentPolicy(vscode);if(!value.networkAccess)throw Error('Network access is disabled by application deployment settings.');if(write&&!value.providerWrites)throw Error('Provider writes are disabled by application deployment settings.');return value;}
  async function publication(message,session,ctx,work){
@@ -98,10 +99,23 @@ function createHost(vscode,{sameScope,comments,apiFactory,readCommitted,fetch:fe
   const file=message.file||message.comment?.anchor?.file||session.scope.rootFile;if(!session.paths.has(file))throw Error('Remote request belongs to another drawing.');
   if(message.type==='open-options')return connect(session);
   if(!REMOTE_OPERATIONS.has(message.type))throw Error('Unsupported remote collaboration operation.');
+  const fork=message.type==='repository-fork-revision';
+  let forkUser=null,forkDestination=null,forkProjectId=null,forkConsent=false,forkCredential=null;
+  const forkNamespace=message.destinationNamespace??message.namespace;
+  if(fork){
+   if(message.confirmed!==true||! /^[a-f0-9]{40}(?:[a-f0-9]{24})?$/i.test(message.sha||'')||typeof message.name!=='string'||! /^[A-Za-z0-9][A-Za-z0-9_.-]{0,99}$/.test(message.name)||['.','..'].includes(message.name)||forkNamespace!==undefined&&forkNamespace!==''&&(typeof forkNamespace!=='string'||! /^[A-Za-z0-9][A-Za-z0-9_.-]{0,99}$/.test(forkNamespace))||message.branch!==undefined&&(typeof message.branch!=='string'||! /^[A-Za-z0-9][A-Za-z0-9._/-]{0,199}$/.test(message.branch)||message.branch.includes('..')||message.branch.includes('//')||message.branch.endsWith('/')||message.branch.endsWith('.lock')))throw Error('Confirm a valid selected commit and new fork destination.');
+  }
   const write=['github-publish-comment','github-recover-publication','comment-publish'].includes(message.type);
   const chat=message.type==='chat-message-write';
   if(chat&&message.annotation){const a=message.annotation.anchor;if(a?.repository!==session.scope.repository||a.ref!==session.scope.ref||!session.paths.has(a.file))throw Error('Chat annotation belongs to another workspace.');await verify(session,ctx);}
-  if(chat)await credential(ctx,ctx.provider==='github');
+  const threadState=message.type==='chat-thread-state';
+  if(threadState){
+   if(message.confirmed!==true||!['open','closed'].includes(message.state)||!['issue','discussion'].includes(message.thread?.kind)||!Number.isSafeInteger(message.thread?.number)||message.thread.number<1||typeof message.expectedUpdatedAt!=='string')throw Error('Confirm a valid conversation state change.');
+   const action=message.state==='closed'?'Close conversation':'Reopen conversation';
+   if(await vscode.window.showWarningMessage(action+' '+message.thread.kind+' #'+message.thread.number+' in '+ctx.repository+'?',{modal:true},action)!==action)throw Error('Conversation state change cancelled.');
+   policy(true);await context(session);if(vscode.workspace.isTrusted!==true||session.disposed)throw Error('The trusted viewer is no longer active.');
+  }
+  if(chat||threadState)await credential(ctx,ctx.provider==='github');
   if(write||['github-annotations','comment-remote-list'].includes(message.type))await verify(session,ctx);
   if(write){if(!message.comment)throw Error('An explicit review note is required.');const a=message.comment.anchor;if(a?.repository!==session.scope.repository||a.ref!==session.scope.ref||!session.paths.has(a.file))throw Error('Publication anchor belongs to another workspace.');await credential(ctx,ctx.provider==='github');}
   let requests=0,bytes=0,projectId=null;const deadline=Date.now()+120000;
@@ -118,28 +132,61 @@ function createHost(vscode,{sameScope,comments,apiFactory,readCommitted,fetch:fe
     if(method!=='POST'||u.origin!=='https://api.github.com'||u.pathname!=='/graphql'||typeof query!=='string'||!/^\s*(?:query\b|\{)/.test(query)||/\bmutation\b/.test(query))throw Error('Provider writes are disabled by application deployment settings.');
    }
    const github=ctx.provider==='github',project='/api/v4/projects/'+encodeURIComponent(ctx.repository);
-   const allowed=github?(u.origin==='https://api.github.com'&&(u.pathname==='/user'||['mention-users','comment-mention-users'].includes(message.type)&&u.pathname==='/search/users'||u.pathname==='/graphql'||u.pathname==='/repos/'+ctx.repository||u.pathname.startsWith('/repos/'+ctx.repository+'/'))||u.origin==='https://uploads.github.com'&&u.pathname==='/user-attachments/assets'):
+   let allowed=github?(u.origin==='https://api.github.com'&&(u.pathname==='/user'||['mention-users','comment-mention-users'].includes(message.type)&&u.pathname==='/search/users'||u.pathname==='/graphql'||u.pathname==='/repos/'+ctx.repository||u.pathname.startsWith('/repos/'+ctx.repository+'/'))||u.origin==='https://uploads.github.com'&&u.pathname==='/user-attachments/assets'):
     u.origin===ctx.host&&(u.pathname==='/api/v4/user'||['mention-users','comment-mention-users'].includes(message.type)&&u.pathname==='/api/v4/users'||u.pathname===project||u.pathname.startsWith(project+'/')||projectId!==null&&(u.pathname==='/api/v4/projects/'+projectId||u.pathname.startsWith('/api/v4/projects/'+projectId+'/')));
+   if(fork){
+    const branch=encodeURIComponent(message.branch||'review/'+message.sha.slice(0,12)),selected=message.sha.toLowerCase(),source=github?'/repos/'+ctx.repository:projectId!==null?'/api/v4/projects/'+projectId:null,dest=github&&forkDestination?'/repos/'+forkDestination:forkProjectId!==null?'/api/v4/projects/'+forkProjectId:null;
+    const routes=[['GET',github?'/user':'/api/v4/user'],['GET',github?'/repos/'+ctx.repository:project]];
+    if(source)routes.push(['GET',source+(github?'/commits/':'/repository/commits/')+selected],['POST',source+(github?'/forks':'/fork')]);
+    if(github&&forkUser&&forkNamespace)routes.push(['GET','/user/memberships/orgs/'+forkNamespace]);
+    if(!github&&forkUser&&/^\d{1,15}$/.test(forkNamespace||''))routes.push(['GET','/api/v4/namespaces/'+forkNamespace]);
+    if(github&&dest)routes.push(['GET',dest],['GET',dest+'/commits/'+selected],['POST',dest+'/git/refs']);
+    if(!github&&forkDestination)routes.push(['GET','/api/v4/projects/'+encodeURIComponent(forkDestination)]);
+    if(!github&&dest)routes.push(['GET',dest],['GET',dest+'/repository/commits/'+selected],['POST',dest+'/repository/branches']);
+    if(dest)routes.push(['GET',dest+(github?'/git/ref/heads/':'/repository/branches/')+branch]);
+    allowed=u.origin===(github?'https://api.github.com':ctx.host)&&!u.search&&routes.some(([verb,p])=>method===verb&&u.pathname===p);
+   }
    if(!allowed||++requests>40||Date.now()>=deadline)throw Error('Remote API request is outside this workspace or its request budget.');
    const controller=new AbortController(),abort=()=>controller.abort(),timer=setTimeout(()=>controller.abort(),Math.min(30000,Math.max(1,deadline-Date.now())));
    init.signal?.addEventListener('abort',abort,{once:true});if(init.signal?.aborted)abort();
-   try{const response=await fetcher(url,{...init,signal:controller.signal,redirect:'error',credentials:'omit'});
+   try{
+   if(fork){
+    const current=await credential(ctx,false,session.context.secrets);
+    if(!forkCredential||!current||current.token!==forkCredential.token)throw Error('Provider account changed or signed out. Inspect any created fork before retrying.');
+    policy(true);if(vscode.workspace.isTrusted!==true||session.disposed)throw Error('The trusted viewer is no longer active.');
+   }
+   const response=await fetcher(url,{...init,signal:controller.signal,redirect:'error',credentials:'omit'});
    const reader=response.body?.getReader(),chunks=[];let size=0;
    const cancel=()=>reader?.cancel().catch(()=>{});controller.signal.addEventListener('abort',cancel,{once:true});if(controller.signal.aborted)cancel();
    if(reader){try{for(;;){const value=await reader.read();if(value.done)break;size+=value.value.byteLength;bytes+=value.value.byteLength;if(size>4*1024*1024||bytes>32*1024*1024)throw Error('Remote response exceeds its byte budget.');chunks.push(value.value);}}catch(error){await reader.cancel().catch(()=>{});throw error;}finally{controller.signal.removeEventListener('abort',cancel);}}
    if(controller.signal.aborted)throw Error('Remote collaboration request timed out.');
    const body=new Uint8Array(size);let offset=0;for(const chunk of chunks){body.set(chunk,offset);offset+=chunk.byteLength;}
    if(!github&&u.pathname===project&&response.ok){const value=JSON.parse(new TextDecoder().decode(body));if(value.path_with_namespace!==ctx.repository||!Number.isSafeInteger(value.id)||value.id<1)throw Error('GitLab project identity does not match the workspace.');projectId=value.id;}
+   if(fork&&response.ok){const value=JSON.parse(new TextDecoder().decode(body));if(u.pathname===(github?'/user':'/api/v4/user')){const login=github?value.login:value.username;if(typeof login!=='string'||! /^[A-Za-z0-9][A-Za-z0-9_.-]{0,99}$/.test(login))throw Error('Invalid authenticated fork account.');forkUser=value;forkDestination=(github&&forkNamespace?forkNamespace:login)+'/'+message.name;}
+    if(!github&&u.pathname==='/api/v4/namespaces/'+forkNamespace){if(value.id!==Number(forkNamespace)||typeof value.full_path!=='string'||! /^[A-Za-z0-9][A-Za-z0-9_.-]*(?:\/[A-Za-z0-9][A-Za-z0-9_.-]*)*$/.test(value.full_path))throw Error('GitLab returned an unverified namespace.');forkDestination=value.full_path+'/'+message.name;}
+    if(!github&&method==='POST'&&u.pathname==='/api/v4/projects/'+projectId+'/fork'&&response.status===201){if(!Number.isSafeInteger(value.id)||value.id<1||value.forked_from_project?.id!==projectId||value.path_with_namespace!==forkDestination)throw Error('GitLab returned an unverified fork identity.');forkProjectId=value.id;}
+   }
    return new Response(response.status===204?null:body,{status:response.status,statusText:response.statusText,headers:response.headers});
    }finally{clearTimeout(timer);init.signal?.removeEventListener('abort',abort);}
   };
+  if(fork){
+   const lock=JSON.stringify(['fork',ctx.provider,ctx.host,ctx.repository,forkNamespace||'',message.name]);if(publicationLocks.has(lock))throw Error('This fork creation is already in progress.');publicationLocks.set(lock,true);
+   try{
+    const authorize=async()=>{policy(true);await context(session);if(vscode.workspace.isTrusted!==true||session.disposed)throw Error('The trusted viewer is no longer active.');if(!forkConsent){const action='Create remote fork';const accepted=await vscode.window.showWarningMessage('Create '+(forkNamespace?forkNamespace+'/':'your account / ')+message.name+' from '+ctx.repository+' and add branch '+(message.branch||'review/'+message.sha.slice(0,12))+' at commit '+message.sha+'?',{modal:true},action);if(accepted!==action)throw Error('Fork creation cancelled.');policy(true);await context(session);if(vscode.workspace.isTrusted!==true||session.disposed)throw Error('The trusted viewer is no longer active.');forkConsent=true;}};
+    await authorize();forkCredential=await credential(ctx,ctx.provider==='github',session.context.secrets);
+    if(!forkCredential)throw Error('Connect your provider account before creating a fork.');
+    const module=forkFactory||require('./media/revision-fork.js');
+    return await module.create({provider:ctx.provider,host:ctx.host,repository:ctx.repository,ref:message.sha.toLowerCase(),sha:message.sha.toLowerCase(),file:mapFile(ctx,file),destinationNamespace:forkNamespace||undefined,name:message.name,branch:message.branch,confirmed:true},{authorize,request:async(method,path,body)=>{await authorize();const response=await safeFetch((ctx.provider==='github'?'https://api.github.com':ctx.host)+path,{method,headers:{Authorization:'Bearer '+forkCredential.token,Accept:'application/json',...(body!==undefined?{'Content-Type':'application/json'}:{})},...(body!==undefined?{body:JSON.stringify(body)}:{})});let data=null;try{data=await response.json();}catch{}return{status:response.status,data};}});
+   }finally{publicationLocks.delete(lock);}
+  }
   const dependencies={chrome:storage(session),fetch:safeFetch,crypto:globalThis.crypto,KiCadReviewComments:comments,credential:host=>{if(host&&host!==ctx.host)throw Error('Credential host mismatch.');return credential(ctx,false,session.context.secrets);}};
   if(['mention-users','comment-mention-users'].includes(message.type)){const mentions=require('./media/mention-users.js').create({authorizationHeaders:async()=>{const value=await credential(ctx,false,session.context.secrets);return value?{Authorization:'Bearer '+value.token}:{};},fetcher:safeFetch});return mentions.lookup({...message,provider:ctx.provider,host:ctx.host,repository:ctx.repository});}
   const api=(apiFactory||require('./media/'+ctx.provider+'-review-host-api.js'))(dependencies);api.hostProjectId=()=>projectId;
   const scope={provider:ctx.provider,...(ctx.provider==='gitlab'?{host:ctx.host}:{}),repository:ctx.repository,ref:ctx.ref,file:mapFile(ctx,file)};
-  if(message.type==='github-thread-read')return api.readThread({...scope,kind:message.kind,number:message.number,includeCapabilities:message.includeCapabilities===true});
+  if(message.type==='github-thread-read'){const result=await api.readThread({...scope,kind:message.kind,number:message.number,includeCapabilities:message.includeCapabilities===true});if(!policy(false).providerWrites&&result.capabilities)result.capabilities={...result.capabilities,canClose:false,canReopen:false};return result;}
   if(message.type==='chat-thread-list')return api.chatThreadList({...scope,kind:message.kind,page:message.page,cursor:message.cursor});
   if(message.type==='chat-reaction')throw Error('Chat reactions are not supported by this provider bridge.');
+  if(threadState){const key=JSON.stringify(['thread-state',ctx.provider,ctx.host,ctx.repository,message.thread.kind,message.thread.number]);if(publicationLocks.has(key))throw Error('This conversation state is already being changed.');publicationLocks.set(key,true);try{return await api.chatThreadState({...message,...scope});}finally{publicationLocks.delete(key);}}
   if(chat){
    if(typeof message.clientMutationId!=='string'||!/^[A-Za-z0-9_-]{16,100}$/.test(message.clientMutationId)||!['issue','discussion'].includes(message.thread?.kind)||!Number.isSafeInteger(message.thread?.number)||message.thread.number<1)throw Error('Invalid chat publication identity.');
    const key=JSON.stringify(['chat',session.scope.boundary.toString(),ctx.provider,ctx.host,ctx.repository,message.thread.kind,message.thread.number,message.clientMutationId]);

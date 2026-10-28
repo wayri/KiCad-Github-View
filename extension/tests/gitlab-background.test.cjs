@@ -5,6 +5,11 @@ let listener,sidecarChecks=0;const store=new Map();global.KiCadReviewFileStore={
 global.importScripts=()=>{};global.chrome={runtime:{id:'test',getURL:path=>'chrome-extension://test/'+path,onMessage:{addListener:callback=>listener=callback}},action:{onClicked:{addListener(){}}},storage:{local:{get:async key=>({[key]:store.get(key)}),set:async items=>{for(const [key,value]of Object.entries(items))store.set(key,value);}}}};
 const worker=require('../background.js'),viewer={id:'test',url:'chrome-extension://test/browser-viewer.html'},tab={id:'test',url:'https://gitlab.com/group/board/-/blob/main/board.kicad_pcb'};
 const message=(request,sender=viewer)=>new Promise(resolve=>{if(!listener(request,sender,resolve))resolve({ignored:true});});
+test('GitLab remote forks require owned viewers and an approved exact provider host',async t=>{
+ const original=global.KiCadGitLabReviewApi;let count=0;global.KiCadGitLabReviewApi={forkRevision:async request=>{count++;assert.equal(request.host,'https://gitlab.com');return {created:true};}};t.after(()=>global.KiCadGitLabReviewApi=original);
+ const request={type:'repository-fork-revision',provider:'gitlab',repository:'owner/repo',ref:'main',file:'board.kicad_pcb',sha:'a'.repeat(40),confirmed:true};
+ assert.equal((await message(request,tab)).ok,false);assert.equal((await message({...request,host:'https://unapproved.example'})).ok,false);assert.equal(count,0);assert.equal((await message(request)).ok,true);assert.equal(count,1);
+});
 
 test('GitLab chat publication requires the exact viewer and matching provider host',async(t)=>{
  const previous=global.KiCadGitLabReviewApi;let called=0;global.KiCadGitLabReviewApi={chatMessageWrite:async request=>{called++;assert.equal(request.host,'https://gitlab.com');return{messageId:'12'};}};t.after(()=>global.KiCadGitLabReviewApi=previous);
@@ -99,4 +104,10 @@ test('GitLab repository detection finds projects on later pinned tree pages',asy
  const previous=global.fetch,sha='e'.repeat(40);let pages=0;global.fetch=async url=>{if(url.includes('/commits/'))return new Response(JSON.stringify({id:sha}));if(url.includes('/tree?')){const query=new URL(url).searchParams;assert.equal(query.get('ref'),sha);pages++;return query.get('page')==='1'?new Response(JSON.stringify(Array.from({length:100},(_,i)=>({path:'notes'+i+'.txt',type:'blob',mode:'100644',id:'f'.repeat(40)}))),{headers:{'x-next-page':'2'}}):new Response(JSON.stringify([{path:'deep/nested/board.kicad_pro',type:'blob',mode:'100644',id:'d'.repeat(40)}]));}throw Error('Unexpected read '+url);};t.after(()=>global.fetch=previous);
  const result=await message({type:'repository-detect',provider:'gitlab',host:'https://gitlab.com',repository:'group/board',ref:'main'},{id:'test',tab:{id:7},url:'https://gitlab.com/group/board/-/tree/main'});
  assert.equal(result.ok,true,result.error);assert.deepEqual(result.result.projects,['deep/nested/board.kicad_pro']);assert.equal(pages,2);assert.equal(result.result.truncated,false);
+});
+
+test('GitLab state changes require exact viewer and approved provider host',async t=>{
+ const before=global.KiCadGitLabReviewApi;let called=0;global.KiCadGitLabReviewApi={chatThreadState:async args=>{called++;assert.equal(args.host,'https://gitlab.com');return{state:'closed'};}};t.after(()=>global.KiCadGitLabReviewApi=before);
+ const request={type:'chat-thread-state',provider:'gitlab',host:'https://gitlab.com',repository:'owner/repo',thread:{kind:'issue',number:42},confirmed:true};
+ assert.equal((await message(request,tab)).ok,false);assert.equal((await message({...request,host:'https://evil.example'})).ok,false);assert.equal(called,0);assert.equal((await message(request)).ok,true);assert.equal(called,1);
 });

@@ -29,13 +29,14 @@ BUILD_INPUTS = ('github-review-api.js', 'gitlab-review-api.js', 'step-decoder.js
 ASSETS += ('variant-manager.js', 'bom-import.js', 'bom-viewer.html', 'bom-viewer.js','bom-workspace.js', 'bom-field-table.js', 'bom-viewer.css', 'calculator-tools.js', 'calculator-viewer.html', 'calculator-viewer.js', 'calculator-viewer.css', 'analysis-spatial.js', 'analysis-overlay.js', 'analysis-bom-link.js')
 ASSETS += ('calculator-catalog.js','calculator-visuals.js')
 ASSETS += ('tool-header.css','tool-header.js')
-ASSETS += ('startup-health.js',)
+ASSETS += ('overview-routing.js',)
+ASSETS += ('startup-health.js','revision-actions.js','revision-fork.js','analysis-simulation.js','analysis-simulation.css')
 ASSETS += ('section-pages.js','section-pages.css','board-setup-ui.js','board-setup-ui.css','mobile-sidebar.js','mobile-sidebar.css','testpoint-tools.css','sheet-hierarchy-links.js','responsive-controls.js','phone-polish.css')
 HOST_FILES = ('git-history-tree.js', 'remote-collaboration.js', 'conflict-host.js', 'package.json', 'extension.js', 'webview-bridge.js', 'README.md', 'GUIDE.md', 'icon.png', 'LICENSE.txt')
 README_IMAGES = ('images/schematic-review.jpg', 'images/pcb-inspection.jpg',
                  'images/assembly-bom.jpg', 'images/visual-merge-conflict.jpg',
                  'images/open-viewer-command.jpg', 'images/copper-net-names.jpg')
-HOST_FILES += README_IMAGES
+HOST_FILES += README_IMAGES + ('revision-export.js',)
 
 
 def adapt_entry(source: bytes) -> bytes:

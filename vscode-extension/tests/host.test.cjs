@@ -498,6 +498,27 @@ test("paired relay accepts loaded hierarchy selections and targets only explicit
   assert.deepEqual(plain(reverse[0].event.selection),net);b.disposed=true;
   assert.equal((await send(h,a,5,{type:"pair-selection",selection})).result.delivered,0);
 });
+test("analysis net focus reaches only original drawing sessions in the same context, repository and revision",async()=> {
+ const h=harness(),drawing=await session(h),analysis=h.api._test.createSession(drawing.uri,{scope:drawing.scope,files:drawing.files},h.context,"d".repeat(48));analysis.analysisPath="report.json";
+ const delivered=[];drawing.post=event=>{delivered.push(event);return true;};
+ const outsiders=[];
+ for(const change of [{scope:{...drawing.scope,repository:"elsewhere/repo"}},{scope:{...drawing.scope,ref:"other"}},{context:{...h.context}},{analysisPath:"other.json"},{uri:drawing.uri.with({path:drawing.uri.path.replace(/[^/]+$/,"other.kicad_sch")})}]){const view=h.api._test.createSession(drawing.uri,{scope:drawing.scope,files:drawing.files},h.context,"e".repeat(48));Object.assign(view,change);view.post=event=>{outsiders.push(event);return true;};}
+ const request={type:"analysis-focus-net",repository:drawing.scope.repository,ref:drawing.scope.ref,file:drawing.scope.rootFile,netName:"/POWER/VCC"};let id=0;
+ assert.equal((await send(h,analysis,++id,request)).result.delivered,1);assert.deepEqual(plain(delivered[0].event),{type:"analysis-net-focus",netName:"/POWER/VCC"});assert.equal(outsiders.length,0);
+ assert.equal((await send(h,drawing,1,request)).ok,false);
+ for(const change of [{file:"other.kicad_sch"},{ref:"other"},{netName:""},{netName:"bad\n"},{netName:"x".repeat(501)},{path:"invented.kicad_sch"}])assert.equal((await send(h,analysis,++id,{...request,...change})).ok,false);
+ assert.equal(delivered.length,1);
+});
+
+test("paired pin relay preserves terminal identity and rejects foreign paths or unbounded fields",async()=> {
+ const h=harness(),root=h.write("design.kicad_sch"),pcb=h.write("design.kicad_pcb","(kicad_pcb)"),a=await existingSession(h,root),b=await existingSession(h,pcb,"c".repeat(48)),delivered=[];
+ b.post=event=>{delivered.push(event);return true;};h.api.activate(h.context);await h.commands.find(c=>c.name==="kicadVisualReview.openPair").handler(root);
+ const selection={kind:"pin",path:"design.kicad_sch",reference:"J1",pinNumber:"A1",uuid:"terminal",ownerUuid:"owner",symbolUuid:"symbol"};let id=0;
+ assert.equal(require("../../extension/paired-review.js").validSelection(selection),true);assert.equal((await send(h,a,++id,{type:"pair-selection",selection})).result.delivered,1);assert.deepEqual(plain(delivered[0].event.selection),selection);
+ for(const changed of [{path:"outside.kicad_sch"},{pinNumber:""},{pinNumber:"A".repeat(201)},{ownerUuid:"bad\n"},{symbolUuid:32},{uri:"file:///outside"},{pinNumber:undefined}])assert.equal((await send(h,a,++id,{type:"pair-selection",selection:{...selection,...changed}})).ok,false);
+ assert.equal(delivered.length,1);
+});
+
 test("paired group relay checks every hierarchy path and preserves qualified net names and empty clears",async()=> {
  const h=harness(),root=h.write("design.kicad_sch",'(kicad_sch (sheet (property "Sheetfile" "child.kicad_sch")))'),pcb=h.write("design.kicad_pcb","(kicad_pcb)");h.write("child.kicad_sch");
  const a=await existingSession(h,root),b=await existingSession(h,pcb,"c".repeat(48)),delivered=[];

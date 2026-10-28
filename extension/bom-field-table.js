@@ -2,7 +2,7 @@
 ((root) => {
 'use strict';
 const MAX_PARTS = 100000;
-const PRESETS=[{id:'value-footprint',label:'Value + footprint',keys:['Value','Footprint']},{id:'value',label:'Value',keys:['Value']},{id:'footprint',label:'Footprint',keys:['Footprint']},{id:'rate',label:'Rate (unit price)',keys:['Unit price','Currency']},{id:'custom',label:'Custom fields',keys:null}];
+const PRESETS=[{id:'value-footprint',label:'Value + footprint',keys:['Value','Footprint']},{id:'value',label:'Value',keys:['Value']},{id:'footprint',label:'Footprint',keys:['Footprint']},{id:'assembly',label:'Assembly status',keys:['Assembly']},{id:'procurement',label:'Procurement status',keys:['status']},{id:'rate',label:'Rate (unit price)',keys:['Unit price','Currency']},{id:'custom',label:'Custom fields',keys:null}];
 function preset(descriptors,id){const selected=PRESETS.find(p=>p.id===id);if(!selected)throw Error('Unknown BoM grouping preset.');return descriptors.map(f=>selected.keys?{...f,groupBy:selected.keys.includes(f.key),show:f.show||selected.keys.includes(f.key)}:{...f});}
 const DEFAULTS = ['Reference','Value','Footprint','Qty','DNP','Exclude from BoM','Assembly'];
 const MANAGEMENT = ['Manufacturer','MPN','Supplier','SKU','Notes','status','Unit price','Currency','Assembly'];

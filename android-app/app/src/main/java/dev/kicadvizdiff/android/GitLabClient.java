@@ -158,6 +158,7 @@ final class GitLabClient {
             case "repository-tree":return readRepositoryTree(host,request,epoch);
             case "repository-history":return readRepositoryHistory(host,request,epoch);
             case "repository-branches":return repositoryBranches(host,request,epoch);
+            case "repository-fork-revision":return forkRevision(host,request,epoch);
             case "revision-branches": {
                 String root=project(request);validateRevisionRequest(request);JSONArray source=array(host,root+"/repository/branches?per_page=100&page=1",epoch),branches=new JSONArray(),warnings=new JSONArray();
                 for(int i=0;i<source.length();i++){JSONObject branch=source.getJSONObject(i);String name=branch.getString("name");validRef(name);branches.put(new JSONObject().put("name",name).put("sha",sha(branch.getJSONObject("commit").getString("id"))));}
@@ -178,6 +179,7 @@ final class GitLabClient {
                 return new JSONObject().put("threads",threads).put("hasMore",values.length()==100);
             }
             case "thread": return readThread(host,request,epoch);
+            case "chat-thread-state": return chatThreadState(host,request,epoch);
             case "chat-message-write": return chatWrite(host,request,epoch);
             case "chat-thread-list": return chatThreadList(host,request,epoch);
             case "contributors": {
@@ -262,7 +264,22 @@ final class GitLabClient {
     private void chatCapabilities(String host,JSONObject request,JSONObject thread,int epoch)throws Exception {
         boolean allowed=false;long viewer=0;try{if(credential(host,epoch)!=null){JSONObject user=json(host,"/user",epoch);viewer=threadId(user,"id");allowed=policy(host,request,epoch).getBoolean("allowed");}}catch(Exception denied){check(epoch);}
         thread.put("capabilities",new JSONObject().put("create",allowed).put("reply",allowed).put("edit",allowed).put("reactions",false).put("replyMode","native"));
+        boolean canClose=false,canReopen=false;if(allowed){try{ManagedPolicy.requireAction(context,"chat-thread-state");JSONObject fresh=threadStateSnapshot(host,request,thread.getInt("number"),epoch),issue=fresh.getJSONObject("issue");if(fresh.getBoolean("allowed")&&fresh.getLong("projectId")==thread.getLong("projectId")&&String.valueOf(threadId(issue,"id")).equals(thread.getString("id"))&&issue.getString("updated_at").equals(thread.getString("updatedAt"))){canClose=issue.getString("state").equals("opened");canReopen=issue.getString("state").equals("closed");}}catch(Exception denied){check(epoch);}}thread.getJSONObject("capabilities").put("canClose",canClose).put("canReopen",canReopen);
         JSONArray messages=thread.getJSONArray("comments");for(int i=0;i<messages.length();i++){JSONObject item=messages.getJSONObject(i);item.put("canEdit",allowed&&viewer>0&&viewer==item.optLong("authorId",0)&&!item.optBoolean("bodyTruncated")&&!item.optString("body").contains("kicad-review:")).put("canReply",allowed&&item.has("replyDiscussionId"));}
+    }
+    private JSONObject threadStateSnapshot(String host,JSONObject request,int number,int epoch)throws Exception {
+        String repo=repository(request);JSONObject project=json(host,project(request),epoch);if(!repo.equals(project.optString("path_with_namespace")))throw new Failure("Project identity changed");long projectId=threadId(project,"id");JSONObject issue=json(host,"/projects/"+projectId+"/issues/"+number,epoch),user=json(host,"/user",epoch);long viewer=threadId(user,"id");
+        if(threadId(issue,"project_id")!=projectId||NativeChatRequest.remoteId(issue,"iid")!=number||!java.util.Arrays.asList("opened","closed").contains(issue.optString("state"))||!threadTime(issue.getString("updated_at")))throw new Failure("GitLab returned another Issue identity");threadId(issue,"id");return new JSONObject().put("projectId",projectId).put("viewer",viewer).put("issue",issue).put("allowed",NativeThreadStateRequest.gitlabAllowed(project,issue,viewer));
+    }
+    private JSONObject chatThreadState(String host,JSONObject request,int epoch)throws Exception {
+        NativeThreadStateRequest input=new NativeThreadStateRequest(request);if(!input.kind.equals("issue"))throw new Failure("GitLab supports Issue state changes only");String repo=repository(request),bearer=credential(host,epoch);if(bearer==null)throw new Failure("Sign in before changing conversation state");
+        JSONObject fresh=threadStateSnapshot(host,request,input.number,epoch),issue=fresh.getJSONObject("issue"),permitted=policy(host,request,epoch);long projectId=fresh.getLong("projectId");if(!permitted.getBoolean("allowed")||permitted.getLong("projectId")!=projectId||!fresh.getBoolean("allowed"))throw new Failure("Repository policy or your GitLab role blocks this state change");
+        String key="thread_state_"+hash(host+"|"+repo+"|"+fresh.getLong("viewer")+"|"+input.number+"|"+input.expectedUpdatedAt+"|"+input.state+"|"+request.getString("ref")+"|"+request.getString("file")),previous=journal.getString(key,null);if(previous!=null){JSONObject receipt=new JSONObject(previous);if(receipt.has("result"))return receipt.getJSONObject("result").put("duplicate",true);throw new Failure("Previous state change has an unconfirmed outcome; refresh and inspect GitLab before retrying");}
+        input.checkRevision(issue.getString("updated_at"),issue.getString("state").equals("closed"));
+        synchronized(this){check(epoch);ManagedPolicy.requireAction(context,"chat-thread-state");if(journal.contains(key))throw new Failure("State change already in progress; refresh before retrying");claimWrite("publish");if(!journal.edit().putString(key,new JSONObject().put("pending",true).toString()).commit())throw new Failure("Could not reserve state change");}
+        JSONObject value=new JSONObject(network(host,"/projects/"+projectId+"/issues/"+input.number,"PUT",new JSONObject().put("state_event",input.state.equals("closed")?"close":"reopen").toString().getBytes(StandardCharsets.UTF_8),bearer,epoch,1024*1024));
+        if(threadId(value,"id")!=threadId(issue,"id")||threadId(value,"project_id")!=projectId||NativeChatRequest.remoteId(value,"iid")!=input.number||!value.getString("state").equals(input.state.equals("closed")?"closed":"opened")||!threadTime(value.getString("updated_at")))throw new Failure("GitLab did not confirm the state change; inspect the conversation before retrying");
+        JSONObject result=new JSONObject().put("provider","gitlab").put("host",host).put("repository",repo).put("kind",input.kind).put("number",input.number).put("state",input.state).put("updatedAt",value.getString("updated_at")).put("url",host+"/"+repo+"/-/issues/"+input.number);synchronized(this){check(epoch);if(!journal.edit().putString(key,new JSONObject().put("result",result).toString()).commit())throw new Failure("State changed but receipt could not be saved; refresh the conversation");}return result;
     }
     private JSONObject chatWrite(String host,JSONObject request,int epoch)throws Exception {
         NativeChatRequest input=new NativeChatRequest(request);String repo=repository(request),bearer=credential(host,epoch);if(bearer==null)throw new Failure("Sign in before posting a chat message");
@@ -546,14 +563,26 @@ final class GitLabClient {
     private static String hashBytes(byte[] source)throws Exception {byte[] bytes=MessageDigest.getInstance("SHA-256").digest(source);StringBuilder out=new StringBuilder();for(byte b:bytes)out.append(String.format(Locale.ROOT,"%02x",b&255));return out.toString();}
     private static String encode(String value)throws Exception {return URLEncoder.encode(value,"UTF-8").replace("+","%20");}
     private static String utf8(byte[] bytes)throws Exception {return StandardCharsets.UTF_8.newDecoder().onMalformedInput(CodingErrorAction.REPORT).onUnmappableCharacter(CodingErrorAction.REPORT).decode(ByteBuffer.wrap(bytes)).toString();}
+    private JSONObject forkRevision(String host,JSONObject request,int epoch)throws Exception {
+        NativeRevisionFork.validate(request,false);if(credential(host,epoch)==null)throw new Failure("Sign in to GitLab before creating a fork");
+        ManagedPolicy.requireTransport(context,true);claimWrite("publish");
+        return NativeRevisionFork.create(request,false,host,new NativeRevisionFork.Transport(){
+            public void authorize()throws Exception {check(epoch);ManagedPolicy.requireTransport(context,true);if(credential(host,epoch)==null)throw new Failure("GitLab session expired");}
+            public JSONObject get(String path,boolean missing)throws Exception {try{return new JSONObject(network(host,path,"GET",null,credential(host,epoch),epoch,1024*1024));}catch(Failure error){if(missing&&error.status==404)return null;throw error;}}
+            public JSONObject post(String path,JSONObject body,int expected)throws Exception {return new JSONObject(utf8(networkBytes(host,path,"POST",body.toString().getBytes(StandardCharsets.UTF_8),credential(host,epoch),epoch,1024*1024,"application/json",expected)));}
+        });
+    }
     private JSONObject json(String host,String path,int epoch)throws Exception {return new JSONObject(network(host,path,"GET",null,credential(host,epoch),epoch,4*1024*1024));}
     private JSONArray array(String host,String path,int epoch)throws Exception {JSONArray result=new JSONArray(network(host,path,"GET",null,credential(host,epoch),epoch,4*1024*1024));if(result.length()>100)throw new Failure("Invalid GitLab page size");return result;}
     private String network(String host,String path,String method,byte[] body,String bearer,int epoch,int limit)throws Exception {return network(host,path,method,body,bearer,epoch,limit,"application/json");}
     private String network(String host,String path,String method,byte[] body,String bearer,int epoch,int limit,String contentType)throws Exception {return utf8(networkBytes(host,path,method,body,bearer,epoch,limit,contentType));}
     private byte[] networkBytes(String host,String path,String method,byte[] body,String bearer,int epoch,int limit,String contentType)throws Exception {
+        return networkBytes(host,path,method,body,bearer,epoch,limit,contentType,-1);
+    }
+    private byte[] networkBytes(String host,String path,String method,byte[] body,String bearer,int epoch,int limit,String contentType,int expectedStatus)throws Exception {
         boolean providerWrite=!method.equals("GET")&&!method.equals("HEAD")&&!path.equals("/oauth/token");
         ManagedPolicy.requireTransport(context,providerWrite);
-        check(epoch);host=validateHost(host);if(!path.startsWith("/projects/")&&!path.equals("/user")&&!path.startsWith("/projects?")&&!path.equals("/oauth/token"))throw new Failure("Unsupported GitLab endpoint");
+        check(epoch);host=validateHost(host);if(!path.startsWith("/projects/")&&!path.equals("/user")&&!path.startsWith("/projects?")&&!path.matches("/namespaces/[1-9][0-9]{0,14}")&&!path.equals("/oauth/token"))throw new Failure("Unsupported GitLab endpoint");
         URL url=new URL(host+(path.equals("/oauth/token")?"":"/api/v4")+path);if(!url.getProtocol().equals("https")||url.getUserInfo()!=null||!url.getHost().equals(new URI(host).getHost())||url.getPort()!=-1)throw new Failure("Unsupported GitLab endpoint");
         HttpsURLConnection connection=connections.open(url); NativeLoadOperation.track(connection);connection.setInstanceFollowRedirects(false);connection.setConnectTimeout(15000);connection.setReadTimeout(20000);connection.setUseCaches(false);connection.setRequestProperty("Accept","application/json");connection.setRequestProperty("User-Agent","KiCadVizDiff-Android");connection.setRequestMethod(method);
         if(path.equals("/oauth/token")&&bearer!=null)throw new Failure("Unsupported GitLab OAuth credential");
@@ -565,6 +594,7 @@ final class GitLabClient {
             if(status==403||status==429)throw new Failure("GitLab denied access or rate limited this request");
             if(status==404)throw new Failure("Project or revision unavailable; check private project access",404);
             if(status<200||status>=300)throw new Failure("GitLab request failed (HTTP "+status+")");
+            if(expectedStatus>0&&status!=expectedStatus)throw new Failure("GitLab did not confirm creation of a new resource");
             if(connection.getContentLengthLong()>limit){if(path.matches("/projects/.*/repository/blobs/[a-f0-9]{40}/raw"))throw new DownloadRequired();throw new Failure("GitLab response exceeds import limits");}
             try(InputStream stream=NativeLoadOperation.input(connection.getInputStream());ByteArrayOutputStream output=new ByteArrayOutputStream()) {
                 byte[] buffer=new byte[32768];int n;while((n=stream.read(buffer))!=-1){check(epoch);if(SystemClock.elapsedRealtime()>deadline)throw new Failure("GitLab request timed out");if(n>limit-output.size()){if(path.matches("/projects/.*/repository/blobs/[a-f0-9]{40}/raw"))throw new DownloadRequired();throw new Failure("GitLab response exceeds import limits");}output.write(buffer,0,n);}return output.toByteArray();

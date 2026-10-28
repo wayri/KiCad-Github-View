@@ -21,7 +21,9 @@ import { trackCapsuleDimensions } from "@spike/trackGeometry";
 import { viewportSceneIdentity } from "@spike/viewportScenePolicy";
 import { populationMask, uniqueComponentIndexes } from "./componentState.mjs";
 import { footprintProxies } from "./footprintProxies.mjs";
-import { selectionMatcher, tapGesture, holdGesture } from "./selectionState.mjs";
+import {createAnchorProjector} from "./projectAnchor.mjs";
+import {createSelectionAppearance} from "./selectionAppearance.mjs";
+import { selectionMatcher, selectableRecord, tapGesture, holdGesture } from "./selectionState.mjs";
 import { sphereFitDistance,boxFitDistance } from "./fitPolicy.mjs";
 import { qualityName, qualityViewport, boardOcclusion, boardClipRange, studioLights, studioMaterials, padHasMaskOpening, physicalColors } from "./renderQuality.mjs";
 import { createResultOverlay } from "./result3d.js";
@@ -56,6 +58,15 @@ const STYLE = `
   @media(max-width:700px){.detail{display:none}.bar{gap:4px;padding-inline:6px}.hint{display:none}.inspector{width:min(260px,65%)}}@media(max-width:380px){.title{display:none}.bar{gap:2px}.bar button{padding-inline:5px}.view-select{max-width:90px}}
   @media(pointer:coarse){button,select{min-height:40px}.bar{min-height:50px}.visibility-options label{min-height:32px}}
 `;
+
+// The scene filter changes visibility only; saved geometry and cameras stay intact.
+export function objectVisibilityPolicy(input = {}) {
+  const supportedTypes = ['arcs','pads','vias','tracks','fills','polygons','bodies'];
+  const hiddenTypes = [...new Set((Array.isArray(input.hiddenTypes)?input.hiddenTypes:[]).filter(type=>typeof type==='string'&&type.length<=40).slice(0,64))];
+  const side = ['top','bottom'].includes(input.side)?input.side:'all';
+  return {hiddenTypes,side,supportedTypes,unsupportedTypes:hiddenTypes.filter(type=>!supportedTypes.includes(type)),
+    visible(type,layer){return !hiddenTypes.includes(type)&&!(side==='top'&&layer?.startsWith('B.'))&&!(side==='bottom'&&layer?.startsWith('F.'));}};
+}
 
 function pathFor(points, transform) {
   const path = new THREE.Path();
@@ -234,17 +245,22 @@ export function mountBoard3D(container, source, options = {}) {
   }
   const boardGroup = new THREE.Group(); scene.add(boardGroup);
   const copperGroups = new Map(), pickables = [];
-  const appearanceRecords=[];let realistic=true;
+  let objectVisibility=objectVisibilityPolicy();
+  const visibilityRecords=[];
+  const visibilityRecord=(mesh,type,layer)=>{visibilityRecords.push({mesh,type,layer});mesh.visible=objectVisibility.visible(type,layer);return mesh;};
+  const arcIds=new Set(sourceAST.filter(node=>Array.isArray(node)&&node[0]==='arc').map(node=>{const id=node.find(value=>Array.isArray(value)&&['uuid','tstamp'].includes(value[0]))?.[1];return typeof id==='object'?id?.quoted:id;}).filter(Boolean));
+  const isArc=track=>arcIds.has(track.id)||arcIds.has(track.id?.replace(/:\d+$/,''))||/^track-\d+:\d+$/.test(track.id||'');
+  const appearanceRecords=[];let realistic=true,selectionAppearanceReady=false;
   const appearanceLabel=document.createElement('label');appearanceLabel.append(document.createTextNode('Appearance'));
   const appearanceSelect=document.createElement('select');appearanceSelect.setAttribute('aria-label','3D board appearance');
   for(const [value,label]of [['realistic','Realistic'],['layers','Layer colors']]){const option=document.createElement('option');option.value=value;option.textContent=label;appearanceSelect.append(option);}appearanceLabel.append(appearanceSelect);
   const qualityHelp=document.createElement('p');qualityHelp.className='quality-help';qualityHelp.textContent='High adds ambient occlusion and enhanced antialiasing. Linked model availability is shown below the viewport.';renderingOptions.append(appearanceLabel,qualityLabel,qualityHelp);
-  function applyAppearance(){for(const record of appearanceRecords){const {mesh,role,layer}=record;
+  function applyAppearance(){if(selectionAppearanceReady)selectionAppearance.restore();for(const record of appearanceRecords){const {mesh,role,layer}=record;
     if(role==='pads'){mesh.material.color.setHex(0xffffff);record.pads.forEach((pad,index)=>mesh.setColorAt(index,new THREE.Color(realistic?(padHasMaskOpening(pad,layer)?physicalColors.exposedCopper:physicalColors.coatedCopper):layerThreeColor(layer))));if(mesh.instanceColor)mesh.instanceColor.needsUpdate=true;}
     else mesh.material.color.setHex(realistic?physicalColors.coatedCopper:layerThreeColor(layer));
     mesh.material.metalness=realistic&&role!=='pads'?.08:studioMaterials.copper.metalness;
     mesh.material.roughness=realistic&&role!=='pads'?.52:studioMaterials.copper.roughness;
-  }invalidate();}
+  }if(selectionAppearanceReady)setSelection(externalSelection);invalidate();}
   appearanceSelect.onchange=()=>{realistic=appearanceSelect.value==='realistic';applyAppearance();};
   const groupFor = (layer) => {
     if (!copperGroups.has(layer)) { const group = new THREE.Group(); group.name = layer; boardGroup.add(group); copperGroups.set(layer, group); }
@@ -280,7 +296,8 @@ export function mountBoard3D(container, source, options = {}) {
 
   for (const [layer, color] of [["F.Cu", layerThreeColor("F.Cu")], ["B.Cu", layerThreeColor("B.Cu")]]) {
     const z = layer === "F.Cu" ? top + .025 : bottom - .025;
-    const tracks = board.tracks.filter((item) => item.layer === layer);
+    for(const category of ['tracks','arcs']){
+    const tracks = board.tracks.filter((item) => item.layer === layer&&(isArc(item)?'arcs':'tracks')===category);
     const trackMesh = makeInstanced(groupFor(layer), new THREE.PlaneGeometry(1, 1),
       new THREE.MeshStandardMaterial({ color, ...studioMaterials.copper, side: THREE.DoubleSide }), tracks,
       (object, track) => {
@@ -290,8 +307,9 @@ export function mountBoard3D(container, source, options = {}) {
         object.position.set((a[0] + b[0]) / 2, (a[1] + b[1]) / 2, z);
         object.rotation.set(0, 0, Math.atan2(b[1] - a[1], b[0] - a[0]));
         object.scale.set(Math.max(.04, capsule.shapeLength), Math.max(.04, capsule.width), 1);
-      }, viewportSceneIdentity("copper-track", layer, "tracks"));
-    if (trackMesh) {pickables.push(trackMesh);appearanceRecords.push({mesh:trackMesh,role:'tracks',layer});}
+      }, viewportSceneIdentity("copper-track", layer, category));
+    if (trackMesh) {visibilityRecord(trackMesh,category,layer);pickables.push(trackMesh);appearanceRecords.push({mesh:trackMesh,role:'tracks',layer});}
+    }
     const pads = nativePads.filter((item) => item.layer === layer || item.layers?.includes(layer)||item.layers?.includes('*.Cu'));
     const batches=new Map();let omittedPads=0;
     for(const pad of pads){const outline=nativePadOutline(pad);if(!outline){omittedPads++;continue;}const key=JSON.stringify([pad.shape,pad.width,pad.height,pad.roundrectRatio,pad.drill,pad.drillShape,pad.drillWidth,pad.drillHeight,pad.drillOffset]);if(!batches.has(key)){if(batches.size>=256){omittedPads++;continue;}batches.set(key,{outline,pads:[]});}batches.get(key).pads.push(pad);}
@@ -299,11 +317,11 @@ export function mountBoard3D(container, source, options = {}) {
     const padMaterial=new THREE.MeshStandardMaterial({color:0xffffff,...studioMaterials.copper});
     for(const [key,batch]of batches){const geometry=new THREE.ExtrudeGeometry(padShape(batch.outline),{depth:.04,bevelEnabled:false,curveSegments:8});
       const padMesh=makeInstanced(groupFor(layer),geometry,padMaterial,batch.pads,(object,pad)=>{const[x,y]=world(pad.at);object.position.set(x,y,z-.02);object.rotation.z=(pad.rotation||0)*Math.PI/180;},viewportSceneIdentity('copper-pad',layer,key));
-      if(padMesh){pickables.push(padMesh);appearanceRecords.push({mesh:padMesh,role:'pads',layer,pads:batch.pads});}
+      if(padMesh){visibilityRecord(padMesh,'pads',layer);pickables.push(padMesh);appearanceRecords.push({mesh:padMesh,role:'pads',layer,pads:batch.pads});}
     }
     for (const zone of savedZones.records.filter((item) => item.layer === layer)) {
       if (zone.points.length < 3) continue;
-      if(!zone.filled){const geometry=new THREE.BufferGeometry().setFromPoints(zone.points.map(point=>{const [x,y]=world(point);return new THREE.Vector3(x,y,z);}));const boundary=new THREE.LineLoop(geometry,new THREE.LineBasicMaterial({color:layerThreeColor(layer),transparent:true,opacity:.6}));groupFor(layer).add(boundary);continue;}
+      if(!zone.filled){const geometry=new THREE.BufferGeometry().setFromPoints(zone.points.map(point=>{const [x,y]=world(point);return new THREE.Vector3(x,y,z);}));const boundary=new THREE.LineLoop(geometry,new THREE.LineBasicMaterial({color:layerThreeColor(layer),transparent:true,opacity:.6}));groupFor(layer).add(boundary);visibilityRecord(boundary,'polygons',layer);continue;}
       const zoneShape = new THREE.Shape();
       pathFor(zone.points, world).getPoints().forEach((point, index) => {
         if (index === 0) zoneShape.moveTo(point.x, point.y); else zoneShape.lineTo(point.x, point.y);
@@ -311,7 +329,7 @@ export function mountBoard3D(container, source, options = {}) {
       const mesh = new THREE.Mesh(new THREE.ShapeGeometry(zoneShape),
         new THREE.MeshStandardMaterial({ color, transparent: true, opacity: .34, side: THREE.DoubleSide, depthWrite: false }));
       mesh.position.z = z - (layer === "F.Cu" ? .005 : -.005); mesh.userData.record = { ...zone, type: "Zone" };
-      groupFor(layer).add(mesh); pickables.push(mesh);
+      groupFor(layer).add(mesh);visibilityRecord(mesh,'fills',layer); pickables.push(mesh);
       appearanceRecords.push({mesh,role:'zone',layer});
     }
   }
@@ -319,7 +337,7 @@ export function mountBoard3D(container, source, options = {}) {
   for(const via of board.vias){const outline=nativePadOutline({shape:'circle',width:via.size,height:via.size,drill:via.drill,drillShape:'circle'});if(!outline){omittedVias++;continue;}const key=JSON.stringify([via.size,via.drill]);if(!viaBatches.has(key)){if(viaBatches.size>=128){omittedVias++;continue;}viaBatches.set(key,{outline,vias:[]});}viaBatches.get(key).vias.push(via);}
   if(omittedVias)geometryDiagnostics.push(`${omittedVias} unsupported via annuli omitted.`);
   const viaMaterial=new THREE.MeshStandardMaterial({color:physicalColors.exposedCopper,...studioMaterials.copper});
-  for(const[key,batch]of viaBatches){const geometry=new THREE.ExtrudeGeometry(padShape(batch.outline),{depth:thickness+.08,bevelEnabled:false,curveSegments:8});const mesh=makeInstanced(boardGroup,geometry,viaMaterial,batch.vias,(object,via)=>{const[x,y]=world(via.at);object.position.set(x,y,bottom-.04);},viewportSceneIdentity('via-barrel','through',key));if(mesh)pickables.push(mesh);}
+  for(const[key,batch]of viaBatches){const geometry=new THREE.ExtrudeGeometry(padShape(batch.outline),{depth:thickness+.08,bevelEnabled:false,curveSegments:8});const mesh=makeInstanced(boardGroup,geometry,viaMaterial,batch.vias,(object,via)=>{const[x,y]=world(via.at);object.position.set(x,y,bottom-.04);},viewportSceneIdentity('via-barrel','through',key));if(mesh){visibilityRecord(mesh,'vias','through');pickables.push(mesh);}}
   applyAppearance();
   const parts = new THREE.Group(); boardGroup.add(parts);
   const proxyPoses = footprintProxies(board);
@@ -344,9 +362,9 @@ export function mountBoard3D(container, source, options = {}) {
   let population = board.components.map(() => true);
   function updateComponentVisibility() {
     board.components.forEach((_, index) => componentMesh?.setMatrixAt(index,
-      population[index] && !loadedModelIndexes.has(index) ? componentMatrices[index] : hiddenMatrix));
+      population[index] && objectVisibility.visible('bodies',board.components[index].layer) && !loadedModelIndexes.has(index) ? componentMatrices[index] : hiddenMatrix));
     if (componentMesh) { componentMesh.instanceMatrix.needsUpdate = true; componentMesh.computeBoundingSphere(); }
-    for (const [index, group] of modelGroups) group.visible = population[index];
+    for (const [index, group] of modelGroups) group.visible = population[index]&&objectVisibility.visible('bodies',board.components[index].layer);
     renderer.shadowMap.needsUpdate=true;
     invalidate();
   }
@@ -513,6 +531,51 @@ export function mountBoard3D(container, source, options = {}) {
   toggle("Front copper", true, (visible) => { groupFor("F.Cu").visible = visible; });
   toggle("Back copper", true, (visible) => { groupFor("B.Cu").visible = visible; });
   toggle("Parts", true, (visible) => { parts.visible = visible; renderer.shadowMap.needsUpdate=true; });
+  // A bounded, opt-in set of depth-tested terminal labels. The sprite material
+  // preserves board/model occlusion; labels do not participate in picking or fit.
+  let showTerminalLabels=false;
+  const terminalLabels=new THREE.Group(),terminalLabelCache=new Map();scene.add(terminalLabels);
+  const labelGeometry=new THREE.PlaneGeometry(1,1);
+  const labelRecords=nativePads.filter(p=>p.name&&p.net&&p.name.length<=40&&p.net.length<=48).slice(0,10000);
+  const labelPool=[],frameTextures=new Set();
+  function labelTexture(pad){
+    const key=JSON.stringify([pad.name,pad.net]);if(terminalLabelCache.has(key)){const texture=terminalLabelCache.get(key);terminalLabelCache.delete(key);terminalLabelCache.set(key,texture);frameTextures.add(texture);return texture;}
+    if(terminalLabelCache.size>=150){const unused=[...terminalLabelCache].find(([,texture])=>!frameTextures.has(texture));if(!unused)return null;terminalLabelCache.delete(unused[0]);unused[1].dispose();}
+    const canvas=document.createElement('canvas');canvas.width=512;canvas.height=48;
+    const ctx=canvas.getContext('2d');ctx.font='600 14px monospace';ctx.textAlign='center';ctx.textBaseline='middle';ctx.lineJoin='round';ctx.lineWidth=5;ctx.strokeStyle='#101820';ctx.fillStyle='#f3f8fa';
+    for(const [text,y] of [[pad.name,13],[pad.net,34]]){ctx.strokeText(text,256,y);ctx.fillText(text,256,y);}
+    const texture=new THREE.CanvasTexture(canvas);texture.colorSpace=THREE.SRGBColorSpace;terminalLabelCache.set(key,texture);frameTextures.add(texture);return texture;
+  }
+  const projectedLabel=new THREE.Vector3();
+  function updateTerminalLabels(){
+    let count=0;frameTextures.clear();terminalLabels.visible=showTerminalLabels&&!measuring;
+    if(!terminalLabels.visible)return;
+    if(!objectVisibility.visible('pads'))return void labelPool.forEach(mesh=>mesh.visible=false);
+    const canvasHeight=Math.max(1,canvasHost.clientHeight),canvasWidth=Math.max(1,canvasHost.clientWidth),boxes=[];
+    // Label the facing saved copper surface only; no inferred internal geometry.
+    const layer=camera.position.z>=controls.target.z?'F.Cu':'B.Cu';
+    if(!groupFor(layer).visible||!objectVisibility.visible('pads',layer))return void labelPool.forEach(mesh=>mesh.visible=false);
+    for(const pad of labelRecords){
+      if(count>=150)break;
+      if(!(pad.layers?.includes(layer)||pad.layers?.includes('*.Cu')||pad.layer===layer))continue;
+      const [x,y]=world(pad.at),z=layer==='F.Cu'?top+.055:bottom-.055;
+      const distance=camera.position.distanceTo(new THREE.Vector3(x,y,z));
+      const pxPerMm=canvasHeight/(2*Math.tan(camera.fov*Math.PI/360)*distance),padPixels=Math.min(pad.width,pad.height)*pxPerMm;
+      if(!Number.isFinite(padPixels)||padPixels<32)continue;
+      projectedLabel.set(x,y,z).project(camera);if(projectedLabel.z< -1||projectedLabel.z>1)continue;
+      const size=Math.min(16,Math.max(10,padPixels*.22)),w=(Math.max(pad.name.length,pad.net.length)*.63+1)*size,h=size*2.8;
+      const sx=(projectedLabel.x+1)*canvasWidth/2,sy=(1-projectedLabel.y)*canvasHeight/2,box={x:sx-w/2,y:sy-h/2,w,h};
+      if(box.x<0||box.y<0||box.x+w>canvasWidth||box.y+h>canvasHeight||boxes.some(b=>box.x<b.x+b.w&&box.x+w>b.x&&box.y<b.y+b.h&&box.y+h>b.y))continue;
+      const texture=labelTexture(pad);if(!texture)continue;
+      let mesh=labelPool[count];if(!mesh){mesh=new THREE.Mesh(labelGeometry,new THREE.MeshBasicMaterial({transparent:true,depthTest:true,depthWrite:false,side:THREE.DoubleSide}));mesh.renderOrder=5;terminalLabels.add(mesh);labelPool.push(mesh);}
+      if(mesh.material.map!==texture){mesh.material.map=texture;mesh.material.needsUpdate=true;}mesh.position.set(x,y,z);mesh.quaternion.copy(camera.quaternion);
+      // Canvas glyphs occupy 14 px of a 512 px texture width.
+      mesh.scale.set(512/14*size/pxPerMm,48/14*size/pxPerMm,1);mesh.visible=true;boxes.push(box);count++;
+    }
+    for(let i=count;i<labelPool.length;i++)labelPool[i].visible=false;
+  }
+  toggle('Pad and net names (close zoom)',false,visible=>{showTerminalLabels=visible;});
+
   fit();
 
   const raycaster = new THREE.Raycaster(), pointer = new THREE.Vector2();
@@ -572,6 +635,9 @@ export function mountBoard3D(container, source, options = {}) {
   }
   let selected = null;
   const gesture = tapGesture();
+  let selectionDim=true;
+  const selectionAppearance=createSelectionAppearance(THREE,()=>{const objects=[];boardGroup.traverse(object=>{if(object.material)objects.push(object);});return objects;});
+  selectionAppearanceReady=true;
   const selectionLimit = 2000;
   // Draw only the twelve box edges, never the triangles of a solid cube.
   const outlineGeometry = new THREE.EdgesGeometry(new THREE.BoxGeometry(1, 1, 1));
@@ -632,6 +698,7 @@ export function mountBoard3D(container, source, options = {}) {
     selectionNotice.textContent = `Showing ${count} of ${total} selected 3D objects`;
     selectionNotice.style.display = total > selectionLimit ? 'block' : 'none';
     highlight.visible = false;
+    selectionAppearance.update(matches,total>0&&selectionDim);
     return { highlighted: count, matched: total, limited: total > selectionLimit };
   }
   const highlight = new THREE.LineSegments(outlineGeometry, outlineMaterial());
@@ -662,6 +729,8 @@ export function mountBoard3D(container, source, options = {}) {
     options.onSelect?.(null);
   }
   function select(record, point, object, instanceId) {
+    const mode=options.getSelectionMode?.()||selectionMode;
+    setSelection(mode==='net'&&record.net?{netNames:[record.net]}:record.type==='Component'||typeof record.library==='string'?{references:[record.ref]}:{uuids:[record.uuid||record.id]});
     selected = { record, point: point.clone() };
     groupGeometry.setDrawRange(0, 0);
     showHighlight(object, instanceId);
@@ -688,12 +757,15 @@ export function mountBoard3D(container, source, options = {}) {
       if (result) { options.onAnalysisProbe?.(result); return; }
     }
     const visible = item => { for (let node = item; node; node = node.parent) if (!node.visible) return false; return true; };
-    const hit = raycaster.intersectObjects(pickables.filter(visible), false)[0];
+    const hits = raycaster.intersectObjects(pickables.filter(visible), false);
+    const mode = options.getSelectionMode?.() || selectionMode;
+    const hit = hits.find(hit=>selectableRecord(hit.object.userData.records?.[hit.instanceId] || hit.object.userData.record,mode));
     if (!hit) { clearSelection(); return; }
     const record = hit.object.userData.records?.[hit.instanceId] || hit.object.userData.record;
     if (!record) return;
     select(record, hit.point, hit.object, hit.instanceId);
   }
+  let selectionMode = 'all';
   const hold = holdGesture(event => contextMenu(event));
   renderer.domElement.addEventListener("pointerdown", (event) => { gesture.down(event); hold.down(event); menu.hidden = true; });
   renderer.domElement.addEventListener("pointermove", event => {
@@ -735,15 +807,20 @@ export function mountBoard3D(container, source, options = {}) {
   const observer = new ResizeObserver(resize); observer.observe(canvasHost); resize();
   let analysisOverlay = null;
   const layoutFrame = requestAnimationFrame(() => { if (active) { resize(); fit(); } });
-  function drawFrame(){frame=0;if(!active||contextLost)return;controls.update();updateMeasurementGraphics();
-    try{
+  const projectAnchor=createAnchorProjector(THREE,{objects:()=>pickables,camera,rect:()=>renderer.domElement.getBoundingClientRect(),positionToWorld:(position,side)=>{const [x,y]=world([position.x,position.y]);return new THREE.Vector3(x,y,side==='back'?bottom:top);}});
+  let activeAnchor=null,anchorSignature='',viewSignature='';
+  function notifyAnchor(){if(!activeAnchor)return;const point=projectAnchor(activeAnchor),signature=JSON.stringify(point);if(signature!==anchorSignature){anchorSignature=signature;options.onAnchor?.({anchor:activeAnchor,point});}}
+  function notifyView(){const rect=renderer.domElement.getBoundingClientRect(),signature=JSON.stringify([camera.matrixWorld.elements,camera.projectionMatrix.elements,rect.left,rect.top,rect.width,rect.height]);if(signature!==viewSignature){viewSignature=signature;options.onViewChange?.();}notifyAnchor();}
+  function drawFrame(){frame=0;if(!active||contextLost)return;controls.update();updateMeasurementGraphics();updateTerminalLabels();
+    let rendered=false;try{
       if(pipeline){pipeline.composer.render();if(shaderFailure||renderer.getContext().getError()!==renderer.getContext().NO_ERROR)throw Error('Enhanced rendering failed.');}
       else renderer.render(scene,camera);
-      renderCount++;
+      renderCount++;rendered=true;
     }catch{
       if(pipeline){fallbackQuality('Enhanced rendering could not complete. Balanced rendering is active.');invalidate();}
       else graphicsNotice('The graphics device could not draw this view. Try Low quality or reopen 3D.');
     }
+    if(rendered)notifyView();
   }
   const onContextLost=event=>{event.preventDefault();contextLost=true;cancelAnimationFrame(frame);frame=0;qualitySelect.disabled=true;graphicsNotice('The graphics context was interrupted. The board and selection are retained while the browser recovers.',true);};
   const onContextRestored=()=>{if(!active)return;contextLost=false;qualitySelect.disabled=false;disposePipeline();environment?.dispose();environment=createEnvironment();scene.environment=environment?.texture||null;renderer.shadowMap.needsUpdate=true;quality='balanced';qualitySelect.value=quality;host.dataset.quality=quality;graphicsNotice('Graphics restored. Balanced rendering is active; High quality can be selected again.');sizeViewport();invalidate();};
@@ -755,6 +832,16 @@ export function mountBoard3D(container, source, options = {}) {
   applyQuality(initialQuality,false);
   void loadRepositoryModels();
   return { host, board,
+    objectVisibilityCapabilities(){return {supportedTypes:[...objectVisibility.supportedTypes],unsupportedTypes:['graphics','texts','regions','dimensions','rooms','footprints']};},
+    setObjectVisibility(input={}) {
+      const next=objectVisibilityPolicy(input||{});
+      if(next.side!==objectVisibility.side||JSON.stringify(next.hiddenTypes)!==JSON.stringify(objectVisibility.hiddenTypes))userAdjustedCamera=true;
+      objectVisibility=next;
+      for(const {mesh,type,layer}of visibilityRecords)mesh.visible=objectVisibility.visible(type,layer);
+      updateComponentVisibility();
+      setSelection(externalSelection);
+      return {hiddenTypes:[...objectVisibility.hiddenTypes],side:objectVisibility.side,supportedTypes:[...objectVisibility.supportedTypes],unsupportedTypes:[...objectVisibility.unsupportedTypes]};
+    },
     setMeasurementMode,clearMeasurements,
     measurementState(){return{mode:measuring,unit:measurementUnit,...measurementSession.snapshot()};},
     setQuality(value){return applyQuality(value);},
@@ -777,6 +864,11 @@ export function mountBoard3D(container, source, options = {}) {
     setAnalysisProbes(probes) { analysisOverlay?.setProbes(probes);invalidate(); },
     setAnalysisOpacity(value) { analysisOverlay?.setOpacity(value);invalidate(); },
     setSelection,
+    projectAnchor,
+    setAnchor(anchor){activeAnchor=anchor&&typeof anchor==='object'?anchor:null;anchorSignature='';if(activeAnchor)notifyAnchor();else options.onAnchor?.({anchor:null,point:null});},
+    setSelectionDim(enabled){selectionDim=Boolean(enabled);setSelection(externalSelection);return selectionDim;},
+    selectionAppearanceCapabilities(){return {dim:true,instanceColors:true,desaturatesTextures:true};},
+    setSelectionMode(mode){selectionMode=['all','part','net','pin'].includes(mode)?mode:'all';},
     fit(topView=false){if(active)fit(topView);},
     setView(view){if(!active||!boardViewPresets.some(preset=>preset.id===view))return false;userAdjustedCamera=true;fit(view);return true;},
     zoom(factor){if(!active||!Number.isFinite(factor)||factor<=0)return;const offset=camera.position.clone().sub(controls.target);const distance=Math.max(controls.minDistance,Math.min(controls.maxDistance,offset.length()/factor));if(offset.length()>0)camera.position.copy(controls.target).add(offset.setLength(distance));controls.update();},
@@ -819,7 +911,7 @@ export function mountBoard3D(container, source, options = {}) {
       }
     },
     dispose() { if(measuring)options.onMeasurementMode?.(false);active = false; analysisOverlay?.dispose(); stepClient?.dispose(); cancelAnimationFrame(frame); cancelAnimationFrame(layoutFrame); observer.disconnect();controls.removeEventListener('change',invalidate); controls.removeEventListener("change", updateClipping); controls.removeEventListener("start", cameraInteraction); controls.dispose();disposePipeline();environment?.dispose();renderer.domElement.removeEventListener('webglcontextlost',onContextLost);renderer.domElement.removeEventListener('webglcontextrestored',onContextRestored);document.removeEventListener('pointerdown',closeVisibility);shadow.removeEventListener('keydown',escapeVisibility,true);shadow.removeEventListener('keydown',escapeMeasurement);
-    const resources = new Set(); scene.traverse((object) => {object.shadow?.dispose?.(); if (object.geometry) resources.add(object.geometry);
+    selectionAppearance.dispose();const resources = new Set(); scene.traverse((object) => {object.shadow?.dispose?.(); if (object.geometry) resources.add(object.geometry);
       const materials = Array.isArray(object.material) ? object.material : object.material ? [object.material] : [];
-      materials.forEach((item) => resources.add(item)); }); resources.forEach((item) => item.dispose()); hold.dispose(); renderer.dispose(); host.remove(); } };
+      materials.forEach((item) => resources.add(item)); }); resources.forEach((item) => item.dispose());terminalLabelCache.forEach(texture=>texture.dispose()); labelGeometry.dispose(); hold.dispose(); renderer.dispose(); host.remove(); } };
 }

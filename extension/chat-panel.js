@@ -13,6 +13,7 @@
   const searchToggle=button('⌕',()=>toggleSearch(),'chat-search-toggle'),optionsToggle=button('⋯',()=>setOptions(optionsMenu.hidden),'chat-options-toggle'),close=button('×',()=>options.onClose?.(),'chat-close');close.hidden=!options.onClose;
   for(const [node,label]of [[back,'Conversations'],[searchToggle,'Search messages'],[optionsToggle,'Conversation options'],[close,'Close conversation pane']]){node.title=label;node.setAttribute('aria-label',label);}
   const optionsMenu=make('section','chat-options-menu');optionsMenu.id='chatConversationOptions';optionsMenu.hidden=true;optionsMenu.setAttribute('role','region');optionsMenu.setAttribute('aria-label','Conversation options');optionsToggle.setAttribute('aria-controls',optionsMenu.id);optionsToggle.setAttribute('aria-expanded','false');
+  const threadState=button('Close issue',()=>changeThreadState(),'chat-thread-state');threadState.hidden=true;
   const settings=button('Filters & dates',()=>{closeOptions();options.onSettings?.();},'chat-settings');settings.hidden=!options.onSettings;
   const pin=button('Pin pane',()=>{if(pin.hidden)return;options.onPin();syncPin();closeOptions();},'chat-pin');pin.hidden=typeof options.onPin!=='function'||typeof options.isPinned!=='function';
   function syncPin(){if(!pin.hidden){const pinned=!!options.isPinned();pin.textContent=pinned?'Unpin pane':'Pin pane';pin.setAttribute('aria-pressed',String(pinned));}}
@@ -41,8 +42,8 @@
   for(const [label,name,prefix,suffix]of [['B','Bold','**','**'],['I','Italic','_','_'],['</>','Code','`','`'],['≡','Bulleted list','- ','']]){const tool=button(label,()=>{if(input.disabled)return;const start=input.selectionStart??input.value.length,end=input.selectionEnd??start,selected=input.value.slice(start,end)||'text';input.value=input.value.slice(0,start)+prefix+selected+suffix+input.value.slice(end);input.setSelectionRange?.(start+prefix.length,start+prefix.length+selected.length);changed();input.focus();},'chat-format-tool');tool.title=name;tool.setAttribute('aria-label',name);tool.onpointerdown=event=>event.preventDefault();formatTools.append(tool);}
   const composerOptions=make('section','chat-composer-options');composerOptions.id='chatComposerOptions';composerOptions.hidden=true;composerOptions.setAttribute('role','region');composerOptions.setAttribute('aria-label','Message options and attachments');append(composerOptions,contextRow,mentionSource,save);
   const captureStrip=make('div','chat-capture-strip');append(captureStrip,capturePreview,captureHint,removeCapture);captureStrip.hidden=true;
-  searchToggle.textContent='Search messages';close.textContent='Close conversation';append(optionsMenu,meta,searchToggle,refresh,settings,account,autoLabel,pin,close);append(actions,attachmentToggle,formatToggle,send);append(composer,target,contextHint,formatTools,input,mentionList,captureStrip,composerOptions,actions,status);append(shell,header,find,optionsMenu,list,jump,composer);container.replaceChildren(shell);
-  const drafts=new Map(),seen=new Map(),messageMenus=new Set();let thread=null,key=null,filters={},disposed=false,sending=false,saving=false,readTicket=0,readPromise=null,readScopeKey=null,autoTimer=null,autoFailures=0,autoEpoch=0,mentionTicket=0,mentionTimer=null,mentionRows=[],mentionActive=-1,newCount=0;
+  searchToggle.textContent='Search messages';close.textContent='Close conversation';append(optionsMenu,meta,threadState,searchToggle,refresh,settings,account,autoLabel,pin,close);append(actions,attachmentToggle,formatToggle,send);append(composer,target,contextHint,formatTools,input,mentionList,captureStrip,composerOptions,actions,status);append(shell,header,find,optionsMenu,list,jump,composer);container.replaceChildren(shell);
+  const drafts=new Map(),seen=new Map(),messageMenus=new Set();let thread=null,key=null,filters={},disposed=false,sending=false,saving=false,stateChanging=false,readTicket=0,readPromise=null,readScopeKey=null,autoTimer=null,autoFailures=0,autoEpoch=0,mentionTicket=0,mentionTimer=null,mentionRows=[],mentionActive=-1,newCount=0;
   const timer=(fn,ms)=>(h.setTimeout||setTimeout)(fn,ms),cancelTimer=id=>(h.clearTimeout||clearTimeout)(id);
   function currentDraft(){return drafts.get(key);}
   function blank(){return{text:'',action:'create',reply:null,annotation:null,capture:null,mutation:null,fingerprint:null,scopeSnapshot:{...options.getScope()},threadSnapshot:thread?{kind:thread.kind,number:thread.number}:null};}
@@ -55,15 +56,29 @@
   function closeMenus(){const open=!optionsMenu.hidden||!composerOptions.hidden,hadMessages=closeMessageMenus();closeOptions();setComposerOptions(false);return open||hadMessages;}
   function toggleSearch(){find.hidden=!find.hidden;searchToggle.setAttribute('aria-expanded',String(!find.hidden));if(!find.hidden){closeMenus();find.focus();}else{find.value='';drawMessages();}}
   function changed(){const state=currentDraft();if(!state)return;state.text=input.value;state.mutation=state.fingerprint=null;closeMentions();message('');}
-  function syncComposer(){const state=currentDraft();if(!state)return;
+  function syncThreadState(){const closed=thread?.state==='closed',permission=closed?'canReopen':'canClose';threadState.hidden=typeof options.onThreadState!=='function'||thread?.capabilities?.[permission]!==true;threadState.textContent=(closed?'Reopen ':'Close ')+(thread?.kind==='discussion'?'discussion':'issue');threadState.disabled=sending||saving||stateChanging;}
+  async function changeThreadState(){
+   if(stateChanging||sending||saving||threadState.hidden)return;
+   const captured=thread,capturedKey=key,scope=JSON.stringify(options.getScope()),state=thread.state==='closed'?'open':'closed',expectedUpdatedAt=thread.updatedAt;
+   if(typeof expectedUpdatedAt!=='string')return;
+   const target={kind:thread.kind,number:thread.number,title:thread.title};stateChanging=true;syncComposer();closeOptions();let changed=false;
+   try{
+    const confirmed=typeof options.confirmThreadState==='function'?await options.confirmThreadState({thread:target,state}):h.confirm?.((state==='closed'?'Close':'Reopen')+' '+target.kind+' #'+target.number+' on '+(options.provider==='gitlab'?'GitLab':'GitHub')+'?');
+    if(confirmed!==true||disposed||key!==capturedKey||thread!==captured||JSON.stringify(options.getScope())!==scope)return;
+    await options.onThreadState({thread:target,state,expectedUpdatedAt,confirmed:true});changed=true;
+    if(!disposed&&key===capturedKey){if(!await readCurrent(true))throw Error('Refresh failed.');message(state==='closed'?'Conversation closed.':'Conversation reopened.');}
+   }catch(error){if(!disposed&&key===capturedKey)message(changed?'State changed, but refresh failed. Refresh this conversation before continuing.':error.message||'State change failed. Refresh before retrying.',true);}
+   finally{stateChanging=false;if(!disposed)syncComposer();}
+  }
+  function syncComposer(){syncThreadState();const state=currentDraft();if(!state)return;
    input.value=state.text;input.maxLength=state.annotation?4000:60000;severity.value=state.annotation?.severity||'info';stateSelect.value=state.annotation?.state||'open';
    target.hidden=state.action==='create';targetCopy.textContent=state.reply?(state.action==='edit'?'Editing your message':'Replying to @'+(state.reply.author||'deleted user'))+' · '+state.reply.body.replace(/\s+/g,' ').slice(0,120):'';
    remove.hidden=severity.hidden=stateSelect.hidden=!state.annotation;contextHint.hidden=!state.annotation;contextHint.textContent=state.annotation?'Drawing context: '+(state.annotation.anchor.reference||state.annotation.anchor.netName||state.annotation.anchor.kind||'drawing')+' · '+state.annotation.anchor.file:'';
    captureStrip.hidden=captureHint.hidden=!state.capture;captureHint.textContent=state.capture?'Screenshot · '+state.capture.width+' × '+state.capture.height:'';
    capturePreview.hidden=removeCapture.hidden=!state.capture;if(state.capture){capturePreview.src=state.capture.dataUrl;}else capturePreview.removeAttribute('src');
    send.textContent='↑';send.title=state.action==='edit'?'Review and save edit':'Review and send (Ctrl+Enter)';send.setAttribute('aria-label',state.action==='edit'?'Review and save edit':'Review and send');const allowed=state.action==='create'?thread?.capabilities?.create:state.action==='reply'?thread?.capabilities?.reply:thread?.capabilities?.edit;
-   input.disabled=!allowed||sending||saving;send.disabled=input.disabled||!!state.capturePending;attach.disabled=state.action==='edit'||sending||saving||!allowed;save.disabled=sending||saving||!!state.capturePending;account.hidden=!options.onAccount;
-   for(const node of [cancelTarget,remove,removeCapture,severity,stateSelect,mentionSource,attachmentToggle,formatToggle,...formatTools.children])node.disabled=sending||saving||node===formatToggle&&!allowed;
+   input.disabled=!allowed||sending||saving||stateChanging;send.disabled=input.disabled||!!state.capturePending;attach.disabled=state.action==='edit'||sending||saving||stateChanging||!allowed;save.disabled=sending||saving||stateChanging||!!state.capturePending;account.hidden=!options.onAccount;
+   for(const node of [cancelTarget,remove,removeCapture,severity,stateSelect,mentionSource,attachmentToggle,formatToggle,...formatTools.children])node.disabled=sending||saving||stateChanging||node===formatToggle&&!allowed;
    if(!allowed)message('Conversation is read-only until your account and repository permissions are verified.');
   }
   function resetTarget(){const state=currentDraft();if(!state)return;if(state.action==='edit'){const prior=state.priorDraft||{text:'',annotation:null,capture:null};Object.assign(state,prior);input.value=state.text;}state.action='create';state.reply=null;state.priorDraft=null;changed();syncComposer();input.focus();}
@@ -96,7 +111,7 @@
    let annotation;if(state.annotation){if(state.annotation.anchor.file!==scope.file||state.annotation.anchor.ref!==scope.ref||state.annotation.anchor.repository!==scope.repository)throw Error('Source changed. Return to the attached drawing and revision before sending, or remove its context.');annotation=comments.validateComment({...state.annotation,id:state.mutation,text:body,mentions:composeApi.extractMentions(body,options.provider||'github'),threadType:targetThread.kind,...(state.capture?{capture:state.capture}:{})});}
    return{...scope,thread:{kind:targetThread.kind,number:targetThread.number},action:state.action,body,clientMutationId:state.mutation,...(annotation?{annotation}:{}),...(state.action==='edit'?{messageId:state.reply.id,expectedUpdatedAt:state.reply.updatedAt}:state.action==='reply'?{replyTo:state.reply.id}:{})};
   }
-  async function sendMessage(){if(sending||saving||!thread||disposed)return;const state=currentDraft(),scopeKey=key;state.text=input.value;let payload;try{
+  async function sendMessage(){if(sending||saving||stateChanging||!thread||disposed)return;const state=currentDraft(),scopeKey=key;state.text=input.value;let payload;try{
     if(!thread.capabilities?.[state.action==='create'?'create':state.action==='reply'?'reply':'edit'])throw Error('Your account is not permitted to post this message.');
     if(state.action==='edit'){const loaded=thread.comments?.find(row=>row.id===state.reply?.id);if(!loaded?.canEdit||loaded.updatedAt!==state.reply.updatedAt)throw Error('The message changed or editing permission was lost. Your draft was kept; refresh and reopen Edit.');}
     payload=prepared(state);
@@ -111,7 +126,7 @@
    }catch(error){if(!disposed&&key===scopeKey)message(sent?'Message sent, but refresh failed. Refresh the conversation to see it.':error.message||'Sending failed. Your draft was kept. Inspect the thread before retrying an uncertain result.',true);}
    finally{sending=false;if(!disposed)syncComposer();}
   }
-  async function saveDraft(all=false){if(saving||sending)return false;const state=currentDraft();if(!state)return false;state.text=input.value;const states=all?[...drafts.values()].filter(dirty):[state];saving=true;syncComposer();
+  async function saveDraft(all=false){if(saving||sending||stateChanging)return false;const state=currentDraft();if(!state)return false;state.text=input.value;const states=all?[...drafts.values()].filter(dirty):[state];saving=true;syncComposer();
    try{for(const pending of states){if(!dirty(pending))continue;if(pending.annotation){if(typeof options.onSaveDraft!=='function')throw Error('Local draft storage is unavailable. Your draft was kept.');const payload=prepared(pending,pending.threadSnapshot,pending.scopeSnapshot);await options.onSaveDraft(payload.annotation);}
      else{if(typeof options.onSaveTextDraft!=='function')throw Error('Local draft storage is unavailable. Your draft was kept.');const text=pending.text.trim();if(!text)continue;pending.mutation ||= mutationId();await options.onSaveTextDraft({text,thread:pending.threadSnapshot,...(pending.reply?{replyTo:pending.reply.id}:{}),id:pending.mutation,scope:pending.scopeSnapshot});}
      Object.assign(pending,blank());
@@ -127,7 +142,7 @@
   }
   function stopAuto(){if(autoTimer!==null)cancelTimer(autoTimer);autoTimer=null;}
   function scheduleAuto(delay=60000){stopAuto();if(disposed||!autoRefresh.checked||!thread||d.hidden)return;const epoch=autoEpoch;
-   autoTimer=timer(async()=>{autoTimer=null;if(disposed||!autoRefresh.checked||epoch!==autoEpoch)return;if(!conversationVisible()||readPromise||sending||saving){scheduleAuto();return;}
+   autoTimer=timer(async()=>{autoTimer=null;if(disposed||!autoRefresh.checked||epoch!==autoEpoch)return;if(!conversationVisible()||readPromise||sending||saving||stateChanging){scheduleAuto();return;}
     const scopeKey=key,ok=await readCurrent(true);if(disposed||!autoRefresh.checked||epoch!==autoEpoch)return;if(key!==scopeKey){autoFailures=0;scheduleAuto();return;}
     autoFailures=ok?0:Math.min(autoFailures+1,3);scheduleAuto(Math.min(300000,60000*2**autoFailures));
    },delay);
@@ -148,8 +163,8 @@
      for(const anchor of extracted.anchors){const card=make('div','chat-design-context'),label=make('span','',[(anchor.reference||anchor.netName||anchor.kind||'Drawing'),anchor.file].join(' · ')),locate=button('Locate',()=>{if(options.onLocate?.(anchor)===false)message('This context belongs to another drawing or revision. Open its exact saved source first.',true);},'chat-locate');append(card,label,locate);try{const source=comments.normalizeScope(anchor),path=source.file.split('/').map(encodeURIComponent).join('/'),ref=source.ref.split('/').map(encodeURIComponent).join('/'),url=source.provider==='gitlab'?source.host+'/'+source.repository+'/-/blob/'+ref+'/'+path:'https://github.com/'+source.repository+'/blob/'+ref+'/'+path,link=make('a','chat-source-link','Saved source');link.href=url;link.target='_blank';link.rel='noopener noreferrer';card.append(link);}catch{}body.append(card);}
      for(const attachment of extracted.attachments){const url=contentApi.safeUrl(attachment.url);if(url){const link=make('a','chat-attachment-link','Open screenshot · '+attachment.width+' × '+attachment.height);link.href=url;link.target='_blank';link.rel='noopener noreferrer';body.append(link);}}
      const actions=[];
-     if(!row.root&&row.canReply&&thread.capabilities?.reply)actions.push(button('Reply',()=>{closeMessageMenus();if(sending||saving)return;const state=currentDraft();state.text=input.value;state.action='reply';state.reply=row;state.mutation=state.fingerprint=null;syncComposer();input.focus();},'chat-reply-action'));
-     if(!row.root&&row.canEdit&&thread.capabilities?.edit)actions.push(button('Edit',()=>{closeMessageMenus();if(sending||saving)return;const state=currentDraft();state.text=input.value;if(state.text.trim()&&!h.confirm?.('Replace the current draft with this message for editing?'))return;state.priorDraft={text:state.text,annotation:state.annotation,capture:state.capture,scopeSnapshot:state.scopeSnapshot};state.text=row.body;state.action='edit';state.reply=row;state.annotation=state.capture=null;state.mutation=state.fingerprint=null;syncComposer();input.focus();},'chat-edit-action'));
+     if(!row.root&&row.canReply&&thread.capabilities?.reply)actions.push(button('Reply',()=>{closeMessageMenus();if(sending||saving||stateChanging)return;const state=currentDraft();state.text=input.value;state.action='reply';state.reply=row;state.mutation=state.fingerprint=null;syncComposer();input.focus();},'chat-reply-action'));
+     if(!row.root&&row.canEdit&&thread.capabilities?.edit)actions.push(button('Edit',()=>{closeMessageMenus();if(sending||saving||stateChanging)return;const state=currentDraft();state.text=input.value;if(state.text.trim()&&!h.confirm?.('Replace the current draft with this message for editing?'))return;state.priorDraft={text:state.text,annotation:state.annotation,capture:state.capture,scopeSnapshot:state.scopeSnapshot};state.text=row.body;state.action='edit';state.reply=row;state.annotation=state.capture=null;state.mutation=state.fingerprint=null;syncComposer();input.focus();},'chat-edit-action'));
      const menu=messageMenu(row.author,row.url,actions);if(menu)byline.append(menu);
     }
     append(article,avatar,body);list.append(article);

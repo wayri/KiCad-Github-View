@@ -37,3 +37,12 @@ test('3D tap selection ignores pinch, drag and cancelled gestures', async () => 
   assert.equal(gesture.up(point(1,10,10)),false);
   gesture.down(point(1,10,10)); gesture.cancel(point(1,10,10)); assert.equal(gesture.up(point(1,10,10)),false);
 });
+
+test('pin-only picking excludes component bodies and unrelated copper',async()=>{
+ const {selectableRecord,selectionMatcher}=await helpers;
+ const pad={type:'Pad',id:'pad',uuid:'pad',name:'1',ref:'U1',net:'GND',at:[1,2],width:1,height:2};
+ assert.equal(selectableRecord(pad,'pin'),true);
+ for(const record of [{type:'Board'},{type:'Component',ref:'U1',library:'IC'},{type:'Track',net:'GND'},null])assert.equal(selectableRecord(record,'pin'),false);
+ assert.equal(selectableRecord(pad,'part'),false);
+ const precise=selectionMatcher({uuids:['pad']},{pads:[pad]});assert.equal(precise(pad),true);assert.equal(precise({...pad,id:'other',uuid:'other',name:'2'}),false);assert.equal(precise({type:'Component',ref:'U1'}),false);
+});

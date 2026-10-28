@@ -151,5 +151,16 @@ test('manager locates unfinished parts without saving progress and keeps whole-s
   find(resumed,n=>n.textContent==='Next unfinished part').events.click();assert.equal(located.at(-1).reference,'R2');assert.equal(writes,0);resumed.close();
   const foreign=api.open({objects:[part('R1'),part('R2')],scope:'scope',selectedId:'missing',storage:{getItem:()=>null,setItem:()=>writes++},onLocate:o=>located.push(o)});
   find(foreign,n=>n.textContent==='Next unfinished part').events.click();assert.equal(located.at(-1).reference,'R1');foreign.close();
+  const two=[part('R1'),part('R2')],grouped=api.open({objects:two,scope:'grouped',selectedId:two[0].id,storage:{getItem:()=>null,setItem:()=>writes++},onLocate:o=>located.push(o)});
+  const groupCheck=find(grouped,n=>n.className==='bom-manager-group').children[0];groupCheck.checked=true;groupCheck.events.change();assert.ok(find(grouped,n=>n.textContent==='Group · 2 references'));
+  const reference=find(grouped,n=>n.className?.startsWith('bom-manager-reference')&&n.textContent==='R2');reference.events.click();assert.equal(grouped.getSelectedPart(),two[1]);assert.equal(located.at(-1),two[1]);assert.equal(writes,0);
+  assert.equal(grouped.selectPart(two[0]),true);assert.equal(grouped.getSelectedPart(),two[0]);assert.equal(grouped.selectPart('foreign'),false);assert.equal(grouped.getSelectedPart(),two[0]);assert.equal(writes,0);grouped.close();
  }finally{global.document=original;}
+});
+
+test('assembly presentation counts only work items and keeps accessible state labels independent of colors',()=>{
+ const objects=[part('R1'),part('R2'),part('R3',{populated:false}),part('R4',{excludeFromBom:true})],metadata=Object.fromEntries(objects.map((object,index)=>[api.identity(object),{Assembly:index===0?'verified':'placed'}]));
+ const summary=api.assemblySummary(api.model(objects));assert.deepEqual(summary.states,{'not started':2,placed:0,soldered:0,verified:0});
+ const marked=api.assemblySummary(api.model(objects,'symbol',metadata));assert.equal(marked.fitted,2);assert.equal(marked.percent,50);assert.equal(marked.states.placed,1);assert.equal(marked.states.verified,1);assert.equal(api.assemblySummary([]).percent,0);
+ assert.equal(api.assemblyClass('not started'),'assembly-not-started');assert.equal(api.assemblyClass('<bad>'),'assembly-mixed');
 });

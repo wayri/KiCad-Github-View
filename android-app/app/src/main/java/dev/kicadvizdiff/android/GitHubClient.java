@@ -121,9 +121,11 @@ final class GitHubClient {
             case "repository-tree": return readRepositoryTree(request,epoch);
             case "repository-history": return readRepositoryHistory(request,epoch);
             case "repository-branches": return readRepositoryBranches(request,epoch);
+            case "repository-fork-revision": return forkRevision(request,epoch);
             case "review-list": return reviewList(request, epoch);
             case "review-categories": return categories(repository(request), epoch);
             case "review-thread": return reviewThread(request, epoch);
+            case "chat-thread-state": return chatThreadState(request,epoch);
             case "chat-message-write": return chatWrite(request,epoch);
             case "chat-thread-list": return chatThreadList(request,epoch);
             case "review-publish": return publish(request, epoch);
@@ -746,7 +748,24 @@ final class GitHubClient {
         boolean allowed=false;String viewer="";long viewerId=0;
         try{if(credential(epoch)!=null){JSONObject user=api("/user",epoch,1024*1024);viewer=user.getString("login");viewerId=NativeChatRequest.remoteId(user,"id");if(!viewer.matches("[A-Za-z0-9](?:[A-Za-z0-9-]{0,37}[A-Za-z0-9])?"))throw new Failure("Invalid account identity");allowed=policyStatus(repo,epoch).getBoolean("allowed");}}catch(Exception denied){check(epoch);}
         allowed=allowed&&!thread.optBoolean("locked")&&!thread.optBoolean("isPullRequest");thread.put("capabilities",new JSONObject().put("create",allowed).put("reply",allowed).put("edit",allowed).put("reactions",false).put("replyMode",kind.equals("issue")?"quoted":"native"));
+        boolean canClose=false,canReopen=false;if(allowed){try{ManagedPolicy.requireAction(policyContext,"chat-thread-state");JSONObject fresh=threadStateSnapshot(repo,kind,thread.getInt("number"),epoch);if(fresh.getString("updatedAt").equals(thread.optString("updatedAt"))&&fresh.getBoolean("closed")==thread.optString("state").equals("closed")){canClose=!fresh.getBoolean("closed")&&fresh.getBoolean("viewerCanClose");canReopen=fresh.getBoolean("closed")&&fresh.getBoolean("viewerCanReopen");}}catch(Exception denied){check(epoch);}}thread.getJSONObject("capabilities").put("canClose",canClose).put("canReopen",canReopen);
         JSONArray messages=thread.getJSONArray("comments");for(int i=0;i<messages.length();i++){JSONObject item=messages.getJSONObject(i);boolean own=!viewer.isEmpty()&&viewer.equalsIgnoreCase(item.optString("author"))&&(kind.equals("discussion")?item.optBoolean("viewerDidAuthor"):viewerId>0&&viewerId==item.optLong("authorId",0));item.put("canEdit",allowed&&own&&!item.optBoolean("bodyTruncated")&&(!kind.equals("discussion")||item.optBoolean("viewerCanUpdate")&&item.optBoolean("viewerDidAuthor"))&&!item.optString("body").contains("kicad-review:"));}
+    }
+    private JSONObject threadStateSnapshot(String repo,String kind,int number,int epoch)throws Exception {
+        String[] names=repo.split("/");JSONObject result=graphql("query($owner:String!,$name:String!,$number:Int!){repository(owner:$owner,name:$name){nameWithOwner "+kind+"(number:$number){id number closed updatedAt viewerCanClose viewerCanReopen}}}",new JSONObject().put("owner",names[0]).put("name",names[1]).put("number",number),epoch).getJSONObject("repository"),value=result.getJSONObject(kind);
+        if(!repo.equalsIgnoreCase(result.getString("nameWithOwner"))||NativeChatRequest.remoteId(value,"number")!=number||!(value.get("closed")instanceof Boolean)||!(value.get("viewerCanClose")instanceof Boolean)||!(value.get("viewerCanReopen")instanceof Boolean)||!NativeChatRequest.timestamp(value.getString("updatedAt")))throw new Failure("Conversation identity or permissions could not be verified");nodeId(value.getString("id"));return value;
+    }
+    private JSONObject chatThreadState(JSONObject request,int epoch)throws Exception {
+        NativeThreadStateRequest input=new NativeThreadStateRequest(request);String repo=repository(request);if(credential(epoch)==null)throw new Failure("Sign in before changing conversation state");
+        JSONObject user=api("/user",epoch,1024*1024);long viewer=NativeChatRequest.remoteId(user,"id");if(!policyStatus(repo,epoch).getBoolean("allowed"))throw new Failure("Repository policy blocks conversation state changes");
+        String key="thread_state_"+hash(repo.toLowerCase(java.util.Locale.ROOT)+"|"+viewer+"|"+input.kind+"|"+input.number+"|"+input.expectedUpdatedAt+"|"+input.state+"|"+request.getString("ref")+"|"+request.getString("file"));String previous=reviewReceipts.getString(key,null);
+        if(previous!=null){JSONObject receipt=new JSONObject(previous);if(receipt.has("result"))return receipt.getJSONObject("result").put("duplicate",true);throw new Failure("Previous state change has an unconfirmed outcome; refresh and inspect GitHub before retrying");}
+        JSONObject fresh=threadStateSnapshot(repo,input.kind,input.number,epoch);input.checkRevision(fresh.getString("updatedAt"),fresh.getBoolean("closed"));if(!fresh.getBoolean(input.state.equals("closed")?"viewerCanClose":"viewerCanReopen"))throw new Failure("GitHub does not permit this state change");
+        synchronized(this){check(epoch);ManagedPolicy.requireAction(policyContext,"chat-thread-state");if(reviewReceipts.contains(key))throw new Failure("State change already in progress; refresh before retrying");claimWrite("publish");if(!reviewReceipts.edit().putString(key,new JSONObject().put("pending",true).toString()).commit())throw new Failure("Could not reserve state change");}
+        String verb=input.state.equals("closed")?"close":"reopen",type=input.kind.equals("issue")?"Issue":"Discussion",operation=verb+type,inputType=(input.state.equals("closed")?"Close":"Reopen")+type+"Input";
+        JSONObject value=graphql("mutation($input:"+inputType+"!){"+operation+"(input:$input){"+input.kind+"{id number closed updatedAt}}}",new JSONObject().put("input",new JSONObject().put(input.kind+"Id",fresh.getString("id"))),epoch).getJSONObject(operation).getJSONObject(input.kind);
+        if(!fresh.getString("id").equals(value.getString("id"))||NativeChatRequest.remoteId(value,"number")!=input.number||!(value.get("closed")instanceof Boolean)||value.getBoolean("closed")!=input.state.equals("closed")||!NativeChatRequest.timestamp(value.getString("updatedAt")))throw new Failure("GitHub did not confirm the state change; inspect the conversation before retrying");
+        JSONObject response=new JSONObject().put("provider","github").put("repository",repo).put("kind",input.kind).put("number",input.number).put("state",input.state).put("updatedAt",value.getString("updatedAt")).put("url",threadUrl(repo,input.kind,input.number));synchronized(this){check(epoch);if(!reviewReceipts.edit().putString(key,new JSONObject().put("result",response).toString()).commit())throw new Failure("State changed but receipt could not be saved; refresh the conversation");}return response;
     }
     private JSONObject chatWrite(JSONObject request,int epoch)throws Exception {
         NativeChatRequest input=new NativeChatRequest(request);String repo=repository(request);authenticated(epoch);
@@ -980,6 +999,15 @@ final class GitHubClient {
         return sha;
     }
     private static String encode(String value) throws Exception { return URLEncoder.encode(value, "UTF-8").replace("+", "%20"); }
+    private JSONObject forkRevision(JSONObject request,int epoch)throws Exception {
+        NativeRevisionFork.validate(request,true);if(credential(epoch)==null)throw new Failure("Sign in to GitHub before creating a fork");
+        ManagedPolicy.requireTransport(policyContext,true);claimWrite("publish");
+        return NativeRevisionFork.create(request,true,"https://github.com",new NativeRevisionFork.Transport(){
+            public void authorize()throws Exception {check(epoch);ManagedPolicy.requireTransport(policyContext,true);if(credential(epoch)==null)throw new Failure("GitHub session expired");}
+            public JSONObject get(String path,boolean missing)throws Exception {try{return api(path,epoch,1024*1024);}catch(Missing error){if(missing)return null;throw error;}}
+            public JSONObject post(String path,JSONObject body,int expected)throws Exception {return new JSONObject(networkBytes("https://api.github.com"+path,body.toString().getBytes(StandardCharsets.UTF_8),"application/json",credential(epoch),epoch,1024*1024,expected));}
+        });
+    }
     private JSONObject api(String path, int epoch, int limit) throws Exception {
         return new JSONObject(network("https://api.github.com" + path, null, credential(epoch), epoch, limit));
     }
@@ -990,6 +1018,9 @@ final class GitHubClient {
         return networkBytes(address, body == null ? null : body.getBytes(StandardCharsets.UTF_8), "application/x-www-form-urlencoded", bearer, epoch, limit);
     }
     private String networkBytes(String address, byte[] body, String contentType, String bearer, int epoch, int limit) throws Exception {
+        return networkBytes(address,body,contentType,bearer,epoch,limit,-1);
+    }
+    private String networkBytes(String address, byte[] body, String contentType, String bearer, int epoch, int limit,int expectedStatus) throws Exception {
         check(epoch);
         URL url = new URL(address);
         if (!url.getProtocol().equals("https") || url.getPort() != -1 || url.getUserInfo() != null
@@ -1048,6 +1079,7 @@ final class GitHubClient {
                         connection.getHeaderField("X-GitHub-SSO"), message, System.currentTimeMillis()/1000));
             }
             if (status < 200 || status >= 300) throw new Failure("GitHub request failed (HTTP " + status + ")");
+            if(expectedStatus>0&&status!=expectedStatus)throw new Failure("GitHub did not confirm creation of a new resource");
             if (connection.getContentLengthLong() > limit) throw new Failure("GitHub response exceeds import limits");
             try (InputStream stream = NativeLoadOperation.input(connection.getInputStream()); ByteArrayOutputStream output = new ByteArrayOutputStream()) {
                 byte[] buffer = new byte[32768]; int n;

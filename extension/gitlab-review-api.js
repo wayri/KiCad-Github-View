@@ -120,7 +120,7 @@ const KiCadGitLabReviewApi = (() => {
     finally{reader.releaseLock();}
     const bytes=new Uint8Array(total);let offset=0;for(const chunk of chunks){bytes.set(chunk,offset);offset+=chunk.byteLength;}return new TextDecoder().decode(bytes);
   }
-  async function request(host, path, { method = "GET", body, token, expectedEpoch, allow404 = false } = {}) {
+  async function request(host, path, { method = "GET", body, token, expectedEpoch, allow404 = false, forkResponse = false } = {}) {
     host = validateHost(host);
     if (typeof path !== "string" || !/^\/(?:api\/v4\/|oauth\/token(?:$|\?))/.test(path) || path.includes("\\") || new URL(host + path).origin !== host) throw fail("Invalid GitLab API destination.", true);
     if (expectedEpoch !== undefined && epoch(host) !== expectedEpoch) throw fail("GitLab account changed or signed out.", true);
@@ -132,14 +132,14 @@ const KiCadGitLabReviewApi = (() => {
       const response = await fetch(host + path, { method, headers, body: body ? multipart?body:body instanceof URLSearchParams ? body.toString() : JSON.stringify(body) : undefined,
         credentials: "omit", redirect: "error", cache: "no-store", signal: controller.signal });
       if (expectedEpoch !== undefined && epoch(host) !== expectedEpoch) throw fail("GitLab account changed or signed out.");
-      if (allow404 && response.status === 404) return null;
+      if ((allow404 || forkResponse) && response.status === 404) return forkResponse?{status:404,data:null}:null;
       if (!response.ok) {
         if (response.status === 401 && token && expectedEpoch === epoch(host)) await clearToken(host);
         throw fail(`GitLab returned HTTP ${response.status}. Check repository access and token scopes.`, response.status >= 400 && response.status < 500 && ![408, 429].includes(response.status));
       }
       const text = await responseText(response,multipart?65536:1024*1024);
       if(expectedEpoch!==undefined&&epoch(host)!==expectedEpoch)throw fail('GitLab account changed or signed out.');
-      try { return JSON.parse(text); } catch { throw fail("GitLab returned an invalid API response."); }
+      try { const data=JSON.parse(text);return forkResponse?{status:response.status,data}:data; } catch { throw fail("GitLab returned an invalid API response."); }
     } finally { clearTimeout(timer);controller.abort(); }
   }
   async function startOAuth(host) {
@@ -363,7 +363,44 @@ const KiCadGitLabReviewApi = (() => {
     if(includeCapabilities&&token){try{const policy=await commentPolicyStatus(host,repository,project.id);allowed=policy.allowed===true;login=policy.login||null;}catch{warn('Chat permissions could not be verified.');}}
     for(const comment of comments)comment.canEdit=allowed&&!!login&&comment.author?.toLowerCase()===login.toLowerCase()&&!comment.bodyTruncated&&!comment.body.includes('kicad-review:');
     if(epoch(host)!==current)throw fail('GitLab account changed or signed out.',true);
-    return {...thread,comments,warnings,capabilities:{create:allowed,reply:allowed,edit:allowed,reactions:false,replyMode:'native'}};
+    let canClose=false,canReopen=false;
+    if(allowed&&includeCapabilities){try{await globalThis.KiCadManagedPolicy?.assertWrites();const fresh=await threadStateSnapshot(host,repository,number,options);if(fresh.allowed&&fresh.issue.id===issue.id&&fresh.issue.updated_at===thread.updatedAt&&fresh.issue.state===issue.state){canClose=thread.state==='open';canReopen=thread.state==='closed';}}catch{warn('Conversation state permissions could not be verified.');}}
+    if(epoch(host)!==current)throw fail('GitLab account changed or signed out.',true);
+    return {...thread,comments,warnings,capabilities:{canClose,canReopen,create:allowed,reply:allowed,edit:allowed,reactions:false,replyMode:'native'}};
+  }
+  async function threadStateSnapshot(host,repository,number,options) {
+    const project=await request(host,`/api/v4/projects/${encodeURIComponent(repository)}`,options),user=await request(host,'/api/v4/user',options);
+    if(project?.path_with_namespace!==repository||!Number.isSafeInteger(project.id)||project.id<1||!Number.isSafeInteger(user?.id)||user.id<1)throw fail('GitLab project or account identity could not be verified.',true);
+    const issue=await request(host,`/api/v4/projects/${project.id}/issues/${number}`,options);
+    if(issue?.project_id!==project.id||issue.iid!==number||!Number.isSafeInteger(issue.id)||issue.id<1||!['opened','closed'].includes(issue.state)||typeof issue.updated_at!=='string'||!Number.isFinite(Date.parse(issue.updated_at)))throw fail('GitLab returned another Issue identity.',true);
+    const levels=[project.permissions?.project_access?.access_level,project.permissions?.group_access?.access_level];
+    const allowed=issue.author?.id===user.id||Array.isArray(issue.assignees)&&issue.assignees.some(a=>a?.id===user.id)||levels.some(n=>Number.isSafeInteger(n)&&n>=15);
+    return {project,issue,user,allowed};
+  }
+  async function chatThreadState(message) {
+    await globalThis.KiCadManagedPolicy?.assertWrites();
+    if(message?.provider!==undefined&&message.provider!=='gitlab')throw fail('Invalid GitLab chat provider.',true);
+    const host=validateHost(message?.host),repository=repositoryPath(message?.repository),scope=KiCadReviewComments.normalizeScope({...message,provider:'gitlab',host,repository});
+    const {kind,number}=message.thread||{},state=message.state,expected=message.expectedUpdatedAt;
+    if(message.confirmed!==true||kind!=='issue'||!Number.isSafeInteger(number)||number<1||!['open','closed'].includes(state)||typeof expected!=='string'||!/^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d(?:\.\d{1,3})?Z$/.test(expected)||!Number.isFinite(Date.parse(expected)))throw fail('Confirm a valid Issue state and fetched revision.',true);
+    const lock='gitlab-thread-state:'+JSON.stringify([host,repository,number]);if(locks.has(lock))throw fail('A state change is already in progress.',true);
+    const work=(async()=>{
+      const current=epoch(host),headers=await authorizationHeaders(host),token=headers.Authorization?.slice(7),options={token,expectedEpoch:current};
+      if(!token)throw fail('Sign in before changing a conversation state.',true);
+      const fresh=await threadStateSnapshot(host,repository,number,options),policy=await commentPolicyStatus(host,repository,fresh.project.id);
+      if(!policy.allowed||!fresh.allowed)throw fail('Repository policy or your GitLab role blocks this state change.',true);
+      const key=lock+JSON.stringify([fresh.user.id,expected,state,scope.ref,scope.file]),saved=(await chrome.storage.local.get(key))[key];
+      if(saved?.status==='done')return {...saved.result,duplicate:true};if(saved)throw fail('Previous state change has an unconfirmed outcome. Refresh and inspect GitLab before retrying.');
+      if(fresh.issue.updated_at!==expected||(fresh.issue.state==='closed')===(state==='closed'))throw fail('Conversation state or revision changed. Refresh before changing it.',true);
+      await KiCadReviewComments.reservePublication(chrome.storage.local,JSON.stringify(['gitlab',host]),Date.now());await globalThis.KiCadManagedPolicy?.assertWrites();
+      if(epoch(host)!==current)throw fail('GitLab account changed or signed out.',true);
+      await chrome.storage.local.set({[key]:{status:'pending'}});
+      try{
+        const result=await request(host,`/api/v4/projects/${fresh.project.id}/issues/${number}`,{...options,method:'PUT',body:{state_event:state==='closed'?'close':'reopen'}});
+        if(result?.id!==fresh.issue.id||result.project_id!==fresh.project.id||result.iid!==number||result.state!==(state==='closed'?'closed':'opened')||typeof result.updated_at!=='string'||!Number.isFinite(Date.parse(result.updated_at)))throw fail('GitLab did not confirm the state change. Refresh and inspect the conversation before retrying.');
+        const response={provider:'gitlab',host,repository,kind,number,state,updatedAt:result.updated_at,url:`${host}/${repository}/-/issues/${number}`};await chrome.storage.local.set({[key]:{status:'done',result:response}});return response;
+      }catch(error){if(error.definitive)await chrome.storage.local.remove(key);throw error;}
+    })();locks.set(lock,work);try{return await work;}finally{locks.delete(lock);}
   }
   async function chatMessageWrite(message) {
     await globalThis.KiCadManagedPolicy?.assertWrites();
@@ -434,7 +471,19 @@ const KiCadGitLabReviewApi = (() => {
     if(epoch(host)!==current)throw fail('GitLab account changed or signed out.',true);
     const more=rows.length===20;return {threads,hasMore:more&&page<5,...(more&&page<5?{nextPage:page+1}:{}),warnings,...(more&&page===5?{truncated:true}:{})};
   }
-  return { validateHost, validatePolicy, authStatus, tokenStatus: authStatus, setToken, clearToken, resetAuth, authorizationHeaders, setClientId, startOAuth, commentPolicyStatus, publish, readThread, chatMessageWrite, chatThreadList };
+  async function forkRevision(message){
+    const host=validateHost(message.host||'https://gitlab.com');
+    KiCadRevisionFork.validate({...message,provider:'gitlab',host});
+    await globalThis.KiCadManagedPolicy?.assertWrites();
+    const current=epoch(host),headers=await authorizationHeaders(host),token=headers.Authorization?.slice(7);
+    if(!token)throw fail('Sign in to the selected GitLab server before creating a fork.',true);
+    await KiCadReviewComments.reservePublication(chrome.storage.local,JSON.stringify(['gitlab',host]),Date.now());
+    return KiCadRevisionFork.create({...message,provider:'gitlab',host},{
+      authorize:async()=>{await globalThis.KiCadManagedPolicy?.assertWrites();if(epoch(host)!==current)throw fail('GitLab account changed or signed out.',true);if(globalThis.KiCadGitLabHosts&&!await KiCadGitLabHosts.allowed(host))throw fail('GitLab server permission was removed.',true);const actual=await authorizationHeaders(host);if(actual.Authorization!==headers.Authorization)throw fail('GitLab session expired or changed.',true);},
+      request:(method,path,body)=>request(host,path,{method,body,token,expectedEpoch:current,forkResponse:true})
+    });
+  }
+  return { forkRevision, validateHost, validatePolicy, authStatus, tokenStatus: authStatus, setToken, clearToken, resetAuth, authorizationHeaders, setClientId, startOAuth, commentPolicyStatus, publish, readThread, chatThreadState, chatMessageWrite, chatThreadList };
 })();
 if (typeof globalThis === "object") globalThis.KiCadGitLabReviewApi = KiCadGitLabReviewApi;
 if (typeof module === "object" && module.exports) module.exports = KiCadGitLabReviewApi;

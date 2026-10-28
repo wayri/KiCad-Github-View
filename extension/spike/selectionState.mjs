@@ -2,7 +2,7 @@
 export function selectionMatcher(selection = {}, board = {}) {
   const strings = values => new Set(Array.isArray(values) ? values.filter(v => typeof v === 'string' && v) : []);
   const references = strings(selection.references), uuids = strings(selection.uuids);
-  const nets = new Set();
+  const nets = strings(selection.netNames);
   for (const code of Array.isArray(selection.netCodes) ? selection.netCodes : []) {
     if (code === 0 || code === '0' || code == null || code === '') continue;
     const name = board.nets?.[String(code)];
@@ -47,4 +47,14 @@ export function holdGesture(open, { later = setTimeout, clear = clearTimeout, de
     isHeld() { return held; },
     dispose() { stop(); pointers.clear(); start = null; }
   };
+}
+
+/** Picking modes never replace a saved terminal with its component body. */
+export function selectableRecord(record, mode = 'all') {
+  if (!record) return false;
+  const terminal = record.type === 'Pad' || (typeof record.ref === 'string' && typeof record.name === 'string' && Array.isArray(record.at) && Number.isFinite(record.width) && Number.isFinite(record.height));
+  if (mode === 'pin') return terminal;
+  if (mode === 'part') return !terminal && (record.type === 'Component' || typeof record.library === 'string');
+  if (mode === 'net') return typeof record.net === 'string' && Boolean(record.net);
+  return true;
 }

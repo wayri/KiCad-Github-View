@@ -4,6 +4,7 @@
 @media(max-width:760px){body[data-parts=open] .assembly-viewport{flex:none;min-height:0}body[data-parts=open] .board-stage{display:none}body[data-parts=open] aside{flex:1;max-height:none}}
 
 /* KiCad Symbol Fields Table: field visibility/grouping beside a dense grid. */
+.assembly-summary .bom-assembly-legend{flex-basis:100%;margin:0}.assembly-summary .assembly-badge{min-height:27px;font-size:11px;padding:3px 6px}.bom-fields-grid tr[data-group=true] td{vertical-align:top}.bom-fields-grid select[class^=assembly-]{border-left:4px solid var(--assembly-color,#8c9cad)}
 .assembly-workspace{grid-template-columns:minmax(240px,1fr) minmax(540px,2fr)}
 #partsPane{display:flex;flex-direction:column;gap:8px;padding:10px;overflow:hidden}
 #partsPane .search-label{margin:0;gap:4px}

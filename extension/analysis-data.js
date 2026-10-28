@@ -18,10 +18,10 @@
   }
   if(quoted)throw Error('Incomplete quoted CSV field.');if(value||row.length)finish();return rows;
  }
- function tablePlot(table){
+ function tablePlot(table,limit=64){
   const numericColumns=table.columns.map((_,i)=>i).filter(i=>table.rows.some(row=>numeric(row[i])!==null));
   if(numericColumns.length<2)return null;const xIndex=numericColumns[0];
-  const series=numericColumns.slice(1,65).map(i=>({name:table.columns[i],points:table.rows.map(row=>({x:numeric(row[xIndex]),y:numeric(row[i])})).filter(p=>p.x!==null).map(p=>({...p,y:p.y===null?NaN:p.y}))})).filter(s=>s.points.length);
+  const series=numericColumns.slice(1,limit+1).map(i=>({name:table.columns[i],points:table.rows.map(row=>({x:numeric(row[xIndex]),y:numeric(row[i])})).filter(p=>p.x!==null).map(p=>({...p,y:p.y===null?NaN:p.y}))})).filter(s=>s.points.length);
   return series.length?{title:table.title,xLabel:table.columns[xIndex],series}:null;
  }
  function csv(text,path){
@@ -31,7 +31,8 @@
   while(rows[0].length>1&&rows.every(row=>row.at(-1)===''))for(const row of rows)row.pop();
   const header=rows.shift().map((s,i)=>s.trim()||'Column '+(i+1));if(header.length>256)throw Error('Too many data columns.');
   if(rows.some(row=>row.length!==header.length))throw Error('CSV rows have different column counts.');if(rows.length*header.length>4000000)throw Error('Too many CSV cells; split the exported data.');
-  const table={title:path.split('/').at(-1),columns:header,rows},plot=tablePlot(table);
+  const table={title:path.split('/').at(-1),columns:header,rows},plot=tablePlot(table,256);
+  if(plot)for(const series of plot.series)series.signal=signalMetadata(series.name);
   return {kind:'Simulation / tabular data',tables:[table],plots:plot?[plot]:[],fields:[],warnings:plot?[]:['No pair of numeric columns was found for a graph.']};
  }
  function savedPlots(value){
@@ -142,24 +143,46 @@
    for(const [name,child]of Object.entries(item).sort(([a],[b])=>(/schema|sha|source|status|coverage|findings|checks|assumptions|limit|warning/.test(a)?-1:/mesh|values|samples|points|traces|bodies|field/.test(a)?1:0)-(/schema|sha|source|status|coverage|findings|checks|assumptions|limit|warning/.test(b)?-1:/mesh|values|samples|points|traces|bodies|field/.test(b)?1:0)))visit(child,key?key+'.'+name:name,depth+1);
   };result.savedSource=value;result.plots=savedPlots(value);visit(value,'',0);
   if(nodes>MAX_FIELDS)result.warnings.push('Property preview limited to '+MAX_FIELDS+' fields; full source remains available.');
-  if(/\.wbk$/i.test(path))result.warnings.push('This workbook stores simulation commands, signals and display settings, not waveform samples. Add a KiCad CSV export or saved SPICE raw data to view graphs.');
+  if(/\.wbk$/i.test(path)){result.plots=[];result.warnings.push('This workbook stores simulation commands, signals and display settings, not waveform samples. Add a KiCad CSV export or saved SPICE raw data to view graphs.');}
   return result;
+ }
+ // Keep the source spelling: case folding or stripping sheet paths can bind
+ // equal local names from unrelated sheets. Expressions are not single nets.
+ function signalMetadata(name,type){
+  const voltage=/^v\(([^(),]+)\)(\d+)?$/i.exec(name),current=/^i\(([^(),]+)\)$/i.exec(name);
+  if(voltage&&(!type||type==='voltage'))return {expression:name,quantity:'voltage',unit:'V',net:voltage[1],...(voltage[2]?{run:voltage[2]}:{})};
+  if(current&&(!type||type==='current'))return {expression:name,quantity:'current',unit:'A',device:current[1]};
+  if(type==='voltage'&&!/[(),\s]/.test(name))return {expression:name,quantity:type,unit:'V',net:name};
+  return {expression:name,quantity:type||null,unit:({time:'s',frequency:'Hz',current:'A',voltage:'V'})[type]||null};
+ }
+ function* nonemptyLines(text,start=0,end=text.length){
+  while(start<end){let next=text.indexOf('\n',start);if(next<0||next>end)next=end;const line=text.slice(start,next).trim();start=next+1;if(line)yield line;}
  }
  function raw(text){
   if(/(?:^|\n)Binary:/i.test(text))throw Error('Binary SPICE raw data is not supported. Export ASCII raw data or KiCad CSV.');
-  const variableStart=text.search(/(?:^|\n)Variables:\s*\r?\n/i),valuesStart=text.search(/(?:^|\n)Values:\s*\r?\n/i);
-  if(variableStart<0||valuesStart<0)throw Error('Expected an ASCII SPICE raw file with Variables and Values sections.');
-  const variables=text.slice(variableStart,valuesStart).split(/\r?\n/).slice(2).filter(v=>v.trim()).map(line=>{const m=line.trim().match(/^(\d+)\s+(\S+)\s+(.*)$/);if(!m)throw Error('Invalid SPICE variable declaration.');return{name:m[2],unit:m[3]};});
-  const count=Number(text.match(/No\. Variables:\s*(\d+)/i)?.[1]),points=Number(text.match(/No\. Points:\s*(\d+)/i)?.[1]);
-  if(!count||count!==variables.length||count>256||!Number.isSafeInteger(points)||points<1||points>MAX_ROWS||points*count>4000000)throw Error('Invalid or excessive SPICE dimensions.');
-  const complex=/Flags:.*\bcomplex\b/i.test(text),lines=text.slice(valuesStart).split(/\r?\n/).slice(2).filter(line=>line.trim());
-  if(lines.length!==count*points)throw Error('Incomplete SPICE raw samples.');
+  const variableStart=text.search(/^Variables:[ \t]*\r?$/im),valuesStart=text.search(/^Values:[ \t]*\r?$/im);
+  if(variableStart<0||valuesStart<=variableStart)throw Error('Expected an ASCII SPICE raw file with Variables and Values sections.');
+  if(variableStart>1024*1024||valuesStart-variableStart>1024*1024)throw Error('SPICE header exceeds the 1 MiB metadata budget.');
+  const header=text.slice(0,variableStart),field=name=>{const matches=[...header.matchAll(new RegExp('^'+name+':[ \\t]*(.*)\\r?$','gim'))];if(matches.length!==1)throw Error('Missing or duplicate SPICE '+name+' header.');return matches[0][1].trim();};
+  const dimensions=[field('No\\. Variables'),field('No\\. Points')];
+  const count=Number(dimensions[0]),points=Number(dimensions[1]),flags=field('Flags').toLowerCase().split(/\s+/),complex=flags.includes('complex');
+  if(flags.length!==1||!['real','complex'].includes(flags[0]))throw Error('Unsupported SPICE flags; export one padded real or complex plot.');
+  if(!dimensions.every(v=>/^\d+$/.test(v))||!count||count>256||!Number.isSafeInteger(points)||points<1||points>MAX_ROWS||points*count*(complex?2:1)>MAX_CELLS)throw Error('Invalid or excessive SPICE dimensions.');
+  const variables=[];for(const line of nonemptyLines(text,text.indexOf('\n',variableStart)+1,valuesStart)){const m=line.match(/^(\d+)\s+(\S+)\s+(\S+)(?:\s+(.*))?$/);if(variables.length>=count||!m||Number(m[1])!==variables.length)throw Error('Invalid SPICE variable declaration or index.');if(/\bdims=/.test(m[4]||''))throw Error('Variable-specific SPICE dimensions are not supported.');variables.push({name:m[2],unit:m[3],attributes:m[4]||'',signal:signalMetadata(m[2],m[3])});}
+  if(count!==variables.length||new Set(variables.map(v=>v.name)).size!==count)throw Error('Invalid or duplicate SPICE variables.');
+  const lines=nonemptyLines(text,text.indexOf('\n',valuesStart)+1);
   const rows=[];for(let p=0;p<points;p++){const row=[];for(let v=0;v<count;v++){
-   let value=lines[p*count+v].trim();if(v===0){const m=value.match(/^(\d+)\s+(.*)$/);if(!m||Number(m[1])!==p)throw Error('Invalid SPICE sample index.');value=m[2];}
-   const pair=value.split(',').map(numeric);if(pair.some(n=>n===null)||pair.length!==(complex?2:1))throw Error('Invalid SPICE sample value.');if(v===0)row.push(pair[0]);else row.push(...pair);
+   const next=lines.next();if(next.done)throw Error('Incomplete SPICE raw samples.');let value=next.value;if(v===0){const m=value.match(/^(\d+)\s+(.*)$/);if(!m||Number(m[1])!==p)throw Error('Invalid SPICE sample index.');value=m[2];}
+   const pair=value.split(',').map(numeric);if(pair.some(n=>n===null)||pair.length!==(complex?2:1))throw Error('Invalid SPICE sample value.');if(v===0&&complex&&pair[1]!==0)throw Error('Complex SPICE sweep axes are not supported; their imaginary values cannot be discarded.');if(v===0)row.push(pair[0]);else row.push(...pair);
   }rows.push(row);}
-  const columns=[variables[0].name+' ('+variables[0].unit+')',...variables.slice(1).flatMap(v=>complex?[v.name+' real',v.name+' imaginary']:[v.name+' ('+v.unit+')'])];
-  const table={title:'SPICE waveform samples',columns,rows};return{kind:'ASCII SPICE simulation',tables:[table],plots:[tablePlot(table)].filter(Boolean),fields:[],warnings:complex?['Complex traces are displayed as real and imaginary components.']:[]};
+  if(!lines.next().done)throw Error('Incomplete SPICE raw samples or trailing concatenated plots.');
+  const columns=[variables[0].name+' ('+variables[0].unit+')',...variables.slice(1).flatMap(v=>complex?[v.name+' real ('+v.unit+')',v.name+' imaginary ('+v.unit+')']:[v.name+' ('+v.unit+')'])];
+  const table={title:'SPICE waveform samples',columns,rows},series=[];
+  // All declared variables remain available; tablePlot's generic preview limit
+  // is inappropriate for explicitly named simulator signals.
+  for(let v=1;v<count;v++)for(let part=0;part<(complex?2:1);part++){const column=1+(v-1)*(complex?2:1)+part;series.push({name:columns[column],signal:{...variables[v].signal,component:complex?part?'imaginary':'real':'real'},points:rows.map(row=>({x:row[0],y:row[column]}))});}
+  const fields=[];for(const line of nonemptyLines(header)){if(fields.length>=MAX_FIELDS)throw Error('Too many SPICE metadata fields.');const colon=line.indexOf(':');fields.push({path:colon<0?'Header':line.slice(0,colon),value:colon<0?line:line.slice(colon+1).trim()});}
+  return{kind:'ASCII SPICE simulation',tables:[table],plots:series.length?[{title:fields.find(f=>f.path.toLowerCase()==='plotname')?.value||table.title,xLabel:columns[0],series}]:[],fields,warnings:complex?['Complex traces are displayed as real and imaginary components in their saved units.']:[]};
  }
  function uncomment(text){let output='',quoted=false,escaped=false;for(let i=0;i<text.length;i++){const c=text[i];if(quoted){output+=c;if(escaped)escaped=false;else if(c==='\\')escaped=true;else if(c==='"')quoted=false;continue;}if(c==='"'){quoted=true;output+=c;}else if(c==='/'&&text[i+1]==='/'){while(i<text.length&&text[i]!=='\n')i++;output+='\n';}else if(c==='/'&&text[i+1]==='*'){const end=text.indexOf('*/',i+2);if(end<0)throw Error('Incomplete workbook comment.');i=end+1;output+=' ';}else output+=c;}return output;}
  function workbook(text){

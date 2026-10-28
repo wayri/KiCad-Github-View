@@ -84,3 +84,19 @@ test('group mapping keeps safe matches but never guesses repeated parts or local
  assert.deepEqual(result.objects,[safe]);assert.deepEqual(result.nets,[]);assert.equal(result.errors.length,2);
  assert.ok(result.errors.every(error=>/ambiguous/.test(error)));
 });
+
+
+test('terminal cross-probe resolves saved parent identity and pin number, never a same-number neighbor',()=>{
+ const {relatedPin}=require('../paired-review.js');
+ const footprint=part('footprint','U9','fp','board.kicad_pcb','sym');
+ const pads=[{kind:'pad',uuid:'one',ownerUuid:'fp',pinNumber:'1'}, {kind:'pad',uuid:'two',ownerUuid:'fp',pinNumber:'2'}, {kind:'pad',uuid:'other',ownerUuid:'other-fp',pinNumber:'1'}];
+ const selection={kind:'pin',path:'root.kicad_sch',reference:'U1',uuid:'sym',ownerUuid:'sym',pinNumber:'1'};
+ assert.equal(validSelection(selection),true);
+ assert.deepEqual(relatedPin([footprint],[{path:footprint.path,primitives:pads}],selection),{object:footprint,primitives:[pads[0]],pinNumber:'1'});
+ assert.match(relatedPin([footprint],[{path:footprint.path,primitives:pads}],{...selection,pinNumber:'3'}).error,/unavailable/);
+ const symbol=part('symbol','U1','sym');
+ const pin={kind:'pin',uuid:'sym',ownerUuid:'sym',pinNumber:'2'};
+ assert.deepEqual(relatedPin([symbol],new Map([[symbol.path,{primitives:[pin]}]]),{kind:'pin',path:'board.kicad_pcb',reference:'U9',symbolUuid:'sym',ownerUuid:'fp',uuid:'two',pinNumber:'2'}).primitives,[pin]);
+ assert.match(relatedPin([symbol,{...symbol,path:'repeated.kicad_sch'}],[],{kind:'pin',path:'board.kicad_pcb',reference:'U9',symbolUuid:'sym',pinNumber:'2'}).error,/Multiple saved/);
+ for(const bad of [{...selection,pinNumber:''},{...selection,pinNumber:'1\n'},{...selection,ownerUuid:'a'.repeat(201)},{...selection,extra:'unsafe'}])assert.equal(validSelection(bad),false);
+});
