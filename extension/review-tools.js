@@ -34,6 +34,7 @@
  function onArc(a,angle){return a.ccw?turn(a.start-angle)<=turn(a.start-a.end)+1e-9:turn(angle-a.start)<=turn(a.end-a.start)+1e-9;}
  function snapCategory(p){
   if(p.layer==='Edge.Cuts')return 'outline';
+  if(p.hole&&['pads','vias'].includes(p.objectCategory))return p.objectCategory;
   if(p.kind==='pad'||p.kind==='pin'||p.kind==='pin-marker')return 'pads';
   if(p.kind==='via')return 'vias';
   if(['track','segment','wire','bus'].includes(p.kind))return 'tracks';
@@ -49,7 +50,7 @@
   if(options.constrain&&valid(origin)){axis=Math.abs(at.x-origin.x)>=Math.abs(at.y-origin.y)?'y':'x';point[axis]=origin[axis];}
   const allowed=q=>valid(q)&&(!axis||Math.abs(q[axis]-origin[axis])<1e-7);
   let best=null,bestDist=Infinity,bestPriority=Infinity;
-  const candidate=(q,kind,priority)=>{if(!allowed(q))return;const d=Math.hypot(q.x-point.x,q.y-point.y);if(d<=tolerance&&(priority<bestPriority||priority===bestPriority&&d<bestDist)){best={point:{x:q.x,y:q.y},kind};bestDist=d;bestPriority=priority;}};
+  const candidate=(q,kind,priority)=>{if(!allowed(q))return;const d=Math.hypot(q.x-point.x,q.y-point.y);if(d<=tolerance&&(priority<bestPriority||priority===bestPriority&&(d<bestDist||Math.abs(d-bestDist)<1e-10&&kind==='hole center'&&['circle center','pad center','via center'].includes(best?.kind)))){best={point:{x:q.x,y:q.y},kind};bestDist=d;bestPriority=priority;}};
   const segment=(a,b)=>{if(!valid(a)||!valid(b))return;const dx=b.x-a.x,dy=b.y-a.y,l=dx*dx+dy*dy;let t=l?((point.x-a.x)*dx+(point.y-a.y)*dy)/l:0;
    if(axis&&Math.abs(b[axis]-a[axis])>1e-12){t=(origin[axis]-a[axis])/(b[axis]-a[axis]);if(t<0||t>1)return;}
    else t=Math.max(0,Math.min(1,t));candidate({x:a.x+t*dx,y:a.y+t*dy},'edge',1);
@@ -59,7 +60,8 @@
    else{const angle=Math.atan2(point.y-a.y,point.x-a.x);add({x:a.x+a.r*Math.cos(angle),y:a.y+a.r*Math.sin(angle)});}
   };
   if(!options.bypass&&(corners||edges))for(const p of primitives||[]){
-   if(!p||p.hidden||p.frame||p.hole||p.type==='text'||!filters.has('all')&&!filters.has(snapCategory(p)))continue;
+   if(!p||p.hidden||p.frame||(p.hole&&!options.includeHoles)||p.type==='text'||!filters.has('all')&&!filters.has(snapCategory(p)))continue;
+   if(geometry&&options.circleCenters&&(p.type==='circle'||p.type==='pad')&&valid(p)&&Number.isFinite(p.r)&&p.r>0)candidate(p,p.hole?'hole center':'circle center',0);
    if(geometry&&['pad','via','pin','junction'].includes(p.kind)){
     if(valid(p.connectPoint))candidate(p.connectPoint,'pin',0);
     else if(valid(p.padCenter))candidate(p.padCenter,'pad center',0);

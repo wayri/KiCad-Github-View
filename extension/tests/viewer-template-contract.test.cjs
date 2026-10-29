@@ -12,7 +12,7 @@ test('every dedicated drawing template supplies net-name controls used during vi
 test('all dedicated viewers load the same-tab Draftsman model, exports and workspace before review controls',()=>{
  for(const name of ['pcb-viewer.html','schematic-viewer.html','revision-viewer.html']){
   const html=fs.readFileSync(path.join(__dirname,'..',name),'utf8');
-  for(const file of ['draftsman-model.js','draftsman-export.js','draftsman-workspace.js']){assert.equal(html.split('src="'+file+'"').length,2);assert.ok(html.indexOf('src="'+file+'"')<html.indexOf('src="review-workspace.js"'));}
+  for(const file of ['draftsman-model.js','draftsman-export.js','draftsman-snap.js','draftsman-workspace.js']){assert.equal(html.split('src="'+file+'"').length,2);assert.ok(html.indexOf('src="'+file+'"')<html.indexOf('src="review-workspace.js"'));}
   assert.match(html,/href="draftsman-workspace.css"/);
  }
 });

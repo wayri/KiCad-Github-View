@@ -12,7 +12,7 @@ Open **Draftsman** in a schematic or PCB viewer to create drawing documentation 
 4. Add outline dimensions, manual dimensions, notes or a fitted-parts BoM. Add sheets for further views rather than crowding one page.
 5. Save a draft, then download the editable document and a PDF. Keep the source project with the editable document: reopening verifies its source fingerprints.
 
-## Templates and snapping (0.12.70 source preview)
+## Templates and snapping (0.12.70 / Android 1.72)
 
 The template picker switches between **Modern** and **KiCad sheet**. The latter uses a KiCad-style boundary, coordinate-zone labels and divided title block. Saved schematic colours are retained in its drawing previews. This is an alternative built-in template, not a loader for custom KiCad `.kicad_wks` files. Existing documents without a template setting keep Modern.
 

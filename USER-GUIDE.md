@@ -4,7 +4,7 @@ Firefox and Firefox derivatives have a separate [installation, signing and Mozil
 
 Open saved KiCad projects, inspect schematics and layouts, and record review or assembly findings without a KiCad installation. Design sources are read-only during ordinary viewing. Review notes, assembly progress and variants are separate data; the VS Code conflict resolver is an explicit exception that can write a resolved drawing after confirmation.
 
-Start with the published extension **0.12.69** or Android **1.71**. Features marked **0.12.70 source preview** require the newer build; a store may still offer an earlier version. This guide distinguishes shared drawing tools from host-specific pages and account features.
+This guide covers extension **0.12.70** and Android **1.72**. Draftsman refinements marked **0.12.70** require that build (Android 1.72); a store may still offer an earlier version. This guide distinguishes shared drawing tools from host-specific pages and account features.
 
 Start with the [installation guide](docs/INSTALL.md) for Android, Windows, Linux and macOS. Check the [KiCad compatibility matrix](docs/KICAD-COMPATIBILITY.md) before reviewing a new file format. Recognized KiCad 8, 9 and 10 constructs use the shared viewer; coverage is narrower for 8/9, and newer constructs may display warnings or incomplete previews.
 
@@ -422,7 +422,11 @@ Open a drawing, then choose **Draftsman** from its tools. The editor stays in th
 
 This is a local browser source preview using the retained synthetic `inspection.kicad_pcb` test fixture. The repository/revision in this capture is test data; it does not demonstrate a live repository write or a physical Android device. No desktop or Android system bars are included.
 
-**0.12.70 source preview:** the template picker offers **Modern** and **KiCad sheet**. The KiCad-style alternative adds a worksheet boundary, coordinate zones and title block; it does not load custom `.kicad_wks` worksheets. Compact icons retain descriptive tooltips and accessible names. The magnet toggles geometry snapping: nearby saved hole/circle centres, corners, line edges and rounded edges show a cursor cue. Hold **Alt** to bypass snapping temporarily or **Shift** to constrain the second point. On touch screens, drag to preview and release to place a dimension point. **Escape** cancels placement.
+**0.12.70:** the template picker offers **Modern** and **KiCad sheet**. The KiCad-style alternative adds a worksheet boundary, coordinate zones and title block; it does not load custom `.kicad_wks` worksheets. Compact icons retain descriptive tooltips and accessible names. The magnet toggles geometry snapping: nearby saved hole/circle centres, corners, line edges and rounded edges show a cursor cue. Hold **Alt** to bypass snapping temporarily or **Shift** to constrain the second point. On touch screens, drag to preview and release to place a dimension point. **Escape** cancels placement.
+
+![Alternative KiCad-style worksheet with dimensions, notes and fitted-parts table](docs/images/draftsman/kicad-template.png)
+
+[Watch the local Draftsman walkthrough](docs/images/draftsman/walkthrough.webm): choose the KiCad-style template, preview a mounting-hole snap, add dimensions/notes/BoM, create a second sheet and export a PDF. This uses the same synthetic local fixture; it ends before any simulated provider-write workflow.
 
 **Save to folder** asks where to create a separate output folder when supported. **Save to repo** is an extension-only, account-authorized action: review the repository, new branch and path before confirming. It creates documentation on a new branch from the viewed commit. Downloading a PDF does not publish anything.
 
