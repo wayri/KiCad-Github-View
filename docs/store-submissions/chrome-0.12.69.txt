@@ -1,0 +1,46 @@
+CHROME WEB STORE UPDATE — 0.12.69
+
+UPLOAD FILE
+https://github.com/wayri/KiCad-Github-View/releases/download/v0.12.69/kicad-visual-review-chrome-edge-brave-opera-vivaldi-chromium-0.12.69.zip
+Verify against that release's SHA256SUMS.txt before upload.
+
+NAME
+KiCad Visual Review for GitHub and GitLab
+
+SHORT DESCRIPTION
+Browser-only KiCad schematic and PCB review on GitHub, GitLab.com and configured GitLab servers, with issue comments.
+
+WHAT'S NEW — 0.12.69
+- Create Draftsman-style documentation in the current viewer tab: customizable sheets/title blocks, schematic/top/bottom board views, scale, rotation, visible layers, automatic outline dimensions, snapped manual dimensions, notes and paginated fitted-parts BoM tables.
+- Download multi-sheet PDF, SVG sheets and editable Draftsman JSON, or save them to a selected folder where supported. Optional confirmed GitHub/GitLab saves create a new documentation branch from the viewed commit. Source views are raster previews, SVG annotations are vector, and PDF is raster output; native Altium/Xpedition interchange is not supported.
+- Add green Open, purple Closed and amber Skipped review states. Linked notes infer last-fetched issue/discussion state, with state filters and confirmed provider Close/Reopen actions. Skipped stays local to the review profile.
+- Choose five colour-coded severity levels: Info, Level 1, Minor, Major and Critical. New provider review messages include readable severity/state banners.
+- Use tilde/backtick/H to highlight the pointed net in 2D or 3D. X/Y/Z set axis views in 3D, Shift selects the opposite side, and F flips the PCB. Shortcuts ignore typing and input-method composition.
+- Choose persistent Universal 3D lighting for even illumination from every side.
+- Display imported KiCad ERC/DRC findings as drawing arrows/notes, with clearer phone access. This does not run KiCad ERC/DRC solvers.
+- Retain full-net internal-layer/via inspection, precise comment Locate and the previous project/BoM/simulation tools.
+
+DETAILED DESCRIPTION
+View and review saved KiCad schematics, PCB layouts and supported 3D models without leaving supported GitHub or GitLab repository pages. Open local drawings and folders from the extension, or use its project dashboard to revisit recently accessed projects.
+
+The dashboard keeps up to 50 project locations locally in the extension. Remote entries reopen their saved revision. Local entries require file reselection: history does not cache source contents or credentials. Search, filter, remove or clear recent entries.
+
+Inspect parts, pins/pads, nets and saved properties; search the project tree; compare saved revisions; and cross-select related schematic, layout and 3D objects. Selected geometry stays coloured while the surrounding drawing greys out. Object-type and top/bottom visibility filters, close-zoom pad/net labels, copper-layer controls and measurements help focus a review. All-sheet mode puts loaded schematic pages on one canvas, with optional routed hierarchy/net relationships and repeated-sheet stacks.
+
+Review the BoM with grouping, assembly/procurement status colours and a local assembly checklist. Read supported saved simulation workbooks, exported samples and reports. Saved-data inspection does not run a simulation or native KiCad ERC/DRC solver.
+
+Create revision-bound Draftsman documents with local PDF/SVG/editable exports and optional confirmed repository saves to a new branch. Documents retain source fingerprints; no KiCad design file is modified.
+
+Use project-linked comments and provider conversations, with mentions, screenshots, drafts and destination review before posting. Close/reopen GitHub issues/discussions or GitLab issues when provider permissions and administrator policy allow. Commit actions include viewing, comparison, project ZIP download, independent local copies and confirmed remote forks with a branch at the selected commit.
+
+Large-board label optimizations reduce redundant work. Results vary by board size, hardware and browser; synthetic CPU measurements are not GPU frame-rate guarantees. Missing or approximate model geometry remains identified.
+
+Public repository viewing can work without an account, subject to provider access and rate limits. Private access and publishing require provider authorization and sufficient rights. Organization policies can restrict these features. Local drawings remain available without remote authentication. This extension is not affiliated with KiCad, GitHub or GitLab.
+
+SUPPORT AND PRIVACY
+support.kivi@sigharmonic.com
+https://github.com/wayri/KiCad-Github-View/issues
+https://wayri.github.io/KiCad-Github-View/privacy.html
+
+SUBMISSION NOTE — NOT LISTING COPY
+Update the existing Chrome Store listing; do not create a duplicate. This is the Chromium package, not a source/Firefox/Safari/Android archive. Keep privacy declarations aligned with local history, provider requests, optional authentication and user-directed publication. GitHub publication and Chrome Store approval are separate steps. Older screenshots may show earlier controls; retain that note when using them.

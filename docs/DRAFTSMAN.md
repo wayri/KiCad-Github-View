@@ -30,4 +30,4 @@ Each document records its source repository/ref and SHA-256 fingerprints of the 
 
 Documents support 1–128 loaded source drawings, 20 sheets, 200 items per sheet and 64 drawing views total. Editable JSON is capped at 4 MiB. The workspace uses a shared 16-megapixel preview budget; large documents should be split into volumes. SVG rendering and PDF pixels/bytes are bounded, and repository exports are capped at 16 MiB. Inputs with unsupported versions/fields, detached dimensions, unsafe paths, remote image URLs or changed source fingerprints are rejected. No document can execute scripts or change circuit connectivity.
 
-Current source includes this workspace; previously published binaries do not gain it until the next release. Repository writes are covered by mocked provider tests, not a live publish test.
+The 0.12.69 preview includes this workspace; older binaries require an update. Repository writes are covered by mocked provider tests, not a live publish test.
