@@ -345,3 +345,8 @@ Associate ERC subsheets explicitly when their UUID cannot resolve uniquely; shee
 Use **H**, **backtick** or **~** to highlight the net under the pointer (or the selected net in 3D). In PCB views, **F** flips the board; **Shift+F** fits the drawing or focused layer. The Fit button remains available. In schematics, **F** still fits the drawing.
 
 In 3D, **X**, **Y** and **Z** select the positive axis views (right, back and top). **Shift+X**, **Shift+Y** and **Shift+Z** select the opposite views (left, front and bottom). **F** moves to the opposite side while preserving the orbit target and distance; **Shift+F** fits the isometric view and **Home** fits the top view. These shortcuts are inactive in text fields, editable content and input-method composition, and do not change saved board geometry.
+
+
+### Draftsman documentation
+
+Open **Draftsman** in the drawing toolbar for customizable multi-sheet documentation, automatic outline dimensions, snapped manual dimensions, notes and a BoM. Export PDF/SVG or an editable document, save to a selected folder, or confirm a new GitHub/GitLab documentation branch. [Draftsman workflow, source provenance and export limits](DRAFTSMAN.md).

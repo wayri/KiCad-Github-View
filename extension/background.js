@@ -1,6 +1,6 @@
 "use strict";
 
-importScripts("managed-policy.js", "parsing.js", "browser-data.js", "review-comments.js", "review-file-store.js", "credential-vault.js", "provider-oauth.js", "revision-fork.js", "github-review-api.js", "gitlab-provider.js", "gitlab-review-api.js", "gitlab-hosts.js", "mention-users.js", "environment-diagnostics.js", "project-recents.js", "native-kicad.js");
+importScripts("draftsman-model.js", "draftsman-export.js", "draftsman-repository.js", "managed-policy.js", "parsing.js", "browser-data.js", "review-comments.js", "review-file-store.js", "credential-vault.js", "provider-oauth.js", "revision-fork.js", "github-review-api.js", "gitlab-provider.js", "gitlab-review-api.js", "gitlab-hosts.js", "mention-users.js", "environment-diagnostics.js", "project-recents.js", "native-kicad.js");
 globalThis.KiCadManagedPolicy?.installFetch();
 
 let mentionService=null;
@@ -1250,6 +1250,14 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       try{const result=await (message.provider==='gitlab'?gitlabDispatch(message,sender,controller.signal):cancellableProject(message,controller.signal));checkLoad(controller.signal);return result;}
       catch(error){checkLoad(controller.signal);throw error;}
       finally{clearTimeout(timer);projectLoads.delete(key);}
+    }
+    if(message.type==='draftsman-save'){
+      if(!viewerSender(sender))throw Error('Only an extension drawing viewer can save Draftsman documents.');
+      const provider=message.provider||'github',host=provider==='github'?'https://github.com':message.host||'https://gitlab.com';
+      if(provider==='gitlab'&&(!globalThis.KiCadGitLabHosts||!await KiCadGitLabHosts.allowed(host)))throw Error('Grant access to this GitLab server in Settings first.');
+      if(senderOrigin?.startsWith('https://'))throw Error('Repository writes require the owned extension viewer.');
+      globalThis.draftsmanRepository ||= KiCadDraftsmanRepository.create({fetch:(...args)=>fetch(...args),headers:(p,h)=>p==='github'?KiCadGitHubReviewApi.authorizationHeaders():KiCadGitLabReviewApi.authorizationHeaders(h),assertWrites:()=>KiCadManagedPolicy.assertWrites()});
+      return draftsmanRepository.save({...message,provider,host});
     }
     if(message.provider==='gitlab'){const host=message.host||'https://gitlab.com';if(senderOrigin?.startsWith('https://')&&senderOrigin!==host)throw new Error('GitLab host does not match the sender.');return gitlabDispatch(message,sender);}
     if(message.comment?.anchor?.provider==='gitlab')throw new Error('GitLab annotations must use the GitLab provider.');

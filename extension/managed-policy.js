@@ -2,7 +2,7 @@
 ((root)=>{'use strict';
  const keys=['NetworkEnabled','ProviderWritesEnabled'];
  const safeLocal=new Set(['managed-policy-status','open-options','load-cancel','comment-list','comment-save','comment-delete','comment-store-status','github-auth-clear','github-auth-reset','github-device-cancel','gitlab-auth-clear','gitlab-auth-reset','gitlab-host-list','gitlab-host-remove']);
- const writes=new Set(['repository-fork-revision','github-publish-comment','comment-publish','chat-message-write','chat-thread-state','chat-reaction','open-comment-draft','claim-comment-draft']);
+ const writes=new Set(['draftsman-save','repository-fork-revision','github-publish-comment','comment-publish','chat-message-write','chat-thread-state','chat-reaction','open-comment-draft','claim-comment-draft']);
  const fail=message=>Object.assign(Error(message),{definitive:true,code:'MANAGED_POLICY'});
  async function read(){
   const area=root.chrome?.storage?.managed;

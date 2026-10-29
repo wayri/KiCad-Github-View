@@ -1356,3 +1356,16 @@ test('Open in KiCad background route accepts only bound owned viewers and uses c
  assert.equal(downloadCalls.length,0);const result=await message(scope,owned);assert.equal(result.ok,true);assert.equal(result.result.opened,true);assert.equal(downloadCalls[0].saveAs,true);assert.equal(nativeCalls[1].value.archivePath,'C:\\Downloads\\review.zip');assert.equal(listeners.size,0);
  const foreign=await message({...scope,archivePath:'C:\\private.zip'},owned);assert.equal(foreign.ok,false);assert.equal(downloadCalls.length,1);
 });
+
+
+test('Draftsman repository writes require owned viewers and explicitly allowed GitLab hosts',async t=>{
+ const old=global.KiCadDraftsmanRepository,oldService=global.draftsmanRepository,hosts=global.KiCadGitLabHosts,captured=[];
+ t.after(()=>{global.KiCadDraftsmanRepository=old;global.draftsmanRepository=oldService;global.KiCadGitLabHosts=hosts;});
+ delete global.draftsmanRepository;global.KiCadDraftsmanRepository={create:()=>({save:async value=>{captured.push(value);return{saved:true};}})};global.KiCadGitLabHosts={allowed:async host=>host==='https://gitlab.com'};
+ const request={type:'draftsman-save',provider:'github',repository:'owner/repo',ref:'a'.repeat(40),confirmed:true};
+ assert.deepEqual(await message(request,{id:'other',url:viewer.url}),{ignored:true});
+ for(const sender of [githubTab(1,'/owner/repo'),options,{id:'test-id',url:extensionOrigin+'analysis-viewer.html'},{id:'test-id',url:extensionOrigin+'pdf-viewer.html'}])assert.equal((await message(request,sender)).ok,false);
+ assert.equal(captured.length,0);assert.equal((await message(request,viewer)).ok,true);assert.equal(captured[0].host,'https://github.com');
+ assert.equal((await message({...request,provider:'gitlab',host:'https://blocked.example'},viewer)).ok,false);assert.equal(captured.length,1);
+ assert.equal((await message({...request,provider:'gitlab',host:'https://gitlab.com'},viewer)).ok,true);assert.equal(captured[1].provider,'gitlab');
+});

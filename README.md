@@ -73,6 +73,7 @@ Local browser file/folder viewing works offline once the extension is installed.
 | Understand a design | Schematic hierarchy and all-sheets overview; PCB layers, net highlighting, saved properties and parallel views |
 | Inspect layout | Snapped 2D measurements, saved copper/zone statistics, trace-length summaries, testpoint/net tables and imported ERC/DRC markers |
 | Assemble a board | BoM field tables, grouping, fitted/DNP filters, variants, progress and procurement fields; confirmed per-part and bulk resets in current source |
+| Create drawing documentation | [Draftsman workspace](docs/DRAFTSMAN.md) in current source: customizable sheets, outline/manual dimensions, notes, BoM and PDF/SVG/editable exports |
 | Inspect fabrication and documents | Gerber/drill screening, PDF viewing and supported saved analysis plots/overlays |
 | Continue a [wayriCAD workflow](https://github.com/wayri/WayriCAD) | Open supported quickTherm, quickPI and quickSI saved results; inspect exported plots, fields and reports in Android/browser |
 | Review in 3D | Supported accessible model assets; unresolved models are identified and may use approximate proxies |
