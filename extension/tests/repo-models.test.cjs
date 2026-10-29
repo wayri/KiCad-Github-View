@@ -89,3 +89,52 @@ test('library variables resolve only unique files in the imported repository inv
   assert.equal(ambiguous.models.length, 0);
   assert.ok(ambiguous.diagnostics.some(message => /multiple repository files/.test(message)));
 });
+
+test('legacy library variables and Windows paths resolve only supplied project assets', () => {
+  for (const prefix of ['${KISYS3DMOD}', '$(KISYS3DMOD)', '$(KICAD9_3DMODEL_DIR)']) {
+    const source = `(kicad_pcb (footprint "Part" (at 1 2) (model "${prefix}/Package.3dshapes/body.step")))`;
+    const result = collect(source, 'pcb/board.kicad_pcb', undefined, ['models/Package.3dshapes/body.step']);
+    assert.equal(result.models[0].path, 'models/Package.3dshapes/body.step');
+    assert.deepEqual(result.diagnostics, []);
+    const missing = collect(source, 'pcb/board.kicad_pcb');
+    assert.equal(missing.models.length, 0);
+    assert.ok(missing.diagnostics.some(message => message.includes('not included in this project')));
+  }
+});
+
+test('corrects model path casing and resolves a unique same-stem STEP/VRML alternative', () => {
+  const source = path => `(kicad_pcb (footprint "Part" (at 1 2) (model "${path}")))`;
+  const corrected = collect(source('models/body.step'), 'pcb/board.kicad_pcb', undefined, ['pcb/Models/Body.STEP']);
+  assert.equal(corrected.models[0].path, 'pcb/Models/Body.STEP');
+  assert.ok(corrected.diagnostics.some(message => message.includes('casing corrected')));
+  const alternate = collect(source('models/body.step'), 'pcb/board.kicad_pcb', undefined, ['pcb/models/body.wrl']);
+  assert.equal(alternate.models[0].path, 'pcb/models/body.wrl');
+  assert.equal(alternate.models[0].format, 'wrl');
+  assert.equal(modelPose(alternate.models[0], 0, 0, 1.6).scale[0], 2.54);
+  assert.ok(alternate.diagnostics.some(message => message.includes('repository model alternative')));
+  const library = collect(source('${KICAD9_3DMODEL_DIR}/Package.3dshapes/body.step'), 'pcb/board.kicad_pcb', undefined, ['models/Package.3dshapes/body.wrl']);
+  assert.equal(library.models[0].path, 'models/Package.3dshapes/body.wrl');
+});
+
+test('model recovery rejects ambiguous matches, arbitrary variables and unsafe library traversal', () => {
+  const source = path => `(kicad_pcb (footprint "Part" (at 1 2) (model "${path}")))`;
+  for (const paths of [['pcb/Models/body.step', 'pcb/MODELS/body.step'], ['pcb/models/body.wrl', 'pcb/models/body.stp']]) {
+    const result = collect(source('models/body.step'), 'pcb/board.kicad_pcb', undefined, paths);
+    assert.equal(result.models.length, 0);
+    assert.ok(result.diagnostics.some(message => message.includes('ambiguous')));
+  }
+  for (const path of ['${KISYS3DMOD}/../body.step', '$(HOME)/body.step', '${KISYS3DMOD}/https://host/body.step']) {
+    assert.equal(collect(source(path), 'pcb/board.kicad_pcb', undefined, ['body.step']).models.length, 0);
+  }
+  // A missing explicit path is retained when inventory is incomplete; no basename guessing.
+  const result = collect(source('models/body.step'), 'pcb/board.kicad_pcb', undefined, ['unrelated/body.wrl']);
+  assert.equal(result.models[0].path, 'pcb/models/body.step');
+});
+
+test('a capped inventory cannot establish unique model recovery', () => {
+  const paths = ['models/Package.3dshapes/body.wrl', ...Array.from({length:1999}, (_, i) => `models/other-${i}.wrl`)];
+  const source = '(kicad_pcb (footprint "Part" (at 1 2) (model "${KISYS3DMOD}/Package.3dshapes/body.step")))';
+  const result = collect(source, 'board.kicad_pcb', undefined, paths);
+  assert.equal(result.models.length, 0);
+  assert.ok(result.diagnostics.some(message => message.includes('discovery is incomplete')));
+});
