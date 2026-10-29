@@ -52,7 +52,7 @@ function find(node, predicate) { return walk(node).find(predicate); }
 function fixture(url, { pull = false, initialHidden = false, delayedCard = false,
   draft = false, draftValue = '', draftTitle = false, titleValue = '',
   draftBody = 'Review note for U3', draftHeading = '[Major] KiCad review: U3',
-  headRepository = 'owner/repo', privatePull=false, gitlabBlob = null, sessionReader=null, repoDiscovery=null } = {}) {
+  headRepository = 'owner/repo', privatePull=false, gitlabBlob = null, sessionReader=null, repoDiscovery=null, inline=true } = {}) {
   const body = new Node('body'), main = new Node('main'); body.append(main);
   let source, card, header, comments, pathNode;
   const makeCard = () => {
@@ -140,6 +140,8 @@ function fixture(url, { pull = false, initialHidden = false, delayedCard = false
     const handled = listener(message, sender, (value) => { reply = value; });
     return { handled, reply };
   };
+  // Legacy inline renderer tests request it explicitly; ordinary browsing is tested separately.
+  if(inline)send({type:pull||url.includes('/-/merge_requests/')?'focusReview':'focusInline'});
   return {
     body, main, get source() { return source; }, get card() { return card; },
     get header() { return header; }, get comments() { return comments; },
@@ -511,5 +513,19 @@ test('repository landing pages do not inject banners or scan until the toolbar i
   const ui=fixture(url);await new Promise(setImmediate);ui.tick();ui.tick();
   assert.equal(find(ui.body,node=>node.dataset.kicadVisualReview!==undefined),undefined);assert.equal(ui.messages.filter(m=>m.type==='repository-detect').length,0);assert.equal(ui.source.hidden,false);
   const reply=ui.send({type:'projectLaunchContext'}).reply;assert.equal(reply.ref,'HEAD');
+ }
+});
+
+
+test('ordinary GitHub and GitLab file/PR browsing leaves native content untouched without provider reads',async()=>{
+ for(const [url,options] of [
+  ['https://github.com/owner/repo/blob/main/board.kicad_pcb',{}],
+  ['https://github.com/owner/repo/pull/12/files',{pull:true}],
+  ['https://gitlab.com/group/sub/board/-/blob/main/board.kicad_pcb',{gitlabBlob:{projectPath:'group/sub/board',blobPath:'board.kicad_pcb',ref:'main'}}],
+  ['https://gitlab.com/group/sub/board/-/merge_requests/8/diffs',{}]
+ ]){
+  const ui=fixture(url,{...options,inline:false});await new Promise(setImmediate);ui.tick();ui.mutate();await new Promise(setImmediate);
+  assert.equal(find(ui.body,n=>n.dataset.kicadVisualReview!==undefined),undefined);assert.equal(ui.source.hidden,false);
+  assert.equal(ui.messages.filter(m=>['repository-detect','githubPull','githubFiles','gitlab-merge-request'].includes(m.type)).length,0);
  }
 });

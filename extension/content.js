@@ -25,7 +25,7 @@
     .controls button.project-detected{display:inline-flex;align-items:center;gap:6px;background:#176342;border-color:#56d99b;color:#fff;animation:kicad-project-found 1.2s ease-out 2}.project-detected::before{content:'▣';font-size:17px;line-height:1;color:#b9ffda}.controls button.project-detected:hover{background:#207b53;border-color:#adffd3}@keyframes kicad-project-found{50%{box-shadow:0 0 0 3px #56d99b55}}@media(prefers-reduced-motion:reduce){.controls button.project-detected{animation:none}}
     [hidden]{display:none!important}@media(max-width:760px){.body{grid-template-columns:1fr}.pages{flex-direction:row;border-right:0;border-bottom:1px solid #32424a;max-height:none}.pages button{white-space:nowrap}.viewport{height:55vh;min-height:280px}.viewport-row{flex-direction:column}}
   `;
-  let currentUrl = "", mount = null, sequence = 0, checkTimer = null, focusPending = false;
+  let currentUrl = "", mount = null, sequence = 0, checkTimer = null, focusPending = false, inlineRequestedUrl = null;
   let draftAttemptedUrl = "", draftClaiming = false;
 
   function request(type, extra = {}) {
@@ -312,6 +312,7 @@
   function check() {
     maybeClaimCommentDraft();
     const url = location.href.split("#")[0];
+    if(inlineRequestedUrl!==url){if(mount)clearMount();currentUrl=url;return;}
     const routeOptions={gitlabHosts:location.origin!=='https://github.com'?[location.origin||new URL(url).origin]:[]};
     const route = parse.route(url,routeOptions)||parse.repositoryRoute(url,routeOptions);
     if (url !== currentUrl) { clearMount(); currentUrl = url; if (route?.kind !== "blob") focusPending = false; }
@@ -387,6 +388,7 @@
       return false;
     }
     if (message.type === "focusReview") {
+      inlineRequestedUrl=location.href.split("#")[0];
       check();
       const focused = Boolean(mount?.host?.isConnected);
       if (focused) mount.host.scrollIntoView({ block: "start" });
@@ -396,6 +398,7 @@
     if (message.type === "focusInline") {
       const route = parse.route(location.href,{gitlabHosts:location.origin!=="https://github.com"?[location.origin]:[]});
       if (route?.kind !== "blob") { sendResponse({ focused: false }); return false; }
+      inlineRequestedUrl=location.href.split("#")[0];
       focusPending = true;
       check();
       const panel = mount?.panels?.[0]?.host;

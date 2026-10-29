@@ -4,7 +4,7 @@ Firefox and Firefox derivatives have a separate [installation, signing and Mozil
 
 Open saved KiCad projects, inspect schematics and layouts, and record review or assembly findings without a KiCad installation. Design sources are read-only during ordinary viewing. Review notes, assembly progress and variants are separate data; the VS Code conflict resolver is an explicit exception that can write a resolved drawing after confirmation.
 
-This guide covers browser extension **0.12.71**, VS Code **0.12.70+**, and Android **1.72**. Draftsman refinements marked **0.12.70** require that build (Android 1.72); a store may still offer an earlier version. This guide distinguishes shared drawing tools from host-specific pages and account features.
+This guide covers browser extension **0.12.72**, VS Code **0.12.70+**, and Android **1.72**. Draftsman refinements marked **0.12.70** require that build (Android 1.72); a store may still offer an earlier version. This guide distinguishes shared drawing tools from host-specific pages and account features.
 
 Start with the [installation guide](docs/INSTALL.md) for Android, Windows, Linux and macOS. Check the [KiCad compatibility matrix](docs/KICAD-COMPATIBILITY.md) before reviewing a new file format. Recognized KiCad 8, 9 and 10 constructs use the shared viewer; coverage is narrower for 8/9, and newer constructs may display warnings or incomplete previews.
 
@@ -101,7 +101,7 @@ Open extension Options and choose **Open local KiCad workspace**. Use **Open fil
 
 Enable **Parallel views** and choose a drawing for each pane to inspect schematic and PCB together. Matching saved part/net identities support cross-probing. Reimport browser-picked files after changing them externally: the viewer holds a saved snapshot. The optional loopback launcher has a separate **Reload saved project** action. See [local browser workspace](docs/LOCAL-VIEWER.md).
 
-In browser build **0.12.71**, click the extension toolbar icon on a GitHub or approved GitLab repository. The extension opens a new viewer tab: a single detected project opens directly; multiple projects appear in a chooser. No result shows **No KiCad project detected**. Permission/policy failures show an error, not an empty-project claim. No project-detection banner is injected at the repository top. Refresh existing repository tabs after updating. On non-repository pages the same tab offers local files, recent projects and settings.
+In browser build **0.12.72**, click the extension toolbar icon on a GitHub or approved GitLab repository. The extension opens a new viewer tab: a single detected project opens directly; multiple projects appear in a chooser. No result shows **No KiCad project detected**. Permission/policy failures show an error, not an empty-project claim. Repository, file and pull-request pages keep their native content: no automatic viewer or detection banner is injected. Refresh existing repository tabs after updating. On non-repository pages the same tab offers local files, recent projects and settings.
 
 For online review, open a supported GitHub/GitLab repository file page. Allow the extension access to the intended host. Private browser-session reads have provider-specific limits; publishing remote reviews requires a connected account and permissions. See [Git hosts and accounts](docs/GIT-HOSTS.md) and [GitHub sign-in](docs/GITHUB-SIGNIN.md).
 

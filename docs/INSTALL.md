@@ -1,12 +1,12 @@
 # Install Pocket KiView
 
-Current GitHub preview: extension 0.12.71 and Android 1.72. Download the packages below; store availability is separate from GitHub release availability.
+Current GitHub preview: extension 0.12.72 and Android 1.72. Download the packages below; store availability is separate from GitHub release availability.
 
 Choose a prepared package from the [README download buttons](../README.md#downloads) or [GitHub Releases](https://github.com/wayri/KiCad-Github-View/releases). GitHub's automatic **Source code** archives are source checkouts, not installable extensions. The source repository and release downloads are public.
 
 The browser and VS Code editions run on Windows, Linux and macOS. There is no standalone Windows `.exe`, Linux `.deb`/AppImage or macOS `.dmg` installer in the published release. Ordinary viewing does not require KiCad, Python or a rendering server. The optional local Python launcher has separate requirements.
 
-Browser/desktop 0.12.71 assets (Android 1.72 remains in release 0.12.70): `kicad-visual-review-chrome-edge-brave-opera-vivaldi-chromium-0.12.71.zip`, `kicad-visual-review-firefox-0.12.71.zip`, `kicad-visual-review-vscode-0.12.71.vsix`, and `pocket-kivi-android-phone-tablet-1.72-development.apk`.
+Browser/desktop 0.12.72 assets (Android 1.72 remains in release 0.12.70): `kicad-visual-review-chrome-edge-brave-opera-vivaldi-chromium-0.12.72.zip`, `kicad-visual-review-firefox-0.12.72.zip`, `kicad-visual-review-vscode-0.12.72.vsix`, and `pocket-kivi-android-phone-tablet-1.72-development.apk`.
 
 ## Choose your platform
 
@@ -35,7 +35,7 @@ code --install-extension wayri.kicad-visual-review
 For a downloaded VSIX, replace the filename with the actual package:
 
 ```sh
-code --install-extension ./kicad-visual-review-vscode-0.12.71.vsix
+code --install-extension ./kicad-visual-review-vscode-0.12.72.vsix
 ```
 
 On macOS, VS Code's **Shell Command: Install 'code' command in PATH** enables this optional terminal route. The Extensions UI does not need it.
@@ -72,7 +72,7 @@ For online projects, open a normal repository file page for `.kicad_sch` or `.ki
 
 ## Firefox and derivatives — Windows, Linux and macOS
 
-1. Download the [Firefox 0.12.71 ZIP](https://github.com/wayri/KiCad-Github-View/releases/download/v0.12.71/kicad-visual-review-firefox-0.12.71.zip), verify its checksum and extract it.
+1. Download the [Firefox 0.12.72 ZIP](https://github.com/wayri/KiCad-Github-View/releases/download/v0.12.72/kicad-visual-review-firefox-0.12.72.zip), verify its checksum and extract it.
 2. In desktop Firefox 128+, open `about:debugging#/runtime/this-firefox`, choose **Load Temporary Add-on**, and select the extracted `manifest.json`.
 3. Click the extension icon for local files/folders, or refresh a GitHub/GitLab design page. Preferences/Options contains optional provider accounts and approved servers.
 4. To update, reload its `about:debugging` card after replacing the extracted files and refresh design tabs. Load it again after restarting Firefox.
