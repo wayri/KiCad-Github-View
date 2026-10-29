@@ -45,12 +45,20 @@ test('PCB selection opens one drawing preview; explicit setup retains saved laye
  await view.get('fileTree').children.find(n=>n.textContent==='board.kicad_pcb').onclick();
  assert.equal(view.get('overviewPanel').hidden,false);assert.equal(view.get('drawingPreview').children.filter(n=>n.src).length,1);assert.match(view.get('drawingPreview').children.find(n=>n.src).src,/file=board.kicad_pcb/);
  view.get('openDesign').onclick();await tick();assert.equal(view.get('drawingPreview').children.filter(n=>n.src).length,1);
- assert.equal(view.bodyClasses.has('focus-drawing'),false,'project files remain visible when a drawing opens');
+ assert.equal(view.bodyClasses.has('focus-drawing'),true,'drawing owns the viewport without the outer project chrome');
  const previewFrame=view.get('drawingPreview').children.find(n=>n.src);
+ assert.equal(new URL(previewFrame.src,'https://viewer.test/').searchParams.get('projectShell'),'1');
+ previewFrame.contentWindow={};
+ const showProject={type:'kicad-review:show-project-settings'};
+ view.handlers.message({source:{},origin:'https://viewer.test',data:showProject});assert.equal(view.bodyClasses.has('focus-drawing'),true,'unrelated windows cannot open project controls');
+ view.handlers.message({source:previewFrame.contentWindow,origin:'https://evil.test',data:showProject});assert.equal(view.bodyClasses.has('focus-drawing'),true,'wrong origins cannot open project controls');
+ view.handlers.message({source:previewFrame.contentWindow,origin:'https://viewer.test',data:showProject});
+ assert.equal(view.bodyClasses.has('focus-drawing'),false);assert.equal(view.get('settingsPanel').hidden,false);
+ view.get('overviewTab').onclick();assert.equal(view.bodyClasses.has('focus-drawing'),true);
+ assert.equal(view.get('drawingPreview').children.find(n=>n.src),previewFrame,'returning to drawing preserves the iframe and drafts');
  const focusControl=view.get('drawingPreview').children[0].children[0];
- assert.equal(focusControl.textContent,'Focus drawing');assert.equal(focusControl.attributes['aria-pressed'],'false');
- focusControl.onclick();assert.equal(view.bodyClasses.has('focus-drawing'),true);assert.equal(focusControl.textContent,'Show project controls');assert.equal(focusControl.attributes['aria-pressed'],'true');
- focusControl.onclick();assert.equal(view.bodyClasses.has('focus-drawing'),false);assert.equal(view.get('drawingPreview').children.find(n=>n.src),previewFrame,'focus toggles preserve drawing and draft state');
+ focusControl.onclick();assert.equal(view.bodyClasses.has('focus-drawing'),false);
+ focusControl.onclick();assert.equal(view.bodyClasses.has('focus-drawing'),true);
 
  view.get('projectTreeToggle').onclick();assert.equal(view.get('projectTreeToggle').attributes['aria-expanded'],'false');view.get('projectTreeToggle').onclick();assert.equal(view.get('projectTreeToggle').attributes['aria-expanded'],'true');
  view.get('drawingPreview').children[0].children.find(n=>n.textContent==='Close preview').onclick();assert.equal(view.get('drawingPreview').children.length,0);

@@ -322,3 +322,14 @@ test('outer request deadline and page exit cancel pending work without requiring
  tab('Draftsman').click();await tick();assert.equal(frame.messages.at(-1).message.mode,'draftsman');
  tab('Simulation').click();await tick();assert.equal(frame.messages.at(-1).message.mode,'simulation');
  });
+
+
+test('embedded drawing Project tab returns to the owning shell without nesting a second project viewer',async()=>{
+ const view=viewer({...parameters,base:'',projectShell:'1'},()=>({ok:false,error:'unexpected read'}));
+ const drawing=view.get('headDrawing').children[0];
+ view.get('workspaceTabs').children.find(button=>button.getAttribute('aria-label')==='Project view').click();await tick();
+ assert.equal(view.parentMessages.at(-1).message.type,'kicad-review:show-project-settings');
+ assert.equal(view.get('projectWorkspace').children.length,0);
+ assert.equal(view.get('headDrawing').children[0],drawing);
+ assert.equal(view.calls.length,0);
+});
