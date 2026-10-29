@@ -1,4 +1,4 @@
-# Chrome Web Store — copy/paste fields (0.12.70)
+# Chrome Web Store — copy/paste fields (0.12.72)
 
 Upload only the extension ZIP as the package, not this folder or a VSIX. The uploaded title/summary come from the manifest. Use [CHROME-STORE-DESCRIPTION.txt](CHROME-STORE-DESCRIPTION.txt) for the Description field; the upload folder also includes it as description.txt. Its headings and bullet lists are plain text, without Markdown syntax.
 
@@ -35,7 +35,7 @@ identity:
 Run optional provider authorization through the browser authentication flow. Local and public-file review do not require an account.
 
 scripting:
-Register preview content scripts only on explicitly approved self-hosted GitLab origins.
+Register bundled content bridges only on explicitly approved self-hosted GitLab origins. Identify the user-selected repository/revision and support authorized signed-in source reads. Ordinary repository pages are not automatically replaced; executable scripts are not downloaded.
 
 downloads:
 Optional permission for the explicit Open in KiCad action. Download the selected repository revision ZIP, ask where to save it, track that download by its own ID, and verify the completed path before passing it to the optional desktop helper. It does not scan unrelated download history.
@@ -44,7 +44,7 @@ nativeMessaging:
 Optional permission for Open in KiCad after the user grants it and separately installs the dev.pocketkivi.kicad desktop helper. Check helper availability and open the user-selected completed project ZIP in local KiCad. OAuth credentials are not sent to the helper; ordinary viewing works without it.
 
 hostPermissions:
-github.com and gitlab.com provide supported inline repository review. api.github.com retrieves repository metadata/files and performs explicitly requested provider operations. raw.githubusercontent.com retrieves selected raw files/models; uploads.github.com supports selected attachment operations. Optional HTTPS origins support self-hosted GitLab servers only after user approval.
+github.com and gitlab.com identify the repository selected by the user and support authorized source reads. api.github.com retrieves repository metadata/files and performs explicitly requested provider operations. raw.githubusercontent.com retrieves selected raw files/models; uploads.github.com supports selected attachment operations. Optional HTTPS origins support self-hosted GitLab servers only after user approval.
 
 Remote code:
 Yes, I am using remote code. The optional project HTML preview displays user-selected local or repository HTML that may contain inline JavaScript. It runs inside a manifest-declared sandbox and nested sandboxed iframe, without extension API access or same-origin privileges. The preview CSP blocks network connections and external script sources. Viewer logic, libraries and Wasm decoders are bundled; project scripts do not execute in privileged extension contexts. Keep this disclosure aligned with the actual packaged sandbox behaviour rather than declaring all HTML previews static.
