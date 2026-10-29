@@ -18,6 +18,7 @@ FILES.update({'draftsman-model.js','draftsman-snap.js','draftsman-export.js','dr
 FILES.update({'overview-routing.js','dashboard.html','dashboard.css','dashboard.js','project-recents.js'})
 FILES.update({'workspace-chrome.css','workspace-chrome.js','revision-actions.js','revision-fork.js','analysis-simulation.js','analysis-simulation.css'})
 FILES.update({'provider-oauth.js','provider-oauth.json'})
+FILES.update({'project-launch.js','project-launcher.html','project-launcher.js','project-launcher.css'})
 FILES.update({'native-kicad.js', 'comment-focus.js'})
 FILES.update({'chat-content.js','chat-panel.js','chat-panel.css','review-sync.js','work-board-panel.js'})
 FILES.update({'compact-surfaces.css','compact-surfaces.js'})

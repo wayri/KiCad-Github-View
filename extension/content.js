@@ -172,38 +172,6 @@
       focusPending = false;
     }
   }
-  async function activateRepository(route,token){
-    const scripts=[...document.querySelectorAll('script[type="application/json"]')].map(node=>node.textContent);
-    const app=document.querySelector('#js-view-blob-app,#js-repository-blob-header-app,#js-repository-tree');
-    const ref=parse.repositoryRef(route,scripts,app?.dataset);
-    const top=mountBefore(document.querySelector('main')),owner={kind:'repository',host:top.host,panels:[],empty:false};mount=owner;
-    const heading=element('div','top repository-bar'),controls=element('div','controls'),status=element('div','status','Checking this repository for KiCad projects…'),slot=element('div');
-    const refresh=button('Check again','',()=>{if(mount!==owner)return;clearMount();activateRepository(route,sequence);});
-    const repositoryTitle=element('div','title','KiCad projects');
-    heading.append(repositoryTitle,controls);controls.append(refresh);top.box.append(heading,status,slot);
-    if(!ref){setStatus(status,'Select the repository root or refresh this branch page to identify its exact branch.',true);return;}
-    try{
-      const result=await request('repository-detect',{repository:route.repository,ref,...(route.provider?{provider:route.provider,host:route.host}:{})});
-      if(token!==sequence||mount!==owner)return;
-      if(!/^[a-f0-9]{40}$/i.test(result?.sha||'')||!Array.isArray(result.projects))throw Error('Repository discovery did not return a pinned revision.');
-      const files=result.projects.filter(file=>typeof file==='string'&&parse.filePath(file)&&/\.kicad_(pro|sch|pcb)$/i.test(file));
-      if(!files.length){if(result.truncated){setStatus(status,'No KiCad project found in this partial repository listing. Additional folders may contain projects. Open a KiCad file directly or connect your account for a fuller listing.');return;}owner.empty=true;top.host.remove();return;}
-      const picker=element('select');picker.setAttribute('aria-label','KiCad project or standalone drawing');
-      for(const file of files){const option=element('option','',file);option.value=file;picker.append(option);}picker.value=files[0];
-      const open=button('Open KiCad project','active project-detected',()=>{
-        if(mount!==owner||!files.includes(picker.value))return;
-        for(const panel of [...owner.panels])disposePanel(panel,owner);
-        owner.panels.push(panelFor({repository:route.repository,file:picker.value,head:result.sha,...(route.provider?{provider:route.provider,host:route.host}:{})},null,picker.value,true,slot,controls));
-      });
-      open.title='KiCad project detected — open the selected project';
-      open.setAttribute('aria-label','KiCad project detected: open selected project');
-      controls.prepend(picker,open);
-      setStatus(status,`${files.length} KiCad ${files.length===1?'entry':'entries'} · ${result.ref||ref} · ${result.sha.slice(0,10)}${result.truncated?' · Partial listing: additional projects may exist.':''}`);
-      repositoryTitle.textContent=`KiCad · ${files.length}`;
-      repositoryTitle.title=status.textContent; picker.title=status.textContent;
-      status.hidden=!result.truncated;
-    }catch(error){if(token===sequence&&mount===owner)setStatus(status,'KiCad project discovery unavailable: '+error.message+'. Check access in extension settings, then retry.',true);}
-  }
   async function activateMerge(route,token){
     const pageUrl=location.href.split('#')[0],target=document.querySelector('main');if(!target)return;
     const top=mountBefore(target),owner={kind:'merge',host:top.host,panels:[]};mount=owner;
@@ -355,10 +323,6 @@
       reconcilePullCards(mount);
       return;
     }
-    if(mount?.kind==='repository'&&route?.kind==='repository'){
-      if(!mount.empty&&!mount.host.isConnected){const main=document.querySelector('main');if(main?.parentNode)main.parentNode.insertBefore(mount.host,main);}
-      return;
-    }
     if(mount?.kind==='merge'&&route?.kind==='merge'){
       if(!mount.host.isConnected){const main=document.querySelector('main');if(main?.parentNode)main.parentNode.insertBefore(mount.host,main);}
       return;
@@ -374,7 +338,7 @@
     }
     if (!route || mount) return;
     const token = sequence;
-    if (route.kind === "repository") activateRepository(route,token);
+    if (route.kind === "repository") return;
     else if (route.kind === "merge") activateMerge(route,token);
     else if (route.kind === "blob") activateBlob(route, token);
     else activatePull(route, token);
@@ -408,6 +372,13 @@
     if (message.type === 'gitlab-session-read') {
       if(sender.tab || location.origin==='https://github.com' || !globalThis.KiCadGitLabSessionReader)return false;
       return sessionRead(globalThis.KiCadGitLabSessionReader);
+    }
+    if(message.type==='projectLaunchContext'){
+      const options={gitlabHosts:location.origin!=='https://github.com'?[location.origin]:[]};
+      const route=parse.route(location.href,options),repository=parse.repositoryRoute(location.href,options);
+      if(route?.kind==='blob'){sendResponse(embedded());return false;}
+      const scripts=[...document.querySelectorAll('script[type="application/json"]')].map(node=>node.textContent),app=document.querySelector('#js-view-blob-app,#js-repository-blob-header-app,#js-repository-tree');
+      sendResponse(repository?{ref:parse.repositoryRef(repository,scripts,app?.dataset)}:null);return false;
     }
     if (message.type === "viewerContext") {
       const route = parse.route(location.href,{gitlabHosts:location.origin!=="https://github.com"?[location.origin]:[]});

@@ -1,6 +1,6 @@
 "use strict";
 
-importScripts("draftsman-model.js", "draftsman-export.js", "draftsman-repository.js", "managed-policy.js", "parsing.js", "browser-data.js", "review-comments.js", "review-file-store.js", "credential-vault.js", "provider-oauth.js", "revision-fork.js", "github-review-api.js", "gitlab-provider.js", "gitlab-review-api.js", "gitlab-hosts.js", "mention-users.js", "environment-diagnostics.js", "project-recents.js", "native-kicad.js");
+importScripts("draftsman-model.js", "draftsman-export.js", "draftsman-repository.js", "managed-policy.js", "parsing.js", "project-launch.js", "browser-data.js", "review-comments.js", "review-file-store.js", "credential-vault.js", "provider-oauth.js", "revision-fork.js", "github-review-api.js", "gitlab-provider.js", "gitlab-review-api.js", "gitlab-hosts.js", "mention-users.js", "environment-diagnostics.js", "project-recents.js", "native-kicad.js");
 globalThis.KiCadManagedPolicy?.installFetch();
 
 let mentionService=null;
@@ -971,38 +971,19 @@ async function cacheProviderAnnotations(scope,result,{sourceUrl=null,complete=fa
   return result;
 }
 
+function launcherSender(sender){return sender?.id===chrome.runtime.id&&(sender.frameId??0)===0&&sender.url?.split(/[?#]/,1)[0]===chrome.runtime.getURL('project-launcher.html');}
 async function openFromAction(tab) {
-  const home = () => chrome.tabs.create({ url: chrome.runtime.getURL('dashboard.html') });
-  if(globalThis.KiCadManagedPolicy){const policy=await KiCadManagedPolicy.read();if(!policy.valid||!policy.networkEnabled)return home();}
-  const focus = async type => {
-    try { if ((await chrome.tabs.sendMessage(tab.id, { type }))?.focused) return; } catch {}
-    return home();
-  };
-  if (!Number.isInteger(tab?.id) || typeof tab.url !== "string") return home();
-  let page;
-  try { page = new URL(tab.url); } catch { return home(); }
-  let gitlab = false;
-  if (page.protocol === 'https:' && page.origin !== 'https://github.com') {
-    try { gitlab = Boolean(await globalThis.KiCadGitLabHosts?.allowed(page.origin)); } catch {}
-  }
-  if (gitlab) {
-    if (page.pathname.includes('/-/blob/')) return focus('focusInline');
-    if (/\/-\/merge_requests\/[1-9][0-9]*(?:\/|$)/.test(page.pathname)) return focus('focusReview');
-    return home();
-  }
-  if (page.origin !== "https://github.com") return home();
-  const path = page.pathname.split("/").filter(Boolean);
-  if (path.length >= 4 && /^[A-Za-z0-9_.-]+$/.test(path[0]) && /^[A-Za-z0-9_.-]+$/.test(path[1]) &&
-      path[2] === "pull" && /^[1-9][0-9]*$/.test(path[3])) {
-    const filesUrl = `https://github.com/${path[0]}/${path[1]}/pull/${path[3]}/files`;
-    if (page.pathname !== new URL(filesUrl).pathname) await chrome.tabs.update(tab.id, { url: filesUrl });
-    else await focus('focusReview');
-    return;
-  }
-  if (path[2] === "blob") {
-    return focus('focusInline');
-  }
-  return home();
+  const open=params=>chrome.tabs.create({url:chrome.runtime.getURL('project-launcher.html')+'?'+new URLSearchParams(params)});
+  if(!Number.isInteger(tab?.id)||typeof tab.url!=='string')return open({});
+  let page;try{page=new URL(tab.url);}catch{return open({});}
+  if(page.protocol!=='https:'||page.origin!=='https://github.com'&&!(await globalThis.KiCadGitLabHosts?.allowed(page.origin)))return open({});
+  let hint;try{hint=await chrome.tabs.sendMessage(tab.id,{type:'projectLaunchContext'},{frameId:0});}catch{}
+  try{
+    const context=KiCadProjectLaunch.context(tab.url,hint);
+    if(!context)return open({});
+    if(context.kind==='drawing')return chrome.tabs.create({url:KiCadProjectLaunch.viewerURL(context,context.file,p=>chrome.runtime.getURL(p))});
+    return open({source:context.source,ref:context.ref});
+  }catch(error){return open({error:error.message});}
 }
 
 chrome.action.onClicked.addListener((tab) => openFromAction(tab).catch(async error => {
@@ -1171,9 +1152,10 @@ async function gitlabDispatch(message, sender,signal) {
 }
 
 async function repositoryDetection(message,sender){
-  if(sender?.id!==chrome.runtime.id||!Number.isInteger(sender.tab?.id)||(sender.frameId??0)!==0)throw Error('Repository discovery requires its top-level host page.');
+  const launcher=launcherSender(sender);
+  if(!launcher&&(sender?.id!==chrome.runtime.id||!Number.isInteger(sender.tab?.id)||(sender.frameId??0)!==0))throw Error('Repository discovery requires its top-level host page.');
   const host=message.provider==='gitlab'?(message.host||'https://gitlab.com'):'https://github.com';
-  const route=KiCadGitHub.repositoryRoute(sender.url,{gitlabHosts:message.provider==='gitlab'?[host]:[]});
+  const route=KiCadGitHub.repositoryRoute(launcher?message.source:sender.url,{gitlabHosts:message.provider==='gitlab'?[host]:[]});
   if(!route||route.repository!==message.repository||(route.provider||'github')!==(message.provider||'github')||(route.host||'https://github.com')!==host)throw Error('Repository discovery does not match the host page.');
   let ref=message.ref;
   if(!KiCadBrowserData.validRef(ref)||(!route.tail&&ref!=='HEAD')||route.tail&&!(route.tail.join('/')===ref||route.tail.join('/').startsWith(ref+'/')))throw Error('Repository branch does not match the host page.');
@@ -1215,7 +1197,7 @@ function nativeKiCad(){const api=globalThis.KiCadNativeKiCad||(typeof require===
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   const customHostSender=sender?.id===chrome.runtime.id&&typeof sender.url==='string'&&sender.url.startsWith('https://')&&message?.provider==='gitlab';
-  if (!(senderAllowed(sender) || pdfSender(sender) || analysisSender(sender) || optionsSender(sender)||dashboardSender(sender)||localWorkspaceSender(sender)||customHostSender) || !message || typeof message !== "object") return false;
+  if (!(senderAllowed(sender) || pdfSender(sender) || analysisSender(sender) || optionsSender(sender)||dashboardSender(sender)||localWorkspaceSender(sender)||launcherSender(sender)||customHostSender) || !message || typeof message !== "object") return false;
   (async () => {
     if(message.type==='native-kicad-cancel')return nativeKiCad().cancel(message,sender);
     if(message.type?.startsWith('project-recents-')||message.type?.startsWith('dashboard-'))return dashboardDispatch(message,sender);
@@ -1224,6 +1206,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       if(!optionsSender(sender))throw Error('Only extension settings can inspect administrator policy.');
       return KiCadManagedPolicy.read();
     }
+    if(launcherSender(sender)&&message.type!=='repository-detect')throw Error('The project launcher only discovers repository projects.');
     await globalThis.KiCadManagedPolicy?.authorize(message);
     if(message.type==='native-kicad-open')return nativeKiCad().open(message,sender);
     if(message.type==='repository-detect')return repositoryDetection(message,sender);

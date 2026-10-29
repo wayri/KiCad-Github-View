@@ -11,6 +11,7 @@ const storageArea = (store) => ({
   remove: async (key) => { for (const item of Array.isArray(key) ? key : [key]) store.delete(item); }
 });
 global.KiCadGitHub=require('../parsing.js');
+global.KiCadProjectLaunch=require('../project-launch.js');
 global.KiCadBrowserData = require('../browser-data.js');
 global.KiCadReviewComments = require('../review-comments.js');
 global.KiCadGitHubReviewApi = require('../github-review-api.js');
@@ -580,39 +581,30 @@ test('public issue reader surfaces rate limits and bounded scan warnings', async
   assert.ok(selected.result.warnings.some(warning=>/500 comments/.test(warning)));
 });
 
-test('toolbar action focuses the inline blob, navigates a PR, and opens its workspace elsewhere', async () => {
-  calls.created.length = calls.updated.length = calls.messages.length = 0;
-  calls.response = { focused: true };
-  await background.openFromAction({ id: 3, url: 'https://github.com/owner/repo/blob/main/design/root.kicad_sch' });
-  assert.deepEqual(calls.messages[0], { id: 3, message: { type: 'focusInline' } });
-  assert.equal(calls.created.length, 0);
-  await background.openFromAction({ id: 3, url: 'https://github.com/owner/repo/pull/12' });
-  assert.equal(calls.updated[0].url, 'https://github.com/owner/repo/pull/12/files');
-  await background.openFromAction({ id: 3, url: 'https://github.com/owner/repo/pull/12/files' });
-  assert.deepEqual(calls.messages[1], { id: 3, message: { type: 'focusReview' } });
-  await background.openFromAction({ id: 3, url: 'https://github.com/owner/repo' });
-  await background.openFromAction({ id: 3, url: 'https://example.com/' });
-  assert.deepEqual(calls.created,[{url:extensionOrigin+'dashboard.html'},{url:extensionOrigin+'dashboard.html'}]);
-  assert.equal(calls.messages.length, 2);
-  assert.equal(typeof actionListener, 'function');
+test('toolbar opens a standalone drawing or repository launcher without navigating the host page', async()=>{
+ calls.created.length=calls.updated.length=calls.messages.length=0;calls.response=null;
+ await background.openFromAction({id:3,url:'https://github.com/owner/repo/blob/main/design/root.kicad_sch'});
+ let url=new URL(calls.created[0].url);assert.equal(url.pathname,'/browser-viewer.html');assert.equal(url.searchParams.get('file'),'design/root.kicad_sch');assert.equal(url.searchParams.get('head'),'main');
+ await background.openFromAction({id:3,url:'https://github.com/owner/repo'});
+ url=new URL(calls.created[1].url);assert.equal(url.pathname,'/project-launcher.html');assert.equal(url.searchParams.get('source'),'https://github.com/owner/repo');assert.equal(url.searchParams.get('ref'),'HEAD');
+ await background.openFromAction({id:3,url:'https://github.com/owner/repo/pull/12'});
+ assert.equal(new URL(calls.created[2].url).pathname,'/project-launcher.html');assert.equal(calls.updated.length,0);assert.ok(calls.messages.every(c=>c.message.type==='projectLaunchContext'));assert.equal(typeof actionListener,'function');
 });
-test('toolbar action opens a visible workspace for missing URLs and unavailable inline viewers', async t=>{
- const before=chrome.tabs.sendMessage;t.after(()=>{chrome.tabs.sendMessage=before;});calls.created.length=0;
- for(const tab of [undefined,{id:3},{id:3,url:'not a URL'},{id:3,url:'chrome://newtab/'}])await background.openFromAction(tab);
- calls.response={focused:false};await background.openFromAction({id:3,url:'https://github.com/owner/repo/blob/main/readme.md'});
- chrome.tabs.sendMessage=async()=>{throw Error('No receiving content script');};
- await background.openFromAction({id:3,url:'https://github.com/owner/repo/blob/main/board.kicad_pcb'});
- await background.openFromAction({id:3,url:'https://github.com/owner/repo/pull/12/files'});
- assert.equal(calls.created.length,7);assert.ok(calls.created.every(c=>c.url===extensionOrigin+'dashboard.html'));
+
+test('toolbar always opens visible feedback even when content scripts or URLs are unavailable',async t=>{
+ const before=chrome.tabs.sendMessage;t.after(()=>{chrome.tabs.sendMessage=before;});chrome.tabs.sendMessage=async()=>{throw Error('No receiving content script');};calls.created.length=0;
+ for(const tab of [undefined,{id:3},{id:3,url:'not a URL'},{id:3,url:'chrome://newtab/'},{id:3,url:'https://example.com/'}])await background.openFromAction(tab);
+ assert.equal(calls.created.length,5);assert.ok(calls.created.every(c=>new URL(c.url).pathname==='/project-launcher.html'));
+ await background.openFromAction({id:3,url:'https://github.com/owner/repo'});assert.equal(new URL(calls.created[5].url).searchParams.get('ref'),'HEAD');
 });
-test('GitLab toolbar action focuses drawings and merge requests with a visible fallback',async t=>{
+
+test('GitLab toolbar keeps namespace and host while requiring approved host access',async t=>{
  const previous=global.KiCadGitLabHosts;t.after(()=>{global.KiCadGitLabHosts=previous;});global.KiCadGitLabHosts={allowed:async host=>host==='https://gitlab.com'};
- calls.created.length=0;calls.messages.length=0;calls.response={focused:true};
- await background.openFromAction({id:3,url:'https://gitlab.com/group/project/-/blob/main/board.kicad_pcb'});
- await background.openFromAction({id:3,url:'https://gitlab.com/group/project/-/merge_requests/12'});
- assert.deepEqual(calls.messages.map(c=>c.message.type),['focusInline','focusReview']);assert.equal(calls.created.length,0);
- calls.response={focused:false};await background.openFromAction({id:3,url:'https://gitlab.com/group/project/-/blob/main/readme.md'});
- await background.openFromAction({id:3,url:'https://gitlab.com/group/project'});assert.equal(calls.created.length,2);
+ calls.created.length=0;calls.response={repository:'group/sub/project',file:'design/board.kicad_pcb',head:'main'};
+ await background.openFromAction({id:3,url:'https://gitlab.com/group/sub/project/-/blob/main/design/board.kicad_pcb'});
+ let url=new URL(calls.created[0].url);assert.equal(url.pathname,'/browser-viewer.html');assert.equal(url.searchParams.get('provider'),'gitlab');assert.equal(url.searchParams.get('repository'),'group/sub/project');
+ await background.openFromAction({id:3,url:'https://gitlab.com/group/sub/project'});url=new URL(calls.created[1].url);assert.equal(url.searchParams.get('source'),'https://gitlab.com/group/sub/project');
+ await background.openFromAction({id:3,url:'https://not-approved.example/group/project'});assert.equal(new URL(calls.created[2].url).searchParams.has('source'),false);
 });
 
 test('private annotation readback uses the connected account and loads comments beyond the first page',async t=>{
@@ -1368,4 +1360,14 @@ test('Draftsman repository writes require owned viewers and explicitly allowed G
  assert.equal(captured.length,0);assert.equal((await message(request,viewer)).ok,true);assert.equal(captured[0].host,'https://github.com');
  assert.equal((await message({...request,provider:'gitlab',host:'https://blocked.example'},viewer)).ok,false);assert.equal(captured.length,1);
  assert.equal((await message({...request,provider:'gitlab',host:'https://gitlab.com'},viewer)).ok,true);assert.equal(captured[1].provider,'gitlab');
+});
+
+
+test('owned launcher discovery is read-only, source-bound and distinct from website injection',async t=>{
+ const launcher={id:'test-id',frameId:0,tab:{id:7},url:extensionOrigin+'project-launcher.html'};
+ const request={type:'repository-detect',source:'https://github.com/owner/board',repository:'owner/board',ref:'HEAD'};
+ const urls=[];withFetch(t,async url=>{urls.push(String(url));if(url==='https://api.github.com/repos/owner/board')return json({default_branch:'main'});if(url.includes('/git/commits/'))return json({sha:sha('a'),tree:{sha:sha('b')}});if(url.includes('/commits/'))return new Response(sha('a'));if(url.includes('/git/trees/'))return json({sha:sha('b'),truncated:false,tree:[{path:'board.kicad_pro',type:'blob',mode:'100644',sha:sha('c')}]});throw Error('Unexpected request '+url);});
+ const result=await message(request,launcher);assert.equal(result.ok,true,result.error);assert.deepEqual(result.result.projects,['board.kicad_pro']);
+ const before=urls.length;assert.equal((await message({...request,source:'https://evil.example/owner/board'},launcher)).ok,false);assert.equal((await message({...request,repository:'owner/other'},launcher)).ok,false);assert.equal((await message({...request,ref:'other'},launcher)).ok,false);assert.equal(urls.length,before);
+ assert.equal((await message({type:'github-thread-read'},launcher)).ok,false);assert.equal((await message(request,{...launcher,frameId:1})).ignored,true);
 });
