@@ -9,6 +9,7 @@ global.fetch=async()=>{networkCalls++;return new Response('{}');};
 global.importScripts=()=>{};
 global.KiCadGitHubReviewApi={tokenStatus:async()=>{credentialCalls++;return {configured:true};}};
 const policy=require('../managed-policy.js');
+require('../github-project-view.js');
 require('../background.js');
 const viewer={id:'test',url:chrome.runtime.getURL('browser-viewer.html')},options={id:'test',url:chrome.runtime.getURL('options.html')};
 const message=(value,sender=viewer)=>new Promise(resolve=>{if(!listener(value,sender,resolve))resolve({ignored:true});});

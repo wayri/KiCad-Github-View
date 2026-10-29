@@ -1,6 +1,6 @@
 "use strict";
 
-importScripts("draftsman-model.js", "draftsman-export.js", "draftsman-repository.js", "managed-policy.js", "parsing.js", "project-launch.js", "browser-data.js", "review-comments.js", "review-file-store.js", "credential-vault.js", "provider-oauth.js", "revision-fork.js", "github-review-api.js", "gitlab-provider.js", "gitlab-review-api.js", "gitlab-hosts.js", "mention-users.js", "environment-diagnostics.js", "project-recents.js", "native-kicad.js");
+importScripts("github-session-reader.js", "github-project-buffer.js", "github-project-view.js", "draftsman-model.js", "draftsman-export.js", "draftsman-repository.js", "managed-policy.js", "parsing.js", "project-launch.js", "browser-data.js", "review-comments.js", "review-file-store.js", "credential-vault.js", "provider-oauth.js", "revision-fork.js", "github-review-api.js", "gitlab-provider.js", "gitlab-review-api.js", "gitlab-hosts.js", "mention-users.js", "environment-diagnostics.js", "project-recents.js", "native-kicad.js");
 globalThis.KiCadManagedPolicy?.installFetch();
 
 let mentionService=null;
@@ -54,22 +54,10 @@ function linkedReadController(signal){
   signal?.addEventListener('abort',abort,{once:true});
   return {controller,dispose:()=>signal?.removeEventListener('abort',abort)};
 }
-async function cancellableProject(message,signal){
- const {repository,ref,file}=message;
- if(message.type==='project-inventory')return projectInventory(repository,ref,file,signal);
- if(message.type==='project-file')return projectFile(repository,ref,file,signal);
- revisionScope(repository,ref,file);
- if(message.type==='revision-resolve')return revisionResolve(repository,ref,file,signal);
- const read=(repo,sha,path)=>githubFile(repo,sha,path,signal);
- const directory=(repo,sha,path)=>githubDirectory(repo,sha,path,false,signal);
- try{
-  if(/\.kicad_sch$/i.test(file)){
-   const snapshot=await githubSchematicSnapshot(repository,ref,signal);checkLoad(signal);
-   return recentSnapshot(await KiCadBrowserData.loadProject(repository,snapshot.sha,file,read,directory,'github',()=>githubSchematicInventory(repository,snapshot.sha,snapshot.treeSha,signal)),snapshot.sha);
-  }
-  return await KiCadBrowserData.loadProject(repository,ref,file,read,directory);
- }catch(error){checkLoad(signal);if(!/HTTP (401|403|404)|rate limit/i.test(error.message))throw error;return githubSessionProject(repository,ref,file,error,signal);}
-}
+let githubProjectBuffer=null,githubProjectView=null;
+function projectBuffer(){return githubProjectBuffer||=(KiCadGitHubProjectBuffer.create({readSession:(...args)=>githubSessionRead(...args),fetch:(...args)=>fetch(...args),assertNetwork:()=>globalThis.KiCadManagedPolicy?.assertNetwork()}));}
+function projectView(){return githubProjectView||=(KiCadGitHubProjectView.create({buffer:projectBuffer()}));}
+async function cancellableProject(message,signal){return projectView().read(message,signal);}
 // Reads remain in an isolated content script on the already-open repository tab.
 // Cookies and signed raw URLs never enter extension messages or storage.
 async function sessionLoadMessage(tabId,message,signal){
@@ -90,7 +78,10 @@ async function githubSessionRead(repository,ref,action,path='',limit=8*1024*1024
     let reply;try{reply=await sessionLoadMessage(tab.id,{type:'github-session-read',repository,ref,action,path,limit:Math.min(limit,32*1024*1024)},signal);}catch{checkLoad(signal);continue;}
     if(!reply?.ok)continue;
     const result=reply.result;
-    if(action==='file') {
+    if(action==='asset') {
+      if(result===null)return null;
+      if(result?.sha?.toLowerCase()!==ref.toLowerCase()||typeof result.base64!=='string'||result.base64.length>Math.ceil(limit*4/3)+4||!/^[A-Za-z0-9+/]*={0,2}$/.test(result.base64))throw Error('Invalid GitHub session asset response.');
+    } else if(action==='file') {
       if(result===null)return null;
       if(result?.sha?.toLowerCase()!==ref.toLowerCase()||typeof result.content!=='string'||new TextEncoder().encode(result.content).byteLength>limit)throw Error('Invalid GitHub session file response.');
     } else if(!SHA.test(result?.sha||'')||SHA.test(ref)&&result.sha.toLowerCase()!==ref.toLowerCase()||!Array.isArray(result.items)||result.items.length>1000)throw Error('Invalid GitHub session revision response.');
@@ -1176,17 +1167,8 @@ async function repositoryDetection(message,sender){
     }
     listing.truncated=Boolean(listing.hasMore||listing.warnings.length);
   }else{
-    try{
-      if(ref==='HEAD'){
-        const metadata=await githubDiscoveryJson(`https://api.github.com/repos/${message.repository}`,1024*1024);ref=metadata?.default_branch;
-        if(!KiCadBrowserData.validRef(ref))throw Error('GitHub did not return a default branch.');
-      }
-      listing=await repositoryTree(message.repository,ref);
-    }catch(error){
-      if(!/HTTP (401|403|404)|rate limit/i.test(error.message))throw error;
-      const session=await githubSessionInventory(message.repository,ref,error,path=>/\.kicad_(pro|sch|pcb)$/i.test(path)&&KiCadGitHub.filePath(path));
-      listing={sha:session.snapshotRef,entries:session.files.map(file=>({path:file.path,type:'blob'})),warnings:session.warnings,truncated:session.warnings.some(warning=>/limited|incomplete|limit reached/i.test(warning))};
-    }
+    const snapshot=await projectBuffer().inventory(message.repository,ref);
+    listing={sha:snapshot.snapshotRef,entries:snapshot.files.map(item=>({path:item.path,type:'blob'})),warnings:snapshot.warnings,truncated:snapshot.warnings.some(warning=>/incomplete|limited|limit reached/i.test(warning))};
   }
   const projects=KiCadGitHub.detectedProjects(listing.entries);
   return {repository:message.repository,ref,sha:listing.sha,projects,truncated:Boolean(listing.truncated||listing.hasMore||projects.length===100),warnings:[...new Set(listing.warnings||[])]};
@@ -1244,6 +1226,13 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     }
     if(message.provider==='gitlab'){const host=message.host||'https://gitlab.com';if(senderOrigin?.startsWith('https://')&&senderOrigin!==host)throw new Error('GitLab host does not match the sender.');return gitlabDispatch(message,sender);}
     if(message.comment?.anchor?.provider==='gitlab')throw new Error('GitLab annotations must use the GitLab provider.');
+    if(KiCadGitHubProjectView.types.has(message.type)){
+      if(message.type==='project'){
+        if(optionsSender(sender))throw Error('Options cannot load KiCad projects.');
+        authorizeHostRead(message,sender);
+      }else if(!viewerSender(sender)&&!pdfSender(sender)&&!analysisSender(sender))throw Error('Only extension viewers can read project snapshots.');
+      return projectView().read(message);
+    }
     switch (message.type) {
       case 'repository-fork-revision':
         if(!viewerSender(sender))throw Error('Only extension viewers can create a repository fork.');
@@ -1435,7 +1424,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 });
 
 if (typeof module === "object" && module.exports) {
-  module.exports = { githubFile, githubPull, githubFiles, githubDirectory, githubSchematicInventory, drawingFiles, openViewerWindow,
+  module.exports = { projectBuffer, projectView, githubFile, githubPull, githubFiles, githubDirectory, githubSchematicInventory, drawingFiles, openViewerWindow,
     githubAsset, designChanges, senderAllowed, viewerSender, analysisSender, optionsSender, dashboardSender, dashboardDispatch, recordLoadedProject,openFromAction,
     commentList, commentSave, commentDelete, openCommentDraft, claimCommentDraft,
     acknowledgeCommentDraft, githubAnnotations, revisionBranches,revisionCommits,revisionResolve,repositoryTree,repositoryHistory,repositoryBranches };

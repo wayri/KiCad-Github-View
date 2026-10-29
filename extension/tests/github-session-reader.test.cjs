@@ -16,6 +16,39 @@ test('directory parsing rejects stale commits, incomplete listings and traversal
  assert.throws(()=>treeData(tree('',[{path:'../secret',contentType:'file'}]),sha,''),/unsafe/);
  const result=treeData(tree('',[{path:'link',contentType:'symlink'}]),sha,'');assert.equal(result.items[0].type,'symlink');
 });
+
+test('HEAD discovery reuses embedded repository page data without any network request',async()=>{
+ let calls=0;
+ const api=create({location:{href:'https://github.com/owner/private'},parseDocument:()=>tree('',[{path:'design',contentType:'directory'}]),fetch:async()=>{calls++;throw Error('No fetch expected');}});
+ assert.deepEqual(await api.read({repository:repo,ref:'HEAD',action:'resolve'}),{sha,items:[{path:'design',type:'directory'}]});
+ assert.equal(calls,0);
+ const stale=create({location:{href:'https://github.com/owner/private'},parseDocument:()=>tree(),parseHTML:()=>tree(),fetch:async(url)=>{calls++;return response('html',url);}});
+ await assert.rejects(stale.read({repository:repo,ref:'b'.repeat(40),action:'resolve'}),/different revision/);
+ assert.equal(calls,1);
+});
+
+test('session binary assets preserve exact bytes and reject unrelated redirect destinations',async()=>{
+ const bytes=new Uint8Array([0,255,128,10]);
+ const api=create({location:{href:'https://github.com/owner/private'},fetch:async()=>response(bytes,'https://raw.githubusercontent.com/owner/private/'+sha+'/model.step')});
+ assert.deepEqual(await api.read({repository:repo,ref:sha,action:'asset',path:'model.step',limit:16}),{base64:'AP+ACg==',sha});
+ const wrong=create({location:{href:'https://github.com/owner/private'},fetch:async()=>response(bytes,'https://evil.example/model.step')});
+ await assert.rejects(wrong.read({repository:repo,ref:sha,action:'asset',path:'model.step',limit:16}),/download/);
+});
+
+test('HEAD never reuses a feature-branch tab as the default branch',async()=>{
+ let calls=0;const feature=tree();feature[0].payload.codeViewTreeRoute.refInfo={name:'feature/board',currentOid:'b'.repeat(40)};
+ const main=tree();main[0].payload.codeViewTreeRoute.refInfo={name:'main',currentOid:sha};
+ const api=create({location:{href:'https://github.com/owner/private/tree/feature/board'},parseDocument:()=>feature,parseHTML:()=>main,fetch:async url=>{calls++;assert.equal(url,'https://github.com/owner/private');return response('html',url);}});
+ assert.equal((await api.read({repository:repo,ref:'HEAD',action:'resolve'})).sha,sha);assert.equal(calls,1);
+});
+
+test('repository-root payload variants are read without treating root data as a subfolder',()=>{
+ const route=tree()[0].payload.codeViewTreeRoute;
+ for(const payload of [{codeViewRepoRoute:route},{refInfo:route.refInfo,tree:route.tree}]){
+  assert.equal(treeData([{payload}],'HEAD','').sha,sha);
+  assert.throws(()=>treeData([{payload}],sha,'design'),/readable/);
+ }
+});
 test('raw download accepts only the exact pinned source and never returns signed URLs',async()=>{
  let init;
  const api=create({location:{href:'https://github.com/owner/private'},fetch:async(url,options)=>{init=options;return response('(kicad_pcb)','https://raw.githubusercontent.com/owner/private/'+sha+'/board.kicad_pcb?token=temporary');}});

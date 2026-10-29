@@ -177,7 +177,7 @@ test('saving metadata stays local until explicit publish and records its thread 
 test('known repository policy restriction disables direct publish while preserving local comments',async()=>{
  const validate=require('../review-comments.js').validateComment;const note=validate({id:'policy-note',text:'Review placement',createdAt:'2025-01-01T00:00:00.000Z',anchor:{repository:'wayri/fixture',ref:'main',file:'board.kicad_pcb'}});
  const view=workspaceRuntime(async request=>request.type==='comment-list'?[note]:request.type==='comment-policy-status'?{mode:'allowlist',allowed:false,reason:'Only approved reviewers may publish',login:'alice'}:[]);
- view.load();await view.workspace.refreshComments();await new Promise(resolve=>setImmediate(resolve));
+ view.load();await view.workspace.refreshComments();await view.get('refreshCommentPolicy').click();await new Promise(resolve=>setImmediate(resolve));
  const actions=view.get('commentList').children[0].children.at(-1),publish=actions.children.find(node=>node.textContent==='Publish to GitHub');
  assert.equal(publish.disabled,true);assert.match(view.get('commentPolicyStatus').textContent,/publishing restricted/);
  assert.ok(actions.children.find(node=>node.textContent==='Edit'));assert.equal(view.get('refreshCommentPolicy').disabled,false);
@@ -1284,13 +1284,22 @@ test('work board opens from Comments and carries GitLab provider, host and curre
  view.workspace.dispose();assert.equal(disposed,true);
 });
 
-test('annotation polling mounts with foreground lifecycle and source-scoped updates',async()=>{
+test('GitLab annotation polling mounts with foreground lifecycle and source-scoped updates',async()=>{
  let sync,started,visibility=0,disposed=false;const calls=[];
- const view=workspaceRuntime(async m=>{calls.push(m);if(m.type==='github-annotations')return{notes:[],warnings:[]};return[];},{reviewSync:{create:options=>{sync=options;return{start:scope=>{started=scope;},visibilityChanged:()=>visibility++,dispose:()=>{disposed=true;}};}}});
+ const view=workspaceRuntime(async m=>{calls.push(m);if(m.type==='comment-remote-list')return{notes:[],warnings:[]};return[];},{provider:'gitlab',host:'https://gitlab.com',reviewSync:{create:options=>{sync=options;return{start:scope=>{started=scope;},visibilityChanged:()=>visibility++,dispose:()=>{disposed=true;}};}}});
  view.load();await new Promise(setImmediate);assert.equal(started.file,'board.kicad_pcb');view.get('commentsButton').click();assert.ok(visibility>0);assert.equal(sync.isVisible(),true);
- const result=await sync.load(started);assert.equal(result.syncFile,'board.kicad_pcb');sync.onUpdate(result);assert.ok(calls.some(m=>m.type==='github-annotations'));
+ const result=await sync.load(started);assert.equal(result.syncFile,'board.kicad_pcb');sync.onUpdate(result);assert.ok(calls.some(m=>m.type==='comment-remote-list'));
  sync.onUpdate({notes:[{text:'Foreign result'}],syncFile:'other.kicad_pcb'});assert.equal(view.get('commentList').textContent.includes('Foreign result'),false);
  view.workspace.dispose();assert.equal(disposed,true);
+});
+
+test('GitHub drawing startup never checks remote policy or starts provider polling',async()=>{
+ const calls=[];let mounts=0;
+ const view=workspaceRuntime(async m=>{calls.push(m);if(m.type==='github-annotations')return{notes:[],warnings:[]};return[];},{reviewSync:{create(){mounts++;throw Error('No automatic GitHub polling');}}});
+ view.load();await new Promise(setImmediate);
+ assert.equal(mounts,0);assert.equal(calls.some(m=>['comment-policy-status','github-annotations','chat-thread-list'].includes(m.type)),false);
+ await view.get('refreshGitHub').click();assert.ok(calls.some(m=>m.type==='github-annotations'));
+ view.workspace.dispose();
 });
 
 
