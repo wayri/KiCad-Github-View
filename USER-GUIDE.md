@@ -443,3 +443,10 @@ Drawing views in exported sheets are raster previews; dimensions, notes and tabl
 - **Large project is incomplete:** inspect truncation and parser diagnostics; reduce the imported set rather than assuming a partial view is complete.
 
 Contact [support.kivi@sigharmonic.com](mailto:support.kivi@sigharmonic.com) with the app/extension version, operating system, exact steps and a non-confidential minimal example. Do not include account tokens or private project data without authorization.
+
+## Compact views and experimental Fast PI
+
+The icon-and-label view strip switches Schematic, Layout, 3D, Draftsman and
+Simulation. Simulation separates imported KiCad/wayriCAD results from Fast PI.
+See [Fast PI setup, outputs and numerical limits](docs/FAST-PI.md) before using
+this experimental two-contact DC copper workflow.

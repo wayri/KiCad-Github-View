@@ -385,6 +385,14 @@
       if(event.source!==parent||event.origin!==ownOrigin||event.data?.type!=='kicad-review:command')return;
 
       const msg=event.data;
+      if(msg.command==='workspace-view'){
+        if(!['schematic','layout','3d','draftsman','simulation'].includes(msg.mode))return;
+        if(msg.mode==='3d'){if(pcb&&!scene)$('mode3d').click();return;}
+        if(scene)$('mode3d').click();
+        if(msg.mode==='draftsman')$('openDraftsman')?.click();
+        if(msg.mode==='simulation'){if(globalThis.KiCadWorkspaceChrome)dispatchEvent(new Event('kicad-review:simulation-view'));else $('openSavedReports')?.click();}
+        return;
+      }
       if(msg.command==='restore-controls'){workspace.restoreFocusView?.();return;}
       if(msg.command==='open-sheet'){workspace.followSheet?.(msg.file);return;}
       if(msg.command==='refresh-comments'){workspace.refreshComments?.();return;}

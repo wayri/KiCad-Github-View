@@ -109,3 +109,7 @@ body[data-workspace-chrome] #reviewWorkspace.docked-sidebars #drawingTools{z-ind
  body[data-workspace-chrome].phone-sidebars-visible:not(.drawing-focused) #reviewWorkspace.docked-sidebars{padding-right:calc(44px + var(--tool-strip-width,40px))!important}
  body[data-workspace-chrome].phone-sidebars-visible #reviewWorkspace>.sidebar-dock.right{right:var(--tool-strip-width,40px)}
 }
+
+.workspace-view-navigation{display:flex;align-items:center;gap:2px;overflow-x:auto;max-width:100%;flex:0 1 auto;padding:2px;border:1px solid #52657566;border-radius:6px}.workspace-view-navigation button{display:inline-flex;gap:4px;align-items:center;white-space:nowrap;min-height:27px;padding:4px 6px;font-size:10px}.workspace-view-navigation button svg{width:16px;height:16px}.workspace-view-navigation button[aria-pressed=true]{background:#28544e;color:#c6fff0;border-color:#65cdb7}@media(max-width:700px){.workspace-view-navigation{order:5;flex:1 1 100%}}
+
+.workspace-simulation-menu{max-width:min(360px,calc(100vw - 24px));padding:12px;border:1px solid #607884;border-radius:8px;background:var(--panel,#1b2935);color:var(--text,#e7edf2)}.workspace-simulation-menu strong{display:block;font-size:12px;margin-bottom:8px}.workspace-simulation-menu button{display:block;width:100%;margin-top:6px;min-height:30px;font-size:11px}.workspace-simulation-menu::backdrop{background:#0006}

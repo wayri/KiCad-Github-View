@@ -1,7 +1,20 @@
 /* A focused Android shell. Existing controllers continue owning actions and data. */
 ((root)=>{'use strict';
  const structureChanged=records=>records.some(record=>[...record.addedNodes,...record.removedNodes].some(node=>node.nodeType===1&&node.namespaceURI!=='http://www.w3.org/2000/svg'));
+ const viewEntries=Object.freeze([['schematic','Schematic','sheet'],['layout','Layout','board'],['3d','3D','cube'],['draftsman','Draftsman','ruler'],['simulation','Simulation','analytics']]);
+ function activateView(doc,key,simulation){
+  if(!viewEntries.some(([id])=>id===key))return false;
+  const mode=doc.getElementById('mode3d'),board=Boolean(mode&&!mode.hidden),three=mode?.getAttribute('aria-pressed')==='true';
+  if(key==='3d'){if(!board||mode.disabled)return false;if(!three)mode.click();return true;}
+  if((key==='layout'&&!board)||(key==='schematic'&&board)){const opposite=doc.getElementById('viewOppositeDrawing');if(!opposite||opposite.disabled)return false;opposite.click();return true;}
+  if(three){if(mode.disabled)return false;mode.click();}
+  if(key==='simulation'){simulation();return true;}
+  if(key==='draftsman'){const action=doc.getElementById('openDraftsman');if(!action||action.disabled)return false;action.click();}
+  return true;
+ }
+ if(typeof module==='object'&&module.exports)module.exports={viewEntries,activateView};
  const d=root.document;if(!d)return;
+
  const make=(tag,text)=>{const n=d.createElement(tag);if(text)n.textContent=text;return n;};
  function home(){
   const welcome=d.getElementById('welcome');if(!welcome)return;
@@ -25,6 +38,22 @@
    }
    const tools=menu.querySelector('.android-engineering-actions');if(tools&&!tools.closest('.android-menu-section')){const group=make('details');group.className='android-menu-section';group.append(make('summary','Engineering tools'));menu.append(group);group.append(tools);}
   }
+ }
+ let simulationDialog=null;
+ function simulationMenu(){
+  if(simulationDialog?.open)return;
+  const page=make('dialog');simulationDialog=page;page.id='androidSimulationViews';page.setAttribute('aria-label','Simulation views');
+  const header=make('header'),close=make('button','Close');close.type='button';close.setAttribute('aria-label','Close simulation views');close.onclick=()=>page.close();header.append(make('strong','Simulation'),close);
+  const body=make('div');body.className='android-sheet-content';for(const [id,label,detail]of [['openSavedReports','Saved results','KiCad workbooks and wayriCAD analysis'],['openFastPI','Fast PI · experimental','Two-point DC copper screening']]){const source=d.getElementById(id),action=make('button');action.type='button';action.disabled=!source||source.disabled;action.append(make('strong',label),make('small',detail));action.onclick=()=>{page.close();source.click();};body.append(action);}
+  page.append(header,body);page.addEventListener('click',event=>{if(event.target!==page)return;const rect=page.getBoundingClientRect();if(event.clientX<rect.left||event.clientX>rect.right||event.clientY<rect.top||event.clientY>rect.bottom)page.close();});page.addEventListener('close',()=>{page.remove();simulationDialog=null;});d.body.append(page);page.showModal();
+ }
+ root.addEventListener?.('kicad-review:simulation-view',simulationMenu);
+ function drawingViews(){
+  if(!d.getElementById('androidViewToolbar')||d.getElementById('androidDrawingViews')||new URLSearchParams(root.location?.search||'').get('headerViews')==='1')return;
+  const nav=make('nav');nav.id='androidDrawingViews';nav.setAttribute('aria-label','Drawing views');const buttons=new Map();
+  for(const [key,label,icon]of viewEntries){const action=make('button');action.type='button';action.setAttribute('aria-label',label+' view');action.title=label;action.dataset.icon=icon;action.append(make('span',label));action.onclick=()=>activateView(d,key,simulationMenu);buttons.set(key,action);nav.append(action);}
+  const sync=()=>{const mode=d.getElementById('mode3d'),board=Boolean(mode&&!mode.hidden),three=mode?.getAttribute('aria-pressed')==='true';for(const [key,action]of buttons){action.setAttribute('aria-pressed',String(key===(three?'3d':board?'layout':'schematic')));const target=key==='3d'?mode:key==='draftsman'?d.getElementById('openDraftsman'):key==='simulation'?d.getElementById('openSavedReports'):d.getElementById('viewOppositeDrawing');action.disabled=key==='3d'?!board||mode.disabled:!target||target.disabled;}};
+  d.body.prepend(nav);root.KiCadUIIcons?.decorate?.(nav);sync();const mode=d.getElementById('mode3d');if(mode)new MutationObserver(sync).observe(mode,{attributes:true,attributeFilter:['hidden','disabled','aria-pressed']});
  }
  function drawing(){
   const rail=d.getElementById('androidViewToolbar');if(!rail)return;
@@ -54,7 +83,7 @@
   const launch=content.querySelector('.presentation-launch');if(launch&&launch.parentElement!==presentation)presentation.append(launch);
   const heading=page.querySelector('header strong');if(heading&&heading.textContent!=='Project menu')heading.textContent='Project menu';
  }
- let scheduled=false;function refresh(){scheduled=false;home();drawing();workspaceMenu();}
+ let scheduled=false;function refresh(){scheduled=false;home();drawing();drawingViews();workspaceMenu();}
  const schedule=()=>{if(scheduled)return;scheduled=true;queueMicrotask(refresh);};
  const start=()=>{d.body.classList.add('android-design');refresh();new MutationObserver(records=>{if(structureChanged(records))schedule();}).observe(d.body,{childList:true,subtree:true});};
  if(d.readyState==='loading')d.addEventListener('DOMContentLoaded',start,{once:true});else start();

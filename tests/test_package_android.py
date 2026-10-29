@@ -35,6 +35,18 @@ class AndroidPackageTests(unittest.TestCase):
         self.assertLess(page.index('adaptive-ui.js'),page.index('measurement-tools.js'))
         self.assertIn('measurement-tools.css',page)
         self.assertIn(b'id="probeA"',assets['analysis-viewer.html'])
+    def test_fast_pi_worker_and_compact_views_are_available_offline(self):
+        assets=builder.payload()
+        for name in ('fast-pi.js','fast-pi-worker.js','fast-pi-workspace.js','fast-pi-workspace.css'):
+            self.assertEqual(assets[name],(ROOT/'extension'/name).read_bytes())
+        for page in ('pcb-viewer.html','schematic-viewer.html','revision-viewer.html'):
+            text=assets[page].decode()
+            self.assertIn('fast-pi-workspace.js',text)
+            self.assertLess(text.index('fast-pi-workspace.js'),text.index('review-workspace.js'))
+            self.assertIn('android-design.js',text)
+        self.assertIn(b'openFastPI',assets['android-design.js'])
+        self.assertIn(b'kicad-review:simulation-view',assets['android-design.js'])
+
     def test_html_local_script_references_resolve_in_bundle(self):
         import re
         assets=builder.payload()

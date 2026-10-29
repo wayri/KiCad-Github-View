@@ -211,3 +211,25 @@ body.android-design[data-size] .section-page{padding-bottom:var(--android-safe-b
 body.android-design[data-size] :is(#designNavigator,#designInspector,#commentsSidebar) .panel-heading{padding-left:calc(12px + var(--android-safe-left,0px))!important;padding-right:calc(12px + var(--android-safe-right,0px))!important;padding-top:calc(2px + var(--android-safe-top,0px))!important;min-height:calc(var(--android-header-height) + var(--android-safe-top,0px))!important}
 
 body.android-design[data-size]:has(#androidWorkspaceHeader) #reviewHeader{height:calc(var(--android-header-height) + var(--android-safe-top,0px))!important;min-height:calc(var(--android-header-height) + var(--android-safe-top,0px))!important;flex:none!important;overflow:visible!important;align-items:stretch!important}
+
+/* Keep the new drawing destinations reachable without the desktop chrome. */
+body.android-design #androidDrawingViews{position:absolute;top:0;left:0;right:0;z-index:32;display:flex;gap:2px;overflow-x:auto;background:color-mix(in srgb,var(--panel,#192530) 92%,transparent);border-bottom:1px solid var(--line,#405564);padding:2px 4px}
+body.android-design #androidDrawingViews button{display:flex;align-items:center;justify-content:center;gap:3px;flex:1 0 auto;min-height:36px;padding:4px 6px!important;font-size:10px!important;border:0;background:transparent}
+body.android-design #androidDrawingViews .ui-icon{width:17px;height:17px;flex-basis:17px}
+body.android-design #androidDrawingViews button[aria-pressed=true]{color:var(--accent,#80e0cc);background:color-mix(in srgb,var(--accent,#80e0cc) 12%,transparent);box-shadow:inset 0 -2px var(--accent,#80e0cc)}
+body.android-design #androidSimulationViews{width:min(380px,calc(100vw - 24px));max-height:65dvh;padding:0;border:1px solid var(--line,#405564);border-radius:12px;background:var(--panel,#192530);color:var(--text,#e8eff5)}
+body.android-design #androidSimulationViews header{display:flex;align-items:center;justify-content:space-between;padding:10px 12px}
+body.android-design #androidSimulationViews .android-sheet-content{padding:4px 12px 12px;display:grid;gap:6px}
+body.android-design #androidSimulationViews .android-sheet-content button{display:flex;flex-direction:column;align-items:flex-start;gap:4px;padding:9px!important;min-height:48px;text-align:left}
+body.android-design #androidSimulationViews small{font-size:11px;color:var(--muted,#a8b9c5)}
+body.android-design .fast-pi-panel{top:auto;bottom:0;left:0;right:0;width:auto;max-height:min(44dvh,440px);padding:8px;border-radius:12px 12px 0 0;overscroll-behavior:contain;scroll-padding-block:44px 12px}
+body.android-design .fast-pi-panel header{position:sticky;top:0;background:var(--panel,#192530);z-index:1;min-height:32px}
+body.android-design .fast-pi-panel input,body.android-design .fast-pi-panel select,body.android-design .fast-pi-panel button{min-height:36px;font-size:12px!important}
+body.android-design .fast-pi-panel.floating{left:8px;right:8px;top:44px;bottom:auto;width:auto;max-height:70dvh}
+body.android-presenting #androidDrawingViews{display:none!important}
+@media(min-width:840px),(max-height:500px) and (min-width:600px){body.android-design .fast-pi-panel{left:auto;right:8px;top:44px;bottom:8px;width:min(340px,42vw);max-height:none;border-radius:10px}body.android-design .fast-pi-panel.floating{left:auto;right:8px;top:44px;width:min(340px,42vw);max-height:85dvh}}
+
+/* Six host destinations scroll instead of crushing their labels on narrow phones. */
+body.android-design[data-size] #androidWorkspaceNav #workspaceTabs{overflow-x:auto;flex-wrap:nowrap;justify-content:flex-start}
+body.android-design[data-size] #androidWorkspaceNav #workspaceTabs>button{flex:1 0 54px;min-width:54px;display:flex;flex-direction:column;align-items:center;justify-content:center;white-space:nowrap;font-size:10px!important}
+body.android-design[data-size] #androidWorkspaceNav #workspaceTabs>button>span{font-size:10px!important;line-height:12px}

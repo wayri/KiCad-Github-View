@@ -47,6 +47,16 @@
   const validEntry=path=>isDrawing(path)||Boolean(globalThis.KiCadGitHub?.filePath(path));
   let activeWorkspace=isDrawing(entryFile)?(isBoard(entryFile)?'layout':'schematic'):'project',inventoryPromise=null,tabEpoch=0,pickerMounted=false,chooserMode='split',latestHierarchy=null;
   const tabs=new Map();
+  let pendingViewAction=null;
+  function dispatchWorkspaceView(){
+    if(!pendingViewAction)return;
+    const board=['layout','3d','draftsman'].includes(pendingViewAction)||(pendingViewAction==='simulation'&&activeWorkspace==='layout');
+    const side=[...frames.keys()].find(side=>side!=='base'&&views.has(side)&&isBoard(views.get(side).file)===board);
+    if(!side)return;const mode=pendingViewAction;pendingViewAction=null;
+    frames.get(side).contentWindow?.postMessage({type:'kicad-review:command',command:'workspace-view',mode},origin());
+    for(const [key,button]of tabs){button.classList.toggle('active',key===mode);button.setAttribute('aria-pressed',String(key===mode));}
+  }
+  async function openWorkspaceView(name){pendingViewAction=name==='project'?null:name;await chooseWorkspace(['3d','draftsman'].includes(name)?'layout':name==='simulation'?(isBoard(request.file)?'layout':'schematic'):name);dispatchWorkspaceView();}
   function sourceFor(file){if(!validEntry(file))return;const removed=request.status==='removed'&&file===request.file;const repo=removed?request.repository:request.headRepository,ref=removed?request.base:request.head;$('sourceLink').href=`${provider==='gitlab'?providerContext.host:'https://github.com'}/${repo}/${provider==='gitlab'?'-/blob':'blob'}/${encodeURIComponent(ref)}/${file.split('/').map(encodeURIComponent).join('/')}`;}
   function markWorkspace(name){activeWorkspace=name;$('splitView')?.setAttribute('aria-pressed',String(name==='split')); for(const [key,button]of tabs){button.classList.toggle('active',key===name);button.setAttribute('aria-pressed',String(key===name));}comparison.hidden=name==='project';$('projectWorkspace').hidden=name!=='project';toolbar.hidden=true;sourceFor(name==='project'?entryFile:name==='schematic'&&data.validPath(latestHierarchy?.hierarchy?.active)?latestHierarchy.hierarchy.active:name==='layout'?(isBoard(request.file)?request.file:pairedFile):request.file);}
   function mountPicker(){if(pickerMounted||!isDrawing(request.file)||request.pullNumber||!globalThis.KiCadRevisionPicker)return;pickerMounted=true;globalThis.KiCadRevisionPicker.mount({holder:$('projectTools'),request,send:message=>send(message),navigate:query=>location.assign(`${chrome.runtime.getURL('browser-viewer.html')}?${query}`)});}
@@ -62,7 +72,7 @@
     if(!isDrawing(request.file)){request.file=path;request.oldFile=path;showProject('head',request.headRepository,request.head,path);mountPicker();}
     if(path===request.file){markWorkspace(isBoard(path)?'layout':'schematic');if(pairedFile)pairView('main');else setMode('head');}
     else{if(path!==pairedFile)openPair(path);markWorkspace(isBoard(path)?'layout':'schematic');pairView('companion');}
-    toolbar.hidden=true;status('');
+    toolbar.hidden=true;status('');dispatchWorkspaceView();
   }
   async function chooseWorkspace(name){
     const epoch=++tabEpoch;pairEpoch++;if(name==='project'){projectWorkspace();return;}
@@ -79,7 +89,7 @@
       status(choices.length?'Choose a drawing; multiple project files are available.':'No matching drawing found. Enter its repository-relative path.',!choices.length);
     }catch(error){if(epoch===tabEpoch)status(error.message,true);}
   }
-  function workspaceTabs(){for(const [name,label]of [['project','Project'],['schematic','Schematic'],['layout','Layout']]){const button=element('button',label);button.type='button';button.addEventListener('click',()=>chooseWorkspace(name));tabs.set(name,button);$('workspaceTabs').append(button);}markWorkspace(activeWorkspace);}
+  function workspaceTabs(){for(const [name,label,icon]of [['project','Project','folder'],['schematic','Schematic','sheet'],['layout','Layout','board'],['3d','3D','cube'],['draftsman','Draftsman','ruler'],['simulation','Simulation','analytics']]){const button=element('button');button.type='button';button.title=label;button.setAttribute('aria-label',label+' view');if(globalThis.KiCadUIIcons)button.append(KiCadUIIcons.icon(icon));button.append(element('span',label));button.addEventListener('click',()=>openWorkspaceView(name));tabs.set(name,button);$('workspaceTabs').append(button);}markWorkspace(activeWorkspace);}
   function projectControl(text,handler){const button=element('button',text);button.type='button';button.addEventListener('click',handler);$('projectTools').append(button);return button;}
   function companionValid(path){return data.validPath(path)&&/\.kicad_pcb$/i.test(path)!==/\.kicad_pcb$/i.test(request.file);}
   function pairView(mode='both'){
@@ -154,7 +164,7 @@
     holder.className = "drawing";
     const viewer = element("iframe");viewer.allow="camera";
     viewer.title = `${file} at ${ref.slice(0, 12)}`;
-    const query = new URLSearchParams({ repository, ref, file, workspace: '1', ...providerContext });
+    const query = new URLSearchParams({ repository, ref, file, workspace: '1', headerViews:'1', ...providerContext });
     if(file===entryFile&&params.get('focusNet')&&params.get('focusNet').length<=500)query.set('focusNet',params.get('focusNet'));
     if (request.pullNumber) { query.set("pullNumber", request.pullNumber); query.set("pullRepository", request.pullRepository); }
     if(!position&&file===entryFile&&params.has('focusX')&&params.has('focusY')&&[params.get('focusX'),params.get('focusY')].every(n=>Number.isFinite(Number(n))&&Math.abs(Number(n))<=1e6))position={x:Number(params.get('focusX')),y:Number(params.get('focusY')),uuid:params.get('focusUuid')};
@@ -192,6 +202,7 @@
     const side = [...frames].find(([, frame]) => frame.contentWindow === event.source)?.[0];
     if (!side) return;
     views.set(side, { file: event.data.file, view: event.data.view });
+    if(event.data.phase==='ready')dispatchWorkspaceView();
     if(event.data.phase==='ready'&&pendingSelections.has(side)){
       const selection=pendingSelections.get(side);pendingSelections.delete(side);
       if(pairedFile&&crossLinked)frames.get(side)?.contentWindow?.postMessage({type:'kicad-review:command',command:'highlight-related',selection},origin());

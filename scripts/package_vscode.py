@@ -25,6 +25,7 @@ ASSETS += ('ui-foundation.css','tool-surfaces.css','gerber-camera.js')
 ASSETS += ('pdf-tools.js','pdf-viewer.html','pdf-viewer.css','pdf-viewer.js','vendor/pdfjs/FILES.json') + tuple('vendor/pdfjs/'+name for name in json.loads((ROOT/'extension/vendor/pdfjs/FILES.json').read_text())['files'])
 ASSETS += ('mention-users.js','repository-explorer.js','repository-explorer.css','layer-colors.js','load-worker-vscode.js')
 ASSETS += ('engineering-launcher.js', 'review-handoff.js', 'local-runtime.js')
+ASSETS += ('fast-pi.js','fast-pi-worker.js','fast-pi-worker-vscode.js','fast-pi-workspace.js','fast-pi-workspace.css')
 BUILD_INPUTS = ('github-review-api.js', 'gitlab-review-api.js', 'step-decoder.js', 'step-worker.js', 'vendor/occt/occt-import-js.js')
 ASSETS += ('variant-manager.js', 'bom-import.js', 'bom-viewer.html', 'bom-viewer.js','bom-workspace.js', 'bom-field-table.js', 'bom-viewer.css', 'calculator-tools.js', 'calculator-viewer.html', 'calculator-viewer.js', 'calculator-viewer.css', 'analysis-spatial.js', 'analysis-overlay.js', 'analysis-bom-link.js')
 ASSETS += ('calculator-catalog.js','calculator-visuals.js')
@@ -79,6 +80,11 @@ def prepare_media(root: Path = ROOT) -> dict[str, bytes]:
     load_spec.loader.exec_module(load_builder)
     if (root / 'extension/load-worker-vscode.js').read_bytes() != load_builder.bundle(root):
         raise ValueError('Preparation worker bundle is stale; run scripts/build_load_worker.py.')
+    fast_spec = importlib.util.spec_from_file_location('build_fast_pi_worker', Path(__file__).with_name('build_fast_pi_worker.py'))
+    fast_builder = importlib.util.module_from_spec(fast_spec)
+    fast_spec.loader.exec_module(fast_builder)
+    if (root / 'extension/fast-pi-worker-vscode.js').read_bytes() != fast_builder.bundle(root):
+        raise ValueError('Fast PI worker bundle is stale; run scripts/build_fast_pi_worker.py.')
     payload, hashes = {}, {}
     destination = root / 'vscode-extension' / 'media'
     for name in ASSETS:
