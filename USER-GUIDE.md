@@ -415,8 +415,8 @@ objects. Commit changes and reopen if the source-verification check rejects them
 Open a drawing, then choose **Draftsman** from its tools. The editor stays in the current tab and creates a separate drawing document. It does not edit the schematic or PCB.
 
 1. Set the sheet size, orientation, title, revision and units in **Sheet & title block**.
-2. Select a loaded schematic or PCB and add a view. Choose its side, visible layers, scale and rotation in Properties.
-3. Use **Auto dimensions** for saved PCB outline width/height, or **Dimension** to place two points. Add notes and a fitted-parts BoM as needed.
+2. Select a loaded PCB and add a mechanical 3D view. Choose top, bottom, a side or isometric; adjust viewpoint, scale and rotation in Properties. Copper and electrical overlays are hidden.
+3. In a top mechanical view, use **Auto dimensions** for saved PCB outline width/height, or **Dimension** to place two points with hole/corner snapping. Other projections currently reject source-coordinate dimensions. Add notes and a fitted-parts BoM as needed.
 4. Add another sheet for an assembly view or extra detail. Use Undo/Redo to revise the document.
 5. **Save draft** retains the editable document in this browser profile. Use **Download → Editable document** for a portable `.kivi-draft.json` backup, or export PDF/SVG for sharing.
 

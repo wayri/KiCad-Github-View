@@ -110,9 +110,19 @@ function makeInstanced(group, geometry, material, records, place, identity) {
   return mesh;
 }
 
+export function mechanicalCaptureFrame(bounds,camera,width,height,origin={x:0,y:0}) {
+  let minX=Infinity,maxX=-Infinity,minY=Infinity,maxY=-Infinity;
+  for(const x of [bounds.min.x,bounds.max.x])for(const y of [bounds.min.y,bounds.max.y])for(const z of [bounds.min.z,bounds.max.z]){const point=new THREE.Vector3(x,y,z).applyMatrix4(camera.matrixWorldInverse);minX=Math.min(minX,point.x);maxX=Math.max(maxX,point.x);minY=Math.min(minY,point.y);maxY=Math.max(maxY,point.y);}
+  const nativeWidth=Math.max(1,width),nativeHeight=Math.max(1,height),scale=Math.min(1,1800/nativeWidth,1800/nativeHeight),pixelWidth=Math.max(1,Math.floor(nativeWidth*scale)),pixelHeight=Math.max(1,Math.floor(nativeHeight*scale)),aspect=pixelWidth/pixelHeight;
+  const worldHeight=Math.max((maxY-minY)/.9,(maxX-minX)/aspect/.9,.01),worldWidth=worldHeight*aspect,center=bounds.getCenter(new THREE.Vector3());
+  return {width:pixelWidth,height:pixelHeight,worldWidth,worldHeight,bounds:{x:origin.x+center.x-worldWidth/2,y:origin.y-center.y-worldHeight/2,width:worldWidth,height:worldHeight}};
+}
+
 export function mountBoard3D(container, source, options = {}) {
   options ||= {};
-  const initialDark = options.dark !== false;
+  const mechanical = options.mechanical === true;
+  const captureAbort = new AbortController();
+  const initialDark = mechanical ? options.dark === true : options.dark !== false;
   const board = parseKicadBoard(source);
   const sourceAST=globalThis.KiCadDesignDiff.parse(source),savedZones=sourceZoneGeometry(sourceAST);
   const padDetails=padSourceDetails(sourceAST),nativePads=board.pads.map(pad=>({...pad,...padDetails.get(pad.id)}));
@@ -168,6 +178,7 @@ export function mountBoard3D(container, source, options = {}) {
 
   const lightingKey='pocket-kivi:3d-lighting:v1';let lighting='studio';
   try{lighting=lightingName(localStorage.getItem(lightingKey));}catch{}
+  if(mechanical)lighting='universal';
   if(options.lighting!==undefined)lighting=lightingName(options.lighting);
   const lightingLabel=document.createElement('label');lightingLabel.className='quality-label';const lightingCaption=document.createElement('span');lightingCaption.textContent='Lighting';
   const lightingSelect=document.createElement('select');lightingSelect.setAttribute('aria-label','3D lighting');lightingSelect.title='Universal: even neutral lighting on all sides, without shadows or ambient occlusion. Studio: directional depth and reflections.';
@@ -183,7 +194,7 @@ export function mountBoard3D(container, source, options = {}) {
     .reduce((sum, layer) => sum + layer.thickness, 0) || 1.6;
   const top = thickness / 2, bottom = -top;
   const copperPlan=sourceCopperPlan(board,sourceAST,thickness);
-  const scene = new THREE.Scene(); scene.background = new THREE.Color(initialDark ? 0x151820 : 0xe7ebf1);
+  const scene = new THREE.Scene(); scene.background = new THREE.Color(initialDark ? 0x151820 : mechanical ? 0xffffff : 0xe7ebf1);
   const camera = new THREE.PerspectiveCamera(45, 1, 0.1, Math.max(3000, extent * 30));
   // OrbitControls captures its up basis at construction. Use the board's
   // thickness axis consistently for orbiting and all fitted camera presets.
@@ -253,7 +264,7 @@ export function mountBoard3D(container, source, options = {}) {
   const copperGroups = new Map(), pickables = [];
   let objectVisibility=objectVisibilityPolicy();
   const visibilityRecords=[];
-  const visibilityRecord=(mesh,type,layer)=>{visibilityRecords.push({mesh,type,layer});mesh.visible=objectVisibility.visible(type,layer);return mesh;};
+  const visibilityRecord=(mesh,type,layer)=>{visibilityRecords.push({mesh,type,layer});mesh.visible=!mechanical&&objectVisibility.visible(type,layer);return mesh;};
   const arcIds=new Set(sourceAST.filter(node=>Array.isArray(node)&&node[0]==='arc').map(node=>{const id=node.find(value=>Array.isArray(value)&&['uuid','tstamp'].includes(value[0]))?.[1];return typeof id==='object'?id?.quoted:id;}).filter(Boolean));
   const isArc=track=>arcIds.has(track.id)||arcIds.has(track.id?.replace(/:\d+$/,''))||/^track-\d+:\d+$/.test(track.id||'');
   const appearanceRecords=[];let realistic=true,selectionAppearanceReady=false;
@@ -269,7 +280,7 @@ export function mountBoard3D(container, source, options = {}) {
   }if(selectionAppearanceReady)setSelection(externalSelection);invalidate();}
   appearanceSelect.onchange=()=>{realistic=appearanceSelect.value==='realistic';applyAppearance();};
   const groupFor = (layer) => {
-    if (!copperGroups.has(layer)) { const group = new THREE.Group(); group.name = layer; boardGroup.add(group); copperGroups.set(layer, group); }
+    if (!copperGroups.has(layer)) { const group = new THREE.Group(); group.name = layer; boardGroup.add(group); copperGroups.set(layer, group); group.visible=!mechanical; }
     return copperGroups.get(layer);
   };
   const shape = boardShape(board, world);
@@ -278,7 +289,7 @@ export function mountBoard3D(container, source, options = {}) {
   const drilled=new Set();let drillCount=0,drillPoints=0,omittedDrills=0;
   const inside=(point,loop)=>{let result=false;for(let i=0,j=loop.length-1;i<loop.length;j=i++){const [a,b]=[loop[i],loop[j]];if((a[1]>point[1])!==(b[1]>point[1])&&point[0]<(b[0]-a[0])*(point[1]-a[1])/(b[1]-a[1])+a[0])result=!result;}return result;};
   const outer=board.outlineLoops?.[0],outlineHoles=board.outlineLoops?.slice(1)||[];
-  for(const item of [...nativePads,...board.vias.filter(via=>copperPlan.viaSpans.get(via.id)?.through).map(via=>({...via,shape:'circle',width:via.size,height:via.size,drillShape:'circle',rotation:0}))]){
+  for(const item of [...nativePads,...(mechanical?[]:board.vias.filter(via=>copperPlan.viaSpans.get(via.id)?.through).map(via=>({...via,shape:'circle',width:via.size,height:via.size,drillShape:'circle',rotation:0})))]){
     if(!(item.drill>0))continue;const loop=nativeDrillOutline(item);if(!loop){omittedDrills++;continue;}
     const angle=(item.rotation||0)*Math.PI/180,c=Math.cos(angle),s=Math.sin(angle),[cx,cy]=world(item.at);
     if(outlineHoles.some(hole=>inside(item.at,hole)))continue;
@@ -387,9 +398,9 @@ export function mountBoard3D(container, source, options = {}) {
   }
   const modelDiagnostics = Array.isArray(options.assetWarnings)
     ? options.assetWarnings.filter(item => typeof item === "string").slice(0, 48).map(item => item.slice(0, 500)) : [];
-  if(savedZones.unfilled)modelDiagnostics.push(`${savedZones.unfilled} zones have no saved copper fill; only their boundaries are shown.`);
-  if(savedZones.truncated)modelDiagnostics.push('Saved zone display reached its polygon/point budget; additional copper is omitted.');
-  modelDiagnostics.push(...geometryDiagnostics);
+  if(!mechanical&&savedZones.unfilled)modelDiagnostics.push(`${savedZones.unfilled} zones have no saved copper fill; only their boundaries are shown.`);
+  if(!mechanical&&savedZones.truncated)modelDiagnostics.push('Saved zone display reached its polygon/point budget; additional copper is omitted.');
+  modelDiagnostics.push(...geometryDiagnostics.filter(message=>!mechanical||!/copper|pad shapes|annuli|via bodies/i.test(message)));
   showModelDiagnostics();
   function showModelDiagnostics() {
     const resolved = loadedModelIndexes.size;
@@ -545,8 +556,8 @@ export function mountBoard3D(container, source, options = {}) {
   const divider=document.createElement('span');divider.className='divider';divider.setAttribute('aria-hidden','true');bar.append(divider);
   const measureButton=action('Measure',()=>setMeasurementMode(!measuring),'M3 17 17 3l4 4L7 21ZM7 13l3 3M10 10l2 2M13 7l3 3','Measure distance between 3D surfaces');measureButton.setAttribute('aria-pressed','false');
   const displayButton=action('Display',()=>setDisplayOpen(visibilityOptions.hidden),'M3 6h18M3 12h18M3 18h18M7 3v6M17 9v6M10 15v6','3D display settings');displayButton.setAttribute('aria-expanded','false');displayButton.setAttribute('aria-controls',visibilityOptions.id);
-  toggle("Front copper", true, (visible) => { groupFor("F.Cu").visible = visible; });
-  toggle("Back copper", true, (visible) => { groupFor("B.Cu").visible = visible; });
+  toggle("Front copper", true, (visible) => { groupFor("F.Cu").visible = !mechanical&&visible; });
+  toggle("Back copper", true, (visible) => { groupFor("B.Cu").visible = !mechanical&&visible; });
   toggle("Parts", true, (visible) => { parts.visible = visible; renderer.shadowMap.needsUpdate=true; });
   toggle("Full net 3D", true, (enabled) => { fullNet3D=enabled;setSelection(externalSelection); });
   // A bounded, opt-in set of depth-tested terminal labels. The sprite material
@@ -566,7 +577,7 @@ export function mountBoard3D(container, source, options = {}) {
   }
   const projectedLabel=new THREE.Vector3();
   function updateTerminalLabels(){
-    let count=0;frameTextures.clear();terminalLabels.visible=showTerminalLabels&&!measuring;
+    let count=0;frameTextures.clear();terminalLabels.visible=!mechanical&&showTerminalLabels&&!measuring;
     if(!terminalLabels.visible)return;
     if(!objectVisibility.visible('pads'))return void labelPool.forEach(mesh=>mesh.visible=false);
     const canvasHeight=Math.max(1,canvasHost.clientHeight),canvasWidth=Math.max(1,canvasHost.clientWidth),boxes=[];
@@ -695,6 +706,7 @@ export function mountBoard3D(container, source, options = {}) {
   const selectionNotice = document.createElement('div'); selectionNotice.className = 'hint'; selectionNotice.style.bottom = '42px'; selectionNotice.hidden = true; stage.append(selectionNotice);
   function setSelection(selection = {}) {
     invalidate();
+    if(mechanical){externalSelection={};netInspection.update({},false);netInspection.group.visible=false;selectionAppearance.restore();groupGeometry.setDrawRange(0,0);highlight.visible=false;selectionNotice.hidden=true;return {highlighted:0,matched:0,limited:false,mechanical:true};}
     externalSelection = selection || {};
     const matches = selectionMatcher(externalSelection, board);
     const netState=netInspection.update(externalSelection,fullNet3D);
@@ -762,6 +774,7 @@ export function mountBoard3D(container, source, options = {}) {
   const instanceMatrix = new THREE.Matrix4(), bounds = new THREE.Box3();
   const highlightCenter = new THREE.Vector3(), highlightSize = new THREE.Vector3();
   function showHighlight(object, instanceId) {
+    if(mechanical)return;
     invalidate();
     object.updateWorldMatrix(true, false);
     if (Number.isInteger(instanceId)) {
@@ -782,6 +795,7 @@ export function mountBoard3D(container, source, options = {}) {
     options.onSelect?.(null);
   }
   function select(record, point, object, instanceId) {
+    if(mechanical)return;
     const mode=options.getSelectionMode?.()||selectionMode;
     setSelection(mode==='net'&&record.net?{netNames:[record.net]}:record.type==='Component'||typeof record.library==='string'?{references:[record.ref]}:{uuids:[record.uuid||record.id]});
     selected = { record, point: point.clone() };
@@ -894,14 +908,46 @@ export function mountBoard3D(container, source, options = {}) {
   const escapeVisibility=event=>{if(event.key==='Escape'&&!visibilityOptions.hidden){setDisplayOpen(false,true);event.preventDefault();event.stopImmediatePropagation();}};
   document.addEventListener('pointerdown',closeVisibility);shadow.addEventListener('keydown',escapeVisibility,true);
   applyQuality(initialQuality,false);
-  void loadRepositoryModels();
-  return { host, board,
+  const modelReady=loadRepositoryModels();
+  void modelReady.catch(()=>{});
+  async function captureMechanicalView(view='top') {
+    if(!mechanical)throw new Error('Mechanical capture requires mount option mechanical:true.');
+    if(!boardViewPresets.some(preset=>preset.id===view))throw new Error('Unsupported mechanical view preset.');
+    if(!active||captureAbort.signal.aborted)throw new Error('Mechanical viewer is closed.');
+    let timer,abort;
+    try{await Promise.race([modelReady,new Promise((resolve,reject)=>{abort=()=>reject(new Error('Mechanical capture cancelled: viewer closed.'));captureAbort.signal.addEventListener('abort',abort,{once:true});timer=setTimeout(()=>reject(new Error('Mechanical model loading timed out; no incomplete capture exported.')),45000);})]);}
+    finally{clearTimeout(timer);if(abort)captureAbort.signal.removeEventListener('abort',abort);}
+    if(!active||contextLost||captureAbort.signal.aborted)throw new Error('Mechanical graphics are unavailable or closed.');
+    userAdjustedCamera=true;setSelection({});showTerminalLabels=false;terminalLabels.visible=false;measureGroup.visible=false;highlight.visible=false;groupHighlight.visible=false;analysisOverlay?.dispose();analysisOverlay=null;
+    for(const {mesh}of visibilityRecords)mesh.visible=false;for(const group of copperGroups.values())group.visible=false;
+    boardGroup.updateWorldMatrix(true,true);
+    const bounds=new THREE.Box3(),temporary=new THREE.Box3();
+    boardGroup.traverse(object=>{if(!object.geometry)return;for(let node=object;node;node=node.parent)if(!node.visible)return;
+      if(object.isInstancedMesh){object.computeBoundingBox();if(object.boundingBox)bounds.union(temporary.copy(object.boundingBox).applyMatrix4(object.matrixWorld));}
+      else{object.geometry.computeBoundingBox();if(object.geometry.boundingBox)bounds.union(temporary.copy(object.geometry.boundingBox).applyMatrix4(object.matrixWorld));}
+    });
+    if(bounds.isEmpty()||[...bounds.min.toArray(),...bounds.max.toArray()].some(value=>!Number.isFinite(value)||Math.abs(value)>1e6))throw new Error('No finite, bounded mechanical board or assembly geometry.');
+    const preset=boardViewPreset(view),direction=new THREE.Vector3(...preset.direction).normalize(),center=bounds.getCenter(new THREE.Vector3()),size=bounds.getSize(new THREE.Vector3()),distance=Math.max(1,size.length()*2);
+    if(view==='top')direction.set(0,0,1);if(view==='bottom')direction.set(0,0,-1);
+    const captureCamera=new THREE.OrthographicCamera(-1,1,1,-1,.01,distance*4);
+    captureCamera.up.fromArray(view==='top'||view==='bottom'?[0,1,0]:preset.up);captureCamera.position.copy(center).addScaledVector(direction,distance);captureCamera.lookAt(center);captureCamera.updateMatrixWorld(true);
+    const captureFrame=mechanicalCaptureFrame(bounds,captureCamera,canvasHost.clientWidth,canvasHost.clientHeight,{x:centerX,y:centerY}),{width:pixelWidth,height:pixelHeight,worldWidth,worldHeight}=captureFrame;
+    captureCamera.left=-worldWidth/2;captureCamera.right=worldWidth/2;captureCamera.top=worldHeight/2;captureCamera.bottom=-worldHeight/2;captureCamera.updateProjectionMatrix();
+    let image;
+    try{renderer.setPixelRatio(1);renderer.setSize(pixelWidth,pixelHeight,false);renderer.shadowMap.needsUpdate=true;renderer.render(scene,captureCamera);image=renderer.domElement.toDataURL('image/png');}
+    finally{if(active)sizeViewport();}
+    if(!image?.startsWith('data:image/png'))throw new Error('Mechanical PNG capture failed.');
+    const warnings=[...modelDiagnostics];if(loadedModelIndexes.size<board.components.length)warnings.push('Some component models are unavailable; saved-footprint stand-ins may be shown.');
+    if(!board.stackup?.some(layer=>Number.isFinite(layer.thickness)))warnings.push('Saved stackup thickness is unavailable; the 3D substrate uses a 1.6 mm display fallback.');
+    return {image,warnings,projection:'orthographic',view,width:pixelWidth,height:pixelHeight,mmPerPixel:worldHeight/pixelHeight,planar:view==='top',bounds:captureFrame.bounds,viewBounds:{left:-worldWidth/2,right:worldWidth/2,top:worldHeight/2,bottom:-worldHeight/2},mechanical:true};
+  }
+  return { host, board,ready:modelReady,captureMechanicalView,
     objectVisibilityCapabilities(){return {supportedTypes:[...objectVisibility.supportedTypes],unsupportedTypes:['graphics','texts','regions','dimensions','rooms','footprints']};},
     setObjectVisibility(input={}) {
       const next=objectVisibilityPolicy(input||{});
       if(next.side!==objectVisibility.side||JSON.stringify(next.hiddenTypes)!==JSON.stringify(objectVisibility.hiddenTypes))userAdjustedCamera=true;
       objectVisibility=next;
-      for(const {mesh,type,layer}of visibilityRecords)mesh.visible=objectVisibility.visible(type,layer);
+      for(const {mesh,type,layer}of visibilityRecords)mesh.visible=!mechanical&&objectVisibility.visible(type,layer);
       updateComponentVisibility();
       setSelection(externalSelection);
       return {hiddenTypes:[...objectVisibility.hiddenTypes],side:objectVisibility.side,supportedTypes:[...objectVisibility.supportedTypes],unsupportedTypes:[...objectVisibility.unsupportedTypes]};
@@ -912,6 +958,7 @@ export function mountBoard3D(container, source, options = {}) {
     getRenderStats(){const plan=qualityViewport(canvasHost.clientWidth,canvasHost.clientHeight,globalThis.devicePixelRatio,graphics.maxDimension,quality,graphics);return{...plan,graphicsTier:graphics.tier,defaultQuality:graphics.defaultQuality,maxDimension:graphics.maxDimension,antialias:gl.getContextAttributes()?.antialias===true,floatTargets:graphics.premium||renderer.extensions.has('EXT_color_buffer_float'),environmentLighting:Boolean(scene.environment),ambientOcclusion:Boolean(pipeline?.passes.some(pass=>pass instanceof GTAOPass&&pass.enabled)),lighting:lightingRig.state(),renderCount,contextLost,gpuTextures:renderer.info.memory.textures,drawCalls:renderer.info.render.calls,loadedModelCount:loadedModelIndexes.size,componentCount:board.components.length};},
     setAnalysisOverlay(surface) {
       if (!active) return { placed: false, reason: "3D viewer is closed." };
+      if(mechanical)return {placed:false,reason:'Mechanical views exclude electrical result overlays.'};
       if (!surface) { analysisOverlay?.dispose(); analysisOverlay = null; invalidate();return { placed: false, reason: "Overlay cleared." }; }
       const basis = surface.zBasis;
       const savedLayer = surface.layer;
@@ -953,7 +1000,7 @@ export function mountBoard3D(container, source, options = {}) {
     setTheme(dark) {
       if (!active) return;
       host.dataset.theme = dark ? "dark" : "light";
-      scene.background.setHex(dark ? 0x151820 : 0xe7ebf1);
+      scene.background.setHex(dark ? 0x151820 : mechanical ? 0xffffff : 0xe7ebf1);
       highlight.material.color.setHex(dark ? 0xffdf7d : 0x9b5500);
       groupHighlight.material.color.setHex(dark ? 0xffdf7d : 0x9b5500);
       resize();
@@ -988,7 +1035,7 @@ export function mountBoard3D(container, source, options = {}) {
         if (index != null && !population[index]) clearSelection();
       }
     },
-    dispose() { if(measuring)options.onMeasurementMode?.(false);active = false; analysisOverlay?.dispose(); stepClient?.dispose(); cancelAnimationFrame(frame); cancelAnimationFrame(layoutFrame); observer.disconnect();controls.removeEventListener('change',invalidate); controls.removeEventListener("change", updateClipping); controls.removeEventListener("start", cameraInteraction); controls.dispose();disposePipeline();lightingRig.dispose();environment?.dispose();renderer.domElement.removeEventListener('webglcontextlost',onContextLost);renderer.domElement.removeEventListener('webglcontextrestored',onContextRestored);document.removeEventListener('pointerdown',closeVisibility);shadow.removeEventListener('keydown',escapeVisibility,true);shadow.removeEventListener('keydown',escapeMeasurement);
+    dispose() { if(measuring)options.onMeasurementMode?.(false);active = false;captureAbort.abort(); analysisOverlay?.dispose(); stepClient?.dispose(); cancelAnimationFrame(frame); cancelAnimationFrame(layoutFrame); observer.disconnect();controls.removeEventListener('change',invalidate); controls.removeEventListener("change", updateClipping); controls.removeEventListener("start", cameraInteraction); controls.dispose();disposePipeline();lightingRig.dispose();environment?.dispose();renderer.domElement.removeEventListener('webglcontextlost',onContextLost);renderer.domElement.removeEventListener('webglcontextrestored',onContextRestored);document.removeEventListener('pointerdown',closeVisibility);shadow.removeEventListener('keydown',escapeVisibility,true);shadow.removeEventListener('keydown',escapeMeasurement);
     renderer.domElement.removeEventListener('pointerdown',measurementTouchCapture,true);netInspection.dispose();selectionAppearance.dispose();const resources = new Set(); scene.traverse((object) => {object.shadow?.dispose?.(); if (object.geometry) resources.add(object.geometry);
       const materials = Array.isArray(object.material) ? object.material : object.material ? [object.material] : [];
       materials.forEach((item) => resources.add(item)); }); resources.forEach((item) => item.dispose());terminalLabelCache.forEach(texture=>texture.dispose()); labelGeometry.dispose(); hold.dispose(); renderer.dispose(); host.remove(); } };

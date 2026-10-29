@@ -16,7 +16,7 @@ FILES = {'analysis-data.js', 'analysis-viewer.html', 'analysis-viewer.css', 'ana
          'credential-vault-host.html', 'credential-vault-host.js', 'credential-vault-worker.js'}
 FILES.update({'window-link.js','detached-view.js','github-project-buffer.js','github-project-view.js'})
 FILES.update({'fast-pi.js','fast-pi-worker.js','fast-pi-workspace.js','fast-pi-workspace.css'})
-FILES.update({'draftsman-model.js','draftsman-snap.js','draftsman-export.js','draftsman-workspace.js','draftsman-workspace.css','draftsman-repository.js'})
+FILES.update({'draftsman-model.js','draftsman-mechanical.js','draftsman-snap.js','draftsman-export.js','draftsman-workspace.js','draftsman-workspace.css','draftsman-repository.js'})
 FILES.update({'overview-routing.js','dashboard.html','dashboard.css','dashboard.js','project-recents.js'})
 FILES.update({'workspace-chrome.css','workspace-chrome.js','revision-actions.js','revision-fork.js','analysis-simulation.js','analysis-simulation.css'})
 FILES.update({'provider-oauth.js','provider-oauth.json'})

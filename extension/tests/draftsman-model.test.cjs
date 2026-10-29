@@ -14,6 +14,16 @@ test('strict schemas reject unknown fields, arbitrary paths, unbounded text and 
  for(const change of [v=>v.version=2,v=>v.schema='other',v=>v.pages[0].items[0].onclick='alert(1)',v=>v.source.token='secret',v=>v.source.host='https://github.com@evil.example',v=>v.source.hashes['../x.kicad_pcb']='c'.repeat(64),v=>v.pages[0].items[0].file='../secret.kicad_pcb',v=>v.pages[0].items[0].x=500,v=>v.pages[0].items[0].scale=0,v=>v.pages[0].items[0].layers=['F.Cu','F.Cu'],v=>v.title='x'.repeat(201),v=>v.accent='url(https://evil)',v=>v.pages[0].items.push({id:'bom',type:'bom',x:10,y:20,width:100,rows:[{reference:'R1',value:'1k',footprint:'R',quantity:-1}]})]){const value=doc();change(value);assert.throws(()=>api.validate(value));}
  const value=doc();value.pages=Array.from({length:21},(_,i)=>({id:'p'+i,title:'',items:[]}));assert.throws(()=>api.validate(value),/1–20/);assert.throws(()=>api.validate(' '.repeat(api.MAX_BYTES+1)),/4 MiB/);value.pages=[{id:'p',title:'',items:Array.from({length:201},(_,i)=>({...view(),id:'v'+i}))}];assert.throws(()=>api.validate(value),/200/);
 });
+
+test('mechanical views preserve orthographic projection and reject copper and misleading dimensions',()=>{
+ const value=doc(),item=value.pages[0].items[0];Object.assign(item,{renderMode:'mechanical3d',projection:'top',side:'top',layers:[]});
+ assert.equal(api.validate(value).pages[0].items[0].projection,'top');
+ for(const change of [view=>view.layers=['F.Cu'],view=>view.side='bottom',view=>view.file='root.kicad_sch',view=>view.projection='perspective']){
+  const copy=JSON.parse(JSON.stringify(value));change(copy.pages[0].items[0]);assert.throws(()=>api.validate(copy));
+ }
+ const withDimension=JSON.parse(JSON.stringify(value));withDimension.pages[0].items.push({id:'dimension-mech',type:'dimension',viewId:item.id,kind:'horizontal',a:{x:0,y:0},b:{x:10,y:0},offset:3});
+ assert.doesNotThrow(()=>api.validate(withDimension));withDimension.pages[0].items[0].projection='iso';assert.throws(()=>api.validate(withDimension),/top mechanical/);
+});
 test('all mirrored and rotated source transforms invert exactly and preserve true measured scale',()=>{
  for(const side of ['top','bottom'])for(const rotation of [0,90,180,270])for(const scale of ['fit',1,2]){const v={...view(),side,rotation,scale},t=api.viewTransform(v,bounds),center=t.toPage({x:35,y:35});assert.ok(Math.abs(center.x-80)<1e-9);assert.ok(Math.abs(center.y-70)<1e-9);
   for(const p of [{x:10,y:20},{x:60,y:50},{x:26.7,y:42.3}]){const q=t.toWorld(t.toPage(p));assert.ok(Math.abs(q.x-p.x)<1e-8);assert.ok(Math.abs(q.y-p.y)<1e-8);}
