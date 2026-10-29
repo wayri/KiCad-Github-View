@@ -1,6 +1,6 @@
 /* Local viewer bridge: only same-origin frames of the explicit local workspace. */
 (()=>{
- 'use strict';let host;try{if(parent!==window&&parent.location.origin===location.origin)host=parent.KiCadLocalWorkspace;}catch{}if(!host)return;
+ 'use strict';let host;try{if(parent!==window&&parent.location.origin===location.origin)host=parent.KiCadLocalWorkspace;else if(new URLSearchParams(location.search).get('detached')==='1'&&opener&&opener.location.origin===location.origin){const candidate=opener.KiCadLocalWorkspace;if(candidate?.acceptDetached?.(location.href))host=candidate;}}catch{}if(!host)return;
  window.KiCadLocalRuntime=true;window.KiCadLocalWorkspace=host;
  const api=host.transport,storage=host.storage;
  window.chrome={runtime:{id:'kiview-local',getURL:name=>host.assetURL(name),sendMessage:async message=>{

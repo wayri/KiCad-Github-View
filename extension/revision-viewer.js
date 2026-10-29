@@ -18,7 +18,8 @@
   const loading=globalThis.KiCadLoading?.indicator(document.body,{onStop:()=>stopLoading()});
   function loadWait(promise){return new Promise((resolve,reject)=>{const signal=loadController?.signal,abort=()=>reject(signal?.reason||Object.assign(Error('Loading stopped.'),{name:'AbortError'}));if(signal?.aborted){abort();return;}signal?.addEventListener('abort',abort,{once:true});Promise.resolve(promise).then(value=>{signal?.removeEventListener('abort',abort);signal?.aborted?abort():resolve(value);},error=>{signal?.removeEventListener('abort',abort);reject(error);});});}
   const loadSend=message=>{const pending=send({...message,...(remoteLoad?{loadId}:{})});const signal=loadController?.signal,abort=()=>{if(remoteLoad)void send({type:'load-cancel',loadId}).catch(()=>{});};signal?.addEventListener('abort',abort,{once:true});return loadWait(pending).finally(()=>signal?.removeEventListener('abort',abort));};
-  let sheetOverview=null,compatibilityUI=null;
+  let sheetOverview=null,compatibilityUI=null,windowLink=null;
+  const viewSession=/^[a-zA-Z0-9_-]{32,128}$/.test(params.get('viewSession')||'')?params.get('viewSession'):globalThis.crypto?.randomUUID?.()||null;
   let dark=pcb,workspace=null,canvas=null,scene=null,modelAssetCache=null,disposed=false,applying=false,crossApplying=false,lastView='',lastFile='';
 
   const own=new URL(chrome.runtime.getURL('browser-viewer.html')),ownOrigin=`${own.protocol}//${own.host}`;
@@ -234,7 +235,7 @@
 
       getDesigns:()=>designs,updateDiagnostics,onOverviewHighlights:()=>sheetOverview?.refresh(),
       onHierarchy(hierarchy){if(!disposed)parent.postMessage({type:'kicad-review:hierarchy',repository,ref,hierarchy},ownOrigin);},
-      onSelection(selection){if(crossApplying||!globalThis.KiCadPairedReview?.validSelection(selection))return;if(globalThis.KiCadVSCodeBridge?.selection)globalThis.KiCadVSCodeBridge.selection(selection);else parent.postMessage({type:'kicad-review:selection',selection},ownOrigin);},
+      onSelection(selection){if(crossApplying||!globalThis.KiCadPairedReview?.validSelection(selection))return;windowLink?.publish(selection);if(globalThis.KiCadVSCodeBridge?.selection)globalThis.KiCadVSCodeBridge.selection(selection);else parent.postMessage({type:'kicad-review:selection',selection},ownOrigin);},
       onCommentsChanged(){if(globalThis.KiCadVSCodeBridge?.onCommentsChanged)globalThis.KiCadVSCodeBridge.onCommentsChanged();else parent.postMessage({type:'kicad-review:comments-changed'},ownOrigin);},pullNumber:Number(params.get('pullNumber'))||null,pullRepository:params.get('pullRepository')||repository});
 
     workspace.attachCanvas(canvas);openSheet(initialFile);loading?.hide();
@@ -378,6 +379,10 @@
     }
 
     const related=selection=>{if(!globalThis.KiCadPairedReview?.validSelection(selection))return;crossApplying=true;try{workspace.highlightRelated?.(selection);}finally{crossApplying=false;}};
+    if(globalThis.KiCadWindowLink&&viewSession&&(/^[a-f0-9]{40}$/i.test(ref)||globalThis.KiCadLocalRuntime&&globalThis.KiCadLocalWorkspace?.openDetached))try{windowLink=KiCadWindowLink.mount({session:viewSession,scope:JSON.stringify([provider,providerContext.host||'https://github.com',repository,ref]),onSelection:selection=>{crossApplying=true;try{workspace.applyWindowSelection?.(selection);}finally{crossApplying=false;}},onEnabled:enabled=>{dispatchEvent(new CustomEvent('kicad-review:detach-state',{detail:{enabled}}));if(parent!==window)parent.postMessage({type:'kicad-review:detach-state',enabled},ownOrigin);}});}catch(error){$('engineNotice').textContent=error.message;$('engineNotice').hidden=false;updateDiagnostics();}
+    addEventListener('kicad-review:detach-sync',event=>{if(typeof event.detail?.enabled==='boolean')windowLink?.setEnabled(event.detail.enabled);});
+    addEventListener('kicad-review:detach-view',event=>{const mode=event.detail?.mode;if(!['schematic','layout','3d'].includes(mode))return;globalThis.KiCadDetachedView?.chooser({mode,current:currentFile(),unavailable:Boolean(globalThis.KiCadVSCodeContext||globalThis.KiCadLocalRuntime&&!globalThis.KiCadLocalWorkspace?.openDetached||globalThis.KiCadAndroidRuntime),getEntries:async()=>{const reply=await send({type:'project-inventory',repository,ref,file:rootFile});if(!reply?.ok)throw Error(reply?.error||'Project inventory unavailable.');return reply.result.files;},buildURL:file=>KiCadDetachedView.url({base:location.href,mode,file,repository,ref,provider,host:providerContext.host,session:viewSession,allowLocal:Boolean(globalThis.KiCadLocalRuntime&&globalThis.KiCadLocalWorkspace?.openDetached)}),onError:message=>{$('engineNotice').textContent=message;$('engineNotice').hidden=false;updateDiagnostics();}});});
+    if(params.get('initialView')==='3d'&&pcb)$('mode3d').click();
     addEventListener('kicad-review:related',event=>{if(globalThis.KiCadVSCodeContext)related(event.detail);});
     addEventListener('kicad-review:comments-refresh',()=>{if(globalThis.KiCadVSCodeContext)workspace.refreshComments?.();});
     addEventListener('message',event=>{
@@ -385,6 +390,7 @@
       if(event.source!==parent||event.origin!==ownOrigin||event.data?.type!=='kicad-review:command')return;
 
       const msg=event.data;
+      if(msg.command==='detach-sync'&&typeof msg.enabled==='boolean'){windowLink?.setEnabled(msg.enabled);return;}
       if(msg.command==='workspace-view'){
         if(!['schematic','layout','3d','draftsman','simulation'].includes(msg.mode))return;
         if(msg.mode==='3d'){if(pcb&&!scene)$('mode3d').click();return;}
@@ -421,7 +427,7 @@
 
   }
 
-  addEventListener('pagehide',()=>{disposed=true;loadController?.abort();loading?.dispose();modelAssetCache?.clear();sheetOverview?.dispose();compatibilityUI?.dispose();workspace?.dispose();scene?.dispose();canvas?.dispose();});
+  addEventListener('pagehide',()=>{windowLink?.dispose();disposed=true;loadController?.abort();loading?.dispose();modelAssetCache?.clear();sheetOverview?.dispose();compatibilityUI?.dispose();workspace?.dispose();scene?.dispose();canvas?.dispose();});
 
   const deadline=setTimeout(()=>stopLoading('Loading stopped after 5 minutes. Retry or open a smaller project.'),300000);
   start().catch(error=>{loading?.hide();if(disposed)return;workspace?.dispose();canvas?.dispose();$('frameControls').hidden=true;status.textContent=loadController?.signal.aborted?(loadController.signal.reason?.message||'Loading stopped.'):error.message;if(error.name!=='AbortError')status.classList.add('error');const retry=document.createElement('button');retry.type='button';retry.textContent='Retry loading';retry.onclick=()=>location.reload();status.append(retry);if(!status.isConnected)$('drawingHost').append(status);}).finally(()=>{loadFinished=true;clearTimeout(deadline);});

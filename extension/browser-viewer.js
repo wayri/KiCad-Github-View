@@ -1,6 +1,7 @@
 "use strict";
 (() => {
   const params = new URLSearchParams(location.search);
+  const viewSession=/^[a-zA-Z0-9_-]{32,128}$/.test(params.get('viewSession')||'')?params.get('viewSession'):globalThis.crypto?.randomUUID?.()||null;
   if(/\.pdf$/i.test(params.get('file')||'')){const removed=params.get('status')==='removed';params.set('ref',params.get('ref')||(removed?params.get('base'):params.get('head'))||'');if(!removed&&params.get('headRepository'))params.set('repository',params.get('headRepository'));location.replace(chrome.runtime.getURL('pdf-viewer.html')+'?'+params);return;}
   const request = {
     repository: params.get("repository"), headRepository: params.get("headRepository") || params.get("repository"),
@@ -67,7 +68,7 @@
   async function inventory(retry){if(!inventoryPromise)inventoryPromise=loadOperation('inventory','Finding project drawings',read=>read({type:'project-inventory',repository:request.headRepository,ref:request.head,file:entryFile}),retry).then(reply=>{if(!reply?.ok)throw Error(reply?.error||'Could not discover project drawings.');if(!Array.isArray(reply.result?.files)||reply.result.files.length>20000)throw Error('Invalid project inventory.');return reply.result;}).catch(error=>{inventoryPromise=null;throw error;});return inventoryPromise;}
   function displayDrawing(path){
     if(isDrawing(request.file)&&path!==request.file&&isBoard(path)===isBoard(request.file)){
-      location.assign(chrome.runtime.getURL('browser-viewer.html')+'?'+new URLSearchParams({repository:request.headRepository,head:request.head,file:path,...providerContext}));return;
+      location.assign(chrome.runtime.getURL('browser-viewer.html')+'?'+new URLSearchParams({repository:request.headRepository,head:request.head,file:path,viewSession,...providerContext}));return;
     }
     if(!isDrawing(request.file)){request.file=path;request.oldFile=path;showProject('head',request.headRepository,request.head,path);mountPicker();}
     if(path===request.file){markWorkspace(isBoard(path)?'layout':'schematic');if(pairedFile)pairView('main');else setMode('head');}
@@ -120,6 +121,9 @@
     projectControl('Fit panes',()=>sendCommand('fit-drawing'));
     const initial=params.get('pairedFile');if(initial){if(companionValid(initial))openPair(initial);else status('Invalid companion drawing path.',true);}
   }
+  addEventListener('message',event=>{if(event.origin===origin()&&[...frames.values()].some(frame=>frame.contentWindow===event.source)&&event.data?.type==='kicad-review:detach-state'&&typeof event.data.enabled==='boolean')dispatchEvent(new CustomEvent('kicad-review:detach-state',{detail:{enabled:event.data.enabled}}));});
+  addEventListener('kicad-review:detach-sync',event=>{if(typeof event.detail?.enabled==='boolean')for(const frame of frames.values())frame.contentWindow?.postMessage({type:'kicad-review:command',command:'detach-sync',enabled:event.detail.enabled},origin());});
+  addEventListener('kicad-review:detach-view',event=>{const mode=event.detail?.mode;if(!['schematic','layout','3d'].includes(mode))return;globalThis.KiCadDetachedView?.chooser({mode,current:request.file,unavailable:Boolean(globalThis.KiCadVSCodeContext||globalThis.KiCadLocalRuntime&&!globalThis.KiCadLocalWorkspace?.openDetached||globalThis.KiCadAndroidRuntime),getEntries:async()=>(await inventory()).files,buildURL:file=>KiCadDetachedView.url({base:location.href,mode,file,repository:request.headRepository,ref:request.head,provider,host:providerContext.host,session:viewSession,allowLocal:Boolean(globalThis.KiCadLocalRuntime&&globalThis.KiCadLocalWorkspace?.openDetached)}),onError:message=>status(message,true)});});
   function status(message, error = false) {
     $("status").textContent = message; $("status").classList.toggle("error", error);
     $("status").hidden=Boolean(pairedFile)&&!error;
@@ -164,7 +168,7 @@
     holder.className = "drawing";
     const viewer = element("iframe");viewer.allow="camera";
     viewer.title = `${file} at ${ref.slice(0, 12)}`;
-    const query = new URLSearchParams({ repository, ref, file, workspace: '1', headerViews:'1', ...providerContext });
+    const query = new URLSearchParams({ repository, ref, file, workspace: '1', headerViews:'1',viewSession, ...providerContext });
     if(file===entryFile&&params.get('focusNet')&&params.get('focusNet').length<=500)query.set('focusNet',params.get('focusNet'));
     if (request.pullNumber) { query.set("pullNumber", request.pullNumber); query.set("pullRepository", request.pullRepository); }
     if(!position&&file===entryFile&&params.has('focusX')&&params.has('focusY')&&[params.get('focusX'),params.get('focusY')].every(n=>Number.isFinite(Number(n))&&Math.abs(Number(n))<=1e6))position={x:Number(params.get('focusX')),y:Number(params.get('focusY')),uuid:params.get('focusUuid')};

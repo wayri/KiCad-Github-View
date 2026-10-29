@@ -918,6 +918,29 @@
       }
       if(object.kind==='sheet'&&!silent)highlightSheet(sheetTarget(object),object);else updateHighlights();draw();
     }
+    function applyWindowSelection(selection){
+      if(selection===null){clearHighlights();return true;}
+      if(!root.KiCadPairedReview?.validSelection(selection))return false;
+      const same=item=>/\.kicad_pcb$/i.test(item.path)===pcb;
+      const part=item=>{const uuid=item.kind==='pin'?item.ownerUuid:item.uuid;const matches=objects.filter(o=>o.path===item.path&&!o.parentId&&o.kind===(pcb?'footprint':'symbol')&&(uuid?o.uuid===uuid:o.reference===item.reference));return matches.length===1?matches[0]:null;};
+      const net=item=>{const matches=netModel.nets.filter(n=>n.path===item.path&&(n.name===item.netName||n.names?.includes(item.netName)));return matches.length===1?matches[0]:null;};
+      if(selection.kind==='group'){
+        if(!selection.items.length){clearHighlights();return true;}
+        const parts=[],nets=[],errors=[];for(const item of selection.items){
+          if(item.kind==='pin'){errors.push('Select one pin to cross-select its exact terminal.');continue;}
+          if(same(item)){const object=item.kind==='part'?part(item):null,n=item.kind==='net'?net(item):null;if(object)parts.push(object);else if(n)nets.push(n);else errors.push('Saved object is missing or ambiguous.');}
+          else {const match=item.kind==='part'?root.KiCadPairedReview.relatedPart(objects,item):root.KiCadPairedReview.relatedNet(netModel.nets,objects,item,currentFile());if(match.object)parts.push(match.object);else if(match.net)nets.push(match.net);else errors.push(match.error);}
+        }
+        const path=[...parts,...nets].find(x=>x.path===currentFile())?.path||parts[0]?.path||nets[0]?.path;if(path&&path!==currentFile())openSheet(path);
+        pinnedClasses.clear();pinnedNets.clear();selectedNet=null;highlightObjects=[...new Set(parts)];for(const n of nets)pinnedNets.set(n.id,n);selected=highlightObjects.find(o=>o.path===currentFile())||null;activeConnection=null;connectionCursor=-1;updateHighlights();renderObjects();renderNets();properties();navigation?.renderSearch();notice(errors.length?errors.filter(Boolean).join(' '):'');draw();return Boolean(parts.length||nets.length);
+      }
+      if(!same(selection))return highlightRelated(selection);
+      const path=selection.path;if(path!==currentFile()&&model.sheets.some(s=>s.path===path))openSheet(path);refreshNets();
+      if(selection.kind==='net'){const match=net(selection);if(!match){notice('Saved net is missing or ambiguous in this drawing.');return false;}selectNet(match,true,false,false);return true;}
+      const object=part(selection);if(!object){notice('Saved component is missing or ambiguous in this drawing.');return false;}
+      if(selection.kind==='pin'){const primitives=(getCanvas()?.primitives||[]).filter(p=>!p.hidden&&!p.hole&&(p.ownerUuid||p.uuid)===object.uuid&&['pad','pin'].includes(p.kind)&&String(p.pinNumber??p.name??'')===String(selection.pinNumber));return selectTerminal(object,selection.pinNumber,primitives,true,false);}
+      pinnedNets.clear();pinnedClasses.clear();highlightObjects=[];selectObject(object,true,true);highlightObjects=[object];updateHighlights();draw();return true;
+    }
     function highlightRelated(selection) {
       if(selection?.kind==='pin'){
         if(!root.KiCadPairedReview?.validSelection(selection))return false;
@@ -1839,7 +1862,7 @@
       const result=sources.length?root.KiCadOverviewConnectivity.resolve(netModel.nets,sources,entries.flatMap(e=>e.placements||[])):{matches:[],links:[],limits:[]};result.active=sources.length>0;
       overviewCache={model:netModel,objects,key,result};return result;
     }
-    return {selectOverviewObject(path,uuid){const matches=objects.filter(o=>o.path===path&&o.uuid===uuid);let object=matches.find(o=>!o.parentId)||matches[0];if(!object)return false;if(object.parentId)object=objects.find(o=>o.path===path&&o.id===object.parentId);if(!object)return false;selectObject(object,true,false);return true;},positionSimulation(point){simulationView?.move?.(point);},sceneViewChanged(){if(scene)draw();},focusSignalNet,focusSaved(path,uuid){const matches=objects.filter(o=>o.path===path&&o.uuid===uuid&&!o.parentId);if(matches.length===1)selectObject(matches[0],true,true);},restoreFocusView,attachCanvas,draw,refreshNets,refreshComments,highlightRelated,followSheet,clearSelection,clearHighlights,
+    return {selectOverviewObject(path,uuid){const matches=objects.filter(o=>o.path===path&&o.uuid===uuid);let object=matches.find(o=>!o.parentId)||matches[0];if(!object)return false;if(object.parentId)object=objects.find(o=>o.path===path&&o.id===object.parentId);if(!object)return false;selectObject(object,true,false);return true;},positionSimulation(point){simulationView?.move?.(point);},sceneViewChanged(){if(scene)draw();},focusSignalNet,focusSaved(path,uuid){const matches=objects.filter(o=>o.path===path&&o.uuid===uuid&&!o.parentId);if(matches.length===1)selectObject(matches[0],true,true);},restoreFocusView,attachCanvas,draw,refreshNets,refreshComments,highlightRelated,applyWindowSelection,followSheet,clearSelection,clearHighlights,
       overviewSheets(){return sheetOverviewEntries(model.sheets.filter(s=>s.kind==='schematic'),objects.filter(o=>o.kind==='sheet'));},
       overviewSelection(path,instanceId){const graph=overviewConnectivity();return {netIds:graph?[...new Set(graph.matches.filter(m=>m.net.path===path&&(!instanceId||m.instanceId===instanceId)).map(m=>m.net.id))]:(netSheetMatches().get(path)||[]).map(n=>n.id),instanceIds:graph?[...new Set(graph.matches.filter(m=>m.net.path===path).map(m=>m.instanceId))]:[],limits:graph?.limits||[],uuids:highlightObjects.filter(o=>o.path===path).map(o=>o.uuid).filter(Boolean),mode:$('highlightStyle').value||'dim',netActive:graph?graph.active:netSheetMatches().size>0};},
       selectOverviewNet(path,uuid,instanceId){const matches=netModel.nets.filter(n=>n.path===path&&n.uuids.includes(uuid));if(matches.length===1){selectNet(matches[0],false,false,false,false,instanceId);return true;}return false;},

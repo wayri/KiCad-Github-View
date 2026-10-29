@@ -204,6 +204,18 @@ test('paired selection emits a bounded saved part and net; incoming highlight re
  view.get('netList').children[0].click();assert.equal(selections.at(-1).kind,'net');assert.equal(selections.at(-1).netName,'SIGNAL');
  assert.equal(view.workspace.highlightRelated({kind:'net',netName:'NO_SUCH_NET',path:'root.kicad_sch'}),false);
 });
+test('independent layout and 3D windows apply exact same-board part, terminal, net and group selections',()=>{
+ const view=workspaceRuntime();view.load();
+ assert.equal(view.workspace.applyWindowSelection({kind:'part',path:'board.kicad_pcb',uuid:'fp',reference:'R1'}),true);
+ assert.ok(view.canvas.netPrimitives.size>0);
+ assert.equal(view.workspace.applyWindowSelection({kind:'part',path:'board.kicad_pcb',uuid:'missing',reference:'R1'}),false,'does not fall back from conflicting saved UUID');
+ assert.equal(view.workspace.applyWindowSelection({kind:'pin',path:'board.kicad_pcb',ownerUuid:'fp',uuid:'pad',reference:'R1',pinNumber:'1'}),true);
+ assert.equal(view.workspace.applyWindowSelection({kind:'net',path:'board.kicad_pcb',netName:'SIGNAL'}),true);
+ assert.equal(view.canvas.netHighlight.name,'SIGNAL');
+ assert.equal(view.workspace.applyWindowSelection({kind:'group',items:[{kind:'part',path:'board.kicad_pcb',uuid:'fp',reference:'R1'},{kind:'net',path:'board.kicad_pcb',netName:'SIGNAL'}]}),true);
+ assert.equal(view.workspace.applyWindowSelection(null),true);assert.equal(view.canvas.netHighlight,null);
+ assert.equal(view.workspace.applyWindowSelection({kind:'part',path:'root.kicad_sch',uuid:'symbol-uuid',reference:'R1'}),true,'opposite schematic mapping still works');
+});
 
 test('point and dragged-area review tools persist millimetre anchors and disable ruler interception',async()=>{
  let notes=[];const view=workspaceRuntime(async request=>{if(request.type==='comment-list')return notes;if(request.type==='comment-save'){notes.push(request.comment);return request.comment;}return[];});view.load();await new Promise(resolve=>setImmediate(resolve));

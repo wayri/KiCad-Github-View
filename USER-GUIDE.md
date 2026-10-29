@@ -450,3 +450,9 @@ The icon-and-label view strip switches Schematic, Layout, 3D, Draftsman and
 Simulation. Simulation separates imported KiCad/wayriCAD results from Fast PI.
 See [Fast PI setup, outputs and numerical limits](docs/FAST-PI.md) before using
 this experimental two-contact DC copper workflow.
+
+## Independent browser windows
+
+Use **Detach** or drag a drawing tab outside the viewer window to separate the
+schematic, PCB layout or 3D view. Each has its own camera; **Cross-select detached
+views** controls selection sharing. [Supported hosts and setup](docs/DETACHED-VIEWS.md).
