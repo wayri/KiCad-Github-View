@@ -23,29 +23,31 @@
  }
  function content(value,options={}){
   const input=bounded(value),raw=input.text,api=options.comments||root.KiCadReviewComments||fallback;
-  const anchors=[],attachments=[],edits=[],seen=new Set(),ranges=literalRanges(raw),protectedAt=index=>ranges.some(([start,end])=>index>=start&&index<end);
+  const anchors=[],attachments=[],severities=[],annotations=[],edits=[],seen=new Set(),ranges=literalRanges(raw),protectedAt=index=>ranges.some(([start,end])=>index>=start&&index<end);
   let invalidMetadata=false;
   const marker=/<!--\s*kicad-review:[\s\S]*?(?:-->|$)/g;
   for(const match of raw.matchAll(marker)){
    if(protectedAt(match.index))continue;
    let note;try{note=api?.fromMarkdown?.(match[0])?.[0];}catch{}
    if(note&&anchors.length<MAX_CONTEXTS){
+    if(annotations.length<MAX_CONTEXTS)annotations.push(note);
+    if(!severities.includes(note.severity))severities.push(note.severity);
     const key=JSON.stringify(note.anchor);if(!seen.has(key)){anchors.push(note.anchor);seen.add(key);}
     for(const attachment of note.attachments||[])if(attachments.length<MAX_CONTEXTS&&!attachments.some(existing=>existing.url===attachment.url))attachments.push(attachment);
    }else if(!note)invalidMetadata=true;
    let replaced=false;
    if(note&&api?.toMarkdown){
-    let canonical;try{canonical=api.toMarkdown(note);}catch{}
-    if(canonical){let index=raw.indexOf(canonical);while(index>=0&&protectedAt(index))index=raw.indexOf(canonical,index+1);
+    let versions=[];try{versions=[...new Set([api.toMarkdown(note),api.toMarkdown(note,{stateBadge:false}),api.toMarkdown(note,{severityBadge:false})])];}catch{}
+    for(const canonical of versions){let index=raw.indexOf(canonical);while(index>=0&&protectedAt(index))index=raw.indexOf(canonical,index+1);
      if(index>=0&&index+canonical.length>=match.index+match[0].length&&!edits.some(edit=>index<edit.end&&index+canonical.length>edit.start)){
-      edits.push({start:index,end:index+canonical.length,text:note.text});replaced=true;
+      edits.push({start:index,end:index+canonical.length,text:note.text});replaced=true;break;
      }
     }
    }
    if(!replaced&&!edits.some(edit=>match.index>=edit.start&&match.index<edit.end))edits.push({start:match.index,end:match.index+match[0].length,text:''});
   }
   let text=raw;for(const edit of edits.sort((a,b)=>b.start-a.start))text=text.slice(0,edit.start)+edit.text+text.slice(edit.end);
-  return{text:text.trim(),anchors,attachments,truncated:input.truncated,invalidMetadata};
+  return{text:text.trim(),anchors,attachments,severities,annotations,truncated:input.truncated,invalidMetadata};
  }
  function safeUrl(value){
   if(typeof value!=='string'||value.length>2048||/[\x00-\x20\x7f]/.test(value))return null;

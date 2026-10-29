@@ -50,6 +50,17 @@ test('historical open rejects traversal, missing sources and unavailable Git wit
  const missing=await h.send({type:'repository-tree',sha:OLD,directory:''});assert.equal(missing.ok,false);assert.match(missing.error,/No working files were substituted/);
 });
 
+test('historical cross-file search preserves immutable revision and target identity in the new saved viewer',async()=>{
+ const h=harness();assert.equal((await h.send({type:'repository-open-file',path:'root.kicad_sch',sha:OLD})).ok,true);
+ const panel=h.panels[0],initial=JSON.parse(panel.webview.html.match(/globalThis.KiCadVSCodeContext=(.*?);<\/script>/)[1]);let id=0;
+ const saved=async request=>{await panel.receive({channel:h.api.CHANNEL,token:initial.token,id:++id,request:{repository:'local/workspace',ref:OLD,file:'root.kicad_sch',...request}});return panel.messages.at(-1).reply;};
+ assert.equal((await saved({type:'project-search-files'})).ok,true);
+ const result={kind:'object',path:'board.kicad_pcb',uuid:'saved-part',position:{x:1,y:2},view:'3d'};
+ assert.equal((await saved({type:'open-project-drawing',file:result.path,searchResult:result})).ok,true);
+ const target=JSON.parse(h.panels[1].webview.html.match(/globalThis.KiCadVSCodeContext=(.*?);<\/script>/)[1]);
+ assert.equal(target.historical,true);assert.equal(target.drawingFile,result.path);assert.match(target.search,new RegExp(OLD));assert.deepEqual(target.searchResult,result);assert.ok(h.reads.every(read=>read.sha===OLD));
+});
+
 test('commit comparison uses unsaved current text and immutable saved source, with no writable receiver',async()=>{
  const h=harness(),uri=Uri.joinPath(h.session.scope.boundary,'root.kicad_sch');
  h.vscode.workspace.fs.stat=async target=>({type:target.path.endsWith('.kicad_sch')?1:2,size:12});

@@ -54,6 +54,7 @@ function runtime(dpr=1,extra={}){
   const element={style:{},setAttribute(){},addEventListener:(key,fn)=>listeners.set(key,fn),removeEventListener(){},getContext:()=>ctx,getBoundingClientRect:()=>({left:0,top:0,width:800,height:600}),remove(){},setPointerCapture(){},hasPointerCapture:()=>false};
   const host={append(){},getBoundingClientRect:element.getBoundingClientRect};
   let created=false;const env={EventTarget,CustomEvent,document:{createElement:()=>{if(!created){created=true;return element;}return {...element,style:{}};}},devicePixelRatio:dpr,ResizeObserver:class{observe(){}disconnect(){}},module:{exports:{}},...extra};
+  vm.runInNewContext(fs.readFileSync(path.join(__dirname,'../pad-labels.js'),'utf8'),env);
   vm.runInNewContext(fs.readFileSync(path.join(__dirname,'../owned-canvas.js'),'utf8'),env);
   const canvas=env.KiCadOwnedCanvas.mount(host,{pcb:true,dark:true});return{canvas,element,operations,listeners};
 }
@@ -270,4 +271,24 @@ test('highlight union honors live mutable members and the 200-net cap',()=>{
  const {canvas}=runtime(),a={},b={},c={};const members=[a],nets=[{primitives:members},...Array.from({length:199},()=>({primitives:[]})),{primitives:[c]}];
  canvas.setNetHighlights(nets);assert.equal(canvas.highlightCount,200);assert.equal(canvas.netPrimitives.has(a),true);assert.equal(canvas.netPrimitives.has(c),false);
  members.push(b);canvas.setNetHighlights(nets);assert.equal(canvas.netPrimitives.has(b),true);members.shift();canvas.setNetHighlights(nets);assert.equal(canvas.netPrimitives.has(a),false);canvas.dispose();
+});
+
+test('selection encloses measured rotated glyphs and visible footprint children',()=>{
+ const {canvas}=runtime();canvas.viewport.camera.zoom=10;
+ canvas.ctx.measureText=()=>({actualBoundingBoxLeft:0,actualBoundingBoxRight:80,actualBoundingBoxAscent:10,actualBoundingBoxDescent:5});
+ const label={type:'text',x:20,y:30,text:'EN',angle:90,align:'left',layer:'F.Cu',ownerUuid:'u1'};
+ const proxy={type:'polygon',kind:'footprint-hit',uuid:'u1',ownerUuid:'u1',points:[{x:0,y:0},{x:1,y:1}]};
+ const pad={type:'circle',x:15,y:20,r:1,layer:'F.Cu',ownerUuid:'u1'};
+ canvas.primitives=[proxy,label,pad];canvas.visibleLayers=new Set(['F.Cu']);
+ const box=canvas.selectionBounds(label),measured=canvas.textBounds(label);
+ assert.deepEqual(box,measured);const all=canvas.selectionBounds(proxy);
+ assert.ok(all.x<=14&&all.y<=19&&all.y+all.h>=measured.y+measured.h);
+ canvas.visibleLayers.clear();assert.equal(canvas.selectionBounds(proxy),null);canvas.dispose();
+});
+
+test('flipped selection rectangle encloses both screen-space corners with positive width',()=>{
+ const {canvas,operations}=runtime();const pad={type:'circle',x:5,y:5,r:2,layer:'F.Cu'};
+ canvas.primitives=[pad];canvas.visibleLayers=new Set(['F.Cu']);canvas.selected=pad;canvas.viewport.camera.zoom=10;canvas.viewport.camera.flipped=true;
+ operations.length=0;canvas.draw();const rectangles=operations.filter(o=>o[0]==='strokeRect');
+ assert.equal(rectangles.length,2);for(const rect of rectangles){assert.equal(rect[3],50);assert.equal(rect[4],50);}canvas.dispose();
 });

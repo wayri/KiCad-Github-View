@@ -71,6 +71,10 @@ class ReleaseTests(unittest.TestCase):
             (root / 'docs/images').mkdir(parents=True)
             (root / 'docs/using-github-integration').mkdir()
             (root / 'README.md').write_text('Guide index')
+            (root / 'USER-GUIDE.md').write_text('Illustrated walkthrough')
+            (root / 'docs/chrome-privacy.html').write_text('<h1>Privacy</h1>')
+            (root / 'docs/images/draftsman').mkdir()
+            (root / 'docs/images/draftsman/walkthrough.webm').write_bytes(b'fixture video')
             (root / 'docs/using-github-integration/README.md').write_text('![Example](../images/example.jpg)')
             (root / 'docs/images/example.jpg').write_bytes(b'fixture pixels')
             first = release.package_guides(root / 'first.zip', root)
@@ -78,6 +82,9 @@ class ReleaseTests(unittest.TestCase):
             self.assertEqual(first.read_bytes(), second.read_bytes())
             with zipfile.ZipFile(first) as archive:
                 self.assertEqual(archive.read('docs/images/example.jpg'), b'fixture pixels')
+                self.assertEqual(archive.read('USER-GUIDE.md'), b'Illustrated walkthrough')
+                self.assertEqual(archive.read('docs/images/draftsman/walkthrough.webm'), b'fixture video')
+                self.assertIn('docs/chrome-privacy.html', archive.namelist())
                 self.assertIn('docs/using-github-integration/README.md', archive.namelist())
 
     def test_tag_binding_and_dirty_checkout_rejection(self):

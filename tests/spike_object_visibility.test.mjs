@@ -42,7 +42,7 @@ test('scene filter composes with existing Display groups without changing camera
  const front={visible:false},back={visible:true},track={visible:true,parent:front},pad={visible:true,parent:back};
  const records=[{mesh:track,type:'tracks',layer:'F.Cu'},{mesh:pad,type:'pads',layer:'B.Cu'}];
  const camera={zoom:7,position:[1,2,30]},before=JSON.stringify(camera);let changes=0;
- const api=Function('objectVisibilityPolicy','visibilityRecords','updateComponentVisibility','setSelection','externalSelection',`let objectVisibility=objectVisibilityPolicy(),userAdjustedCamera=false;return {${code}adjusted:()=>userAdjustedCamera};`)(policy,records,()=>{},()=>changes++,{});
+ const api=Function('objectVisibilityPolicy','visibilityRecords','updateComponentVisibility','setSelection','externalSelection',`const mechanical=false;let objectVisibility=objectVisibilityPolicy(),userAdjustedCamera=false;return {${code}adjusted:()=>userAdjustedCamera};`)(policy,records,()=>{},()=>changes++,{});
  const hidden=api.setObjectVisibility({hiddenTypes:['tracks','rooms'],side:'bottom'});
  assert.equal(track.visible,false);assert.equal(pad.visible,true);assert.equal(front.visible,false);assert.equal(back.visible,true);
  assert.deepEqual(hidden.unsupportedTypes,['rooms']);assert.equal(api.adjusted(),true);

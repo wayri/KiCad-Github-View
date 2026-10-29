@@ -9,6 +9,7 @@ global.fetch=async()=>{networkCalls++;return new Response('{}');};
 global.importScripts=()=>{};
 global.KiCadGitHubReviewApi={tokenStatus:async()=>{credentialCalls++;return {configured:true};}};
 const policy=require('../managed-policy.js');
+require('../github-project-view.js');
 require('../background.js');
 const viewer={id:'test',url:chrome.runtime.getURL('browser-viewer.html')},options={id:'test',url:chrome.runtime.getURL('options.html')};
 const message=(value,sender=viewer)=>new Promise(resolve=>{if(!listener(value,sender,resolve))resolve({ignored:true});});
@@ -27,7 +28,7 @@ test('malformed, unreadable and partially available policy fails closed without 
  chrome.storage.managed={};assert.equal((await policy.read()).valid,false);assert.equal(networkCalls,before);
 });
 test('offline dispatcher denies repository reads, authentication, diagnostics and publication before credentials or network',async()=>{
- const types=['project','githubPull','githubFiles','repository-detect','project-inventory','project-file','repo-asset','pdf-file','github-annotations','github-thread-read','chat-thread-list','github-auth-set','github-auth-status','github-device-start','github-device-poll','github-access-test','viewer-diagnostics','gitlab-auth-set','gitlab-oauth-start','gitlab-auth-status','github-publish-comment','comment-publish','chat-message-write','chat-thread-state','chat-reaction','open-comment-draft'];
+ const types=['draftsman-save','project','githubPull','githubFiles','repository-detect','project-inventory','project-file','repo-asset','pdf-file','github-annotations','github-thread-read','chat-thread-list','github-auth-set','github-auth-status','github-device-start','github-device-poll','github-access-test','viewer-diagnostics','gitlab-auth-set','gitlab-oauth-start','gitlab-auth-status','github-publish-comment','comment-publish','chat-message-write','chat-thread-state','chat-reaction','open-comment-draft'];
  configuration={NetworkEnabled:false};const before=networkCalls,credentials=credentialCalls;
  for(const type of types)for(const provider of ['github','gitlab']){
   const result=await message({type,provider,repository:'owner/repo'},options);assert.equal(result.ok,false,type);assert.match(result.error,/administrator policy/,type);
@@ -42,7 +43,7 @@ test('policy changes override an already configured account and cannot be change
  const response=await message({type:'github-auth-status',NetworkEnabled:true,policy:{NetworkEnabled:true}},options);
  assert.equal(response.ok,false);assert.equal(credentialCalls,credentials);
  configuration={NetworkEnabled:true,ProviderWritesEnabled:false};await policy.authorize({type:'project'});
- for(const type of ['repository-fork-revision','github-publish-comment','comment-publish','chat-message-write','chat-thread-state','chat-reaction','open-comment-draft','claim-comment-draft'])assert.equal((await message({type})).ok,false,type);
+ for(const type of ['draftsman-save','repository-fork-revision','github-publish-comment','comment-publish','chat-message-write','chat-thread-state','chat-reaction','open-comment-draft','claim-comment-draft'])assert.equal((await message({type})).ok,false,type);
  for(const type of ['comment-list','comment-save','comment-delete','github-auth-clear','gitlab-auth-reset'])await policy.authorize({type});
 });
 test('transport rechecks managed policy for reads, uploads, mutations, OAuth and GraphQL query requests',async()=>{

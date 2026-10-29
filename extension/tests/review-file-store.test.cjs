@@ -28,7 +28,8 @@ test('permission loss fails closed and empty selected files initialize',async()=
 });
 test('sidecar validates duplicate scopes, metadata and unsafe remote links',()=>{
  assert.throws(()=>validator.serializeSidecar([note(),note()]),/Duplicate/);
- assert.throws(()=>validator.validateComment({...note(),state:'closed'}));
+ assert.throws(()=>validator.validateComment({...note(),state:'done'}));
+ assert.equal(validator.parseSidecar(validator.serializeSidecar([{...note(),state:'closed'}]))[0].state,'closed');
  assert.throws(()=>validator.validateComment({...note(),remoteRefs:[{kind:'issue',repository:'wayri/demo',number:3,url:'https://evil.example/issues/3',publishedAt:note().createdAt}]}));
  const normalized=validator.validateComment({...note(),tags:[' assembly ','assembly','review']});assert.deepEqual(normalized.tags,['assembly','review']);assert.deepEqual(validator.fromMarkdown(validator.toMarkdown(normalized)),[normalized]);
 });

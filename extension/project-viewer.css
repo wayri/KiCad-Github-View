@@ -16,6 +16,11 @@ body[data-ui-theme=light] .project-warnings{color:#8c551b}
 /* Drawing-first project mode keeps only the return and close controls outside the viewer. */
 .focus-drawing .project-header{display:none}.project-app.focus-drawing #overviewPanel{padding:0;gap:0}.focus-drawing .preview-actions{padding:2px 6px;gap:6px}.focus-drawing .preview-actions button{min-height:20px;line-height:16px;padding:1px 7px;font-size:11px}
 
+/* A drawing owns its navigation. Project settings return through its Project tab. */
+.project-app.focus-drawing .preview-actions{display:none}
+.project-app.focus-drawing #drawingPreview iframe{border:0}
+.project-app.focus-drawing .project-body,.project-app.focus-drawing .project-main{height:100%;min-height:0}
+
 .project-tree .sheet-row{display:flex;align-items:center;gap:3px;border-left:1px dotted var(--line)}.project-tree .sheet-toggle{width:20px;min-width:20px;padding:2px;margin:0;min-height:26px}.project-tree .sheet-open{flex:1;min-width:0;width:auto;text-align:left;justify-content:flex-start;white-space:normal;min-height:30px;margin:0}.project-tree .sheet-tree{margin:8px 0}.project-tree h3{margin:10px 0 5px}
 
 /* Readable project setup without spending drawing height on chrome. */

@@ -143,7 +143,7 @@ def audit_packages(chrome: Path, native: Path, root: Path = ROOT):
 
 
 def package_guides(output: Path, root: Path = ROOT):
-    paths = [root / 'README.md', *sorted((root / 'docs').rglob('*.md')),
+    paths = [root / 'README.md', root / 'USER-GUIDE.md', *sorted((root / 'docs').rglob('*.md')),
              *sorted((root / 'extension/docs').rglob('*.md')),
              *([root / 'vscode-extension/README.md'] if (root / 'vscode-extension/README.md').is_file() else []),
              *([root / 'vscode-extension/GUIDE.md'] if (root / 'vscode-extension/GUIDE.md').is_file() else []),
@@ -152,7 +152,9 @@ def package_guides(output: Path, root: Path = ROOT):
              *([root / 'LICENSING.md'] if (root / 'LICENSING.md').is_file() else []),
              *[root / name for name in ('COMMERCIAL-LICENSING.md', 'THIRD-PARTY-NOTICES.md', 'SECURITY.md') if (root / name).is_file()],
              *sorted((root / 'docs/images').rglob('*.jpg')),
-               *sorted((root / 'docs/images').rglob('*.png'))]
+               *sorted((root / 'docs/images').rglob('*.png')),
+               *sorted((root / 'docs/images/draftsman').glob('*.webm')),
+               root / 'docs/chrome-privacy.html']
     paths.extend(sorted((root / 'docs/play-store/assets').glob('*.png')))
     paths.extend(sorted((root / 'docs/play-store').glob('*.html')))
     with zipfile.ZipFile(output, 'w', compression=zipfile.ZIP_DEFLATED, compresslevel=9) as archive:

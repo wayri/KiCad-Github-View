@@ -177,7 +177,7 @@ test('saving metadata stays local until explicit publish and records its thread 
 test('known repository policy restriction disables direct publish while preserving local comments',async()=>{
  const validate=require('../review-comments.js').validateComment;const note=validate({id:'policy-note',text:'Review placement',createdAt:'2025-01-01T00:00:00.000Z',anchor:{repository:'wayri/fixture',ref:'main',file:'board.kicad_pcb'}});
  const view=workspaceRuntime(async request=>request.type==='comment-list'?[note]:request.type==='comment-policy-status'?{mode:'allowlist',allowed:false,reason:'Only approved reviewers may publish',login:'alice'}:[]);
- view.load();await view.workspace.refreshComments();await new Promise(resolve=>setImmediate(resolve));
+ view.load();await view.workspace.refreshComments();await view.get('refreshCommentPolicy').click();await new Promise(resolve=>setImmediate(resolve));
  const actions=view.get('commentList').children[0].children.at(-1),publish=actions.children.find(node=>node.textContent==='Publish to GitHub');
  assert.equal(publish.disabled,true);assert.match(view.get('commentPolicyStatus').textContent,/publishing restricted/);
  assert.ok(actions.children.find(node=>node.textContent==='Edit'));assert.equal(view.get('refreshCommentPolicy').disabled,false);
@@ -203,6 +203,18 @@ test('paired selection emits a bounded saved part and net; incoming highlight re
  assert.equal(view.workspace.highlightRelated({kind:'part',reference:'R1',uuid:'symbol-uuid',path:'root.kicad_sch'}),true);assert.ok(view.canvas.netPrimitives.size>0,'paired part visibly highlights its geometry');
  view.get('netList').children[0].click();assert.equal(selections.at(-1).kind,'net');assert.equal(selections.at(-1).netName,'SIGNAL');
  assert.equal(view.workspace.highlightRelated({kind:'net',netName:'NO_SUCH_NET',path:'root.kicad_sch'}),false);
+});
+test('independent layout and 3D windows apply exact same-board part, terminal, net and group selections',()=>{
+ const view=workspaceRuntime();view.load();
+ assert.equal(view.workspace.applyWindowSelection({kind:'part',path:'board.kicad_pcb',uuid:'fp',reference:'R1'}),true);
+ assert.ok(view.canvas.netPrimitives.size>0);
+ assert.equal(view.workspace.applyWindowSelection({kind:'part',path:'board.kicad_pcb',uuid:'missing',reference:'R1'}),false,'does not fall back from conflicting saved UUID');
+ assert.equal(view.workspace.applyWindowSelection({kind:'pin',path:'board.kicad_pcb',ownerUuid:'fp',uuid:'pad',reference:'R1',pinNumber:'1'}),true);
+ assert.equal(view.workspace.applyWindowSelection({kind:'net',path:'board.kicad_pcb',netName:'SIGNAL'}),true);
+ assert.equal(view.canvas.netHighlight.name,'SIGNAL');
+ assert.equal(view.workspace.applyWindowSelection({kind:'group',items:[{kind:'part',path:'board.kicad_pcb',uuid:'fp',reference:'R1'},{kind:'net',path:'board.kicad_pcb',netName:'SIGNAL'}]}),true);
+ assert.equal(view.workspace.applyWindowSelection(null),true);assert.equal(view.canvas.netHighlight,null);
+ assert.equal(view.workspace.applyWindowSelection({kind:'part',path:'root.kicad_sch',uuid:'symbol-uuid',reference:'R1'}),true,'opposite schematic mapping still works');
 });
 
 test('point and dragged-area review tools persist millimetre anchors and disable ruler interception',async()=>{
@@ -472,7 +484,7 @@ test('conversation catalog combines issues and discussions, filters by category 
  const category=view.get('commentConversationKind');assert.equal(category.value,'all');category.value='discussion';await category.onchange();
  assert.doesNotMatch(view.get('commentThreadReader').textContent,/Connector clearance/);assert.match(view.get('commentThreadReader').textContent,/Assembly review/);
  view.get('newConversation').click();assert.equal(view.get('editorThreadType').value,'discussion');assert.equal(view.get('editorDestination').value,'discussion');
- assert.equal(view.get('commentComposeTop').closest('#commentComposerMenu').id,'commentComposerMenu');assert.equal(view.get('saveComment').closest('#commentComposerMenu').id,'commentComposerMenu');assert.equal(view.get('commentFormatting').hidden,true);
+ assert.equal(view.get('commentComposeTop').parentElement.id,'commentEditor');assert.equal(view.get('commentComposeTop').closest('#commentComposerMenu'),null);assert.equal(view.get('saveComment').closest('#commentComposerMenu').id,'commentComposerMenu');assert.equal(view.get('commentFormatting').hidden,true);
  assert.equal(calls.some(message=>['github-publish-comment','comment-publish','chat-message-write'].includes(message.type)),false);view.workspace.dispose();
 });
 
@@ -946,7 +958,7 @@ test('Android review cards place comment content ahead of compact location metad
  const view=workspaceRuntime(async m=>m.type==='comment-list'?[note]:[],{android:true});view.load();await view.workspace.refreshComments();
  const card=view.get('commentList').children[0];assert.equal(card.attributes['data-note-id'],note.id);
  assert.equal(card.children[0].className,'note-heading');assert.equal(card.children[0].textContent,'Check VCC');assert.equal(card.children[1].className,'note-body');assert.match(card.children[1].textContent,/Confirm the supply/);
- assert.equal(card.children[2].className,'note-meta');assert.match(card.children[2].textContent,/major/);assert.equal(card.children[3].className,'note-meta note-location');view.workspace.dispose();
+ assert.equal(card.children[2].className,'note-meta');assert.match(card.children[2].textContent,/Major/);assert.equal(card.children[3].className,'note-meta note-location');view.workspace.dispose();
 });
 
 test('overview airwires join resolved global nets, not same-named local nets',()=>{
@@ -1226,10 +1238,10 @@ test('testpoint classification is cached while panning or drawing repeatedly',()
  for(let i=0;i<5;i++)view.workspace.draw();view.get('highlightTestpoints').click();view.get('filterTestpoints').click();assert.equal(classified,count);assert.equal(count,2,'only saved components are classified, not pads/tracks');view.workspace.dispose();
 });
 
-test('review annotation states and GitHub issue state are displayed independently on Android and desktop',async()=>{
+test('linked issue state is inferred while skipped review status and saved annotation data remain intact',async()=>{
  for(const android of [true,false])for(const state of ['open','skipped']){
   const note={id:'state-'+state,text:'Review this connection',state,severity:'info',createdAt:'2026-10-10T00:00:00Z',anchor:{repository:'wayri/fixture',ref:'main',file:'board.kicad_pcb'},github:{source:'issue',number:7,state:'closed',author:'reviewer',url:'https://github.com/wayri/fixture/issues/7'}};
-  const view=workspaceRuntime(async request=>request.type==='comment-list'?[note]:[],{android});view.load();await view.workspace.refreshComments();const card=view.get('commentList').children[0];assert.match(card.textContent,new RegExp('Review: '+state));assert.match(card.textContent,/Issue: closed/);assert.equal(note.state,state);assert.equal(note.github.state,'closed');view.workspace.dispose();
+  const view=workspaceRuntime(async request=>request.type==='comment-list'?[note]:[],{android});view.load();await view.workspace.refreshComments();const card=view.get('commentList').children[0];assert.match(card.textContent,new RegExp('Review: '+(state==='skipped'?'skipped':'closed')));assert.match(card.textContent,/Issue: closed/);assert.equal(note.state,state);assert.equal(note.github.state,'closed');view.workspace.dispose();
  }
 });
 
@@ -1272,13 +1284,22 @@ test('work board opens from Comments and carries GitLab provider, host and curre
  view.workspace.dispose();assert.equal(disposed,true);
 });
 
-test('annotation polling mounts with foreground lifecycle and source-scoped updates',async()=>{
+test('GitLab annotation polling mounts with foreground lifecycle and source-scoped updates',async()=>{
  let sync,started,visibility=0,disposed=false;const calls=[];
- const view=workspaceRuntime(async m=>{calls.push(m);if(m.type==='github-annotations')return{notes:[],warnings:[]};return[];},{reviewSync:{create:options=>{sync=options;return{start:scope=>{started=scope;},visibilityChanged:()=>visibility++,dispose:()=>{disposed=true;}};}}});
+ const view=workspaceRuntime(async m=>{calls.push(m);if(m.type==='comment-remote-list')return{notes:[],warnings:[]};return[];},{provider:'gitlab',host:'https://gitlab.com',reviewSync:{create:options=>{sync=options;return{start:scope=>{started=scope;},visibilityChanged:()=>visibility++,dispose:()=>{disposed=true;}};}}});
  view.load();await new Promise(setImmediate);assert.equal(started.file,'board.kicad_pcb');view.get('commentsButton').click();assert.ok(visibility>0);assert.equal(sync.isVisible(),true);
- const result=await sync.load(started);assert.equal(result.syncFile,'board.kicad_pcb');sync.onUpdate(result);assert.ok(calls.some(m=>m.type==='github-annotations'));
+ const result=await sync.load(started);assert.equal(result.syncFile,'board.kicad_pcb');sync.onUpdate(result);assert.ok(calls.some(m=>m.type==='comment-remote-list'));
  sync.onUpdate({notes:[{text:'Foreign result'}],syncFile:'other.kicad_pcb'});assert.equal(view.get('commentList').textContent.includes('Foreign result'),false);
  view.workspace.dispose();assert.equal(disposed,true);
+});
+
+test('GitHub drawing startup never checks remote policy or starts provider polling',async()=>{
+ const calls=[];let mounts=0;
+ const view=workspaceRuntime(async m=>{calls.push(m);if(m.type==='github-annotations')return{notes:[],warnings:[]};return[];},{reviewSync:{create(){mounts++;throw Error('No automatic GitHub polling');}}});
+ view.load();await new Promise(setImmediate);
+ assert.equal(mounts,0);assert.equal(calls.some(m=>['comment-policy-status','github-annotations','chat-thread-list'].includes(m.type)),false);
+ await view.get('refreshGitHub').click();assert.ok(calls.some(m=>m.type==='github-annotations'));
+ view.workspace.dispose();
 });
 
 
@@ -1305,4 +1326,62 @@ test('3D comment Locate focuses the saved source point and refreshes its marker 
  view.workspace.setScene({setPopulation(){},setSelection(){},focusPosition(position,options){calls.push({position,options});return true;},projectAnchor(){return projected;}});
  const anchor={...chat.options.getScope(),kind:'net',netName:'SIGNAL',position:{x:30,y:40}};assert.equal(chat.options.onLocate(anchor),true);assert.deepEqual(JSON.parse(JSON.stringify(calls[0])),{position:{x:30,y:40},options:{bounds:null,side:'front'}});
  const ring=view.get('drawingHost').querySelector('.comment-focus-ring');assert.equal(ring.style.left,'195px');projected={x:210,y:280};view.workspace.sceneViewChanged();assert.equal(ring.style.left,'210px');assert.equal(ring.style.top,'280px');view.workspace.dispose();
+});
+
+
+test('DRC notes show saved descriptions and exclusion comments as literal text, with independent hide controls',async()=>{
+ const view=workspaceRuntime(undefined,{navigation:true,width:390,android:true});view.load();view.get('viewRuleChecks').click();
+ const finding={type:'clearance',description:'Clearance <img src=x onerror=alert(1)>',severity:'warning',excluded:true,comment:'Reviewed spacing exception',items:[{description:'Track on F.Cu',pos:{x:30,y:40}}]};
+ const report={source:'board.kicad_pcb',date:'2026-10-29T00:00:00Z',kicad_version:'10.0',coordinate_units:'mm',violations:[finding]};
+ view.get('ruleReportFile').files=[{size:600,name:'check.json',text:async()=>JSON.stringify(report)}];await view.get('ruleReportFile').onchange();view.get('showExcludedRules').checked=true;view.get('showExcludedRules').oninput();view.get('nextRule').click();
+ const notes=()=>view.get('commentPins').children.filter(n=>n.className==='rule-location-note');assert.equal(notes().length,1);assert.match(notes()[0].textContent,/Reviewed spacing exception/);assert.match(notes()[0].textContent,/<img src=x/);assert.equal(notes()[0].querySelector('img'),null);assert.match(notes()[0].textContent,/revision unverified/);assert.equal(view.get('ruleWindow').hidden,true);
+ view.get('showRuleNotes').checked=false;view.get('showRuleNotes').onchange();assert.equal(notes().length,0);assert.ok(view.get('commentPins').children.some(n=>n.className.includes('rule-marker')));
+ view.get('showRuleNotes').checked=true;view.get('showRuleNotes').onchange();assert.equal(notes().length,1);notes()[0].querySelector('button').click();assert.equal(notes().length,0);view.get('nextRule').click();assert.equal(notes().length,1);view.get('clearRuleReports').click();assert.equal(notes().length,0);view.workspace.dispose();
+});
+
+test('ERC on-canvas notes require a resolved sheet association and retain explicit report coordinates',async()=>{
+ const focused=[],view=workspaceRuntime(undefined,{navigation:true,pcb:false,files:[{path:'root.kicad_sch',content:'(kicad_sch (version 20250114))'}],focus:p=>focused.push(p)});view.load();
+ const report={source:'root.kicad_sch',date:'2026-10-29T00:00:00Z',kicad_version:'10.0',coordinate_units:'mils',sheets:[{path:'/Power/',uuid_path:'/aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee',violations:[{type:'pin_not_connected',description:'Input pin is unconnected',severity:'error',items:[{description:'Pin 1',pos:{x:1000,y:2000}}]}]}]};
+ view.get('ruleReportFile').files=[{size:600,name:'erc.json',text:async()=>JSON.stringify(report)}];await view.get('ruleReportFile').onchange();view.get('nextRule').click();assert.equal(focused.length,0);assert.equal(view.get('commentPins').children.filter(n=>n.className==='rule-location-note').length,0);
+ const mapping=view.get('reportSheetMappings').children[0].querySelector('select');mapping.value='root.kicad_sch';mapping.onchange();view.get('nextRule').click();assert.deepEqual(focused[0],{x:25.4,y:50.8});assert.match(view.get('commentPins').children.find(n=>n.className==='rule-location-note').textContent,/ERC.*Input pin is unconnected/);view.workspace.dispose();
+});
+
+test('next affected item keeps a selected marker and note beyond the first twenty report items',async()=>{
+ const view=workspaceRuntime(undefined,{navigation:true});view.load();const items=Array.from({length:25},(_,i)=>({description:'Affected '+i,pos:{x:i,y:40}})),report={source:'board.kicad_pcb',date:'2026-10-29T00:00:00Z',kicad_version:'10.0',coordinate_units:'mm',violations:[{type:'clearance',description:'Review connected geometry',severity:'error',items}]};
+ view.get('ruleReportFile').files=[{size:2000,name:'drc.json',text:async()=>JSON.stringify(report)}];await view.get('ruleReportFile').onchange();view.get('nextRule').click();for(let i=0;i<24;i++)view.get('nextRuleItem').click();
+ const active=view.get('commentPins').children.filter(n=>n.className==='pin rule-marker active');assert.equal(active.length,1);assert.match(active[0].attributes['aria-label'],/Affected 24/);assert.match(view.get('commentPins').children.find(n=>n.className==='rule-location-note').textContent,/Affected 24/);assert.ok(view.get('commentPins').children.filter(n=>n.className.includes('rule-marker')).length<=20);view.workspace.dispose();
+});
+
+
+test('KiCad local composer shares visible review levels and primary save with the extension without remote publication',async()=>{
+ const calls=[],view=workspaceRuntime(async m=>{calls.push(m);return[];},{localRuntime:true});view.load();view.get('addCommentTab').click();const top=view.get('commentComposeTop');assert.equal(top.parentElement.id,'commentEditor');assert.equal(top.closest('#commentComposerMenu'),null);assert.equal(view.get('saveComment').parentElement.id,'commentPostRow');assert.equal(view.get('commentPublishSettings').hidden,true);
+ assert.ok(view.get('commentSeverity').children.some(n=>n.value==='level-1'));view.get('commentSeverity').value='level-1';view.get('commentSeverity').onchange();assert.ok(view.get('commentSeverity').className.includes('severity-level-1'));view.get('commentText').value='Inspect resistor\nCheck its rating';await view.get('saveComment').click();assert.equal(calls.find(m=>m.type==='comment-save').comment.severity,'level-1');assert.equal(calls.some(m=>m.type==='github-publish-comment'||m.type==='comment-publish'),false);view.workspace.dispose();
+});
+
+
+test('linked note state follows fetched issue state, filters closed and skips locally without any provider write',async()=>{
+ const calls=[],note={id:'linked-review',text:'Review connector',severity:'minor',state:'open',createdAt:'2026-10-28T00:00:00Z',anchor:{repository:'wayri/fixture',ref:'main',file:'board.kicad_pcb'},github:{source:'issue',number:7,state:'closed',author:'reviewer',url:'https://github.com/wayri/fixture/issues/7'}},view=workspaceRuntime(async m=>{calls.push(m);return m.type==='comment-list'?[note]:[];});view.load();await view.workspace.refreshComments();const card=()=>view.get('commentList').children[0];assert.equal(card().attributes['data-state'],'closed');view.get('stateFilter').value='open';view.get('stateFilter').onchange();assert.equal(view.get('commentList').children.filter(n=>n.attributes['data-note-id']).length,0);view.get('stateFilter').value='closed';view.get('stateFilter').onchange();assert.equal(card().attributes['data-state'],'closed');
+ await card().children.find(n=>n.className==='inspector-actions').children.find(n=>n.textContent==='Skip review').click();view.get('stateFilter').value='skipped';view.get('stateFilter').onchange();assert.equal(card().attributes['data-state'],'skipped');assert.ok(card().children.some(n=>n.className==='review-state-badge'&&n.textContent==='Skipped'));
+ await card().children.find(n=>n.className==='inspector-actions').children.find(n=>n.textContent==='Follow issue state').click();view.get('stateFilter').value='closed';view.get('stateFilter').onchange();assert.equal(card().attributes['data-state'],'closed');assert.equal(note.state,'open');assert.equal(calls.some(m=>m.type==='chat-thread-state'||m.type==='comment-save'),false);view.workspace.dispose();
+});
+
+test('conversation state filters apply to provider rows and confirmed mutations update linked annotations',async()=>{
+ const chat=captureChat(),calls=[],note={id:'receipt-note',text:'Linked check',severity:'info',state:'open',createdAt:'2026-10-28T00:00:00Z',anchor:{repository:'wayri/fixture',ref:'main',file:'board.kicad_pcb'},remoteRefs:[{kind:'issue',repository:'wayri/fixture',number:7,url:'https://github.com/wayri/fixture/issues/7',publishedAt:'2026-10-28T00:00:00Z'}]},view=workspaceRuntime(async m=>{calls.push(m);if(m.type==='comment-list')return[note];if(m.type==='comment-policy-status')return{allowed:true};if(m.type==='chat-thread-state')return{kind:'issue',number:7,state:m.state,updatedAt:'2026-10-29T02:00:00Z'};if(m.type==='chat-thread-list')return{threads:m.kind==='issue'?[{kind:'issue',number:7,title:'Open task',state:'open',updatedAt:'2026-10-29T00:00:00Z'},{kind:'issue',number:8,title:'Closed task',state:'closed',updatedAt:'2026-10-29T01:00:00Z'}]:[],hasMore:false};return[];},{chatPanel:chat.panel});view.load();await view.workspace.refreshComments();view.get('showComments').click();await new Promise(setImmediate);
+ view.get('commentConversationState').value='closed';view.get('commentConversationState').onchange();assert.doesNotMatch(view.get('commentThreadReader').querySelector('.chat-conversation-list').textContent,/Open task/);assert.match(view.get('commentThreadReader').querySelector('.chat-conversation-list').textContent,/Closed task/);
+ await chat.options.onThreadState({thread:{kind:'issue',number:7,title:'Open task'},state:'closed',expectedUpdatedAt:'2026-10-29T00:00:00Z',confirmed:true});assert.equal(view.get('commentList').children[0].attributes['data-state'],'closed');assert.match(view.get('commentThreadReader').querySelector('.chat-conversation-list').textContent,/Open task/);assert.equal(note.state,'open');assert.equal(calls.filter(m=>m.type==='chat-thread-state').length,1);assert.equal(calls.some(m=>m.type==='comment-save'),false);view.workspace.dispose();
+});
+
+
+test('PCB shortcuts flip the view and select all six 3D axis sides without firing while typing',()=>{
+ const view=workspaceRuntime();view.load();let flips=0;view.get('flipButton').onclick=()=>flips++;
+ assert.equal(view.key('f').defaultPrevented,true);assert.equal(flips,1);
+ const sides=[],scene={setPopulation(){},setSelection(){},setView:value=>sides.push(value),flip:()=>flips++,netAtPointer:()=>({net:1})};view.workspace.setScene(scene);
+ for(const key of ['x','y','z']){view.key(key);view.key(key.toUpperCase(),{shiftKey:true});}
+ assert.deepEqual(sides,['right','left','back','front','top','bottom']);
+ view.key('f');assert.equal(flips,2);
+ const count=sides.length;
+ for(const extra of [{ctrlKey:true},{altKey:true},{metaKey:true},{repeat:true},{isComposing:true},{defaultPrevented:true},{composedPath:()=>[{tagName:'INPUT'}]},{composedPath:()=>[{tagName:'TEXTAREA'}]},{composedPath:()=>[{tagName:'SELECT'}]},{composedPath:()=>[{isContentEditable:true}]}]){view.key('z',extra);view.key('f',extra);view.key('~',extra);}
+ assert.equal(sides.length,count);assert.equal(flips,2);assert.equal(view.canvas.netHighlight,null);
+ view.key('~');assert.equal(view.canvas.netHighlight.name,'SIGNAL');view.key('Escape');assert.equal(view.canvas.netHighlight,null);
+ view.workspace.setScene(null);assert.equal(view.key('z').defaultPrevented,undefined);
 });

@@ -25,7 +25,7 @@
     .controls button.project-detected{display:inline-flex;align-items:center;gap:6px;background:#176342;border-color:#56d99b;color:#fff;animation:kicad-project-found 1.2s ease-out 2}.project-detected::before{content:'▣';font-size:17px;line-height:1;color:#b9ffda}.controls button.project-detected:hover{background:#207b53;border-color:#adffd3}@keyframes kicad-project-found{50%{box-shadow:0 0 0 3px #56d99b55}}@media(prefers-reduced-motion:reduce){.controls button.project-detected{animation:none}}
     [hidden]{display:none!important}@media(max-width:760px){.body{grid-template-columns:1fr}.pages{flex-direction:row;border-right:0;border-bottom:1px solid #32424a;max-height:none}.pages button{white-space:nowrap}.viewport{height:55vh;min-height:280px}.viewport-row{flex-direction:column}}
   `;
-  let currentUrl = "", mount = null, sequence = 0, checkTimer = null, focusPending = false;
+  let currentUrl = "", mount = null, sequence = 0, checkTimer = null, focusPending = false, inlineRequestedUrl = null;
   let draftAttemptedUrl = "", draftClaiming = false;
 
   function request(type, extra = {}) {
@@ -172,38 +172,6 @@
       focusPending = false;
     }
   }
-  async function activateRepository(route,token){
-    const scripts=[...document.querySelectorAll('script[type="application/json"]')].map(node=>node.textContent);
-    const app=document.querySelector('#js-view-blob-app,#js-repository-blob-header-app,#js-repository-tree');
-    const ref=parse.repositoryRef(route,scripts,app?.dataset);
-    const top=mountBefore(document.querySelector('main')),owner={kind:'repository',host:top.host,panels:[],empty:false};mount=owner;
-    const heading=element('div','top repository-bar'),controls=element('div','controls'),status=element('div','status','Checking this repository for KiCad projects…'),slot=element('div');
-    const refresh=button('Check again','',()=>{if(mount!==owner)return;clearMount();activateRepository(route,sequence);});
-    const repositoryTitle=element('div','title','KiCad projects');
-    heading.append(repositoryTitle,controls);controls.append(refresh);top.box.append(heading,status,slot);
-    if(!ref){setStatus(status,'Select the repository root or refresh this branch page to identify its exact branch.',true);return;}
-    try{
-      const result=await request('repository-detect',{repository:route.repository,ref,...(route.provider?{provider:route.provider,host:route.host}:{})});
-      if(token!==sequence||mount!==owner)return;
-      if(!/^[a-f0-9]{40}$/i.test(result?.sha||'')||!Array.isArray(result.projects))throw Error('Repository discovery did not return a pinned revision.');
-      const files=result.projects.filter(file=>typeof file==='string'&&parse.filePath(file)&&/\.kicad_(pro|sch|pcb)$/i.test(file));
-      if(!files.length){if(result.truncated){setStatus(status,'No KiCad project found in this partial repository listing. Additional folders may contain projects. Open a KiCad file directly or connect your account for a fuller listing.');return;}owner.empty=true;top.host.remove();return;}
-      const picker=element('select');picker.setAttribute('aria-label','KiCad project or standalone drawing');
-      for(const file of files){const option=element('option','',file);option.value=file;picker.append(option);}picker.value=files[0];
-      const open=button('Open KiCad project','active project-detected',()=>{
-        if(mount!==owner||!files.includes(picker.value))return;
-        for(const panel of [...owner.panels])disposePanel(panel,owner);
-        owner.panels.push(panelFor({repository:route.repository,file:picker.value,head:result.sha,...(route.provider?{provider:route.provider,host:route.host}:{})},null,picker.value,true,slot,controls));
-      });
-      open.title='KiCad project detected — open the selected project';
-      open.setAttribute('aria-label','KiCad project detected: open selected project');
-      controls.prepend(picker,open);
-      setStatus(status,`${files.length} KiCad ${files.length===1?'entry':'entries'} · ${result.ref||ref} · ${result.sha.slice(0,10)}${result.truncated?' · Partial listing: additional projects may exist.':''}`);
-      repositoryTitle.textContent=`KiCad · ${files.length}`;
-      repositoryTitle.title=status.textContent; picker.title=status.textContent;
-      status.hidden=!result.truncated;
-    }catch(error){if(token===sequence&&mount===owner)setStatus(status,'KiCad project discovery unavailable: '+error.message+'. Check access in extension settings, then retry.',true);}
-  }
   async function activateMerge(route,token){
     const pageUrl=location.href.split('#')[0],target=document.querySelector('main');if(!target)return;
     const top=mountBefore(target),owner={kind:'merge',host:top.host,panels:[]};mount=owner;
@@ -344,6 +312,7 @@
   function check() {
     maybeClaimCommentDraft();
     const url = location.href.split("#")[0];
+    if(inlineRequestedUrl!==url){if(mount)clearMount();currentUrl=url;return;}
     const routeOptions={gitlabHosts:location.origin!=='https://github.com'?[location.origin||new URL(url).origin]:[]};
     const route = parse.route(url,routeOptions)||parse.repositoryRoute(url,routeOptions);
     if (url !== currentUrl) { clearMount(); currentUrl = url; if (route?.kind !== "blob") focusPending = false; }
@@ -353,10 +322,6 @@
         if (main?.parentNode) main.parentNode.insertBefore(mount.host, main);
       }
       reconcilePullCards(mount);
-      return;
-    }
-    if(mount?.kind==='repository'&&route?.kind==='repository'){
-      if(!mount.empty&&!mount.host.isConnected){const main=document.querySelector('main');if(main?.parentNode)main.parentNode.insertBefore(mount.host,main);}
       return;
     }
     if(mount?.kind==='merge'&&route?.kind==='merge'){
@@ -374,7 +339,7 @@
     }
     if (!route || mount) return;
     const token = sequence;
-    if (route.kind === "repository") activateRepository(route,token);
+    if (route.kind === "repository") return;
     else if (route.kind === "merge") activateMerge(route,token);
     else if (route.kind === "blob") activateBlob(route, token);
     else activatePull(route, token);
@@ -409,6 +374,13 @@
       if(sender.tab || location.origin==='https://github.com' || !globalThis.KiCadGitLabSessionReader)return false;
       return sessionRead(globalThis.KiCadGitLabSessionReader);
     }
+    if(message.type==='projectLaunchContext'){
+      const options={gitlabHosts:location.origin!=='https://github.com'?[location.origin]:[]};
+      const route=parse.route(location.href,options),repository=parse.repositoryRoute(location.href,options);
+      if(route?.kind==='blob'){sendResponse(embedded());return false;}
+      const scripts=[...document.querySelectorAll('script[type="application/json"]')].map(node=>node.textContent),app=document.querySelector('#js-view-blob-app,#js-repository-blob-header-app,#js-repository-tree');
+      sendResponse(repository?{ref:parse.repositoryRef(repository,scripts,app?.dataset)}:null);return false;
+    }
     if (message.type === "viewerContext") {
       const route = parse.route(location.href,{gitlabHosts:location.origin!=="https://github.com"?[location.origin]:[]});
       const info = route?.kind === "blob" ? parse.blobRequest(route, embedded()) : null;
@@ -416,6 +388,7 @@
       return false;
     }
     if (message.type === "focusReview") {
+      inlineRequestedUrl=location.href.split("#")[0];
       check();
       const focused = Boolean(mount?.host?.isConnected);
       if (focused) mount.host.scrollIntoView({ block: "start" });
@@ -425,6 +398,7 @@
     if (message.type === "focusInline") {
       const route = parse.route(location.href,{gitlabHosts:location.origin!=="https://github.com"?[location.origin]:[]});
       if (route?.kind !== "blob") { sendResponse({ focused: false }); return false; }
+      inlineRequestedUrl=location.href.split("#")[0];
       focusPending = true;
       check();
       const panel = mount?.panels?.[0]?.host;

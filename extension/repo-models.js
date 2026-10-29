@@ -25,7 +25,7 @@
     const boardParts = boardPath.split("/");
     if (boardParts.some(part => !part || part === "." || part === "..")) return null;
     const projectPrefix = "${KIPRJMOD}/";
-    if (modelPath.includes("${") && !modelPath.startsWith(projectPrefix)) return null;
+    if (modelPath.includes("$(") || (modelPath.includes("${") && !modelPath.startsWith(projectPrefix))) return null;
     const relative = modelPath.startsWith(projectPrefix) ? modelPath.slice(projectPrefix.length) : modelPath;
     if (relative.includes("${") || relative.includes("}")) return null;
     const parts = boardParts.slice(0, -1);
@@ -48,15 +48,44 @@
       path.split('/').every(part => part && part !== '.' && part !== '..')) : [];
     function repositoryPath(raw, ref) {
       const relative = resolveModelPath(boardPath, raw);
-      if (relative) return relative;
       // Library environment variables are local KiCad settings. Resolve them only
       // against actual imported repository files; never fetch a global library URL.
-      const suffix = typeof raw === 'string' && /^\$\{KICAD\d+_3DMODEL_DIR\}[\\/]/.test(raw)
-        ? raw.replace(/^\$\{KICAD\d+_3DMODEL_DIR\}[\\/]/, '').replace(/\\/g, '/') : null;
+      const libraryPrefix = /^(?:\$\{(?:KICAD\d+_3DMODEL_DIR|KISYS3DMOD)\}|\$\((?:KICAD\d+_3DMODEL_DIR|KISYS3DMOD)\))[\\/]/;
+      const suffix = typeof raw === 'string' && libraryPrefix.test(raw)
+        ? raw.replace(libraryPrefix, '').replace(/\\/g, '/') : null;
+      const target = relative || suffix;
+      if (relative && (!available.length || available.includes(relative))) return relative;
+      // Transports cap discovery at 2000 entries. At the cap, uniqueness cannot
+      // be established across the project; keep only explicit relative requests.
+      if (Array.isArray(assetPaths) && assetPaths.length >= 2000) {
+        if (!relative) warn(`${ref}: model discovery is incomplete; library recovery is unavailable: ${String(raw).slice(0, 100)}`);
+        return relative;
+      }
+      if (relative) {
+        const matches = available.filter(path => path.toLowerCase() === relative.toLowerCase());
+        if (matches.length === 1) { warn(`${ref}: model path casing corrected to ${matches[0]}`); return matches[0]; }
+        if (matches.length > 1) { warn(`${ref}: model path casing is ambiguous: ${relative}`); return null; }
+      }
+      if (target && isPath(target) && target.split('/').every(part => part && part !== '.' && part !== '..')) {
+        const matches = suffix ? available.filter(path => path === suffix || path.endsWith('/' + suffix)) : [];
+        if (matches.length === 1) return matches[0];
+        if (matches.length > 1) { warn(`${ref}: model library path matches multiple repository files: ${suffix}`); return null; }
+        // KiCad repositories often ship only one of the STEP/VRML representations.
+        // Accept a unique same-stem asset, never an unrelated basename or a URL.
+        const stem = target.replace(/\.(?:step|stp|wrl|vrml)$/i, '');
+        if (stem !== target) {
+          const alternatives = available.filter(path => {
+            const candidate = path.replace(/\.(?:step|stp|wrl|vrml)$/i, '');
+            return candidate !== path && (candidate.toLowerCase() === stem.toLowerCase() ||
+              (suffix && candidate.toLowerCase().endsWith('/' + stem.toLowerCase())));
+          });
+          if (alternatives.length === 1) { warn(`${ref}: using repository model alternative ${alternatives[0]} for ${raw}`); return alternatives[0]; }
+          if (alternatives.length > 1) { warn(`${ref}: model alternatives are ambiguous: ${target}`); return null; }
+        }
+      }
+      if (relative) return relative; // Inventory may be truncated; allow the explicit safe path.
       if (!suffix || !isPath(suffix) || suffix.split('/').some(part => !part || part === '.' || part === '..')) return null;
-      const matches = available.filter(path => path === suffix || path.endsWith('/' + suffix));
-      if (matches.length === 1) return matches[0];
-      if (matches.length > 1) warn(`${ref}: model library path matches multiple repository files: ${suffix}`);
+      warn(`${ref}: library model is not included in this project: ${suffix}. Include the model files with the project to load them offline or in the browser.`);
       return null;
     }
     function embeddedFiles(node) {

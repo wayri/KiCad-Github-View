@@ -10,13 +10,17 @@ MODEL_FILES = {'embedded-models.js', 'vendor/fzstd/fzstd.js', 'vendor/fzstd/LICE
 FILES = {'analysis-data.js', 'analysis-viewer.html', 'analysis-viewer.css', 'analysis-viewer.js', 'touch-canvas.js', 'merge-conflicts.js', 'conflict-viewer.html', 'conflict-viewer.js', 'conflict-viewer.css', 'conflict-properties.js', 'bom-manager.js', 'bom-manager.css', 'part-fields.js', 'BRAND-ASSETS.md', 'step-decoder.js', 'step-worker.js', 'vendor/occt/occt-import-js.js', 'vendor/occt/occt-import-js.wasm', 'vendor/occt/license.occt-import-js.txt', 'vendor/occt/license.occt.txt', 'vendor/occt/NOTICE.md', 'vendor/occt/OCCT_LGPL_EXCEPTION.txt', 'vendor/occt/EMSCRIPTEN-LICENSE.txt', 'gitlab-review-api.js', 'gitlab-hosts.js', 'gitlab-options.js', 'gitlab-provider.js', 'loading-ui.js', 'load-worker.js', 'bom-analytics.js', 'file-compatibility.js', 'html-preview.js', 'html-sandbox.html', 'html-sandbox.js', 'revision-picker.js', 'project-viewer.html', 'project-viewer.css', 'project-viewer.js', 'project-settings.js', 'project-settings-ui.js', 'gerber-renderer.js', 'manifest.json',  'browser-data.js', 'design-diff.js',
          'design-model.js', 'net-model.js', 'overview-connectivity.js', 'ratsnest.js', 'paired-review.js', 'project-search.js', 'rule-reports.js', 'review-navigation.js', 'ui-icons.js', 'worksheet.js', 'view-state.js', 'review-comments.js', 'comment-compose.js', 'review-workspace.js', 'github-review-api.js', 'mention-users.js', 'options.html', 'options.js', 'review-file-store.js', 'review-file-settings.js',
          'review-tools.js', 'repo-models.js', 'browser-viewer.html', 'browser-viewer.js', 'revision-viewer.html', 'schematic-viewer.html',
-         'pcb-viewer.html', 'revision-viewer.css', 'revision-viewer.js', 'owned-canvas.js', 'motion-webgl.js',
+         'pcb-viewer.html', 'revision-viewer.css', 'revision-viewer.js', 'pad-labels.js', 'owned-canvas.js', 'motion-webgl.js',
          'schematic-renderer.js', 'pcb-renderer.js', 'vendor/spike-board3d.bundle.js',
          'vendor/SPIKE-ENGINE-NOTICE.md', 'vendor/THREE-LICENSE', 'credential-vault.js',
          'credential-vault-host.html', 'credential-vault-host.js', 'credential-vault-worker.js'}
+FILES.update({'window-link.js','detached-view.js','github-project-buffer.js','github-project-view.js','workspace-search.js'})
+FILES.update({'fast-pi.js','fast-pi-worker.js','fast-pi-workspace.js','fast-pi-workspace.css'})
+FILES.update({'draftsman-model.js','draftsman-mechanical.js','draftsman-snap.js','draftsman-export.js','draftsman-workspace.js','draftsman-workspace.css','draftsman-repository.js'})
 FILES.update({'overview-routing.js','dashboard.html','dashboard.css','dashboard.js','project-recents.js'})
 FILES.update({'workspace-chrome.css','workspace-chrome.js','revision-actions.js','revision-fork.js','analysis-simulation.js','analysis-simulation.css'})
 FILES.update({'provider-oauth.js','provider-oauth.json'})
+FILES.update({'project-launch.js','project-launcher.html','project-launcher.js','project-launcher.css'})
 FILES.update({'native-kicad.js', 'comment-focus.js'})
 FILES.update({'chat-content.js','chat-panel.js','chat-panel.css','review-sync.js','work-board-panel.js'})
 FILES.update({'compact-surfaces.css','compact-surfaces.js'})

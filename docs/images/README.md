@@ -144,6 +144,12 @@ The application toolbars, drawing areas and relevant editor context remain. PNG 
 
 ## Capability gallery added 2026-10-29
 
+### Draftsman guide capture
+
+`draftsman/editor.png` is a 1280 × 800 application-only browser capture of the current Draftsman source preview, taken on 29 October 2026. It uses the retained synthetic `extension/tests/fixtures/net3d/inspection.kicad_pcb` fixture and local mock repository transport. The repository name and all-`a` revision are test data. The shown PDF export is generated locally; no live provider save, physical Android device or native KiCad plotting is demonstrated. The compact toolbar is newer than the first Draftsman release in 0.12.69. There are no OS, browser-address or Android status bars, and no generated/reconstructed image content.
+
+`draftsman/kicad-template.png` and `draftsman/walkthrough.webm` use the same source/fixture in the alternative KiCad-style template. The walkthrough verifies the visible H1 mounting-hole centre snap, then performs local editing and PDF export. Recording ends before the harness's simulated folder/provider-write actions. These are local browser pixels, not native-device footage or a live GitHub save.
+
 The README capability gallery adds the 30 retained views shown in the local gallery plus seven source previews of column selection, folder browsing, measurement assistance and generated PDF output. Existing tracked images are reused; the additional captures live in `features/`. These are actual application/browser pixels, not generated imagery.
 
 The gallery mixes 0.12.64/0.12.65 captures and subsequent unreleased source previews. Captions identify historical UI, synthetic provider/commit/waveform data, stand-in component bodies and responsive browser previews. Phone-sized browser captures do not establish physical-device validation. No new live GitHub/GitLab post or remote fork is demonstrated.

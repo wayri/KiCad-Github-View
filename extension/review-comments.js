@@ -2,6 +2,52 @@
 
 // Pure validation and interchange helpers. Nothing here posts to GitHub.
 const KiCadReviewComments = (() => {
+  const severityOptions=Object.freeze([
+    {value:'info',label:'Info',color:'#69bbdd',symbol:'🔵'},
+    {value:'level-1',label:'Level 1',color:'#4fc08d',symbol:'🟢'},
+    {value:'minor',label:'Minor',color:'#d4c64f',symbol:'🟡'},
+    {value:'major',label:'Major',color:'#ed9b49',symbol:'🟠'},
+    {value:'critical',label:'Critical',color:'#e65b69',symbol:'🔴'}
+  ].map(Object.freeze));
+  const isSeverity=value=>severityOptions.some(item=>item.value===value);
+  const severityInfo=value=>severityOptions.find(item=>item.value===value)||severityOptions[0];
+  const stateOptions=Object.freeze([
+    {value:'open',label:'Open',color:'#42ae72',symbol:'🟢'},
+    {value:'closed',label:'Closed',color:'#aa79d4',symbol:'🟣'},
+    {value:'skipped',label:'Skipped',color:'#c7ab36',symbol:'🟡'},
+    {value:'resolved',label:'Resolved',color:'#aa79d4',symbol:'🟣'},
+    {value:'wont-fix',label:'Won’t fix',color:'#9099a6',symbol:'⚪'}
+  ].map(Object.freeze));
+  const isState=value=>stateOptions.some(item=>item.value===value);
+  const stateInfo=value=>stateOptions.find(item=>item.value===value)||stateOptions[0];
+  const issueState=value=>value==='opened'?'open':['open','closed'].includes(value)?value:null;
+  function effectiveState(note,states){
+    if(note?.state==='skipped')return 'skipped';
+    const linked=states===undefined?[issueState(note?.github?.state)]:states.map(issueState);
+    if(linked.includes('open'))return 'open';
+    if(linked.length&&linked.every(value=>value==='closed'))return 'closed';
+    return isState(note?.state)?note.state:'open';
+  }
+  function stateMatches(filter,state,saved=state){if(filter==='all')return true;if(filter==='closed')return ['closed','resolved','wont-fix'].includes(state);if(['resolved','wont-fix'].includes(filter))return saved===filter;return state===filter;}
+  function threadLinks(note){
+    const links=new Map(),entries=[...(note?.remoteRefs||[]),...(note?.github?[{...note.github,provider:note.github.provider||note.anchor?.provider||'github'}]:[])];
+    for(const value of entries.slice(0,21)){try{const url=new URL(value.url);if(url.protocol!=='https:'||url.username||url.password||url.search)continue;
+      const provider=value.provider||'github';let match,repository,kind,number;
+      if(provider==='github'){if(url.origin!=='https://github.com')continue;match=/^\/([A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+)\/(issues|discussions|pull)\/([1-9]\d*)$/.exec(url.pathname);if(!match)continue;repository=match[1];kind=match[2]==='discussions'?'discussion':'issue';number=Number(match[3]);}
+      else if(provider==='gitlab'){match=/^\/([A-Za-z0-9_.-]+(?:\/[A-Za-z0-9_.-]+)+)\/-\/issues\/([1-9]\d*)$/.exec(url.pathname);if(!match)continue;repository=match[1];kind='issue';number=Number(match[2]);if(value.host&&new URL(value.host).origin!==url.origin)continue;}
+      else continue;
+      if(repository.split('/').some(part=>part==='.'||part==='..')||!Number.isSafeInteger(number)||number!==value.number||value.repository&&value.repository!==repository)continue;
+      const link={provider,host:url.origin,repository,kind,number};links.set(threadKey(link),link);
+    }catch{}}
+    return [...links.values()];
+  }
+  function threadKey(link){return JSON.stringify([link.provider||'github',link.host||'https://github.com',(link.provider||'github')==='github'?String(link.repository).toLowerCase():link.repository,link.kind,link.number]);}
+  function createThreadStateCache(){const values=new Map();return{
+    remember(scope,thread){const state=issueState(thread?.state),updated=Date.parse(thread?.updatedAt);if(!state||!Number.isFinite(updated)||!['issue','discussion'].includes(thread?.kind)||!Number.isSafeInteger(thread.number)||thread.number<1)return false;const key=threadKey({...scope,kind:scope.provider==='gitlab'?'issue':thread.kind,number:thread.number}),old=values.get(key);if(old&&(old.updated>updated||old.updated===updated&&old.state!==state))return false;values.delete(key);values.set(key,{state,updated});if(values.size>500)values.delete(values.keys().next().value);return true;},
+    states(note){const links=threadLinks(note);if(!links.length)return undefined;const meta=new Set(threadLinks({...note,remoteRefs:[]}).map(threadKey));return links.map(link=>values.get(threadKey(link))?.state||(note.github&&meta.has(threadKey(link))?issueState(note.github.state):null));},
+    clear(){values.clear();}
+  };}
+  function mergeAnnotations(local=[],remote=[]){const values=new Map();for(const note of [...local,...remote]){const a=note?.anchor;if(!a)continue;const key=JSON.stringify([a.provider||'github',a.host||'https://github.com',a.repository,a.ref,a.file,note.id]),old=values.get(key);if(!old){values.set(key,note);continue;}const latest=Date.parse(note.updatedAt||note.createdAt)>Date.parse(old.updatedAt||old.createdAt)?note:old;values.set(key,{...latest,...(note.github||old.github?{github:note.github||old.github}:{}),remoteRefs:old.remoteRefs?.length?old.remoteRefs:note.remoteRefs||[]});}return [...values.values()];}
   // All bound views share the existing publication lock; binding is validation context only.
   const publicationReservations = new Map();
   function create(binding = null) {
@@ -11,8 +57,8 @@ const KiCadReviewComments = (() => {
   const REF = /^[A-Za-z0-9._/-]{1,200}$/;
   const ID = /^[A-Za-z0-9_-]{1,100}$/;
   const PATH = /^[^\\\x00-\x1f\x7f]+\.kicad_(?:sch|pcb)$/i;
-  const SEVERITIES = new Set(["info", "minor", "major", "critical"]);
-  const STATES = new Set(["open", "skipped", "resolved", "wont-fix"]);
+  const SEVERITIES = new Set(severityOptions.map(item=>item.value));
+  const STATES = new Set(stateOptions.map(item=>item.value));
   const MENTION = /^[A-Za-z0-9](?:[A-Za-z0-9-]{0,37}[A-Za-z0-9])?$/;
   const MARKER = /<!-- kicad-review:v1 ([A-Za-z0-9_-]{1,32000}) -->/g;
   const optional = (value, name, limit) => {
@@ -181,7 +227,7 @@ const KiCadReviewComments = (() => {
     return validateComment(JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(
       Uint8Array.from(binary, (character) => character.charCodeAt(0)))));
   }
-  function toMarkdown(value) {
+  function toMarkdown(value, {severityBadge=true,stateBadge=true} = {}) {
     const note = validateComment(value), anchor = note.anchor;
     const fileUrl = revisionUrl(anchor);
     const fileValue = fileUrl ? `[${escaped(anchor.file)}](<${fileUrl}>)` : escaped(anchor.file);
@@ -192,7 +238,7 @@ const KiCadReviewComments = (() => {
       targetValue = anchor.netName || anchor.reference || anchor.objectId || "Unnamed net";
     }
     const rows = [
-      ["Severity", note.severity[0].toUpperCase() + note.severity.slice(1)],
+      ["Severity", severityInfo(note.severity).label],
       ["Review state", note.state],
       ...(note.threadType ? [["Destination type", note.threadType === "discussion" ? "Discussion" : "Issue"]] : []),
       [targetLabel, targetValue],
@@ -210,7 +256,8 @@ const KiCadReviewComments = (() => {
       ["Updated (UTC)", note.updatedAt]
     ];
     const commentLines=note.text.split(/\r\n|\r|\n/);
-    const lines = ["## KiCad visual review", "", "### "+escaped(commentLines[0]), "", escapedComment(commentLines.slice(1).join("\n")), "",
+    const level=severityInfo(note.severity);
+    const lines = ["## KiCad visual review", "", ...(severityBadge?[`> ${level.symbol} **${level.label}** · review severity`, ...(stateBadge?[`> ${stateInfo(note.state).symbol} **${stateInfo(note.state).label}** · review state`]:[]), ""]:[]), "### "+escaped(commentLines[0]), "", escapedComment(commentLines.slice(1).join("\n")), "",
       "### Design context", "", "| Detail | Value |", "| --- | --- |",
       ...rows.map(([label, item, rawMarkdown]) => `| ${tableCell(label)} | ${rawMarkdown ? item : tableCell(item)} |`)];
     if(note.attachments?.length)for(const attachment of note.attachments)lines.push('',`![Captured drawing area (${attachment.width} × ${attachment.height})](${attachment.url})`);
@@ -294,7 +341,7 @@ const KiCadReviewComments = (() => {
     // The final UTC day is inclusive, without relying on timestamp precision.
     return { from, until: to === undefined ? undefined : to + 86400000 };
   }
-  function sortAndFilter(notes, filters = {}, readAt = () => undefined) {
+  function sortAndFilter(notes, filters = {}, readAt = () => undefined, stateOf = effectiveState) {
     const severity = filters.severity || "all", state = filters.state || "all", read = filters.read || "all", threadType=filters.threadType||"all";
     const order = filters.order || "severity", query = String(filters.query || "").trim().toLowerCase().slice(0, 2000);
     if (!["all","issue","discussion"].includes(threadType) || !["all",...SEVERITIES].includes(severity) || !["all","closed",...STATES].includes(state) ||
@@ -302,13 +349,13 @@ const KiCadReviewComments = (() => {
       throw new Error("Invalid comment filter.");
     }
     const dates = createdDateRange(filters.createdFrom, filters.createdTo);
-    const rank = {critical:0,major:1,minor:2,info:3};
+    const rank = Object.fromEntries(severityOptions.map((item,index)=>[item.value,severityOptions.length-index-1]));
     return [...notes].filter((note) => {
       const unread = isUnread(note, readAt(note));
       const created = Date.parse(note.createdAt);
       return (dates.from === undefined || created >= dates.from) && (dates.until === undefined || created < dates.until) &&
         (threadType === "all" || commentType(note) === threadType) && (severity === "all" || (note.severity || "info") === severity) &&
-        (state === "all" || (state === "closed" ? ["resolved","wont-fix"].includes(note.state) : (note.state || "open") === state)) &&
+        stateMatches(state,stateOf(note),note.state||"open") &&
         (read === "all" || (read === "unread") === unread) &&
         (!query || [note.text,note.anchor?.reference,...(note.tags || []),...(note.mentions || [])]
           .join(" ").toLowerCase().includes(query));
@@ -342,7 +389,7 @@ const KiCadReviewComments = (() => {
     publicationReservations.set(key,work);
     try { await work; } finally { if (publicationReservations.get(key) === work) publicationReservations.delete(key); }
   }
-  return { forWorkspace, normalizeScope, normalizeAnchor, validateComment, validateAttachment, toMarkdown, fromMarkdown, parseSidecar, serializeSidecar,
+  return { stateOptions, stateInfo, isState, issueState, effectiveState, stateMatches, threadLinks, createThreadStateCache, mergeAnnotations, severityOptions, severityInfo, isSeverity, forWorkspace, normalizeScope, normalizeAnchor, validateComment, validateAttachment, toMarkdown, fromMarkdown, parseSidecar, serializeSidecar,
     reservePublication, exportComments, parseComments, receiptKey, isUnread, commentType, createdDateRange, sortAndFilter };
   }
   return create();

@@ -101,3 +101,41 @@ body[data-workspace-chrome] .workspace-tools-menu>:is(#openBomManager,#viewRuleC
 
 body[data-workspace-chrome] #frameControls .workspace-mode-switch .button-label{display:inline}
 body[data-workspace-chrome]:has(#mode3d[aria-pressed=true]) #drawingTools>:is(#gridButton,#flipButton){display:none}
+
+/* The docked tool rail must stay above, and outside, the phone canvas. */
+body[data-workspace-chrome] #reviewWorkspace.docked-sidebars #drawingTools{z-index:11}
+@media(max-width:599px),(max-width:839px) and (max-height:500px){
+ body[data-workspace-chrome]:not(.drawing-focused):not(.phone-sidebars-visible) #reviewWorkspace.docked-sidebars{padding-right:var(--tool-strip-width,40px)!important}
+ body[data-workspace-chrome].phone-sidebars-visible:not(.drawing-focused) #reviewWorkspace.docked-sidebars{padding-right:calc(44px + var(--tool-strip-width,40px))!important}
+ body[data-workspace-chrome].phone-sidebars-visible #reviewWorkspace>.sidebar-dock.right{right:var(--tool-strip-width,40px)}
+}
+
+.workspace-view-navigation{display:flex;align-items:center;gap:2px;overflow-x:auto;max-width:100%;flex:0 1 auto;padding:2px;border:1px solid #52657566;border-radius:6px}.workspace-view-navigation button{display:inline-flex;gap:4px;align-items:center;white-space:nowrap;min-height:27px;padding:4px 6px;font-size:10px}.workspace-view-navigation button svg{width:16px;height:16px}.workspace-view-navigation button[aria-pressed=true]{background:#28544e;color:#c6fff0;border-color:#65cdb7}@media(max-width:700px){.workspace-view-navigation{order:5;flex:1 1 100%}}
+
+.workspace-simulation-menu{max-width:min(360px,calc(100vw - 24px));padding:12px;border:1px solid #607884;border-radius:8px;background:var(--panel,#1b2935);color:var(--text,#e7edf2)}.workspace-simulation-menu strong{display:block;font-size:12px;margin-bottom:8px}.workspace-simulation-menu button{display:block;width:100%;margin-top:6px;min-height:30px;font-size:11px}.workspace-simulation-menu::backdrop{background:#0006}
+
+.workspace-detach-menu{position:relative;flex:none;font:10px system-ui}.workspace-detach-menu>summary{list-style:none;cursor:pointer;padding:6px;border:1px solid #58718077;border-radius:5px;white-space:nowrap}.workspace-detach-menu>summary::after{content:' \2197'}.workspace-detach-menu>div{position:absolute;z-index:1900;right:0;top:100%;min-width:210px;display:grid;gap:5px;padding:9px;border:1px solid #587180;border-radius:7px;background:var(--panel,#192530);color:var(--text,#e4edf7);box-shadow:0 6px 24px #0006}.workspace-detach-menu:not([open])>div{display:none}.workspace-detach-menu button{font:11px system-ui;min-height:29px;text-align:left}.workspace-detach-menu label{display:flex;gap:4px;align-items:center;font-size:11px}.workspace-detach-menu small{color:var(--muted,#9eb0bd);line-height:1.4}.workspace-view-dragging{opacity:.5}
+
+/* Centered workspace switcher with a stable, project-wide search anchor. */
+body[data-workspace-chrome] #reviewHeader{display:grid;grid-template-columns:minmax(0,1fr) minmax(200px,320px) minmax(0,1fr);align-items:center;gap:10px;padding:3px 10px}
+body[data-workspace-chrome] #reviewHeader>.identity{display:none}
+.workspace-nav-cluster,.workspace-action-cluster{display:flex;align-items:center;gap:5px;min-width:0}
+.workspace-nav-cluster{justify-content:flex-end}.workspace-action-cluster{justify-content:flex-start}
+body[data-workspace-chrome] #reviewHeader #workspaceTabs{min-width:0;flex:0 1 auto;scrollbar-width:none}
+body[data-workspace-chrome] #reviewHeader #projectTools{flex:0 1 auto;min-width:0;padding-left:0;border:0}
+body[data-workspace-chrome] #reviewHeader #sourceLink{margin-left:auto;flex:none}
+.workspace-project-search{position:relative;min-width:0;width:100%}
+.workspace-project-search>input{width:100%;min-width:0;height:28px;min-height:28px;padding:4px 10px;font:12px/1.4 inherit;border:1px solid var(--line,#3b4652);background:var(--control,#171a21);color:var(--text,#e6e9ef);border-radius:6px}
+.workspace-project-search-popup{position:absolute;z-index:500;top:calc(100% + 5px);left:50%;transform:translateX(-50%);width:min(540px,calc(100vw - 20px));max-height:min(65vh,560px);overflow:auto;padding:6px;background:var(--panel,#1e2128);color:var(--text,#e6e9ef);border:1px solid var(--line,#3b4652);border-radius:8px;box-shadow:0 8px 30px #0005;text-align:left}
+.workspace-project-search-popup[hidden]{display:none}
+.workspace-search-status,.workspace-search-warnings{font-size:11px;color:var(--muted,#9ca5b5);padding:3px 6px;margin:3px 0;line-height:1.5}
+.workspace-search-warnings:empty{display:none}
+.workspace-search-result{display:flex;align-items:center;gap:4px;border-radius:5px}
+.workspace-search-result[aria-selected=true],.workspace-search-result:focus-within{background:var(--selected,#293c59)}
+.workspace-project-search-popup .workspace-search-open{flex:1;min-width:0;display:flex;align-items:flex-start;flex-direction:column;gap:2px;text-align:left;border:0;background:transparent;color:inherit;padding:7px 8px;white-space:normal}
+.workspace-search-open strong{font-size:12px;font-weight:600;overflow-wrap:anywhere}.workspace-search-open small{font-size:11px;color:var(--muted,#9ca5b5);overflow-wrap:anywhere}
+.workspace-project-search-popup .workspace-search-3d{flex:none;font-size:10px;padding:4px 6px;margin-right:4px;min-height:26px}
+.workspace-search-holder{flex:0 1 320px;min-width:160px;max-width:400px;margin-inline:auto}
+@media(max-width:1599px){body[data-workspace-chrome] #reviewHeader #sourceLink{display:none}}
+@media(max-width:1099px){body[data-workspace-chrome] #reviewHeader{grid-template-columns:minmax(0,1fr) minmax(180px,260px);gap:6px}.workspace-action-cluster{grid-column:1/-1;justify-content:center}body[data-workspace-chrome] #reviewHeader #projectTools{justify-content:center}.workspace-nav-cluster{justify-content:flex-start}}
+@media(max-width:699px){body[data-workspace-chrome] #reviewHeader{grid-template-columns:minmax(0,1fr);gap:3px;padding:3px 5px}.workspace-nav-cluster{justify-content:center}#workspaceSearchHost{width:min(100%,400px);justify-self:center}.workspace-action-cluster{display:flex;overflow-x:auto;max-width:100%;justify-content:flex-start}.workspace-project-search-popup{position:fixed;top:92px;left:10px;right:10px;transform:none;width:auto;max-height:55dvh}.workspace-search-holder{min-width:120px;flex-basis:200px}.workspace-project-search>input{height:32px;min-height:32px}}

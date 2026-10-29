@@ -18,7 +18,8 @@
   const loading=globalThis.KiCadLoading?.indicator(document.body,{onStop:()=>stopLoading()});
   function loadWait(promise){return new Promise((resolve,reject)=>{const signal=loadController?.signal,abort=()=>reject(signal?.reason||Object.assign(Error('Loading stopped.'),{name:'AbortError'}));if(signal?.aborted){abort();return;}signal?.addEventListener('abort',abort,{once:true});Promise.resolve(promise).then(value=>{signal?.removeEventListener('abort',abort);signal?.aborted?abort():resolve(value);},error=>{signal?.removeEventListener('abort',abort);reject(error);});});}
   const loadSend=message=>{const pending=send({...message,...(remoteLoad?{loadId}:{})});const signal=loadController?.signal,abort=()=>{if(remoteLoad)void send({type:'load-cancel',loadId}).catch(()=>{});};signal?.addEventListener('abort',abort,{once:true});return loadWait(pending).finally(()=>signal?.removeEventListener('abort',abort));};
-  let sheetOverview=null,compatibilityUI=null;
+  let sheetOverview=null,compatibilityUI=null,windowLink=null;
+  const viewSession=/^[a-zA-Z0-9_-]{32,128}$/.test(params.get('viewSession')||'')?params.get('viewSession'):globalThis.crypto?.randomUUID?.()||null;
   let dark=pcb,workspace=null,canvas=null,scene=null,modelAssetCache=null,disposed=false,applying=false,crossApplying=false,lastView='',lastFile='';
 
   const own=new URL(chrome.runtime.getURL('browser-viewer.html')),ownOrigin=`${own.protocol}//${own.host}`;
@@ -150,7 +151,7 @@
         add('Overview','Restore layer view before focusing',()=>canvas.restoreLayers());
         add('Filled copper','Toggle saved filled copper zones',()=>canvas.setZoneVisibility({filled:canvas.showFilledCopper===false}));
         add('Zone outlines','Toggle saved zone boundary outlines',()=>canvas.setZoneVisibility({outlines:canvas.showZoneOutlines===false}));
-        add('Net names','Show saved copper net names in 2D',()=>{preferences.showNetNames=!canvas.showNetNames;applyTheme();savePreferences();});
+        add('Net names','Show saved pad numbers and copper net names in 2D and 3D',()=>{preferences.showNetNames=!canvas.showNetNames;applyTheme();savePreferences();});
       }
       for(const [name,button] of floatingButtons){
         const selected=name==='Net names'?canvas.showNetNames===true:name==='Filled copper'?canvas.showFilledCopper!==false:name==='Zone outlines'?canvas.showZoneOutlines!==false:name==='All'?!canvas.focusedLayer&&(canvas.design.layers||[]).every(layer=>canvas.visibleLayers.has(layer)):name==='Overview'?!canvas.focusedLayer&&!canvas.layerSnapshot:canvas.focusedLayer===name;
@@ -234,7 +235,7 @@
 
       getDesigns:()=>designs,updateDiagnostics,onOverviewHighlights:()=>sheetOverview?.refresh(),
       onHierarchy(hierarchy){if(!disposed)parent.postMessage({type:'kicad-review:hierarchy',repository,ref,hierarchy},ownOrigin);},
-      onSelection(selection){if(crossApplying||!globalThis.KiCadPairedReview?.validSelection(selection))return;if(globalThis.KiCadVSCodeBridge?.selection)globalThis.KiCadVSCodeBridge.selection(selection);else parent.postMessage({type:'kicad-review:selection',selection},ownOrigin);},
+      onSelection(selection){if(crossApplying||!globalThis.KiCadPairedReview?.validSelection(selection))return;windowLink?.publish(selection);if(globalThis.KiCadVSCodeBridge?.selection)globalThis.KiCadVSCodeBridge.selection(selection);else parent.postMessage({type:'kicad-review:selection',selection},ownOrigin);},
       onCommentsChanged(){if(globalThis.KiCadVSCodeBridge?.onCommentsChanged)globalThis.KiCadVSCodeBridge.onCommentsChanged();else parent.postMessage({type:'kicad-review:comments-changed'},ownOrigin);},pullNumber:Number(params.get('pullNumber'))||null,pullRepository:params.get('pullRepository')||repository});
 
     workspace.attachCanvas(canvas);openSheet(initialFile);loading?.hide();
@@ -312,7 +313,7 @@
     const savePreferences=()=>chrome.storage?.local?.set({[preferenceKey]:preferences}).catch(error=>{$('pageSetupStatus').textContent=error.message;});
 
     $('netNamesSetting').hidden=!pcb;$('showNetNames').onchange=()=>{preferences.showNetNames=$('showNetNames').checked;applyTheme();savePreferences();};
-    const applyTheme=()=>{canvas.showNetNames=preferences.showNetNames===true;$('showNetNames').checked=canvas.showNetNames;dark=preferences.drawingTheme==='dark';canvas.dark=dark;canvas.acceleration=preferences.acceleration==='off'?'off':'auto';scene?.setTheme(dark);document.body.dataset.uiTheme=preferences.uiTheme;$('uiTheme').value=preferences.uiTheme;$('drawingTheme').value=preferences.drawingTheme;$('rulerUnits').value=preferences.rulerUnits;if($('acceleration'))$('acceleration').value=canvas.acceleration;$('themeButton').setAttribute('aria-pressed',String(dark));if($('displayPreset'))$('displayPreset').value=preferences.uiTheme==='light'&&preferences.drawingTheme===(pcb?'dark':'light')?'kicad':preferences.uiTheme===preferences.drawingTheme?preferences.uiTheme:'custom';if(!scene)canvas.draw();};
+    const applyTheme=()=>{canvas.showNetNames=preferences.showNetNames===true;$('showNetNames').checked=canvas.showNetNames;dark=preferences.drawingTheme==='dark';canvas.dark=dark;canvas.acceleration=preferences.acceleration==='off'?'off':'auto';scene?.setTheme(dark);scene?.setTerminalLabels?.(canvas.showNetNames);document.body.dataset.uiTheme=preferences.uiTheme;$('uiTheme').value=preferences.uiTheme;$('drawingTheme').value=preferences.drawingTheme;$('rulerUnits').value=preferences.rulerUnits;if($('acceleration'))$('acceleration').value=canvas.acceleration;$('themeButton').setAttribute('aria-pressed',String(dark));if($('displayPreset'))$('displayPreset').value=preferences.uiTheme==='light'&&preferences.drawingTheme===(pcb?'dark':'light')?'kicad':preferences.uiTheme===preferences.drawingTheme?preferences.uiTheme:'custom';if(!scene)canvas.draw();};
 
     $('themeButton').onclick=()=>{preferences.drawingTheme=dark?'light':'dark';applyTheme();savePreferences();};
 
@@ -365,7 +366,7 @@
 
         try{const engine=await load(),modelPaths=await assetPaths();if(disposed)return;pane.hidden=false;canvas.canvas.hidden=true;
 
-          scene=engine.mountBoard3D(pane,files.find(file=>file.path===rootFile).content,{dark,boardPath:rootFile,assetPaths:modelPaths,assetWarnings,loadAsset:modelAssetCache.load,externalInspector:true,onViewChange:()=>workspace?.sceneViewChanged(),onAnchor:({point})=>workspace?.positionSimulation(point),onMeasurementMode:active=>{$("measureButton").setAttribute("aria-pressed",String(active));$("measurementStatus").textContent=active?"3D measurement: select two model surface points.":"";},onSelect:record=>workspace?.select3D(record),onInspect:record=>workspace?.inspect3D(record),onComment:record=>workspace?.comment3D(record)});
+          scene=engine.mountBoard3D(pane,files.find(file=>file.path===rootFile).content,{dark,showNetNames:canvas.showNetNames,onTerminalLabelsChange:visible=>{preferences.showNetNames=visible;applyTheme();savePreferences();},boardPath:rootFile,assetPaths:modelPaths,assetWarnings,loadAsset:modelAssetCache.load,externalInspector:true,onViewChange:()=>workspace?.sceneViewChanged(),onAnchor:({point})=>workspace?.positionSimulation(point),onMeasurementMode:active=>{$("measureButton").setAttribute("aria-pressed",String(active));$("measurementStatus").textContent=active?"3D measurement: select two model surface points.":"";},onSelect:record=>workspace?.select3D(record),onInspect:record=>workspace?.inspect3D(record),onComment:record=>workspace?.comment3D(record)});
 
           workspace.setScene(scene);syncFloatingLayers();$('drawingLegend').hidden=true;lock(true);mode.setAttribute('aria-pressed','true');if($('renderMode'))$('renderMode').textContent='3D';
 
@@ -378,6 +379,10 @@
     }
 
     const related=selection=>{if(!globalThis.KiCadPairedReview?.validSelection(selection))return;crossApplying=true;try{workspace.highlightRelated?.(selection);}finally{crossApplying=false;}};
+    if(globalThis.KiCadWindowLink&&viewSession&&(/^[a-f0-9]{40}$/i.test(ref)||globalThis.KiCadLocalRuntime&&globalThis.KiCadLocalWorkspace?.openDetached))try{windowLink=KiCadWindowLink.mount({session:viewSession,scope:JSON.stringify([provider,providerContext.host||'https://github.com',repository,ref]),onSelection:selection=>{crossApplying=true;try{workspace.applyWindowSelection?.(selection);}finally{crossApplying=false;}},onEnabled:enabled=>{dispatchEvent(new CustomEvent('kicad-review:detach-state',{detail:{enabled}}));if(parent!==window)parent.postMessage({type:'kicad-review:detach-state',enabled},ownOrigin);}});}catch(error){$('engineNotice').textContent=error.message;$('engineNotice').hidden=false;updateDiagnostics();}
+    addEventListener('kicad-review:detach-sync',event=>{if(typeof event.detail?.enabled==='boolean')windowLink?.setEnabled(event.detail.enabled);});
+    addEventListener('kicad-review:detach-view',event=>{const mode=event.detail?.mode;if(!['schematic','layout','3d'].includes(mode))return;globalThis.KiCadDetachedView?.chooser({mode,current:currentFile(),unavailable:Boolean(globalThis.KiCadVSCodeContext||globalThis.KiCadLocalRuntime&&!globalThis.KiCadLocalWorkspace?.openDetached||globalThis.KiCadAndroidRuntime),getEntries:async()=>{const reply=await send({type:'project-inventory',repository,ref,file:rootFile});if(!reply?.ok)throw Error(reply?.error||'Project inventory unavailable.');return reply.result.files;},buildURL:file=>KiCadDetachedView.url({base:location.href,mode,file,repository,ref,provider,host:providerContext.host,session:viewSession,allowLocal:Boolean(globalThis.KiCadLocalRuntime&&globalThis.KiCadLocalWorkspace?.openDetached)}),onError:message=>{$('engineNotice').textContent=message;$('engineNotice').hidden=false;updateDiagnostics();}});});
+    if(params.get('initialView')==='3d'&&pcb)$('mode3d').click();
     addEventListener('kicad-review:related',event=>{if(globalThis.KiCadVSCodeContext)related(event.detail);});
     addEventListener('kicad-review:comments-refresh',()=>{if(globalThis.KiCadVSCodeContext)workspace.refreshComments?.();});
     addEventListener('message',event=>{
@@ -385,6 +390,16 @@
       if(event.source!==parent||event.origin!==ownOrigin||event.data?.type!=='kicad-review:command')return;
 
       const msg=event.data;
+      if(msg.command==='search-result'){const value=msg.result;if(value&&globalThis.KiCadWorkspaceSearch?.safePath(value.path)&&['object','file','report','draft'].includes(value.kind))workspace.openWorkspaceSearchResult?.(value).catch(error=>{label('reviewNotice',error.message);$('reviewNotice').hidden=false;});return;}
+      if(msg.command==='detach-sync'&&typeof msg.enabled==='boolean'){windowLink?.setEnabled(msg.enabled);return;}
+      if(msg.command==='workspace-view'){
+        if(!['schematic','layout','3d','draftsman','simulation'].includes(msg.mode))return;
+        if(msg.mode==='3d'){if(pcb&&!scene)$('mode3d').click();return;}
+        if(scene)$('mode3d').click();
+        if(msg.mode==='draftsman')$('openDraftsman')?.click();
+        if(msg.mode==='simulation'){if(globalThis.KiCadWorkspaceChrome)dispatchEvent(new Event('kicad-review:simulation-view'));else $('openSavedReports')?.click();}
+        return;
+      }
       if(msg.command==='restore-controls'){workspace.restoreFocusView?.();return;}
       if(msg.command==='open-sheet'){workspace.followSheet?.(msg.file);return;}
       if(msg.command==='refresh-comments'){workspace.refreshComments?.();return;}
@@ -399,7 +414,7 @@
 
     addEventListener('keydown',event=>{
 
-      if(event.composedPath().some(node=>node?.isContentEditable||/^(INPUT|TEXTAREA|SELECT)$/.test(node?.tagName||''))||event.ctrlKey||event.altKey||event.metaKey)return;
+      if(event.defaultPrevented||event.repeat||event.isComposing||event.composedPath().some(node=>node?.isContentEditable||/^(INPUT|TEXTAREA|SELECT)$/.test(node?.tagName||''))||event.ctrlKey||event.altKey||event.metaKey)return;
       if(scene){if(event.key.toLowerCase()==='f'||event.key==='Home'){event.preventDefault();scene.fit?.(event.key==='Home');}else if(['+','='].includes(event.key)){event.preventDefault();scene.zoom?.(1.25);}else if(['-','_'].includes(event.key)){event.preventDefault();scene.zoom?.(.8);}return;}
 
       if(event.key==='Escape'&&!$('viewerSettings').hidden){event.preventDefault();closeSettings();return;}
@@ -409,11 +424,14 @@
 
     if(params.get('focusNet'))workspace?.focusSignalNet(params.get('focusNet'));
     if(params.get('focusUuid'))workspace?.focusSaved(requestedFile,params.get('focusUuid'));
+    if(params.get('view')==='3d'&&pcb&&!$('mode3d').disabled)$('mode3d').click();
+    addEventListener('kicad-review:search-result',event=>{if(globalThis.KiCadVSCodeContext&&event.detail)workspace.openWorkspaceSearchResult?.(event.detail).catch(error=>{label('reviewNotice',error.message);$('reviewNotice').hidden=false;});});
+    globalThis.KiCadVSCodeBridge?.workspaceReady?.();
     if(params.has('focusX')&&params.has('focusY'))focus({x:Number(params.get('focusX')),y:Number(params.get('focusY'))});
 
   }
 
-  addEventListener('pagehide',()=>{disposed=true;loadController?.abort();loading?.dispose();modelAssetCache?.clear();sheetOverview?.dispose();compatibilityUI?.dispose();workspace?.dispose();scene?.dispose();canvas?.dispose();});
+  addEventListener('pagehide',()=>{windowLink?.dispose();disposed=true;loadController?.abort();loading?.dispose();modelAssetCache?.clear();sheetOverview?.dispose();compatibilityUI?.dispose();workspace?.dispose();scene?.dispose();canvas?.dispose();});
 
   const deadline=setTimeout(()=>stopLoading('Loading stopped after 5 minutes. Retry or open a smaller project.'),300000);
   start().catch(error=>{loading?.hide();if(disposed)return;workspace?.dispose();canvas?.dispose();$('frameControls').hidden=true;status.textContent=loadController?.signal.aborted?(loadController.signal.reason?.message||'Loading stopped.'):error.message;if(error.name!=='AbortError')status.classList.add('error');const retry=document.createElement('button');retry.type='button';retry.textContent='Retry loading';retry.onclick=()=>location.reload();status.append(retry);if(!status.isConnected)$('drawingHost').append(status);}).finally(()=>{loadFinished=true;clearTimeout(deadline);});

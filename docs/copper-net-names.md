@@ -1,9 +1,13 @@
-# Copper net names
+# Pad numbers and copper net names
 
-The shared 2D PCB canvas now supports SPIKE-style presentation labels for named straight traces and saved filled copper polygons. Enable **Net names** in the floating Layers controls, or **Net names on copper (2D)** in View and page setup. The per-drawing preference is stored through the existing browser, mobile or VS Code host adapter; it defaults off for existing projects.
+Status: current development source after 0.12.76; a new store release has not been published for this fix.
 
-Labels follow the visible segment angle and remain upright in flipped views. They appear only when the visible copper has room for a readable label, avoid other net-name labels and stop at 300 labels per frame. Names use the saved net model; geometry and source files are unchanged. Hidden layers, focused copper layers, isolated nets and hidden zone fills control label visibility. Unfilled zones, arcs, pads and 3D objects do not receive these presentation labels.
+Enable **Net names** in the floating Layers controls, or **Pad numbers and net names (2D / 3D)** in View and page setup. The per-drawing preference is shared with **Pad and net names (close zoom)** in the 3D Display menu and is stored by the existing browser, Android or VS Code host adapter. Existing projects default to off.
 
-Implementation uses the existing owned canvas, spatial candidate index and workspace net model. No new runtime package or asset is required. SPIKE's `LayoutViewport.tsx` and `viewportPerformance.ts` informed the placement and readability behavior.
+At readable zoom, pad numbers take collision priority over trace and zone net labels. A long hierarchical net name is shortened in the middle when necessary; the complete pad number is retained. Unconnected pads can show their numbers. Optional pin names are included only when there is space. Full saved values remain available in Properties. Geometry and KiCad source files are unchanged.
 
-Verification: 165 focused shared renderer/workspace tests and 45 VS Code host tests passed, including net-name placement, clipping, collisions, flipped camera, layer/isolation filtering and preference persistence/rejection. The saved public KiCad PIC Programmer board was visually checked in the local shared-renderer harness, including its flipped view. Installed Android and VS Code host visual acceptance and a new Marketplace upload remain pending.
+The 2D overlay supports saved copper pads, straight traces and filled polygons, respects visible layers, isolation and object filters, and stops at 300 labels per frame. Its bounded scan considers up to 12,000 eligible visible primitives, with a bounded deferred trace/zone list. Unfilled polygons and arcs do not receive copper-name presentation labels.
+
+3D uses the same number-first layout and adaptive 9–18 px text on the facing saved copper surface. It shows up to 150 close-zoom pad labels, drawn with depth testing: components and board geometry can occlude them. Hide Parts temporarily or change the camera when inspecting pads beneath a body. Labels are excluded from mechanical Draftsman captures, measurements and picking.
+
+Verification: 1,939 JavaScript checks and 23 package/release checks passed. The actual Canvas2D and WebGL viewers were visually checked on a controlled fixture containing a long hierarchical net, GND and an unconnected pad. This is shared-renderer validation; it does not establish installed host acceptance for a future release.

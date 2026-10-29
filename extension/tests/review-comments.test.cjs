@@ -70,7 +70,7 @@ test('mention validation rejects injection and oversize input without changing s
     assert.throws(() => comments.validateComment({...sample(),mentions:[mention]}), /mention/);
   }
   assert.throws(() => comments.validateComment({...sample(),mentions:Array.from({length:21},(_,i)=>`user${i}`)}), /mentions/);
-  assert.throws(() => comments.validateComment({...sample(),state:'closed'}), /state/);
+  assert.throws(() => comments.validateComment({...sample(),state:'done'}), /state/);
   assert.throws(() => comments.validateComment({...sample(),updatedAt:'2026-10-02T00:00:00Z'}), /precedes/);
   const markdown = comments.toMarkdown({...sample(),mentions:['@alice'],text:'@alice check <script>'});
   assert.match(markdown, /\| Mentions \| @alice \|/);
@@ -81,7 +81,7 @@ test('GitHub body formats user text and drawing context safely while retaining t
  const note={...sample(),threadType:'discussion',severity:'major',state:'resolved',text:'Check **spacing** | fast\n@alice <script>alert(1)</script>',tags:['placement|clearance'],mentions:['alice'],
   anchor:{...sample().anchor,repository:'owner/repo',ref:'feature/review',file:'design/a (rev)#1.kicad_pcb',kind:'footprint',reference:'J1|A',variant:'prototype'}};
  const markdown=comments.toMarkdown(note);
- assert.ok(markdown.startsWith('## KiCad visual review\n\n### Check '));
+ assert.ok(markdown.startsWith('## KiCad visual review\n\n> 🟠 **Major** · review severity\n> 🟣 **Resolved** · review state\n\n### Check '));
  assert.match(markdown, /Check.*\n@alice/s);
  assert.equal(markdown.includes('<script>'),false);
  assert.ok(markdown.includes('| Destination type | Discussion |'));
@@ -197,4 +197,34 @@ test('created date restrictions combine with type, state, severity, read, search
  const notes=[{...base,id:'old',createdAt:'2026-10-01T00:00:00Z',updatedAt:'2026-10-04T00:00:00Z'}, {...base,id:'matching',createdAt:'2026-10-03T00:00:00Z',updatedAt:'2026-10-03T00:00:00Z',github:{createdAt:'2026-10-01T00:00:00Z'}}, {...base,id:'other-type',threadType:'discussion'}, {...base,id:'read'}, {...base,id:'open',state:'open'}];
  const filters={createdFrom:'2026-10-03',createdTo:'2026-10-03',threadType:'issue',state:'closed',severity:'major',read:'unread',query:'@alice'.slice(1),order:'updated'};
  assert.deepEqual(comments.sortAndFilter(notes,filters,n=>n.id==='read'?'2026-10-05T00:00:00Z':undefined).map(n=>n.id),['matching']);
+});
+
+
+test('five review levels preserve old notes, sort consistently and publish self-contained coloured severity banners',()=>{
+ assert.deepEqual(comments.severityOptions.map(x=>x.value),['info','level-1','minor','major','critical']);
+ const notes=comments.severityOptions.map(level=>({...sample(),id:'note-'+level.value,severity:level.value}));
+ for(const [i,note]of notes.entries()){const level=comments.severityOptions[i],body=comments.toMarkdown(note);assert.ok(body.includes('> '+level.symbol+' **'+level.label+'** · review severity'));assert.ok(body.includes('| Severity | '+level.label+' |'));assert.deepEqual(comments.fromMarkdown(body),[comments.validateComment(note)]);assert.ok(!body.includes('shields.io'));assert.equal(comments.severityInfo(note.severity),level);}
+ assert.deepEqual(comments.sortAndFilter(notes).map(x=>x.severity),['critical','major','minor','level-1','info']);assert.equal(comments.sortAndFilter(notes,{severity:'level-1'})[0].id,'note-level-1');
+ assert.deepEqual(comments.parseComments(comments.exportComments(notes)),notes.map(comments.validateComment));for(const value of ['level1','Level 1','__proto__',0])assert.equal(comments.isSeverity(value),false);
+ assert.equal(comments.validateComment(sample()).severity,'info');
+});
+
+
+test('review states round-trip closed and skipped, infer provider state and retain legacy resolution filters',()=>{
+ const states=['open','closed','skipped','resolved','wont-fix'];for(const state of states){const note={...sample(),state},body=comments.toMarkdown(note);assert.equal(comments.fromMarkdown(body)[0].state,state);assert.ok(body.includes(comments.stateInfo(state).symbol+' **'+comments.stateInfo(state).label+'** · review state'));}
+ const note={...sample(),state:'open',github:{state:'closed'}};assert.equal(comments.effectiveState(note),'closed');assert.equal(comments.sortAndFilter([note],{state:'closed'}).length,1);assert.equal(comments.sortAndFilter([note],{state:'open'}).length,0);assert.equal(note.state,'open');assert.equal(comments.effectiveState({...note,state:'skipped'}),'skipped');assert.equal(comments.effectiveState({...note,state:'resolved',github:{state:'open'}}),'open');
+ assert.equal(comments.effectiveState(note,['closed',null]),'open');assert.equal(comments.effectiveState(note,['closed','open']),'open');assert.equal(comments.effectiveState(note,['closed','closed']),'closed');assert.equal(comments.effectiveState({...sample(),state:'open',github:{state:'opened'}}),'open');
+ assert.equal(comments.sortAndFilter(states.map(state=>({...sample(),id:state,state})),{state:'closed'}).length,3);assert.equal(comments.sortAndFilter([{...sample(),state:'resolved'}],{state:'resolved'}).length,1);assert.throws(()=>comments.validateComment({...sample(),state:'done'}),/state/);
+});
+
+test('linked-state cache scopes repositories, hosts and conversation kinds and rejects stale snapshots',()=>{
+ const cache=comments.createThreadStateCache(),scope={provider:'github',host:'https://github.com',repository:'owner/board'},note={...sample(),remoteRefs:[{kind:'issue',number:7,repository:'owner/board',url:'https://github.com/owner/board/issues/7',publishedAt:sample().createdAt}]};
+ assert.equal(cache.remember(scope,{kind:'issue',number:7,state:'closed',updatedAt:'2026-10-29T02:00:00Z'}),true);assert.deepEqual(cache.states(note),['closed']);assert.equal(cache.remember(scope,{kind:'issue',number:7,state:'open',updatedAt:'2026-10-29T01:00:00Z'}),false);assert.deepEqual(cache.states(note),['closed']);
+ const other={...note,remoteRefs:[{...note.remoteRefs[0],repository:'other/board',url:'https://github.com/other/board/issues/7'}]};assert.deepEqual(cache.states(other),[null]);assert.deepEqual(cache.states({...note,remoteRefs:[{...note.remoteRefs[0],kind:'discussion',url:'https://github.com/owner/board/discussions/7'}]}),[null]);
+ const gl={...sample(),anchor:{...sample().anchor,provider:'gitlab',host:'https://gitlab.example'},remoteRefs:[{provider:'gitlab',host:'https://gitlab.example',kind:'discussion',repository:'team/board',number:7,url:'https://gitlab.example/team/board/-/issues/7'}]};assert.equal(cache.remember({provider:'gitlab',host:'https://gitlab.example',repository:'team/board'},{kind:'issue',number:7,state:'closed',updatedAt:'2026-10-29T02:00:00Z'}),true);assert.deepEqual(cache.states(gl),['closed']);assert.deepEqual(cache.states({...gl,remoteRefs:[{...gl.remoteRefs[0],host:'https://another.example',url:'https://another.example/team/board/-/issues/7'}]}),[null]);
+ assert.deepEqual(comments.threadLinks({...note,remoteRefs:[{...note.remoteRefs[0],url:'https://evil.example/owner/board/issues/7'}]}),[]);assert.deepEqual(comments.threadLinks({...note,remoteRefs:[{...note.remoteRefs[0],number:8}]}),[]);cache.clear();assert.deepEqual(cache.states(note),[null]);
+});
+
+test('local and remote copies merge by exact source identity without rewriting either annotation',()=>{
+ const local={...sample(),text:'New local text',updatedAt:'2026-10-29T02:00:00Z',remoteRefs:[{kind:'issue',number:7}]},remote={...sample(),text:'Older posted text',github:{state:'closed',source:'issue',number:7}},before=JSON.stringify([local,remote]),merged=comments.mergeAnnotations([local],[remote]);assert.equal(merged.length,1);assert.equal(merged[0].text,local.text);assert.equal(merged[0].github.state,'closed');assert.equal(merged[0].remoteRefs.length,1);assert.equal(JSON.stringify([local,remote]),before);assert.equal(comments.mergeAnnotations([local],[{...remote,anchor:{...remote.anchor,ref:'b'.repeat(40)}}]).length,2);
 });

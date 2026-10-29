@@ -88,6 +88,54 @@ test('global workspace search discovers both kinds without crossing providers an
  assert.equal((await send(h,s,3,{type:'open-project-drawing',...s.scope,file:'board.kicad_pcb'})).ok,true);assert.equal(h.commands.at(-1)[0],'vscode.openWith');assert.equal(h.commands.at(-1)[3],-2);
 });
 
+test('cross-file search target reaches new editor bootstrap once and keeps object/3D identity',async()=>{
+ const h=harness(),s=await session(h),uri=h.write('board.kicad_pcb','(kicad_pcb)');s.paths.add('board.kicad_pcb');
+ const result={kind:'object',path:'board.kicad_pcb',id:'uuid:part',uuid:'part',reference:'U1',netName:'SUPPLY',position:{x:12,y:-34},view:'3d'};
+ assert.equal((await send(h,s,1,{type:'open-project-drawing',repository:s.scope.repository,ref:s.scope.ref,file:result.path,searchResult:result})).ok,true);
+ const target=h.api._test.createSession(uri,await h.api._test.loadProject(uri),h.context,'b'.repeat(48));
+ h.entries.set('file:///extension/media/revision-viewer.html',{bytes:new TextEncoder().encode('<html><head></head><body></body></html>')});
+ const webview={cspSource:'vscode-resource:',asWebviewUri:uri=>({toString:()=>uri.toString()})};
+ const bootstrap=html=>JSON.parse(html.match(/globalThis\.KiCadVSCodeContext=([^<]+);<\/script>/)[1]);
+ assert.deepEqual(plain(bootstrap(await h.api._test.htmlFor(webview,h.context,target)).searchResult),result);
+ assert.equal(bootstrap(await h.api._test.htmlFor(webview,h.context,target)).searchResult,undefined,'target is delivered only once');
+});
+
+test('ready live editor receives authenticated search target and other boundary/revision does not',async()=>{
+ const h=harness(),s=await session(h),uri=h.write('board.kicad_pcb','(kicad_pcb)');s.paths.add('board.kicad_pcb');
+ const project=await h.api._test.loadProject(uri),wrong=h.api._test.createSession(uri,{...project,scope:{...project.scope,ref:'other'}},h.context,'c'.repeat(48));
+ const target=h.api._test.createSession(uri,project,h.context,'b'.repeat(48)),events=[],wrongEvents=[];target.post=async value=>{events.push(value);return true;};wrong.post=async value=>{wrongEvents.push(value);return true;};
+ assert.equal((await send(h,wrong,1,{type:'workspace-search-ready',repository:wrong.scope.repository,ref:wrong.scope.ref,file:'board.kicad_pcb'})).ok,true);
+ assert.equal((await send(h,target,1,{type:'workspace-search-ready',repository:target.scope.repository,ref:target.scope.ref,file:'board.kicad_pcb'})).ok,true);
+ const result={kind:'object',path:'board.kicad_pcb',uuid:'part',position:{x:1,y:2},view:'3d'};
+ assert.equal((await send(h,s,1,{type:'open-project-drawing',repository:s.scope.repository,ref:s.scope.ref,file:result.path,searchResult:result})).ok,true);
+ assert.equal(events.length,1);assert.equal(events[0].token,target.token);assert.equal(events[0].event.type,'workspace-search-result');assert.deepEqual(plain(events[0].event.result),result);assert.equal(wrongEvents.length,0);
+ assert.equal((await send(h,target,2,{type:'workspace-search-ready',repository:target.scope.repository,ref:target.scope.ref,file:'board.kicad_pcb'})).result.delivered,false,'ready replay cannot replay a consumed target');
+});
+
+test('search targets reject unsafe fields and mismatching source before opening an editor',async()=>{
+ const h=harness(),s=await session(h);h.write('board.kicad_pcb','(kicad_pcb)');s.paths.add('board.kicad_pcb');let id=0;
+ const request={type:'open-project-drawing',repository:s.scope.repository,ref:s.scope.ref,file:'board.kicad_pcb'},result={kind:'object',path:'board.kicad_pcb',uuid:'part'};
+ for(const bad of [{...result,path:'other.kicad_pcb'},{...result,kind:'draft'},{...result,document:{}},{...result,uuid:'bad\n'},{...result,position:{x:1e9,y:0}},{...result,position:{x:0,y:0,z:4}},{...result,netName:'x'.repeat(501)},{...result,view:'simulation'}])assert.equal((await send(h,s,++id,{...request,searchResult:bad})).ok,false);
+ for(const overrides of [{repository:'other/project'},{ref:'other'},{file:'unknown.kicad_pcb'}])assert.equal((await send(h,s,++id,{...request,...overrides,searchResult:result})).ok,false);
+ assert.equal((await send(h,s,++id,{type:'open-project-drawing',repository:s.scope.repository,ref:s.scope.ref,file:s.scope.rootFile,searchResult:{kind:'object',path:s.scope.rootFile,view:'3d'}})).ok,false);
+ assert.equal(h.commands.length,0);assert.equal(h.api._test.pendingSearchTargets.size,0);
+});
+
+test('GitLab collaboration context must match the native session binding for search delivery',async()=>{
+ const h=harness(),s=await session(h);s.paths.add('board.kicad_pcb');s.remoteBinding={provider:'gitlab',host:'https://gitlab.example.com'};
+ const request={type:'open-project-drawing',repository:s.scope.repository,ref:s.scope.ref,file:'board.kicad_pcb',provider:'gitlab',host:s.remoteBinding.host,searchResult:{kind:'file',path:'board.kicad_pcb'}};
+ assert.equal((await send(h,s,1,request)).ok,true);assert.equal((await send(h,s,2,{...request,host:'https://other.example.com'})).ok,false);assert.equal((await send(h,s,3,{...request,provider:'github'})).ok,false);
+});
+
+test('pending search delivery is capped at 32 targets, expires after 30 seconds and clears failed opens',async()=>{
+ const h=harness(),s=await session(h);let id=0;
+ for(let i=0;i<33;i++){const file='board'+i+'.kicad_pcb';s.paths.add(file);const result={kind:'file',path:file};assert.equal((await send(h,s,++id,{type:'open-project-drawing',repository:s.scope.repository,ref:s.scope.ref,file,searchResult:result})).ok,true);}
+ assert.equal(h.api._test.pendingSearchTargets.size,32);assert.ok(![...h.api._test.pendingSearchTargets.values()].some(entry=>entry.result.path==='board0.kicad_pcb'));
+ h.api._test.pruneSearchTargets(Date.now()+30001);assert.equal(h.api._test.pendingSearchTargets.size,0);
+ h.vscode.commands.executeCommand=async()=>{throw Error('editor failed');};const file='board32.kicad_pcb';
+ assert.equal((await send(h,s,++id,{type:'open-project-drawing',repository:s.scope.repository,ref:s.scope.ref,file,searchResult:{kind:'file',path:file}})).ok,false);assert.equal(h.api._test.pendingSearchTargets.size,0);
+});
+
 test('global workspace discovery excludes another authority and linked ancestor before source reads',async()=>{
  const h=harness(),s=await session(h);h.write('linked/board.kicad_pcb','(kicad_pcb)');h.entries.set(Uri.joinPath(h.folder,'linked').toString(),{type:66,size:0});
  h.vscode.workspace.findFiles=async()=>[Uri.parse('vscode-vfs://evil/owner/repo/board.kicad_pcb?ref=main'),Uri.joinPath(h.folder,'linked/board.kicad_pcb')];
@@ -219,7 +267,7 @@ test("webview HTML confines resources and points relative SPIKE loads at package
   h.entries.set("file:///extension/media/revision-viewer.html",{bytes:new TextEncoder().encode(template)});
   const webview={cspSource:"https://resources.example",asWebviewUri:(uri)=>({toString:()=>`https://resources.example${uri.path}`})};
   const html=await h.api._test.htmlFor(webview,h.context,s);
-  assert.match(html,/default-src &#39;none&#39;/);assert.match(html,/connect-src https:\/\/resources.example\/extension\/media\/load-worker-vscode.js https:\/\/resources.example\/extension\/media\/step-worker-vscode.js https:\/\/resources.example\/extension\/media\/vendor\/occt\/occt-import-js.wasm;/);assert.match(html,/worker-src blob:/);assert.match(html,/wasm-unsafe-eval/);assert.doesNotMatch(html,/connect-src [^;]*\*/);assert.doesNotMatch(html,/&#39;unsafe-eval&#39;/);
+  assert.match(html,/default-src &#39;none&#39;/);assert.match(html,/connect-src https:\/\/resources.example\/extension\/media\/load-worker-vscode.js https:\/\/resources.example\/extension\/media\/fast-pi-worker-vscode.js https:\/\/resources.example\/extension\/media\/step-worker-vscode.js https:\/\/resources.example\/extension\/media\/vendor\/occt\/occt-import-js.wasm;/);assert.match(html,/worker-src blob:/);assert.match(html,/wasm-unsafe-eval/);assert.doesNotMatch(html,/connect-src [^;]*\*/);assert.doesNotMatch(html,/&#39;unsafe-eval&#39;/);
   assert.match(html,/"stepWorkerUrl":"https:\/\/resources.example\/extension\/media\/step-worker-vscode.js"/);assert.match(html,/"stepWasmUrl":"https:\/\/resources.example\/extension\/media\/vendor\/occt\/occt-import-js.wasm"/);
   assert.match(html,/base href="https:\/\/resources.example\/extension\/media\/"/);
   assert.match(html,/frame-src https:\/\/resources.example\/extension\/media\/terms.html;/);assert.doesNotMatch(html,/frame-src [^;]*\*/);
@@ -742,4 +790,14 @@ test('bound GitLab publication receipts and attachments survive sidecar edits wi
 test('net-anchored review notes retain readable net identity through VS Code sidecars',async()=>{
  const h=harness(),s=await session(h),note=annotation(s);note.anchor.kind='net';note.anchor.netName='POWER_3V3';
  const reply=await send(h,s,1,{type:'comment-save',comment:note});assert.equal(reply.ok,true,reply.error);assert.equal(storedSidecar(h).annotations[0].anchor.netName,'POWER_3V3');
+});
+
+
+test('Level 1 review severity survives VS Code sidecar save and reopen',async()=>{
+ const h=harness(),s=await session(h),note=annotation(s);note.severity='level-1';assert.equal((await send(h,s,1,{type:'comment-save',comment:note})).ok,true);const reopened=await session(h),loaded=(await send(h,reopened,1,{type:'comment-list',...scopeOf(reopened)})).result[0];assert.equal(loaded.severity,'level-1');assert.equal(storedSidecar(h).annotations[0].severity,'level-1');
+});
+
+
+test('Closed review state survives VS Code save and reopen without changing a provider issue',async()=>{
+ const h=harness(),s=await session(h),note=annotation(s);note.state='closed';assert.equal((await send(h,s,1,{type:'comment-save',comment:note})).ok,true);const reopened=await session(h),loaded=(await send(h,reopened,1,{type:'comment-list',...scopeOf(reopened)})).result[0];assert.equal(loaded.state,'closed');
 });

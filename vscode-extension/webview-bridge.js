@@ -3,7 +3,15 @@
   "use strict";
   const context=globalThis.KiCadVSCodeContext,api=acquireVsCodeApi(),channel="kicad-vscode:v1",pending=new Map();
   if(!context || !/^[a-f0-9]{48}$/.test(context.token))throw new Error("Missing private viewer session.");
-  let next=0,hostSource,lastEventId=0,closed=false;
+  let next=0,hostSource,lastEventId=0,closed=false,workspaceMounted=false,pendingSearchResult=context.searchResult||null;
+  const validSearchResult=value=>{
+    const bounded=(item,n)=>typeof item==='string'&&item.length>0&&item.length<=n&&!/[\x00-\x1f\x7f]/.test(item);
+    if(!value||typeof value!=='object'||Array.isArray(value)||!['object','file'].includes(value.kind)||value.path!==context.drawingFile||!bounded(value.path,500)||!/^.+\.kicad_(sch|pcb)$/i.test(value.path)||value.path.startsWith('/')||value.path.split('/').some(part=>!part||part==='.'||part==='..'||/[\\:]/.test(part))||Object.keys(value).some(key=>!['kind','path','id','uuid','reference','position','netName','view'].includes(key)))return false;
+    if(![['id',1000],['uuid',200],['reference',200],['netName',500]].every(([key,max])=>value[key]===undefined||bounded(value[key],max)))return false;
+    if(value.position!==undefined&&(!value.position||typeof value.position!=='object'||Array.isArray(value.position)||Object.keys(value.position).some(key=>!['x','y'].includes(key))||![value.position.x,value.position.y].every(n=>Number.isFinite(n)&&Math.abs(n)<=1e6)))return false;
+    return value.view===undefined||value.view==='3d'&&/\.kicad_pcb$/i.test(value.path);
+  };
+  function flushSearchResult(){if(closed||!workspaceMounted||!pendingSearchResult)return;const value=pendingSearchResult;pendingSearchResult=null;if(validSearchResult(value))dispatchEvent(new CustomEvent('kicad-review:search-result',{detail:value}));}
   const validSelection=(value)=> {
     if(value?.kind==="group") {
       if(Object.keys(value).some((key)=>!["kind","items"].includes(key)) || !Array.isArray(value.items) || value.items.length>200)return false;
@@ -40,6 +48,9 @@
       } else if(msg.event.type==="analysis-net-focus" && Object.keys(msg.event).length===2 && typeof msg.event.netName==="string" && msg.event.netName.length>0 && msg.event.netName.length<=500 && !/[\x00-\x1f\x7f]/.test(msg.event.netName)) {
         lastEventId=msg.eventId;if(hostSource===undefined)hostSource=event.source;
         dispatchEvent(new CustomEvent("kicad-review:analysis-net-focus",{detail:{netName:msg.event.netName}}));
+      } else if(msg.event.type==='workspace-search-result'&&Object.keys(msg.event).length===2&&validSearchResult(msg.event.result)){
+        lastEventId=msg.eventId;if(hostSource===undefined)hostSource=event.source;
+        pendingSearchResult=msg.event.result;flushSearchResult();
       }
       return;
     }
@@ -52,6 +63,11 @@
   // getURL is used solely to establish parent messaging origin in the shared
   // entry point. Keep that origin equal to this webview, not its resource CDN.
   globalThis.KiCadVSCodeBridge={
+    workspaceReady:()=>{
+      if(closed||workspaceMounted)return Promise.resolve(undefined);workspaceMounted=true;flushSearchResult();
+      const scope=new URLSearchParams(context.search||'');if(!scope.get('repository')||!scope.get('ref')||!context.drawingFile)return Promise.resolve(undefined);
+      return request({type:'workspace-search-ready',repository:scope.get('repository'),ref:scope.get('ref'),file:context.drawingFile}).catch(()=>undefined);
+    },
     selection:(selection)=>validSelection(selection)?request({type:"pair-selection",selection}).catch(()=>undefined):Promise.resolve(undefined),
     onCommentsChanged:()=>request({type:"comments-changed"}).catch(()=>undefined)
   };
@@ -59,5 +75,5 @@
     async get(key){const reply=await request({type:"storage-get",key});if(!reply.ok)throw new Error(reply.error);return reply.result;},
     async set(values){const reply=await request({type:"storage-set",values});if(!reply.ok)throw new Error(reply.error);}
   }}};
-  addEventListener("pagehide",()=>{closed=true;for(const entry of pending.values()){clearTimeout(entry.timer);entry.reject(new Error("Drawing closed."));}pending.clear();});
+  addEventListener("pagehide",()=>{closed=true;pendingSearchResult=null;for(const entry of pending.values()){clearTimeout(entry.timer);entry.reject(new Error("Drawing closed."));}pending.clear();});
 })();

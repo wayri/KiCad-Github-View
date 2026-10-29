@@ -1,12 +1,22 @@
 /* Source-bound project search and imported KiCad rule-check navigation. */
 ((root)=>{
   'use strict';
+  function arrowGeometry(start,end){
+    const dx=end.x-start.x,dy=end.y-start.y,length=Math.hypot(dx,dy);if(!Number.isFinite(length)||length<1)return null;
+    const ux=dx/length,uy=dy/length,size=Math.min(9,length/2),wing=size*.55,bx=end.x-ux*size,by=end.y-uy*size;
+    return {shaft:{x1:start.x,y1:start.y,x2:end.x,y2:end.y},head:`M ${bx-uy*wing} ${by+ux*wing} L ${end.x} ${end.y} L ${bx+uy*wing} ${by-ux*wing}`};
+  }
+  function notePlacement(point,width,height){
+    if(![point?.x,point?.y,width,height].every(Number.isFinite)||width<100||height<100)return null;
+    const w=Math.min(260,width-24),h=Math.min(144,(height-48)/2),clamp=(v,lo,hi)=>Math.max(lo,Math.min(hi,v));
+    return {x:clamp(point.x<width/2?point.x+28:point.x-w-28,12,width-w-12),y:clamp(point.y>=h+24?point.y-h-24:point.y+24,12,height-h-12),width:w,maxHeight:h};
+  }
   function mount(options){
     const $=id=>document.getElementById(id),make=(tag,text)=>{const n=document.createElement(tag);if(text!==undefined)n.textContent=String(text);return n;};
     const button=(text,fn)=>{const n=make('button',text);n.type='button';n.onclick=fn;return n;};
     const searchHelp=$('projectSearch')?.parentElement?.querySelector?.('.search-help');
     if(searchHelp){const hint=make('p','Patterns: ref:glob:R* or ref:regex:^R[0-9]+$ . Glob * matches any sequence, ? one character, over the whole field. Regex supports literals, character classes, . , ^ $ and single-atom * + ?; use query OR for alternatives. Matching ignores case. Pattern limits produce an explicit error.');hint.className='hint';searchHelp.append(hint);}
-    let indexNotes=[],index=null,searchObjects=[],searchNets=[],queryResults=[],reports=[],selectedFinding=null,selectedItem=0,searchBusy=false,disposed=false,epoch=0,reportEpoch=0,identityObjects=null,identitySearch=null,classSettings=null,identities=new Map();
+    let noteDismissed=false;let indexNotes=[],index=null,searchObjects=[],searchNets=[],queryResults=[],reports=[],selectedFinding=null,selectedItem=0,searchBusy=false,disposed=false,epoch=0,reportEpoch=0,identityObjects=null,identitySearch=null,classSettings=null,identities=new Map();
     const status=(text)=>{$('projectSearchStatus').textContent=text;};
     const currentObjects=()=>options.getObjects();
     function buildIndex(objects,nets,classes=null,sheets=[]){
@@ -55,13 +65,14 @@
     }
     function visibleFindings(){const query=$('ruleSearch').value.toLowerCase(),severity=$('ruleSeverity').value;return reports.flatMap(r=>r.findings).filter(f=>(severity==='all'||f.severity===severity)&&($('showExcludedRules').checked||!f.excluded)&&`${f.description} ${f.type} ${f.sheetPath||''}`.toLowerCase().includes(query));}
     function locateFinding(finding,itemIndex=0){
-      selectedFinding=finding;selectedItem=itemIndex;const item=finding.items[itemIndex],target=item&&resolveItem(finding,item);
+      selectedFinding=finding;selectedItem=itemIndex;noteDismissed=false;const item=finding.items[itemIndex],target=item&&resolveItem(finding,item);
       if(!target?.file||!target.position){$('ruleStatus').textContent='This item has no resolved drawing location. Associate the report sheet or load project drawings to resolve its saved UUID.';options.redraw();renderRules();return;}
       if(options.locateRule(target)===false){$('ruleStatus').textContent='Cannot jump: open the matching loaded drawing in 2D. Index the project if its sheet is missing.';options.redraw();renderRules();return;}$('ruleStatus').textContent=`${finding.type} · ${target.file} · ${target.position.x.toFixed(3)}, ${target.position.y.toFixed(3)} mm`;renderRules();options.redraw();
     }
     function renderRules(){
       const list=$('ruleResults');list.replaceChildren();const findings=visibleFindings();$('ruleCount').textContent=`${findings.length} saved findings${findings.length>200?' · first 200 listed':''}`;
       for(const finding of findings.slice(0,200)){const section=make('section');section.className='rule-finding'+(selectedFinding===finding?' selected':'');const row=button(`${finding.severity.toUpperCase()} · ${finding.type}`,()=>locateFinding(finding));row.className='rule-title';section.append(row,make('p',finding.description),make('small',`${finding.kind.toUpperCase()} · ${finding.file||finding.sheetPath||'unassociated sheet'}${finding.excluded?' · excluded':''}`));
+        if(finding.comment)section.append(make('p','Note: '+finding.comment));
         for(const [i,item]of finding.items.slice(0,20).entries()){const target=resolveItem(finding,item),action=button(`${i+1}. ${item.description||'Affected item'}${target.file&&target.position?'':' · location unresolved'}`,()=>locateFinding(finding,i));action.className='rule-item';section.append(action);}if(finding.items.length>20)section.append(make('small',`First 20 of ${finding.items.length} items listed. Next item navigates all affected locations.`));list.append(section);
       }
     }
@@ -88,6 +99,8 @@
     $('ruleReportFile').onchange=async()=>{const file=$('ruleReportFile').files?.[0];if(!file)return;try{if(file.size>4*1024*1024)throw new Error('Rule report exceeds 4 MiB.');addReport(await file.text(),file.name);}catch(error){$('ruleStatus').textContent=error.message;}finally{$('ruleReportFile').value='';}};
     $('loadRepoReport').onclick=async()=>{const ticket=++reportEpoch;$('loadRepoReport').disabled=true;$('ruleStatus').textContent='Loading saved repository report…';try{const result=await options.request('rule-report',{repository:options.repository,ref:options.ref,file:options.rootFile,reportPath:$('repoReportPath').value.trim()});if(!disposed&&ticket===reportEpoch)addReport(result.content,result.path);}catch(error){$('ruleStatus').textContent=error.message;}finally{$('loadRepoReport').disabled=false;}};
     for(const id of ['ruleSearch','ruleSeverity','showExcludedRules'])$(id).oninput=()=>{renderRules();options.redraw();};
+    const noteLabel=make('label'),noteToggle=make('input');noteLabel.className='check';noteToggle.id='showRuleNotes';noteToggle.type='checkbox';noteToggle.checked=true;noteLabel.append(noteToggle,make('span','Show selected finding note'));$('showRuleMarkers').parentElement?.parentElement?.append(noteLabel);
+    noteToggle.onchange=()=>{noteDismissed=false;options.redraw();};
     $('showRuleMarkers').onchange=()=>options.redraw();
     for(const [id,step]of [['previousRule',-1],['nextRule',1]])$(id).onclick=()=>{const list=visibleFindings();if(!list.length)return;const at=list.indexOf(selectedFinding),next=at<0?(step>0?0:list.length-1):(at+step+list.length)%list.length;locateFinding(list[next]);};
     for(const [id,step]of [['previousRuleItem',-1],['nextRuleItem',1]])$(id).onclick=()=>{if(!selectedFinding?.items.length)return;locateFinding(selectedFinding,(selectedItem+step+selectedFinding.items.length)%selectedFinding.items.length);};
@@ -95,16 +108,27 @@
     function draw(overlay,pins,screen,svg){
       if(!$('showRuleMarkers').checked||options.is3D())return;const host=$('drawingHost').getBoundingClientRect();let count=0;
       const findings=visibleFindings();if(findings.includes(selectedFinding)){findings.splice(findings.indexOf(selectedFinding),1);findings.unshift(selectedFinding);}
-      for(const finding of findings)for(const [i,item]of finding.items.slice(0,20).entries()){const target=resolveItem(finding,item);if(target.file!==options.currentFile()||!target.position||count++>=200)continue;const point=screen(target.position);if(!point)continue;
-        const color=finding.severity==='error'?'#ee5959':'#d78a16',active=selectedFinding===finding&&selectedItem===i,x=Math.max(14,Math.min(host.width-14,point.x)),y=Math.max(14,Math.min(host.height-14,point.y));
-        if(active){const start={x:Math.max(16,Math.min(host.width-16,x+55)),y:Math.max(16,y-45)};overlay.append(svg('line',{x1:start.x,y1:start.y,x2:x,y2:y,stroke:color,'stroke-width':3}),svg('path',{d:`M ${x-7} ${y-12} L ${x} ${y} L ${x+7} ${y-12}`,fill:'none',stroke:color,'stroke-width':3}));}
+      for(const finding of findings){const entries=[...finding.items.entries()];if(finding===selectedFinding&&entries[selectedItem])entries.unshift(...entries.splice(selectedItem,1));
+       for(const [i,item]of entries.slice(0,20)){const target=resolveItem(finding,item);if(target.file!==options.currentFile()||!target.position||count++>=200)continue;const point=screen(target.position);if(!point)continue;
+        const color=finding.severity==='error'?'#ee5959':finding.excluded?'#8796a6':'#d78a16',active=selectedFinding===finding&&selectedItem===i,x=Math.max(14,Math.min(host.width-14,point.x)),y=Math.max(14,Math.min(host.height-14,point.y));
+        let start={x:Math.max(16,Math.min(host.width-16,x+55)),y:Math.max(16,y-45)};
+        if(active&&noteToggle.checked&&!noteDismissed){const layout=notePlacement({x,y},host.width,host.height);if(layout){
+          const note=make('section');note.className='rule-location-note';note.setAttribute('aria-label','Selected '+finding.kind.toUpperCase()+' finding');note.style.left=layout.x+'px';note.style.top=layout.y+'px';note.style.width=layout.width+'px';note.style.maxHeight=layout.maxHeight+'px';note.style.borderColor=color;
+          const header=make('header'),title=make('strong',`${finding.kind.toUpperCase()} · ${finding.severity}${finding.excluded?' · excluded':''}`),close=button('×',()=>{noteDismissed=true;options.redraw();});close.title='Hide finding note';close.setAttribute('aria-label',close.title);header.append(title,close);
+          note.append(header,make('p',finding.description),make('small',item.description));if(finding.comment)note.append(make('small','Note: '+finding.comment));
+          note.append(make('small',x!==point.x||y!==point.y?'Location outside view · select marker to locate':'Saved report · revision unverified'),button('Details',()=>options.showRules()));pins.append(note);
+          const height=note.getBoundingClientRect?.().height||layout.maxHeight;start={x:Math.max(layout.x,Math.min(layout.x+layout.width,x)),y:Math.max(layout.y,Math.min(layout.y+Math.min(height,layout.maxHeight),y))};
+        }}
+        if(active){const arrow=arrowGeometry(start,{x,y});if(arrow)overlay.append(svg('line',{...arrow.shaft,stroke:color,'stroke-width':2}),svg('path',{d:arrow.head,fill:'none',stroke:color,'stroke-width':2}));}
         const marker=button(active?'➤':'!',()=>{options.showRules();locateFinding(finding,i);});marker.className='pin rule-marker'+(active?' active':'');marker.style.left=x+'px';marker.style.top=y+'px';marker.style.background=color;marker.setAttribute('aria-label',`${finding.kind.toUpperCase()} ${finding.severity}: ${finding.description}; ${item.description}`);marker.title=`${finding.description}${x!==point.x||y!==point.y?' · offscreen: click to locate':''}`;pins.append(marker);
+       }
       }
+
     }
     function routingReports(path){return reports.filter(r=>r.kind==='drc'&&r.metadata.associatedFile===path).map(r=>({metadata:{...r.metadata},unconnectedFindings:r.findings.filter(f=>f.category==='unconnected_items'&&!f.excluded).length,excludedUnconnectedFindings:r.findings.filter(f=>f.category==='unconnected_items'&&f.excluded).length,warnings:[...r.warnings]}));}
     updateAssociations();renderRules();
     return {routingReports,setClasses(classes){classSettings=classes;index=buildIndex(searchObjects.length?searchObjects:currentObjects(),searchNets.length?searchNets:options.getNets(),classes);options.setNetClasses?.(classes);},query(value){$('projectSearch').value=value;return renderSearch();},loadProject,renderSearch,renderRules,updateAssociations,draw,dispose(){disposed=true;epoch++;reportEpoch++;}};
   }
-  root.KiCadReviewNavigation={mount};
+  root.KiCadReviewNavigation={mount,arrowGeometry,notePlacement};
   if(typeof module==='object'&&module.exports)module.exports=root.KiCadReviewNavigation;
 })(globalThis);

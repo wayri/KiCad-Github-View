@@ -66,3 +66,16 @@ body:has(#signinAvailability){font-size:14px;max-width:48rem;margin:16px auto;pa
  body[data-workspace-chrome] .workspace-tools-menu .workspace-quick-tools button{min-height:44px;height:auto}
 }
 @media(prefers-reduced-motion:reduce){body .surface-dismiss{transition:none}}
+
+/* Desktop drawing navigation is one slim row, never a stack of wrapped bands. */
+@media(min-width:840px) and (pointer:fine){
+ body[data-workspace-chrome] #reviewHeader{min-height:32px;padding:2px 6px;gap:6px;flex-wrap:nowrap}
+ body[data-workspace-chrome] #workspaceTabs{min-width:0;flex-wrap:nowrap;scrollbar-width:none}
+ body[data-workspace-chrome] #workspaceTabs button{min-height:26px;padding:3px 6px;border-radius:4px}
+ body[data-workspace-chrome] #projectTools{gap:3px;padding-left:6px;flex-wrap:nowrap}
+ body[data-workspace-chrome] #projectTools>button{min-height:26px;padding:3px 5px}
+ body[data-workspace-chrome] #frameControls{min-height:32px;padding:2px 5px;gap:4px}
+ body[data-workspace-chrome] #frameControls :is(#focusView,.workspace-view-options),
+ body[data-workspace-chrome] #frameControls .tool-group button:has(.ui-icon){width:28px;min-width:28px;height:28px;min-height:28px;padding:5px}
+ body[data-workspace-chrome] #frameControls :is(#universalSearch,#selectionMode,#sheetSelect){height:28px;min-height:28px}
+}

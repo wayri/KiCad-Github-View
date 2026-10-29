@@ -14,8 +14,8 @@ ASSETS = ('analysis-data.js', 'analysis-viewer.html', 'analysis-viewer.css', 'an
     'parsing.js', 'project-viewer.html', 'project-viewer.css', 'project-viewer.js', 'project-settings.js', 'project-settings-ui.js', 'gerber-renderer.js',
     'revision-viewer.html', 'revision-viewer.css', 'revision-viewer.js', 'terms.html',
     'ui-icons.js', 'browser-data.js', 'design-diff.js', 'design-model.js',
-    'net-model.js', 'overview-connectivity.js', 'ratsnest.js', 'paired-review.js', 'project-search.js', 'rule-reports.js', 'review-navigation.js', 'view-state.js', 'review-comments.js', 'comment-compose.js', 'review-workspace.js', 'review-tools.js', 'repo-models.js',
-    'worksheet.js', 'schematic-renderer.js', 'pcb-renderer.js', 'owned-canvas.js', 'touch-canvas.js', 'motion-webgl.js',
+    'net-model.js', 'overview-connectivity.js', 'ratsnest.js', 'paired-review.js', 'project-search.js', 'workspace-search.js', 'rule-reports.js', 'review-navigation.js', 'view-state.js', 'review-comments.js', 'comment-compose.js', 'review-workspace.js', 'review-tools.js', 'repo-models.js',
+    'worksheet.js', 'schematic-renderer.js', 'pcb-renderer.js', 'pad-labels.js', 'owned-canvas.js', 'touch-canvas.js', 'motion-webgl.js',
     'vendor/spike-board3d.bundle.js', 'vendor/SPIKE-ENGINE-NOTICE.md', 'vendor/THREE-LICENSE',
 )
 ASSETS += ('population-inspection.js','population-photo.js','population-review.js','testpoint-tools.js','photo-alignment.js','component-links.js','photo-review.js','photo-review.css')
@@ -25,10 +25,13 @@ ASSETS += ('ui-foundation.css','tool-surfaces.css','gerber-camera.js')
 ASSETS += ('pdf-tools.js','pdf-viewer.html','pdf-viewer.css','pdf-viewer.js','vendor/pdfjs/FILES.json') + tuple('vendor/pdfjs/'+name for name in json.loads((ROOT/'extension/vendor/pdfjs/FILES.json').read_text())['files'])
 ASSETS += ('mention-users.js','repository-explorer.js','repository-explorer.css','layer-colors.js','load-worker-vscode.js')
 ASSETS += ('engineering-launcher.js', 'review-handoff.js', 'local-runtime.js')
+ASSETS += ('window-link.js','detached-view.js')
+ASSETS += ('fast-pi.js','fast-pi-worker.js','fast-pi-worker-vscode.js','fast-pi-workspace.js','fast-pi-workspace.css')
 BUILD_INPUTS = ('github-review-api.js', 'gitlab-review-api.js', 'step-decoder.js', 'step-worker.js', 'vendor/occt/occt-import-js.js')
 ASSETS += ('variant-manager.js', 'bom-import.js', 'bom-viewer.html', 'bom-viewer.js','bom-workspace.js', 'bom-field-table.js', 'bom-viewer.css', 'calculator-tools.js', 'calculator-viewer.html', 'calculator-viewer.js', 'calculator-viewer.css', 'analysis-spatial.js', 'analysis-overlay.js', 'analysis-bom-link.js')
 ASSETS += ('calculator-catalog.js','calculator-visuals.js')
 ASSETS += ('tool-header.css','tool-header.js')
+ASSETS += ('draftsman-model.js','draftsman-mechanical.js','draftsman-snap.js','draftsman-export.js','draftsman-workspace.js','draftsman-workspace.css')
 ASSETS += ('overview-routing.js','comment-focus.js')
 ASSETS += ('startup-health.js','revision-actions.js','revision-fork.js','analysis-simulation.js','analysis-simulation.css')
 ASSETS += ('section-pages.js','section-pages.css','board-setup-ui.js','board-setup-ui.css','mobile-sidebar.js','mobile-sidebar.css','testpoint-tools.css','sheet-hierarchy-links.js','responsive-controls.js','phone-polish.css')
@@ -78,6 +81,11 @@ def prepare_media(root: Path = ROOT) -> dict[str, bytes]:
     load_spec.loader.exec_module(load_builder)
     if (root / 'extension/load-worker-vscode.js').read_bytes() != load_builder.bundle(root):
         raise ValueError('Preparation worker bundle is stale; run scripts/build_load_worker.py.')
+    fast_spec = importlib.util.spec_from_file_location('build_fast_pi_worker', Path(__file__).with_name('build_fast_pi_worker.py'))
+    fast_builder = importlib.util.module_from_spec(fast_spec)
+    fast_spec.loader.exec_module(fast_builder)
+    if (root / 'extension/fast-pi-worker-vscode.js').read_bytes() != fast_builder.bundle(root):
+        raise ValueError('Fast PI worker bundle is stale; run scripts/build_fast_pi_worker.py.')
     payload, hashes = {}, {}
     destination = root / 'vscode-extension' / 'media'
     for name in ASSETS:
