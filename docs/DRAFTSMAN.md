@@ -2,6 +2,22 @@
 
 Open **Draftsman** in a schematic or PCB viewer to create drawing documentation in the current tab. The KiCad design stays read-only. This is a Pocket KiVi document format, not an Altium `.PCBDwf` or Xpedition interchange editor.
 
+[Illustrated walkthrough](../USER-GUIDE.md#9-create-draftsman-documentation) | [Installation](INSTALL.md) | [Downloads](../README.md#downloads)
+
+## First drawing
+
+1. Open the complete project and choose a schematic or PCB drawing.
+2. Open **Draftsman** from the drawing tools. Expand **Sheet & title block** to set paper size, orientation, company, title, revision and units.
+3. Choose a source drawing and add a view. Select it in **Drawing items** to adjust its caption, scale, rotation and visible layers.
+4. Add outline dimensions, manual dimensions, notes or a fitted-parts BoM. Add sheets for further views rather than crowding one page.
+5. Save a draft, then download the editable document and a PDF. Keep the source project with the editable document: reopening verifies its source fingerprints.
+
+## Templates and snapping (0.12.70 source preview)
+
+The template picker switches between **Modern** and **KiCad sheet**. The latter uses a KiCad-style boundary, coordinate-zone labels and divided title block. Saved schematic colours are retained in its drawing previews. This is an alternative built-in template, not a loader for custom KiCad `.kicad_wks` files. Existing documents without a template setting keep Modern.
+
+Select a drawing view, activate **Dimension**, and keep the magnet enabled. Move near a saved hole/circle centre, corner, endpoint, straight edge or rounded edge; the cursor cue identifies the selected target and coordinates. Snapping respects the view's visible source layers and excludes hidden geometry. Hold **Alt** to bypass snapping or **Shift** to constrain the second point to an axis. On touch screens, drag to preview and release to place each point. **Escape** cancels the pending dimension. These refinements are newer than the first Draftsman implementation in 0.12.69.
+
 ## Create and customize
 
 - Add up to 20 sheets. Choose A4, A3 or Letter, portrait/landscape, document and sheet titles, revision, company, units, decimal precision, accent, font size and line width.

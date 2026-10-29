@@ -4,12 +4,22 @@ Firefox and Firefox derivatives have a separate [installation, signing and Mozil
 
 Open saved KiCad projects, inspect schematics and layouts, and record review or assembly findings without a KiCad installation. Design sources are read-only during ordinary viewing. Review notes, assembly progress and variants are separate data; the VS Code conflict resolver is an explicit exception that can write a resolved drawing after confirmation.
 
-For extension 0.12.61 and Android 1.63. Check your installed version when a control differs. This guide distinguishes shared drawing tools from host-specific pages and account features.
+Start with the published extension **0.12.69** or Android **1.71**. Features marked **0.12.70 source preview** require the newer build; a store may still offer an earlier version. This guide distinguishes shared drawing tools from host-specific pages and account features.
 
 Start with the [installation guide](docs/INSTALL.md) for Android, Windows, Linux and macOS. Check the [KiCad compatibility matrix](docs/KICAD-COMPATIBILITY.md) before reviewing a new file format. Recognized KiCad 8, 9 and 10 constructs use the shared viewer; coverage is narrower for 8/9, and newer constructs may display warnings or incomplete previews.
 
 
-[Download packages](README.md#downloads) | [Latest release](https://github.com/wayri/KiCad-Github-View/releases/tag/v0.12.61) | [Support](mailto:support@sigharmonic.com)
+[Download packages](README.md#downloads) | [Published releases](https://github.com/wayri/KiCad-Github-View/releases) | [Support](mailto:support.kivi@sigharmonic.com)
+
+## Your first five minutes
+
+1. **Open the complete project:** import a folder/ZIP on Android or in the browser, or open its folder in VS Code. Include subsheets and model files.
+2. **Choose Schematic or Layout:** use the sheet tree and search to find a part or net. Select it to inspect or highlight matching saved objects.
+3. **Open 3D if needed:** accessible linked models improve realism; inspect missing-model warnings before relying on the preview.
+4. **Record a review:** open Comments, write the finding, attach a drawing location and review its Issue/Discussion destination before sending. A local draft does not post to a provider.
+5. **Keep the result:** save an offline copy on Android, export review metadata, or create a [Draftsman sheet](#9-create-draftsman-documentation). Ordinary viewing does not save changes to the KiCad source.
+
+On a phone, collapse panels to recover drawing space. Use the panel's close/back control when finished; long-press drawing objects for context actions and controls for available tooltips. See [platform-specific installation](docs/INSTALL.md) before your first run.
 
 ## Find your workflow
 
@@ -21,7 +31,8 @@ Start with the [installation guide](docs/INSTALL.md) for Android, Windows, Linux
 - [Comment, inspect photos and transfer reviews](#6-record-share-and-transfer-a-review).
 - [Resolve a local Git conflict](#7-resolve-a-git-conflict-in-vs-code).
 - [Use Git history, focus controls and loader cancellation](#8-workspace-git-and-conversation-controls).
-- [Troubleshoot a problem](#9-troubleshooting-and-support).
+- [Create and export Draftsman sheets](#9-create-draftsman-documentation).
+- [Troubleshoot a problem](#10-troubleshooting-and-support).
 
 ## Which edition does what?
 
@@ -54,7 +65,7 @@ Start with the [installation guide](docs/INSTALL.md) for Android, Windows, Linux
 
 ### Android
 
-1. Download the **Android 1.63 APK** from [GitHub Releases](https://github.com/wayri/KiCad-Github-View/releases/tag/v0.12.61).
+1. Download the **Android APK** using the [README download button](README.md#downloads).
 2. Open it on your phone, permit installation from your chosen download app if Android asks, then install. This is a development-signed preview with manual updates, not a Google Play install. Keep the same signing channel; do not uninstall just to bypass a signature mismatch.
 3. Launch **Pocket KiView** and open your project using the steps below.
 
@@ -74,7 +85,7 @@ Offline copies belong to the app and disappear when app data is cleared or the a
 
 ### Chromium browser extension
 
-1. Download the **Chromium ZIP** from the [release](https://github.com/wayri/KiCad-Github-View/releases/tag/v0.12.61) and extract it to a permanent folder.
+1. Download the **Chromium ZIP** from the [README downloads](README.md#downloads) and extract it to a permanent folder.
 2. Open `chrome://extensions` (or `edge://extensions`), enable **Developer mode**, choose **Load unpacked**, and select the folder containing `manifest.json`.
 3. Pin the extension if desired. Reload existing repository pages after installing or updating it. For future manual updates, replace the unpacked folder contents and select **Reload** on the extension card.
 
@@ -397,7 +408,27 @@ annotation readback require its displayed sources to match raw committed Git
 objects. Commit changes and reopen if the source-verification check rejects them.
 
 
-## 9. Troubleshooting and support
+## 9. Create Draftsman documentation
+
+Open a drawing, then choose **Draftsman** from its tools. The editor stays in the current tab and creates a separate drawing document. It does not edit the schematic or PCB.
+
+1. Set the sheet size, orientation, title, revision and units in **Sheet & title block**.
+2. Select a loaded schematic or PCB and add a view. Choose its side, visible layers, scale and rotation in Properties.
+3. Use **Auto dimensions** for saved PCB outline width/height, or **Dimension** to place two points. Add notes and a fitted-parts BoM as needed.
+4. Add another sheet for an assembly view or extra detail. Use Undo/Redo to revise the document.
+5. **Save draft** retains the editable document in this browser profile. Use **Download → Editable document** for a portable `.kivi-draft.json` backup, or export PDF/SVG for sharing.
+
+![Draftsman drawing editor with compact controls and automatic outline dimensions](docs/images/draftsman/editor.png)
+
+This is a local browser source preview using the retained synthetic `inspection.kicad_pcb` test fixture. The repository/revision in this capture is test data; it does not demonstrate a live repository write or a physical Android device. No desktop or Android system bars are included.
+
+**0.12.70 source preview:** the template picker offers **Modern** and **KiCad sheet**. The KiCad-style alternative adds a worksheet boundary, coordinate zones and title block; it does not load custom `.kicad_wks` worksheets. Compact icons retain descriptive tooltips and accessible names. The magnet toggles geometry snapping: nearby saved hole/circle centres, corners, line edges and rounded edges show a cursor cue. Hold **Alt** to bypass snapping temporarily or **Shift** to constrain the second point. On touch screens, drag to preview and release to place a dimension point. **Escape** cancels placement.
+
+**Save to folder** asks where to create a separate output folder when supported. **Save to repo** is an extension-only, account-authorized action: review the repository, new branch and path before confirming. It creates documentation on a new branch from the viewed commit. Downloading a PDF does not publish anything.
+
+Drawing views in exported sheets are raster previews; dimensions, notes and tables in SVG are vector elements. Automatic dimensions reflect saved outline geometry, without inferred manufacturing tolerances. Read the [complete Draftsman guide](docs/DRAFTSMAN.md) for source matching, export limits and partial-save handling.
+
+## 10. Troubleshooting and support
 
 - **Missing subsheet/model:** import the complete project folder/ZIP and inspect path or size warnings. Absolute/external model paths may be unavailable.
 - **Old drawing after an edit:** reimport browser snapshots, reload the loopback project, or close/reopen the VS Code editor.
@@ -405,4 +436,4 @@ objects. Commit changes and reopen if the source-verification check rejects them
 - **Drafts missing on another device:** export/import their metadata. Local storage is separate for each app/browser profile, and loopback ports have separate browser storage.
 - **Large project is incomplete:** inspect truncation and parser diagnostics; reduce the imported set rather than assuming a partial view is complete.
 
-Contact [support@sigharmonic.com](mailto:support@sigharmonic.com) with the app/extension version, operating system, exact steps and a non-confidential minimal example. Do not include account tokens or private project data without authorization.
+Contact [support.kivi@sigharmonic.com](mailto:support.kivi@sigharmonic.com) with the app/extension version, operating system, exact steps and a non-confidential minimal example. Do not include account tokens or private project data without authorization.

@@ -60,6 +60,8 @@ The shared Three.js 3D viewer defaults to **Balanced** quality and **Realistic**
 
 **[Open the illustrated Android, VS Code and Chrome user guide](USER-GUIDE.md)** — setup, everyday workflows, Git reviews, fabrication files and saved results, with screenshots.
 
+New to the viewer? Start with the guide's [first five minutes](USER-GUIDE.md#your-first-five-minutes), then follow the [Draftsman walkthrough](USER-GUIDE.md#9-create-draftsman-documentation) to create and download drawing sheets. The guide labels newer source previews separately from published binaries.
+
 1. Install an edition using the [platform instructions](docs/INSTALL.md).
 2. Open a local project folder with its sheets and model files, or open a supported GitHub/GitLab file page. Public projects need no account connection; private access requires authorization.
 3. Select a part or net, open **Explorer**, **Inspect**, or **Review**, and follow the [illustrated user guide](USER-GUIDE.md).
