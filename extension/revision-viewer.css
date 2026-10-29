@@ -378,3 +378,7 @@ body[data-workspace="true"] #projectButton,body[data-workspace="true"] #viewOppo
 .severity-level-1{border-left-color:#4fc08d!important}
 #commentComposeTop{margin:0 0 6px;align-items:end}#commentComposeTop label{min-width:0}#commentComposeTop select{width:100%;box-sizing:border-box}
 #commentPostRow>#saveComment{margin-left:auto;background:var(--selected);border-color:var(--accent);font-size:11px;min-height:32px}
+
+.state-closed{border-left-color:#aa79d4!important}
+.review-state-badge{display:inline-flex;align-items:center;gap:3px;max-width:100%;padding:1px 6px;border:1px solid;border-radius:10px;font-size:10px;line-height:1.5;color:var(--text);white-space:nowrap}.note>.review-state-badge{margin:4px 0}
+.chat-catalog-actions #commentConversationState{min-width:0;width:90px;font-size:11px}.chat-thread-badge{flex-shrink:0}

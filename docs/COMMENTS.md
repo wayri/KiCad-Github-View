@@ -1,6 +1,6 @@
 # Review comments and Git host integration
 
-KiCad Visual Review stores comments alongside the design context they refer to: repository, revision, KiCad file, optional object identity or reference, and a point or rectangular area in drawing coordinates. Each note can also carry severity (`info`, `level-1`, `minor`, `major`, or `critical`), tags, mentions, text, timestamps, and a local state (`open`, `skipped`, `resolved`, or `wont-fix`). Area captures can include a PNG. These annotations help reviewers discuss saved design data; they do not modify the schematic or board.
+KiCad Visual Review stores comments alongside the design context they refer to: repository, revision, KiCad file, optional object identity or reference, and a point or rectangular area in drawing coordinates. Each note can also carry severity (`info`, `level-1`, `minor`, `major`, or `critical`), tags, mentions, text, timestamps, and a local state (`open`, `closed`, `skipped`, `resolved`, or `wont-fix`). Area captures can include a PNG. These annotations help reviewers discuss saved design data; they do not modify the schematic or board.
 
 ## Where notes are stored
 
@@ -115,3 +115,13 @@ The five levels, in increasing severity, are **Info** (blue), **Level 1** (green
 New GitHub Issue/Discussion posts and review replies include a self-contained coloured-symbol severity banner and a readable severity row. No external badge image is loaded. This is per-comment metadata in the message body; it does not automatically create repository labels or change the severity of an entire existing issue. Older annotations still load and display their saved severity.
 
 The KiCad launcher uses this same compact browser composer. Local mode presents **Save comment** directly beside the composer actions; it saves a local note and does not publish to GitHub. Its design sources remain read-only.
+
+### Review state and linked issues
+
+**Open** is green, **Closed** purple, and **Skipped** amber. Legacy **Resolved** and **Won’t fix** notes remain supported; the Closed filter includes them. The state selector is visible in the note composer. State filters apply to review cards, the conversation catalog and messages in an opened thread.
+
+A linked comment follows the provider issue/discussion's last fetched Open/Closed state. Fetching the conversation or refreshing its catalog updates that inference without rewriting the annotation. If a comment links to several threads, any known open thread keeps it Open; it is inferred Closed only when all linked thread states are known to be Closed. An unavailable provider state falls back to the saved review state and is identified in the badge tooltip. State can change on the provider after a fetch; refresh before relying on it.
+
+Use the conversation **⋯ → Close issue/discussion** or **Reopen issue/discussion** action to control the provider state. The action requires provider permission, current repository policy and an explicit confirmation; a stale provider revision blocks the write. Confirmed changes update the displayed linked state. Changing a local review dropdown or filter never silently closes a shared issue.
+
+For a linked comment, **Skip review** records a reader/profile-specific local override; **Follow issue state** resumes inference. Skipped is not a native provider issue state. Unlinked notes save their selected review state normally. Published state banners describe the annotation at posting time; the provider's own issue status remains authoritative. Exact-source local/provider copies of the same annotation are displayed once.

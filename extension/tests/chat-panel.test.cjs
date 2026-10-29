@@ -166,7 +166,7 @@ test('compact chat shows only its header icons and +/Send strip until tools are 
  let back=0,settings=0,close=0;const h=harness({onBack:()=>back++,onSettings:()=>settings++,onClose:()=>close++,onAccount:()=>{}});h.api.render(thread());
  assert.equal(h.byId('chatMessageText').rows,2);assert.equal(h.find('chat-search').hidden,true);assert.equal(h.find('chat-options-menu').hidden,true);assert.equal(h.find('chat-composer-options').hidden,true);
  assert.deepEqual(h.find('chat-compose-actions').children.map(node=>node.className),['chat-attachment-toggle','chat-format-toggle','chat-send']);
- assert.deepEqual(h.find('chat-header').children.map(node=>node.className),['chat-back','chat-heading','chat-options-toggle','chat-provider-link']);
+ assert.deepEqual(h.find('chat-header').children.map(node=>node.className),['chat-back','chat-heading','review-state-badge chat-thread-badge','chat-options-toggle','chat-provider-link']);
  assert.equal(h.find('chat-thread-meta').parentElement,h.find('chat-options-menu'));assert.equal(h.find('chat-search-toggle').parentElement,h.find('chat-options-menu'));assert.equal(h.find('chat-close').parentElement,h.find('chat-options-menu'));assert.equal(h.find('chat-format-tools').hidden,true);assert.equal(h.find('chat-send').getAttribute('aria-label'),'Review and send');
  assert.equal(h.find('chat-refresh').parentElement,h.find('chat-options-menu'));assert.equal(h.find('chat-account').parentElement,h.find('chat-options-menu'));assert.equal(h.byId('chatAutoRefresh').parentElement.parentElement,h.find('chat-options-menu'));
  assert.equal(h.find('chat-save-draft').parentElement,h.find('chat-composer-options'));assert.equal(h.find('chat-attach-context').parentElement.parentElement,h.find('chat-composer-options'));
@@ -187,7 +187,7 @@ test('optional pane pin action stays in More, follows host state and never sends
  let pinned=false,calls=0;const h=harness({onPin:()=>{pinned=!pinned;calls++;},isPinned:()=>pinned});h.api.render(thread());
  const pin=h.find('chat-pin');assert.equal(pin.parentElement,h.find('chat-options-menu'));h.find('chat-options-toggle').onclick();assert.equal(pin.textContent,'Pin pane');pin.onclick();assert.equal(pinned,true);assert.equal(pin.textContent,'Unpin pane');assert.equal(pin.getAttribute('aria-pressed'),'true');assert.equal(h.find('chat-options-menu').hidden,true);
  h.find('chat-options-toggle').onclick();pin.onclick();assert.equal(pinned,false);assert.equal(pin.textContent,'Pin pane');assert.equal(calls,2);assert.equal(h.requests.length,0);
- pinned=true;h.find('chat-options-toggle').onclick();assert.equal(pin.textContent,'Unpin pane');assert.equal(h.find('chat-header').children.length,4);
+ pinned=true;h.find('chat-options-toggle').onclick();assert.equal(pin.textContent,'Unpin pane');assert.equal(h.find('chat-header').children.length,5);
 });
 test('tool popovers dismiss outside or Escape, search resets on close, and closing options does not stop enabled polling',()=>{
  const h=harness();h.api.render(thread());h.find('chat-options-toggle').onclick();h.byId('chatAutoRefresh').checked=true;h.byId('chatAutoRefresh').onchange();const polling=latestTimer(h);
@@ -253,4 +253,9 @@ test('attached review severity is selectable above the message and survives publ
  await h.find('chat-send').onclick();assert.equal(h.requests[0].payload.annotation.severity,'level-1');
  const note={id:'remote-level',text:'Inspect this part',createdAt:'2026-10-27T05:00:00Z',severity:'level-1',anchor:{repository:'owner/board',ref:'a'.repeat(40),file:'board.kicad_pcb'}};
  h.api.render(thread(2,{comments:[{id:'13',author:'reviewer',body:comments.toMarkdown(note),createdAt:'2026-10-27T05:00:00Z'}]}));const badge=h.find('chat-review-severity');assert.equal(badge.textContent,'🟢 Level 1');assert.equal(badge.style.borderColor,comments.severityInfo('level-1').color);assert.doesNotMatch(h.find('chat-messages').textContent,/Design context/);h.api.dispose();
+});
+
+
+test('thread state badges and message filters infer issue closure without rewriting saved review data',()=>{
+ const note={id:'state-note',text:'Connector review',createdAt:'2026-10-28T00:00:00Z',severity:'minor',state:'open',anchor:{repository:'owner/board',ref:'a'.repeat(40),file:'board.kicad_pcb'}},h=harness(),value=thread(1,{state:'closed',comments:[{id:'state-message',body:comments.toMarkdown(note),author:'reviewer',createdAt:'2026-10-28T00:00:00Z'}]});h.api.render(value,{state:'closed'});assert.equal(h.find('chat-thread-badge').textContent,'Closed');assert.equal(h.find('chat-review-state').textContent,'Closed');assert.equal(h.find('chat-review-state').attributes['data-state'],'closed');h.api.render(value,{state:'open'});assert.equal(h.find('chat-review-state'),undefined);assert.equal(note.state,'open');assert.equal(h.requests.length,0);h.api.dispose();
 });

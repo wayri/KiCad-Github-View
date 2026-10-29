@@ -748,3 +748,8 @@ test('net-anchored review notes retain readable net identity through VS Code sid
 test('Level 1 review severity survives VS Code sidecar save and reopen',async()=>{
  const h=harness(),s=await session(h),note=annotation(s);note.severity='level-1';assert.equal((await send(h,s,1,{type:'comment-save',comment:note})).ok,true);const reopened=await session(h),loaded=(await send(h,reopened,1,{type:'comment-list',...scopeOf(reopened)})).result[0];assert.equal(loaded.severity,'level-1');assert.equal(storedSidecar(h).annotations[0].severity,'level-1');
 });
+
+
+test('Closed review state survives VS Code save and reopen without changing a provider issue',async()=>{
+ const h=harness(),s=await session(h),note=annotation(s);note.state='closed';assert.equal((await send(h,s,1,{type:'comment-save',comment:note})).ok,true);const reopened=await session(h),loaded=(await send(h,reopened,1,{type:'comment-list',...scopeOf(reopened)})).result[0];assert.equal(loaded.state,'closed');
+});

@@ -198,7 +198,7 @@ function validateComment(note,session=null,bindSession=session) {
     capture={mime:image.mime,dataUrl:image.dataUrl,width:image.width,height:image.height};
   }
   const updatedAt=note.updatedAt ?? note.createdAt,tags=note.tags ?? [],state=note.state ?? "open",remoteRefs=note.remoteRefs ?? [];
-  if(!validTimestamp(updatedAt) || !["open","skipped","resolved","wont-fix"].includes(state) ||
+  if(!validTimestamp(updatedAt) || !sharedReviewComments.isState(state) ||
     !Array.isArray(tags) || tags.length>20 || tags.some((tag)=>typeof tag!=="string" || !tag.trim() || tag.length>40 || /[\x00-\x1f\x7f]/.test(tag)) ||
     !Array.isArray(remoteRefs) || remoteRefs.length>20)throw new Error("Invalid annotation state, timestamps, tags or remote references.");
   if(Date.parse(updatedAt)<Date.parse(note.createdAt))throw new Error("Annotation update time precedes creation time.");
