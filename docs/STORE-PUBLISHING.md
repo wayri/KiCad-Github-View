@@ -1,10 +1,12 @@
 # Store publishing
 
+Current verified channel status: [30 October 2026 release state](RELEASE-STATUS.md). Chrome 0.12.76 is submitted and pending review; VSIX 0.12.76 is uploaded and verifying. Mozilla still disables the existing listing and blocks new submissions. Android 1.76 is installed through the development APK channel; the unsigned AAB is not ready for Play upload. Older dated records below are historical.
+
 ## Current Mozilla / Firefox deployment instructions
 
 Use the [Firefox and derivative guide](FIREFOX.md#publish-to-mozilla-add-ons-or-distribute-a-signed-xpi) for public AMO submission or signed self-distribution. It covers the stable add-on ID, Firefox-specific ZIP, validator/source submission, privacy and reviewer information, signed-XPI verification and updates. The existing 0.12.64 ZIP is an unsigned temporary desktop preview: its missing `gecko.data_collection_permissions` and consent readiness must be addressed before a new AMO submission. No Mozilla listing/signing has been completed. Do not turn off signature checks to create a permanent installation.
 
-Current Chromium upload text and screenshots: [0.12.64 submission](store-submissions/chrome-0.12.64.txt). Older version-specific publishing records below are historical; use the current package and installed-version evidence.
+Current Chromium upload text: [0.12.76 submission](store-submissions/chrome-0.12.76.txt). Older version-specific publishing records below are historical; use the current package and installed-version evidence.
 
 ## Illustrated VS Code listing: 0.12.50
 

@@ -4,7 +4,7 @@ Firefox and Firefox derivatives have a separate [installation, signing and Mozil
 
 Open saved KiCad projects, inspect schematics and layouts, and record review or assembly findings without a KiCad installation. Design sources are read-only during ordinary viewing. Review notes, assembly progress and variants are separate data; the VS Code conflict resolver is an explicit exception that can write a resolved drawing after confirmation.
 
-This guide covers browser extension **0.12.72**, VS Code **0.12.70+**, and Android **1.72**. Draftsman refinements marked **0.12.70** require that build (Android 1.72); a store may still offer an earlier version. This guide distinguishes shared drawing tools from host-specific pages and account features.
+This guide covers browser extension **0.12.76**, VS Code **0.12.76**, and Android **1.76**. Draftsman refinements marked **0.12.70** require that build (Android 1.72); a store may still offer an earlier version. This guide distinguishes shared drawing tools from host-specific pages and account features.
 
 Start with the [installation guide](docs/INSTALL.md) for Android, Windows, Linux and macOS. Check the [KiCad compatibility matrix](docs/KICAD-COMPATIBILITY.md) before reviewing a new file format. Recognized KiCad 8, 9 and 10 constructs use the shared viewer; coverage is narrower for 8/9, and newer constructs may display warnings or incomplete previews.
 
