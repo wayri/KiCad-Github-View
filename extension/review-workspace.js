@@ -1335,6 +1335,7 @@
     function objectAt(at){return hitsAt(at).map(hit=>resolveObject(objects,currentFile(),hit.bbox?.context)).find(Boolean);}
     function inspectPointer(){const object=objectAt(pointerWorld);if(object)selectObject(object);properties();inspector('properties');}
     function highlightPointerNet(){
+      if(scene){const record=scene.netAtPointer?.()||nativePick,net=record&&netModel.nets.find(n=>n.path===currentFile()&&(String(n.code)===String(record.net)||n.name===record.net));if(net)selectNet(net,false,true);else notice('Point at a pad, via or track, or select a net to highlight.');return;}
       const hits=hitsAt(pointerWorld),net=netModel.nets.find(n=>n.path===currentFile()&&hits.some(hit=>n.primitives.includes(hit.bbox?.primitive)));
       if(net)selectNet(net);else {const pointed=objectAt(pointerWorld)||selected,linked=netsForObject(pointed);if(linked.length===1)selectNet(linked[0]);else if(linked.length){netFilterObject=pointed.id;navigate('nets');}else notice('Point at a saved wire, pin, pad or copper item to highlight its net.');}
     }
@@ -1775,16 +1776,18 @@
     $('rulerSnap').onchange=()=>{measurePreview=rulerSnap=null;draw();};$('rulerPitch').onchange=()=>{const pitch=Number($('rulerPitch').value);if(!Number.isFinite(pitch)||pitch<.001||pitch>100){$('rulerSnapStatus').textContent='Grid spacing must be 0.001-100 mm';return;}getCanvas().gridPitch=pitch;measurePreview=rulerSnap=null;getCanvas().draw();};
     $('measureBoard').onclick=()=>{$('rulerKind').value='distance';const extent=KiCadReviewTools.boardExtents(getCanvas()?.design?.primitives,KiCadOwnedCanvas.arcThrough);if(!extent){$('measurementStatus').textContent='No saved Edge.Cuts geometry to measure';return;}boardMeasure=extent;measurePoints=[{x:extent.x,y:extent.y},{x:extent.x+extent.width,y:extent.y+extent.height}];measurePreview=rulerSnap=null;rememberMeasurement('board');draw();$('rulerSnapStatus').textContent='Saved outline bounding extents (not DRC validation)';};
     const reviewKeydown=event=>{
-      if(event.defaultPrevented||event.repeat||event.composedPath().some(node=>node?.isContentEditable||/^(INPUT|TEXTAREA|SELECT)$/.test(node?.tagName||'')))return;
+      if(event.defaultPrevented||event.repeat||event.isComposing||event.composedPath().some(node=>node?.isContentEditable||/^(INPUT|TEXTAREA|SELECT)$/.test(node?.tagName||'')))return;
       if(event.key==='Escape'){if(scene?.measurementState?.().mode)scene.setMeasurementMode(false);$('objectMenu').hidden=true;extraControls.hidden=companionChooser.hidden=true;controlsButton.setAttribute('aria-expanded','false');document.body?.classList?.remove('drawing-focused');try{root.parent?.postMessage({type:'kicad-review:focus',focused:false},location.origin);}catch{}focusCaption('Focus view');if(commentMode)setCommentMode(null);if(selectedNet||pinnedNets.size||pinnedClasses.size||highlightObjects.length||testpointHighlight)clearHighlights();if(measureMode)$('measureButton').click();return;}
       if(event.ctrlKey&&event.shiftKey&&event.key.toLowerCase()==='f'&&!event.altKey&&!event.metaKey){event.preventDefault();const focused=document.body?.classList?.toggle('drawing-focused');focusCaption(focused?'Restore controls':'Focus view');try{root.parent?.postMessage({type:'kicad-review:focus',focused:Boolean(focused)},location.origin);}catch{}showNavigator(false);hideInspector();return;}
       if(event.altKey&&!event.ctrlKey&&!event.metaKey&&!pcb&&!scene&&['ArrowLeft','ArrowRight','Home'].includes(event.key)){event.preventDefault();if(event.key==='Home')homeSheet();else historySheet(event.key==='ArrowLeft'?-1:1);return;}
       if(event.altKey&&event.key==='ArrowUp'&&!event.ctrlKey&&!event.metaKey&&!pcb&&!scene){event.preventDefault();parentSheet();return;}
       if(event.ctrlKey||event.altKey||event.metaKey)return;
       const key=event.key.toLowerCase();
-      if(key==='e'){event.preventDefault();if(scene){properties();inspector('properties');}else inspectPointer();}
+      if(scene&&['x','y','z'].includes(key)){event.preventDefault();scene.setView?.(({x:event.shiftKey?'left':'right',y:event.shiftKey?'front':'back',z:event.shiftKey?'bottom':'top'})[key]);}
+      else if(key==='f'&&pcb&&!event.shiftKey){event.preventDefault();if(scene)scene.flip?.();else $('flipButton').click();}
+      else if(key==='e'){event.preventDefault();if(scene){properties();inspector('properties');}else inspectPointer();}
       else if(key==='/'){event.preventDefault();searchInput.focus();}
-      else if((key==='h'||key==='`'||key==='~'||event.code==='Backquote')&&!scene){event.preventDefault();highlightPointerNet();}
+      else if(key==='h'||key==='`'||key==='~'||event.code==='Backquote'){event.preventDefault();highlightPointerNet();}
       else if(key==='c'){event.preventDefault();const item=objectAt(pointerWorld)||selected;editComment(null,item?anchor(item.position,item):pointerWorld?anchor(pointerWorld,null):null);}
       else if(key==='m'&&(!scene||scene.setMeasurementMode)){event.preventDefault();$('measureButton').click();}
       else if(event.key==='Enter'&&!pcb&&!scene&&selected?.kind==='sheet'&&!event.composedPath().some(node=>/^(BUTTON|A)$/.test(node?.tagName||''))){event.preventDefault();openSubsheet();}

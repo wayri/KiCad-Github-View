@@ -338,3 +338,10 @@ Open **3D → Display → Lighting** and choose **Universal** for neutral, even 
 Open **More tools → Rules** in the web/VS Code viewer, or **Drawing tools → Rules** on Android (ERC for schematics, DRC for boards). Under **Load saved KiCad report**, import an official KiCad JSON report or load its path from the repository. Findings show severity-coloured markers at saved positions, an aligned arrow to the selected affected item and a compact on-canvas note. The note includes the description, affected item and any exclusion comment. Use **Show selected finding note** or its close button to reduce clutter; **Details** reopens the floating findings panel. On phones the panel closes when jumping to a finding so the drawing remains visible. Previous/Next finding and item controls retain the selected annotation even for reports with many affected items.
 
 Associate ERC subsheets explicitly when their UUID cannot resolve uniquely; sheet display names are not assumed to be filenames. Coordinates are converted from the report's declared mm, mils or inch units. Locations without a resolved drawing/position are listed without invented markers. Reports remain unverified saved evidence and can be stale. This imports JSON results; it does not execute ERC/DRC or ingest arbitrary plain-text reports.
+
+
+### Drawing and 3D keyboard shortcuts
+
+Use **H**, **backtick** or **~** to highlight the net under the pointer (or the selected net in 3D). In PCB views, **F** flips the board; **Shift+F** fits the drawing or focused layer. The Fit button remains available. In schematics, **F** still fits the drawing.
+
+In 3D, **X**, **Y** and **Z** select the positive axis views (right, back and top). **Shift+X**, **Shift+Y** and **Shift+Z** select the opposite views (left, front and bottom). **F** moves to the opposite side while preserving the orbit target and distance; **Shift+F** fits the isometric view and **Home** fits the top view. These shortcuts are inactive in text fields, editable content and input-method composition, and do not change saved board geometry.

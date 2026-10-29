@@ -171,3 +171,10 @@ test('Stop during drawing fetch sends scoped cancellation and blocks late viewer
  let complete;const view=await revision('',[],{worker:true,projectReply:()=>new Promise(resolve=>complete=resolve)});const initial=view.calls.requests.find(r=>r.type==='project');assert.ok(initial.loadId);view.calls.stopLoading();await tick();assert.match(view.get('status').textContent,/Loading stopped/);assert.equal(view.calls.attach,0);assert.equal(view.calls.requests.find(r=>r.type==='load-cancel').loadId,initial.loadId);
  complete({ok:true,result:[{path:'root.kicad_sch',content:'(kicad_sch)'}]});await tick();assert.equal(view.calls.attach,0);assert.equal(view.get('status').children.at(-1).textContent,'Retry loading');
 });
+
+
+test('handled PCB flip does not also fit and repeated or composing keys leave the camera alone',async()=>{
+ const v=await revision('',[],{pcb:true}),before=v.calls.board;
+ for(const extra of [{defaultPrevented:true},{repeat:true},{isComposing:true}])assert.equal(v.key('f',[],extra),false);
+ assert.equal(v.calls.board,before);assert.equal(v.key('F',[],{shiftKey:true}),true);assert.equal(v.calls.board,before+1);
+});

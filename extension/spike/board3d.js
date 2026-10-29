@@ -818,11 +818,21 @@ export function mountBoard3D(container, source, options = {}) {
     if (!record) return;
     select(record, hit.point, hit.object, hit.instanceId);
   }
+  let pointerInside=false;
+  function netAtPointer(){
+    if(!active||!pointerInside||measuring)return null;
+    raycaster.setFromCamera(pointer,camera);
+    const visible=item=>{for(let node=item;node;node=node.parent)if(!node.visible)return false;return true;};
+    const hit=raycaster.intersectObjects([...pickables,...netInspection.group.children].filter(visible),false).find(hit=>selectableRecord(hit.object.userData.records?.[hit.instanceId]||hit.object.userData.record,'net'));
+    return hit?(hit.object.userData.records?.[hit.instanceId]||hit.object.userData.record):null;
+  }
+  renderer.domElement.addEventListener('pointerleave',()=>{pointerInside=false;});
   let selectionMode = 'all';
   const hold = holdGesture(event => contextMenu(event));
   const measurementTouchCapture=event=>{if(measuring&&event.pointerType==='touch'&&measurementPointers.size)controls.enabled=true;};renderer.domElement.addEventListener('pointerdown',measurementTouchCapture,true);
   renderer.domElement.addEventListener("pointerdown", (event) => { gesture.down(event); hold.down(event); menu.hidden = true;if(measuring&&event.pointerType==='touch'){measurementPointers.add(event.pointerId);measurementTouchDrag=measurementPointers.size===1?event.pointerId:null;controls.enabled=measurementPointers.size!==1;measurementTouch={x:event.clientX,y:event.clientY};invalidate();} });
   renderer.domElement.addEventListener("pointermove", event => {
+    pointerInside=true;const rect=renderer.domElement.getBoundingClientRect();pointer.set(((event.clientX-rect.left)/rect.width)*2-1,-((event.clientY-rect.top)/rect.height)*2+1);
     gesture.move(event); hold.move(event);if(measuring&&event.pointerType==='touch'){measurementTouch={x:event.clientX,y:event.clientY};invalidate();}
     if (analysisOverlay && options.onAnalysisHover) {
       const rect = renderer.domElement.getBoundingClientRect();
@@ -936,6 +946,8 @@ export function mountBoard3D(container, source, options = {}) {
       userAdjustedCamera=true;controls.maxDistance=Math.max(controls.maxDistance,distance*2);camera.position.copy(target).addScaledVector(direction,Math.max(controls.minDistance,distance));controls.target.copy(target);controls.update();updateClipping();invalidate();return true;
     },
     fit(topView=false){if(active)fit(topView);},
+    netAtPointer,
+    flip(){if(!active)return false;userAdjustedCamera=true;const offset=camera.position.clone().sub(controls.target);camera.position.copy(controls.target).sub(offset);controls.update();updateClipping();invalidate();return true;},
     setView(view){if(!active||!boardViewPresets.some(preset=>preset.id===view))return false;userAdjustedCamera=true;fit(view);return true;},
     zoom(factor){if(!active||!Number.isFinite(factor)||factor<=0)return;const offset=camera.position.clone().sub(controls.target);const distance=Math.max(controls.minDistance,Math.min(controls.maxDistance,offset.length()/factor));if(offset.length()>0)camera.position.copy(controls.target).add(offset.setLength(distance));controls.update();},
     setTheme(dark) {

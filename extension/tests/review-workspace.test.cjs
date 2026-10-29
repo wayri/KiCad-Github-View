@@ -1349,3 +1349,18 @@ test('conversation state filters apply to provider rows and confirmed mutations 
  view.get('commentConversationState').value='closed';view.get('commentConversationState').onchange();assert.doesNotMatch(view.get('commentThreadReader').querySelector('.chat-conversation-list').textContent,/Open task/);assert.match(view.get('commentThreadReader').querySelector('.chat-conversation-list').textContent,/Closed task/);
  await chat.options.onThreadState({thread:{kind:'issue',number:7,title:'Open task'},state:'closed',expectedUpdatedAt:'2026-10-29T00:00:00Z',confirmed:true});assert.equal(view.get('commentList').children[0].attributes['data-state'],'closed');assert.match(view.get('commentThreadReader').querySelector('.chat-conversation-list').textContent,/Open task/);assert.equal(note.state,'open');assert.equal(calls.filter(m=>m.type==='chat-thread-state').length,1);assert.equal(calls.some(m=>m.type==='comment-save'),false);view.workspace.dispose();
 });
+
+
+test('PCB shortcuts flip the view and select all six 3D axis sides without firing while typing',()=>{
+ const view=workspaceRuntime();view.load();let flips=0;view.get('flipButton').onclick=()=>flips++;
+ assert.equal(view.key('f').defaultPrevented,true);assert.equal(flips,1);
+ const sides=[],scene={setPopulation(){},setSelection(){},setView:value=>sides.push(value),flip:()=>flips++,netAtPointer:()=>({net:1})};view.workspace.setScene(scene);
+ for(const key of ['x','y','z']){view.key(key);view.key(key.toUpperCase(),{shiftKey:true});}
+ assert.deepEqual(sides,['right','left','back','front','top','bottom']);
+ view.key('f');assert.equal(flips,2);
+ const count=sides.length;
+ for(const extra of [{ctrlKey:true},{altKey:true},{metaKey:true},{repeat:true},{isComposing:true},{defaultPrevented:true},{composedPath:()=>[{tagName:'INPUT'}]},{composedPath:()=>[{tagName:'TEXTAREA'}]},{composedPath:()=>[{tagName:'SELECT'}]},{composedPath:()=>[{isContentEditable:true}]}]){view.key('z',extra);view.key('f',extra);view.key('~',extra);}
+ assert.equal(sides.length,count);assert.equal(flips,2);assert.equal(view.canvas.netHighlight,null);
+ view.key('~');assert.equal(view.canvas.netHighlight.name,'SIGNAL');view.key('Escape');assert.equal(view.canvas.netHighlight,null);
+ view.workspace.setScene(null);assert.equal(view.key('z').defaultPrevented,undefined);
+});
