@@ -19,6 +19,8 @@ Explore schematics and PCB layouts, follow nets, measure geometry, work through 
 
 ## Downloads
 
+**Store status — checked 29 October 2026:** Chrome **0.12.72 is submitted and pending review**, with automatic publication after approval. It includes icon-first viewing and release notes in the store description. [Chrome Web Store](https://chromewebstore.google.com/detail/klfdjlbngpoopegjmbajaidgodpmjaoc) currently serves the approved version until the update passes review. VS Code Marketplace **0.12.70 is live**; GitHub offers newer **0.12.72** packages. Mozilla's existing listing is **disabled**, new uploads are blocked, and the appeal has not resulted in reinstatement. The Firefox ZIP below is unsigned development software, not an approved AMO release. Android **1.72** remains the development-signed APK in v0.12.70; no Google Play release is claimed. [Channel details](docs/RELEASE-STATUS.md).
+
 The live counter above totals GitHub release-asset downloads, including downloads initiated by KiCad PCM **when its package URL points to a GitHub release asset in this repository**. GitHub does not expose a browser-versus-PCM breakdown or unique install count. No PCM package/repository is currently configured here, and downloads hosted elsewhere are not included. [What the counter measures](docs/DOWNLOAD-STATS.md).
 
 [![Download Android APK](https://img.shields.io/badge/Android-Download%20APK%201.72-3DDC84?logo=android&logoColor=white)](https://github.com/wayri/KiCad-Github-View/releases/download/v0.12.70/pocket-kivi-android-phone-tablet-1.72-development.apk)
@@ -38,7 +40,7 @@ Browser/desktop downloads above are the [v0.12.72 GitHub preview](https://github
 <details>
 <summary>Release versions, checksums and Android signing</summary>
 
-Release packages are built from the tagged source; screenshots show several retained development versions and may differ from the packaged UI. No Google Play or public Chrome Web Store installation URL is advertised here.
+Release packages are built from the tagged source; screenshots show several retained development versions and may differ from the packaged UI. The Chrome Store link above is the existing public listing; its approved version can lag GitHub. No Google Play installation is advertised here.
 
 Compare preview downloads with [SHA256SUMS.txt](https://github.com/wayri/KiCad-Github-View/releases/download/v0.12.72/SHA256SUMS.txt). An AAB is a Play upload bundle, not a directly installable Android app. Preserve/export projects and review state before changing signing channels; do not uninstall merely to bypass a signature mismatch. [Installation and updates](docs/INSTALL.md).
 
