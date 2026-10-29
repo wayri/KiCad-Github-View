@@ -19,7 +19,7 @@ Explore schematics and PCB layouts, follow nets, measure geometry, work through 
 
 ## Downloads
 
-**Release 0.12.75 / Android 1.75:** detachable browser views, linked cross-selection, improved project-model path recovery and experimental Fast PI. Store approval is separate from GitHub downloads. Chrome 0.12.72 was pending review at the last check; the 0.12.75 submission is being prepared. Marketplace publication requires fresh account verification. Mozilla remains disabled pending its existing appeal. Android uses the development signing channel; no Google Play release is claimed. [Channel details](docs/RELEASE-STATUS.md).
+**Release 0.12.75 / Android 1.75:** detachable browser views, linked cross-selection, improved project-model path recovery and experimental Fast PI. Store approval is separate from GitHub downloads. Chrome 0.12.75 is submitted and pending review. VS Code Marketplace 0.12.75 is uploaded and verifying. Mozilla remains disabled pending its existing appeal. Android uses the development signing channel; no Google Play release is claimed. [Channel details](docs/RELEASE-STATUS.md).
 
 The live counter above totals GitHub release-asset downloads, including downloads initiated by KiCad PCM **when its package URL points to a GitHub release asset in this repository**. GitHub does not expose a browser-versus-PCM breakdown or unique install count. No PCM package/repository is currently configured here, and downloads hosted elsewhere are not included. [What the counter measures](docs/DOWNLOAD-STATS.md).
 
