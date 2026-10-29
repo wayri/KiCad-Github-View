@@ -19,7 +19,7 @@ async function revision(query='',extraFiles=[],options={}){
   KiCadPairedReview:require('../paired-review.js'),KiCadReviewTools:require('../review-tools.js'),KiCadWorksheet:require('../worksheet.js'),KiCadBrowserData:require('../browser-data.js'),KiCadDesignModel:require('../design-model.js'),KiCadDesignDiff:require('../design-diff.js'),KiCadViewState:viewState,
   KiCadSchematicRenderer:{build:()=>({primitives:[],layers:[],page:{width:297,height:210},warnings:[]})},
   KiCadPCBRenderer:{build:()=>({primitives:[],layers:options.layers||[],page:{width:297,height:210},warnings:[]})},
-  SpikeBoard3D:{mountBoard3D(_pane,_source,config){calls.modelOptions=config;return{dispose(){},setTheme(){}};}},
+  SpikeBoard3D:{mountBoard3D(_pane,_source,config){calls.modelOptions=config;return{dispose(){},setTheme(){},setTerminalLabels(visible){calls.terminalLabels=visible;}};}},
   KiCadOwnedCanvas:{mount:()=>canvas},KiCadReviewWorkspace:{composeSheetOverview:require('../review-workspace.js').composeSheetOverview,sheetPageHighlights:require('../review-workspace.js').sheetPageHighlights,mount:options=>{calls.workspaceOptions=options;return {draw(){},setScene(){},attachCanvas(){calls.attach++;},dispose(){calls.disposed++;},highlightRelated(selection){calls.related=selection;options.onSelection?.(selection);},refreshComments(){calls.refreshed=(calls.refreshed||0)+1;},options};}},
   addEventListener:(type,callback)=>listeners.set(type,callback)};
  if(options.android){context.KiCadNetModel=require('../net-model.js');context.KiCadAndroidUI={};context.setTimeout=(fn,ms)=>{const timer=setTimeout(fn,ms);if(ms>100)timer.unref();return timer;};context.requestAnimationFrame=fn=>setTimeout(fn,0);context.cancelAnimationFrame=clearTimeout;context.IntersectionObserver=class{constructor(callback){this.callback=callback;calls.overviewObserver=this;this.observed=[];}observe(node){this.observed.push(node);}disconnect(){this.observed=[];}};const mount=context.KiCadReviewWorkspace.mount;context.KiCadReviewWorkspace.mount=opts=>({...mount(opts),overviewSheets:()=>[{sheet:{path:initialFile,label:'Root'},depth:0},...extraFiles.map(file=>({sheet:{path:file.path,label:'Power supply'},depth:1}))],overviewSelection:path=>options.overviewSelection?.(path)||({netIds:[],uuids:[],mode:'dim'})});}
@@ -177,4 +177,12 @@ test('handled PCB flip does not also fit and repeated or composing keys leave th
  const v=await revision('',[],{pcb:true}),before=v.calls.board;
  for(const extra of [{defaultPrevented:true},{repeat:true},{isComposing:true}])assert.equal(v.key('f',[],extra),false);
  assert.equal(v.calls.board,before);assert.equal(v.key('F',[],{shiftKey:true}),true);assert.equal(v.calls.board,before+1);
+});
+
+
+test('pad and net-name preference is shared across 2D and the mounted 3D scene',async()=>{
+ const v=await revision('',[],{pcb:true});v.get('showNetNames').checked=true;v.get('showNetNames').onchange();await v.get('mode3d').click();
+ assert.equal(v.calls.modelOptions.showNetNames,true);
+ v.calls.modelOptions.onTerminalLabelsChange(false);assert.equal(v.canvas.showNetNames,false);assert.equal(v.get('showNetNames').checked,false);assert.equal(v.calls.terminalLabels,false);
+ v.get('showNetNames').checked=true;v.get('showNetNames').onchange();assert.equal(v.calls.terminalLabels,true);
 });

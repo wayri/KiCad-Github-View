@@ -4,6 +4,7 @@
 
   "use strict";
 
+  const padLabels=root.KiCadPadLabels||(typeof require==='function'?require('./pad-labels.js'):null);
   const finitePoint = p => Number.isFinite(p?.x) && Number.isFinite(p?.y);
   const schematicPalettes=Object.freeze({
     dark:Object.freeze({'#000000':'#e8edf5','#840000':'#f2bb74','#a90000':'#ff8587','#008400':'#59dba8','#008484':'#65c6ed','#000080':'#71aaff','#a0a0a0':'#718298','#725600':'#8bbcff'}),
@@ -116,14 +117,17 @@
     if(!(zoom>0)||!Number.isFinite(zoom))return output;
     const add=(p,name,x,y,angle,size)=>{
       if(output.length>=limit||!Number.isFinite(x+y+angle+size))return;
-      const at=camera.world_to_screen({x,y}),r=angle*Math.PI/180,w=size*(Math.max(...name.split('\n').map(line=>line.length))*.65+1),h=size*1.4*name.split('\n').length;
+      const at=camera.world_to_screen({x,y}),r=angle*Math.PI/180,w=size*(Math.max(...name.split('\n').map(line=>line.length))*.65+1),h=size*1.2*name.split('\n').length;
       const bw=Math.abs(Math.cos(r))*w+Math.abs(Math.sin(r))*h,bh=Math.abs(Math.sin(r))*w+Math.abs(Math.cos(r))*h;
       const box={x:at.x-bw/2-3,y:at.y-bh/2-3,w:bw+6,h:bh+6};
       if(box.x<0||box.y<0||box.x+box.w>camera.width||box.y+box.h>camera.height||boxes.some(b=>box.x<b.x+b.w&&box.x+box.w>b.x&&box.y<b.y+b.h&&box.y+box.h>b.y))return;
       boxes.push(box);output.push({text:name,x:at.x,y:at.y,angle,size,primitive:p});
     };
     const labeledPads=new Set();
-    for(const [p,rawName] of entries){
+    // Pad identity takes collision priority over copper net labels. Defer only a
+    // bounded number of trace/zone candidates; keep the pad stream lazy at cap.
+    function* prioritized(){const copper=[];let scanned=0;for(const entry of entries){if(++scanned>12000)break;if(entry[0]?.kind==='pad')yield entry;else if(copper.length<Math.max(1,limit)*4)copper.push(entry);}yield* copper;}
+    for(const [p,rawName] of prioritized()){
       if(output.length>=limit)break;
       let name=rawName;
       if(p.kind==='pad'&&!p.hole&&p.layer?.endsWith('.Cu')){
@@ -138,13 +142,9 @@
         if(!center)continue;
         const width=(p.padWidth||b?.w||0)*zoom,height=(p.padHeight||b?.h||0)*zoom;
         if(Math.min(width,height)<13)continue;
-        const size=Math.min(18,Math.max(9,Math.min(width,height)*.25));
-        const net=typeof name==='string'&&name.length<=160?name:'';
-        const title=[number,p.pinName].filter(Boolean).join(' ');
-        const lines=[title,net].filter(Boolean);
-        if(!lines.length)continue;
-        const label=lines.join('\n'),maxLength=Math.max(...lines.map(line=>line.length));
-        if(maxLength*size*.65>Math.max(width,height)*1.7)continue;
+        const layout=padLabels?.layout({number,pinName:p.pinName||'',net:typeof name==='string'?name:'',widthPx:width,heightPx:height});
+        if(!layout)continue;
+        const label=layout.text,size=layout.size;
         const start=output.length;add(p,label,center.x,center.y,0,size);
         if(output.length>start)labeledPads.add(key);
         continue;
@@ -268,7 +268,7 @@
       const labels=netLabels(entries(),this.viewport.camera),ctx=this.ctx;
       ctx.save();ctx.font='11px monospace';ctx.textAlign='center';ctx.textBaseline='middle';ctx.lineJoin='round';ctx.lineWidth=3;
       ctx.fillStyle=this.dark?'#f3f8fa':'#17212b';ctx.strokeStyle=this.dark?'#101820':'#ffffff';
-      for(const label of labels){ctx.save();ctx.translate(label.x,label.y);ctx.rotate(label.angle*Math.PI/180);ctx.font=label.size+'px monospace';const lines=label.text.split('\n');lines.forEach((line,i)=>{const y=(i-(lines.length-1)/2)*label.size*1.4;ctx.strokeText(line,0,y);ctx.fillText(line,0,y);});ctx.restore();}ctx.restore();
+      for(const label of labels){ctx.save();ctx.translate(label.x,label.y);ctx.rotate(label.angle*Math.PI/180);ctx.font=label.size+'px monospace';const lines=label.text.split('\n');lines.forEach((line,i)=>{const y=(i-(lines.length-1)/2)*label.size*1.2;ctx.strokeText(line,0,y);ctx.fillText(line,0,y);});ctx.restore();}ctx.restore();
     }
     setSelectionMode(mode){this.selectionMode=['all','part','net','pin'].includes(mode)?mode:'all';}
     query(at,pixels=5){const tolerance=pixels/this.viewport.camera.zoom;return this.candidates({x:at.x-tolerance,y:at.y-tolerance,w:2*tolerance,h:2*tolerance}).filter(p=>this.geometryVisible(p)&&p.pick!==false&&(this.selectionMode!=='pin'||['pad','pin','pin-marker','pin-name','pin-number'].includes(p.kind))&&(p.uuid||p.reference)&&(!p.layer||this.visibleLayers.has(p.layer))&&(!this.focusedLayer||this.layerFocusMode!=='isolate'||p.layer===this.focusedLayer)&&hitPrimitive(p,at,tolerance)).sort((a,b)=>{const priority=p=>p.kind==='pad'?0:p.kind==='footprint'||p.kind==='symbol'?1:p.kind==='zone'?4:2;const focus=p=>this.focusedLayer&&p.layer===this.focusedLayer?0:1;return focus(a)-focus(b)||priority(a)-priority(b);}).slice(0,40);}

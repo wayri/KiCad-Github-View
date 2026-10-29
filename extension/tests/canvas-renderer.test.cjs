@@ -54,6 +54,7 @@ function runtime(dpr=1,extra={}){
   const element={style:{},setAttribute(){},addEventListener:(key,fn)=>listeners.set(key,fn),removeEventListener(){},getContext:()=>ctx,getBoundingClientRect:()=>({left:0,top:0,width:800,height:600}),remove(){},setPointerCapture(){},hasPointerCapture:()=>false};
   const host={append(){},getBoundingClientRect:element.getBoundingClientRect};
   let created=false;const env={EventTarget,CustomEvent,document:{createElement:()=>{if(!created){created=true;return element;}return {...element,style:{}};}},devicePixelRatio:dpr,ResizeObserver:class{observe(){}disconnect(){}},module:{exports:{}},...extra};
+  vm.runInNewContext(fs.readFileSync(path.join(__dirname,'../pad-labels.js'),'utf8'),env);
   vm.runInNewContext(fs.readFileSync(path.join(__dirname,'../owned-canvas.js'),'utf8'),env);
   const canvas=env.KiCadOwnedCanvas.mount(host,{pcb:true,dark:true});return{canvas,element,operations,listeners};
 }

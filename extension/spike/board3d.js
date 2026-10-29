@@ -13,6 +13,7 @@ import { SMAAPass } from "three/addons/postprocessing/SMAAPass.js";
 import "../design-diff.js";
 import "../repo-models.js";
 import fzstd from "../vendor/fzstd/fzstd.js";
+import padLabels from "../pad-labels.js";
 import "../embedded-models.js";
 import "../step-decoder.js";
 import { parseKicadBoard } from "@spike/boardParser";
@@ -560,19 +561,19 @@ export function mountBoard3D(container, source, options = {}) {
   toggle("Back copper", true, (visible) => { groupFor("B.Cu").visible = !mechanical&&visible; });
   toggle("Parts", true, (visible) => { parts.visible = visible; renderer.shadowMap.needsUpdate=true; });
   toggle("Full net 3D", true, (enabled) => { fullNet3D=enabled;setSelection(externalSelection); });
-  // A bounded, opt-in set of depth-tested terminal labels. The sprite material
+  // A bounded set of depth-tested terminal labels follows the net-name setting. The material
   // preserves board/model occlusion; labels do not participate in picking or fit.
-  let showTerminalLabels=false;
+  let showTerminalLabels=options.showNetNames===true;
   const terminalLabels=new THREE.Group(),terminalLabelCache=new Map();scene.add(terminalLabels);
   const labelGeometry=new THREE.PlaneGeometry(1,1);
-  const labelRecords=nativePads.filter(p=>p.name&&p.net&&p.name.length<=40&&p.net.length<=48).slice(0,10000);
+  const labelRecords=nativePads.filter(p=>typeof p.name==='string'&&p.name.length>0&&p.name.length<=160).slice(0,10000);
   const labelPool=[],frameTextures=new Set();
-  function labelTexture(pad){
-    const key=JSON.stringify([pad.name,pad.net]);if(terminalLabelCache.has(key)){const texture=terminalLabelCache.get(key);terminalLabelCache.delete(key);terminalLabelCache.set(key,texture);frameTextures.add(texture);return texture;}
+  function labelTexture(label){
+    const key=JSON.stringify([label.lines,label.size,label.width,label.height]);if(terminalLabelCache.has(key)){const texture=terminalLabelCache.get(key);terminalLabelCache.delete(key);terminalLabelCache.set(key,texture);frameTextures.add(texture);return texture;}
     if(terminalLabelCache.size>=150){const unused=[...terminalLabelCache].find(([,texture])=>!frameTextures.has(texture));if(!unused)return null;terminalLabelCache.delete(unused[0]);unused[1].dispose();}
-    const canvas=document.createElement('canvas');canvas.width=512;canvas.height=48;
-    const ctx=canvas.getContext('2d');ctx.font='600 14px monospace';ctx.textAlign='center';ctx.textBaseline='middle';ctx.lineJoin='round';ctx.lineWidth=5;ctx.strokeStyle='#101820';ctx.fillStyle='#f3f8fa';
-    for(const [text,y] of [[pad.name,13],[pad.net,34]]){ctx.strokeText(text,256,y);ctx.fillText(text,256,y);}
+    const canvas=document.createElement('canvas');canvas.width=label.width*2;canvas.height=label.height*2;
+    const ctx=canvas.getContext('2d');ctx.scale(2,2);ctx.font=`600 ${label.size}px monospace`;ctx.textAlign='center';ctx.textBaseline='middle';ctx.lineJoin='round';ctx.lineWidth=2;ctx.strokeStyle='#101820';ctx.fillStyle='#f3f8fa';
+    label.lines.forEach((text,index)=>{const y=label.height/2+(index-(label.lines.length-1)/2)*label.size*1.2;ctx.strokeText(text,label.width/2,y);ctx.fillText(text,label.width/2,y);});
     const texture=new THREE.CanvasTexture(canvas);texture.colorSpace=THREE.SRGBColorSpace;terminalLabelCache.set(key,texture);frameTextures.add(texture);return texture;
   }
   const projectedLabel=new THREE.Vector3();
@@ -589,21 +590,22 @@ export function mountBoard3D(container, source, options = {}) {
       if(!(pad.layers?.includes(layer)||pad.layers?.includes('*.Cu')||pad.layer===layer))continue;
       const [x,y]=world(pad.at),z=layer==='F.Cu'?top+.055:bottom-.055;
       const distance=camera.position.distanceTo(new THREE.Vector3(x,y,z));
-      const pxPerMm=canvasHeight/(2*Math.tan(camera.fov*Math.PI/360)*distance),padPixels=Math.min(pad.width,pad.height)*pxPerMm;
-      if(!Number.isFinite(padPixels)||padPixels<32)continue;
+      const pxPerMm=canvasHeight/(2*Math.tan(camera.fov*Math.PI/360)*distance);
+      const label=padLabels.layout({number:pad.name,pinName:pad.pinName,net:pad.net,widthPx:pad.width*pxPerMm,heightPx:pad.height*pxPerMm,minPadPx:24});
+      if(!label)continue;
       projectedLabel.set(x,y,z).project(camera);if(projectedLabel.z< -1||projectedLabel.z>1)continue;
-      const size=Math.min(16,Math.max(10,padPixels*.22)),w=(Math.max(pad.name.length,pad.net.length)*.63+1)*size,h=size*2.8;
+      const {width:w,height:h}=label;
       const sx=(projectedLabel.x+1)*canvasWidth/2,sy=(1-projectedLabel.y)*canvasHeight/2,box={x:sx-w/2,y:sy-h/2,w,h};
       if(box.x<0||box.y<0||box.x+w>canvasWidth||box.y+h>canvasHeight||boxes.some(b=>box.x<b.x+b.w&&box.x+w>b.x&&box.y<b.y+b.h&&box.y+h>b.y))continue;
-      const texture=labelTexture(pad);if(!texture)continue;
+      const texture=labelTexture(label);if(!texture)continue;
       let mesh=labelPool[count];if(!mesh){mesh=new THREE.Mesh(labelGeometry,new THREE.MeshBasicMaterial({transparent:true,depthTest:true,depthWrite:false,side:THREE.DoubleSide}));mesh.renderOrder=5;terminalLabels.add(mesh);labelPool.push(mesh);}
       if(mesh.material.map!==texture){mesh.material.map=texture;mesh.material.needsUpdate=true;}mesh.position.set(x,y,z);mesh.quaternion.copy(camera.quaternion);
-      // Canvas glyphs occupy 14 px of a 512 px texture width.
-      mesh.scale.set(512/14*size/pxPerMm,48/14*size/pxPerMm,1);mesh.visible=true;boxes.push(box);count++;
+      mesh.scale.set(w/pxPerMm,h/pxPerMm,1);mesh.visible=true;boxes.push(box);count++;
     }
     for(let i=count;i<labelPool.length;i++)labelPool[i].visible=false;
   }
-  toggle('Pad and net names (close zoom)',false,visible=>{showTerminalLabels=visible;});
+  const terminalLabelsToggle=toggle('Pad and net names (close zoom)',showTerminalLabels,visible=>{setTerminalLabels(visible);options.onTerminalLabelsChange?.(visible);});
+  function setTerminalLabels(visible){showTerminalLabels=Boolean(visible);terminalLabelsToggle.checked=showTerminalLabels;terminalLabels.visible=!mechanical&&showTerminalLabels&&!measuring;invalidate();return showTerminalLabels;}
 
   fit();
 
@@ -952,7 +954,7 @@ export function mountBoard3D(container, source, options = {}) {
       setSelection(externalSelection);
       return {hiddenTypes:[...objectVisibility.hiddenTypes],side:objectVisibility.side,supportedTypes:[...objectVisibility.supportedTypes],unsupportedTypes:[...objectVisibility.unsupportedTypes]};
     },
-    setMeasurementMode,clearMeasurements,
+    setMeasurementMode,clearMeasurements,setTerminalLabels,
     measurementState(){return{mode:measuring,unit:measurementUnit,...measurementSession.snapshot()};},
     setQuality(value){return applyQuality(value);},
     getRenderStats(){const plan=qualityViewport(canvasHost.clientWidth,canvasHost.clientHeight,globalThis.devicePixelRatio,graphics.maxDimension,quality,graphics);return{...plan,graphicsTier:graphics.tier,defaultQuality:graphics.defaultQuality,maxDimension:graphics.maxDimension,antialias:gl.getContextAttributes()?.antialias===true,floatTargets:graphics.premium||renderer.extensions.has('EXT_color_buffer_float'),environmentLighting:Boolean(scene.environment),ambientOcclusion:Boolean(pipeline?.passes.some(pass=>pass instanceof GTAOPass&&pass.enabled)),lighting:lightingRig.state(),renderCount,contextLost,gpuTextures:renderer.info.memory.textures,drawCalls:renderer.info.render.calls,loadedModelCount:loadedModelIndexes.size,componentCount:board.components.length};},
