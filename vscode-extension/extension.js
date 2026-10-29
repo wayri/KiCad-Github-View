@@ -7,6 +7,7 @@ const VIEW = "kicadVisualReview.viewer", CHANNEL = "kicad-vscode:v1";
 const MAX_FILE = 8 * 1024 * 1024, MAX_PROJECT = 24 * 1024 * 1024;
 const MAX_MESSAGE = 1024 * 1024, MAX_FILES = 32;
 const MAX_SIDECAR=4*1024*1024,liveSessions=new Set(),pairTargets=new Map();
+const pendingSearchTargets=new Map(),MAX_SEARCH_TARGETS=32,SEARCH_TARGET_TTL=30000;
 const OPERATIONS = new Set(["open-analysis-viewer", "close-analysis-viewer", "repository-tree", "repository-history", "repository-branches", "preview-project-html", "project-inventory", "project-file", "open-project-file", "open-project-overview", "rule-report", "project-search-files", "open-project-drawing", "project", "repo-model-index", "repo-asset", "pair-selection", "comments-changed", "comment-list", "comment-save", "comment-delete", "storage-get", "storage-set", "open-comment-draft", "github-annotations"]);
 const sharedReviewComments=require('./media/review-comments.js');
 const {createHost:createRemoteHost,deploymentPolicy}=require('./remote-collaboration.js');
@@ -16,6 +17,7 @@ OPERATIONS.add('repository-compare-current');
 OPERATIONS.add('repository-export-revision');
 OPERATIONS.add('repository-fork-revision');
 OPERATIONS.add('analysis-focus-net');
+OPERATIONS.add('workspace-search-ready');
 for(const operation of remoteCollaboration.operations)OPERATIONS.add(operation);
 let storageQueue=Promise.resolve();
 let pendingMessages=0,pendingMessageBytes=0;
@@ -302,6 +304,32 @@ function createSession(uri,project,context,token=secret()) {
     preferencesKey:JSON.stringify(["kicad-review-preferences",project.scope.repository,project.scope.rootFile]),assetRequests:0,assetBytes:0,eventId:0,...(project.history?{history:project.history}:{})};
   liveSessions.add(session);return session;
 }
+function validateSearchResult(value,file){
+  if(!value||typeof value!=='object'||Array.isArray(value)||!['object','file'].includes(value.kind)||!safePath(value.path)||value.path!==file||Object.keys(value).some(key=>!['kind','path','id','uuid','reference','position','netName','view'].includes(key)))throw Error('Invalid or out-of-source workspace search result.');
+  const result={kind:value.kind,path:value.path};
+  for(const [key,max]of [['id',1000],['uuid',200],['reference',200],['netName',500]])if(value[key]!==undefined&&value[key]!==null){if(typeof value[key]!=='string'||!value[key]||value[key].length>max||/[\x00-\x1f\x7f]/.test(value[key]))throw Error('Invalid workspace search identity.');result[key]=value[key];}
+  if(value.position!==undefined&&value.position!==null){const point=value.position;if(!point||typeof point!=='object'||Array.isArray(point)||Object.keys(point).some(key=>!['x','y'].includes(key))||![point.x,point.y].every(n=>Number.isFinite(n)&&Math.abs(n)<=1e6))throw Error('Invalid workspace search position.');result.position={x:point.x,y:point.y};}
+  if(value.view!==undefined){if(value.view!=='3d'||!/\.kicad_pcb$/i.test(file))throw Error('Invalid workspace search view.');result.view='3d';}
+  return result;
+}
+function searchTargetKey(uri,scope){return JSON.stringify([uri.toString(),scope.boundary.toString(),scope.repository,scope.ref]);}
+function pruneSearchTargets(now=Date.now()){for(const [key,value]of pendingSearchTargets)if(value.expires<=now)pendingSearchTargets.delete(key);}
+function queueSearchTarget(uri,scope,result){
+  pruneSearchTargets();const key=searchTargetKey(uri,scope);pendingSearchTargets.delete(key);
+  while(pendingSearchTargets.size>=MAX_SEARCH_TARGETS)pendingSearchTargets.delete(pendingSearchTargets.keys().next().value);
+  const entry={result,expires:Date.now()+SEARCH_TARGET_TTL};pendingSearchTargets.set(key,entry);return entry;
+}
+function takeSearchTarget(session){
+  pruneSearchTargets();const key=searchTargetKey(session.uri,session.scope),entry=pendingSearchTargets.get(key);
+  if(!entry||entry.result.path!==session.scope.rootFile)return null;pendingSearchTargets.delete(key);return entry.result;
+}
+async function deliverSearchTarget(session){
+  if(session.disposed||!session.searchReady||session.analysisPath||session.overview)return false;
+  pruneSearchTargets();const key=searchTargetKey(session.uri,session.scope),entry=pendingSearchTargets.get(key);
+  if(!entry||entry.result.path!==session.scope.rootFile)return false;
+  const delivered=await notifySession(session,{type:'workspace-search-result',result:entry.result});
+  if(delivered&&pendingSearchTargets.get(key)===entry)pendingSearchTargets.delete(key);return delivered;
+}
 function validPairSelection(value) {
   if(value?.kind==="group") {
     if(Object.keys(value).some((key)=>!["kind","items"].includes(key)) || !Array.isArray(value.items) || value.items.length>200)return false;
@@ -535,10 +563,12 @@ async function loadHistoricalProject(scope,history,budget={files:0,bytes:0}){
 async function openHistoricalFile(request,session){
   browseScope({...request,file:session.scope.rootFile},session);
   if(!GIT_SHA.test(request.sha||'')||!projectPaths.filePath(request.path))throw Error('Select a saved commit and a supported project file.');
+  const searchResult=request.searchResult===undefined?null:validateSearchResult(request.searchResult,request.path);
   const history=await historyContext(session,request.sha.toLowerCase()),scope={...session.scope,rootFile:request.path,ref:history.sha};
   const project=await loadHistoricalProject(scope,history),uri=vscode.Uri.joinPath(scope.boundary,...request.path.split('/')).with({query:'kiview-commit='+history.sha});
   const panel=vscode.window.createWebviewPanel(VIEW,'Saved '+request.path.split('/').at(-1)+' · '+history.sha.slice(0,8),vscode.ViewColumn.Beside,{enableScripts:true,localResourceRoots:[session.context.extensionUri]});
   const saved=createSession(uri,project,session.context);saved.closeForPolicy=()=>panel.dispose();saved.post=message=>panel.webview.postMessage(message);
+  if(searchResult)saved.initialSearchResult=searchResult;
   const receiver=panel.webview.onDidReceiveMessage(message=>handleMessage(message,saved,reply=>panel.webview.postMessage(reply)));panel.onDidDispose(()=>{saved.disposed=true;liveSessions.delete(saved);receiver.dispose();});
   try{panel.webview.html=await htmlFor(panel.webview,saved.context,saved);}catch(error){saved.disposed=true;liveSessions.delete(saved);panel.dispose();throw error;}
   return{opened:true,sha:history.sha,workingTree:false};
@@ -685,7 +715,7 @@ async function repositoryHistory(request,session){
   return{...base,commits,hasMore,nextPage:hasMore?page+1:null,warnings:[...new Set(warnings)].slice(0,20)};
 }
 async function dispatch(request,session) {
-  if(!['project','storage-get','storage-set','pair-selection','comments-changed','close-analysis-viewer'].includes(request.type))sourceAccess(session.scope.boundary);
+  if(!['project','storage-get','storage-set','pair-selection','comments-changed','close-analysis-viewer','workspace-search-ready'].includes(request.type))sourceAccess(session.scope.boundary);
   const state=session.context.workspaceState,key=session.storageKey;
   if(request.type==='repository-fork-revision'){
     revisionAction(request,session);await historyContext(session,request.sha.toLowerCase());revisionAction(request,session);
@@ -724,7 +754,24 @@ async function dispatch(request,session) {
     const bytes=await workspaceAccess("readFile",uri);if(bytes.byteLength>4*1024*1024)throw new Error('Rule report exceeds 4 MiB.');return {content:new TextDecoder('utf-8',{fatal:true}).decode(bytes),path};
   }
   if(request.type==="project-search-files")return searchProjectFiles(request,session);
-  if(request.type==="open-project-drawing"){assertScope(request,session);if(session.history)return openHistoricalFile({...request,path:request.file,sha:session.history.sha},session);await vscode.commands.executeCommand("vscode.openWith",vscode.Uri.joinPath(session.scope.boundary,...request.file.split("/")),VIEW,vscode.ViewColumn.Beside);return {opened:true};}
+  if(request.type==='workspace-search-ready'){
+    assertScope(request,session);if(request.file!==session.scope.rootFile||Object.keys(request).some(key=>!['type','repository','ref','file'].includes(key)))throw Error('Invalid workspace search readiness scope.');
+    session.searchReady=true;return{delivered:await deliverSearchTarget(session)};
+  }
+  if(request.type==="open-project-drawing"){
+    assertScope(request,session);if(request.searchResult!==undefined){
+      if(Object.keys(request).some(key=>!['type','repository','ref','file','searchResult','provider','host'].includes(key)))throw Error('Invalid drawing open fields.');
+      if(request.provider!==undefined&&request.provider!==session.remoteBinding?.provider||request.host!==undefined&&request.host!==session.remoteBinding?.host)throw Error('Drawing search provider does not match this workspace binding.');
+    }
+    const result=request.searchResult===undefined?null:validateSearchResult(request.searchResult,request.file);
+    if(session.history)return openHistoricalFile({...request,...(result?{searchResult:result}:{}),path:request.file,sha:session.history.sha},session);
+    const target=vscode.Uri.joinPath(session.scope.boundary,...request.file.split('/'));
+    const queued=result?queueSearchTarget(target,session.scope,result):null,key=searchTargetKey(target,session.scope);
+    try{await vscode.commands.executeCommand('vscode.openWith',target,VIEW,vscode.ViewColumn.Beside);}
+    catch(error){if(queued&&pendingSearchTargets.get(key)===queued)pendingSearchTargets.delete(key);throw error;}
+    if(result)for(const other of liveSessions){if(other.context===session.context&&searchTargetKey(other.uri,other.scope)===key&&await deliverSearchTarget(other))break;}
+    return {opened:true};
+  }
   if(request.type==="repo-model-index")return repoModelIndex(request,session);
   if(request.type==="repo-asset")return loadRepoAsset(request,session);
   if(request.type==="pair-selection")return relaySelection(request.selection,session);
@@ -802,7 +849,8 @@ async function htmlFor(webview,context,session) {
   let html=new TextDecoder().decode(await vscode.workspace.fs.readFile(templateUri));
   const nonce=secret(),resource=(name)=>webview.asWebviewUri(vscode.Uri.joinPath(media,...name.split("/"))).toString();
   const collaboration=session.history?null:await remoteCollaboration.publicContext(session);
-  const contextData={...(collaboration?{collaboration}:{}),drawingFile:session.scope.rootFile,historical:!!session.history,canOpenHistorical:true,token:session.token,loadWorkerUrl:resource("load-worker-vscode.js"),fastPIWorkerUrl:resource("fast-pi-worker-vscode.js"),stepWorkerUrl:resource("step-worker-vscode.js"),stepWasmUrl:resource("vendor/occt/occt-import-js.wasm"),search:new URLSearchParams({repository:session.scope.repository,ref:session.scope.ref,file:session.analysisPath||session.scope.rootFile,...(session.analysisResultView?{resultView:session.analysisResultView}:{})}).toString()};
+  const searchResult=session.initialSearchResult||(!session.analysisPath&&!session.overview?takeSearchTarget(session):null);delete session.initialSearchResult;
+  const contextData={...(collaboration?{collaboration}:{}),...(searchResult?{searchResult}:{}),drawingFile:session.scope.rootFile,historical:!!session.history,canOpenHistorical:true,token:session.token,loadWorkerUrl:resource("load-worker-vscode.js"),fastPIWorkerUrl:resource("fast-pi-worker-vscode.js"),stepWorkerUrl:resource("step-worker-vscode.js"),stepWasmUrl:resource("vendor/occt/occt-import-js.wasm"),search:new URLSearchParams({repository:session.scope.repository,ref:session.scope.ref,file:session.analysisPath||session.scope.rootFile,...(session.analysisResultView?{resultView:session.analysisResultView}:{})}).toString()};
   const bootstrap=JSON.stringify(contextData).replace(/</g,"\\u003c").replace(/\u2028/g,"\\u2028").replace(/\u2029/g,"\\u2029");
   const csp=`default-src 'none'; script-src 'nonce-${nonce}' ${webview.cspSource} 'wasm-unsafe-eval'; style-src ${webview.cspSource} 'unsafe-inline'; img-src ${webview.cspSource} data: blob: ${collaboration?(collaboration.provider==='github'?'https://github.com/user-attachments/':collaboration.host+'/'+collaboration.repository+'/uploads/ '+collaboration.host+'/-/project/') : ''}; font-src ${webview.cspSource}; connect-src ${resource('load-worker-vscode.js')} ${resource('fast-pi-worker-vscode.js')} ${resource('step-worker-vscode.js')} ${resource('vendor/occt/occt-import-js.wasm')}; worker-src blob:; base-uri ${webview.cspSource}; frame-src ${resource('terms.html')};`;
   html=html.replace(/(src|href)="([^"#:]+)"/g,(match,attr,name)=>`${attr}="${escaped(resource(name))}"`);
@@ -921,4 +969,4 @@ function activate(context) {
   }));
 }
 function deactivate() {pairTargets.clear();}
-module.exports={activate,deactivate,_test:{remoteCollaboration,projectScope,sameScope,childPath,loadProject,createSession,handleMessage,htmlFor,conflictHTML,staticHTML,validateSidecar,readSidecar,writeSidecar,CHANNEL,MAX_FILE,MAX_PROJECT}};
+module.exports={activate,deactivate,_test:{remoteCollaboration,projectScope,sameScope,childPath,loadProject,createSession,handleMessage,htmlFor,conflictHTML,staticHTML,validateSidecar,readSidecar,writeSidecar,validateSearchResult,pruneSearchTargets,pendingSearchTargets,CHANNEL,MAX_FILE,MAX_PROJECT}};

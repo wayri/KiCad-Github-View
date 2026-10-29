@@ -27,7 +27,7 @@
    load=loads.get(message.loadId);if(!load){if(loads.size>=32)throw Error('Too many active loads.');load={controller:new AbortController(),users:0};loads.set(message.loadId,load);}load.users++;
   }
   if(message.type==='open-options'){window.top.document.getElementById(provider==='gitlab'?'gitlabButton':'githubButton').click();return{ok:true,result:{opened:true}};}
-  if(message.type==='open-project-drawing'||message.type==='open-viewer-window'){window.top.KiCadAndroid.openDrawing(message.file);return{ok:true,result:{opened:true}};}
+  if(message.type==='open-project-drawing'||message.type==='open-viewer-window'){if(message.searchResult){const r=message.searchResult;window.top.KiCadAndroid.openDrawing(message.file,{...r.position,uuid:r.uuid,netName:r.netName,view:r.view,ref:message.ref});}else window.top.KiCadAndroid.openDrawing(message.file);return{ok:true,result:{opened:true}};}
   if(online&&(message.repository&&message.repository.toLowerCase()!==info.repository.toLowerCase()||message.provider&&message.provider!==provider||message.host&&message.host!==project.remote?.host))throw Error('Request belongs to another repository or server.');
   if(online&&['work-board-list','work-board-read','work-board-move','repository-fork-revision','revision-resolve','revision-branches','revision-commits','repository-tree','repository-history','repository-branches'].includes(message.type))return{ok:true,result:await nativeRequest(message)};
   const snapshot=await source(message.ref||message.comment?.anchor?.ref||frameRef,load?{signal:load.controller.signal}:undefined);

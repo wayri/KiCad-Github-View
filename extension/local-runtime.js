@@ -5,7 +5,7 @@
  const api=host.transport,storage=host.storage;
  window.chrome={runtime:{id:'kiview-local',getURL:name=>host.assetURL(name),sendMessage:async message=>{
   try{
-   if(['open-project-file','open-project-drawing','open-viewer-window'].includes(message.type)){host.openDrawing(message.file);return{ok:true,result:{opened:true}};}
+   if(['open-project-file','open-project-drawing','open-viewer-window'].includes(message.type)){if(message.searchResult)host.openDrawing(message.file,message.searchResult);else host.openDrawing(message.file);return{ok:true,result:{opened:true}};}
    if(['open-project-overview','open-options'].includes(message.type)){host.openProject();return{ok:true,result:{opened:true}};}
    return await api.send(message);
   }catch(e){return{ok:false,error:e.message};}

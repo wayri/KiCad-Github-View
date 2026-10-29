@@ -456,3 +456,14 @@ this experimental two-contact DC copper workflow.
 Use **Detach** or drag a drawing tab outside the viewer window to separate the
 schematic, PCB layout or 3D view. Each has its own camera; **Cross-select detached
 views** controls selection sharing. [Supported hosts and setup](docs/DETACHED-VIEWS.md).
+
+### Project-wide search (0.12.76)
+
+Use the centered **Search entire project** field or **Ctrl+K** to find saved parts,
+pins/pads, net names, project files/settings, supported simulation/report text and
+Draftsman documents for the current source revision. PCB part results offer
+**Show in 3D**. Type to build the local index; later queries reuse it. Arrow keys
+move through results, Enter opens a selected result, and Escape or an outside
+click closes the list. The search displays partial-index and size limits. It
+reads saved results and does not run simulation source or repository HTML.
+Draftsman documents must still match their original source fingerprints.

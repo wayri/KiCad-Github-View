@@ -48,7 +48,7 @@
   const validEntry=path=>isDrawing(path)||Boolean(globalThis.KiCadGitHub?.filePath(path));
   let activeWorkspace=isDrawing(entryFile)?(isBoard(entryFile)?'layout':'schematic'):'project',inventoryPromise=null,tabEpoch=0,pickerMounted=false,chooserMode='split',latestHierarchy=null;
   const tabs=new Map();
-  let pendingViewAction=null;
+  let pendingViewAction=params.get('view')==='3d'?'3d':null,workspaceSearch=null,pendingSearchResult=null;
   function dispatchWorkspaceView(){
     if(!pendingViewAction)return;
     const board=['layout','3d','draftsman'].includes(pendingViewAction)||(pendingViewAction==='simulation'&&activeWorkspace==='layout');
@@ -58,8 +58,41 @@
     for(const [key,button]of tabs){button.classList.toggle('active',key===mode);button.setAttribute('aria-pressed',String(key===mode));}
   }
   async function openWorkspaceView(name){if(name==='project'&&params.get('projectShell')==='1'&&parent!==globalThis){parent.postMessage({type:'kicad-review:show-project-settings'},location.origin);return;}pendingViewAction=name==='project'?null:name;await chooseWorkspace(['3d','draftsman'].includes(name)?'layout':name==='simulation'?(isBoard(request.file)?'layout':'schematic'):name);dispatchWorkspaceView();}
+  function dispatchSearchResult(){
+    if(!pendingSearchResult)return;
+    const side=[...frames.keys()].find(side=>side!=='base'&&views.has(side)&&(!pendingSearchResult.path||views.get(side).file===pendingSearchResult.path));
+    if(!side)return;const result=pendingSearchResult;pendingSearchResult=null;
+    frames.get(side).contentWindow?.postMessage({type:'kicad-review:command',command:'search-result',result},origin());
+  }
+  async function openSearchResult(result){
+    if(!globalThis.KiCadGitHub.filePath(result.path))throw Error('Invalid search result path.');
+    if(result.kind==='draft'){
+      const file=result.sourceFile||(isDrawing(result.path)?result.path:null);if(!file||!data.validPath(file))throw Error('Open the exact source PCB for this Draftsman document first.');
+      markWorkspace('draftsman');comparison.hidden=true;$('projectWorkspace').hidden=true;
+      const frame=element('iframe');frame.title='Draftsman source '+file;frame.src=chrome.runtime.getURL(isBoard(file)?'pcb-viewer.html':'schematic-viewer.html')+'?'+new URLSearchParams({repository:request.headRepository,ref:request.head,file,workspace:'1',headerViews:'1',headerSearch:'1',...providerContext});
+      $('searchWorkspace').replaceChildren(frame);$('searchWorkspace').hidden=false;frames.set('search',frame);pendingSearchResult={...result,path:file};return;
+    }
+    if(isDrawing(result.path)){
+      if(result.path===request.file||result.path===pairedFile){displayDrawing(result.path);pendingSearchResult=result;dispatchSearchResult();if(result.view==='3d')await openWorkspaceView('3d');return;}
+      const query=new URLSearchParams({repository:request.headRepository,head:request.head,file:result.path,viewSession,...providerContext,...(params.get('projectShell')==='1'?{projectShell:'1'}:{})});
+      if(result.uuid)query.set('focusUuid',result.uuid);
+      if(result.netName)query.set('focusNet',result.netName);
+      if(Number.isFinite(result.position?.x)&&Number.isFinite(result.position?.y)){query.set('focusX',result.position.x);query.set('focusY',result.position.y);}
+      if(result.view==='3d')query.set('view','3d');location.assign(chrome.runtime.getURL('browser-viewer.html')+'?'+query);return;
+    }
+    const page=/\.pdf$/i.test(result.path)?'pdf-viewer.html':result.kind==='report'&&!/\.kicad_pro$/i.test(result.path)?'analysis-viewer.html':'project-viewer.html';
+    markWorkspace(result.kind==='report'&&!/\.kicad_pro$/i.test(result.path)?'simulation':'project');comparison.hidden=true;$('projectWorkspace').hidden=true;
+    const frame=element('iframe');frame.title=result.label||result.path;frame.src=chrome.runtime.getURL(page)+'?'+new URLSearchParams({repository:request.headRepository,ref:request.head,file:result.path,projectOnly:'1',...providerContext});
+    $('searchWorkspace').replaceChildren(frame);$('searchWorkspace').hidden=false;
+  }
+  function mountWorkspaceSearch(){
+    if(workspaceSearch||!globalThis.KiCadWorkspaceSearch)return;
+    const scope={repository:request.headRepository,ref:request.head,file:entryFile,provider,host:providerContext.host||'https://github.com'};
+    workspaceSearch=KiCadWorkspaceSearch.mount({document,host:globalThis,holder:$('workspaceSearchHost'),scope,request:async(type,extra)=>{const reply=await send({type,...scope,...extra});if(!reply?.ok)throw Error(reply?.error||'Project search unavailable.');return reply.result;},getDrafts:()=>KiCadWorkspaceSearch.scopedDrafts(localStorage,scope),open:openSearchResult});
+    addEventListener('pagehide',()=>workspaceSearch?.destroy(),{once:true});
+  }
   function sourceFor(file){if(!validEntry(file))return;const removed=request.status==='removed'&&file===request.file;const repo=removed?request.repository:request.headRepository,ref=removed?request.base:request.head;$('sourceLink').href=`${provider==='gitlab'?providerContext.host:'https://github.com'}/${repo}/${provider==='gitlab'?'-/blob':'blob'}/${encodeURIComponent(ref)}/${file.split('/').map(encodeURIComponent).join('/')}`;}
-  function markWorkspace(name){activeWorkspace=name;$('splitView')?.setAttribute('aria-pressed',String(name==='split')); for(const [key,button]of tabs){button.classList.toggle('active',key===name);button.setAttribute('aria-pressed',String(key===name));}comparison.hidden=name==='project';$('projectWorkspace').hidden=name!=='project';toolbar.hidden=true;sourceFor(name==='project'?entryFile:name==='schematic'&&data.validPath(latestHierarchy?.hierarchy?.active)?latestHierarchy.hierarchy.active:name==='layout'?(isBoard(request.file)?request.file:pairedFile):request.file);}
+  function markWorkspace(name){activeWorkspace=name;$('splitView')?.setAttribute('aria-pressed',String(name==='split')); for(const [key,button]of tabs){button.classList.toggle('active',key===name);button.setAttribute('aria-pressed',String(key===name));}if($('searchWorkspace'))$('searchWorkspace').hidden=true;frames.delete('search');views.delete('search');comparison.hidden=name==='project';$('projectWorkspace').hidden=name!=='project';toolbar.hidden=true;sourceFor(name==='project'?entryFile:name==='schematic'&&data.validPath(latestHierarchy?.hierarchy?.active)?latestHierarchy.hierarchy.active:name==='layout'?(isBoard(request.file)?request.file:pairedFile):request.file);}
   function mountPicker(){if(pickerMounted||!isDrawing(request.file)||request.pullNumber||!globalThis.KiCadRevisionPicker)return;pickerMounted=true;globalThis.KiCadRevisionPicker.mount({holder:$('projectTools'),request,send:message=>send(message),navigate:query=>location.assign(`${chrome.runtime.getURL('browser-viewer.html')}?${query}`)});}
   function projectWorkspace(){
     if(!$('projectWorkspace').children.length){const frame=element('iframe');frame.title='Project settings and constraints';frame.src=chrome.runtime.getURL('project-viewer.html')+'?'+new URLSearchParams({repository:request.headRepository,ref:request.head,file:entryFile,projectOnly:'1',...providerContext});$('projectWorkspace').append(frame);}
@@ -168,7 +201,7 @@
     holder.className = "drawing";
     const viewer = element("iframe");viewer.allow="camera";
     viewer.title = `${file} at ${ref.slice(0, 12)}`;
-    const query = new URLSearchParams({ repository, ref, file, workspace: '1', headerViews:'1',viewSession, ...providerContext });
+    const query = new URLSearchParams({ repository, ref, file, workspace: '1', headerViews:'1',...(globalThis.KiCadWorkspaceSearch?{headerSearch:'1'}:{}),viewSession, ...providerContext });
     if(file===entryFile&&params.get('focusNet')&&params.get('focusNet').length<=500)query.set('focusNet',params.get('focusNet'));
     if (request.pullNumber) { query.set("pullNumber", request.pullNumber); query.set("pullRepository", request.pullRepository); }
     if(!position&&file===entryFile&&params.has('focusX')&&params.has('focusY')&&[params.get('focusX'),params.get('focusY')].every(n=>Number.isFinite(Number(n))&&Math.abs(Number(n))<=1e6))position={x:Number(params.get('focusX')),y:Number(params.get('focusY')),uuid:params.get('focusUuid')};
@@ -206,7 +239,7 @@
     const side = [...frames].find(([, frame]) => frame.contentWindow === event.source)?.[0];
     if (!side) return;
     views.set(side, { file: event.data.file, view: event.data.view });
-    if(event.data.phase==='ready')dispatchWorkspaceView();
+    if(event.data.phase==='ready'){dispatchWorkspaceView();dispatchSearchResult();}
     if(event.data.phase==='ready'&&pendingSelections.has(side)){
       const selection=pendingSelections.get(side);pendingSelections.delete(side);
       if(pairedFile&&crossLinked)frames.get(side)?.contentWindow?.postMessage({type:'kicad-review:command',command:'highlight-related',selection},origin());
@@ -216,6 +249,7 @@
   });
   addEventListener('message',(event)=>{
     if(event.origin!==origin())return;const side=[...frames].find(([,frame])=>frame.contentWindow===event.source)?.[0];if(!side)return;
+    if(event.data?.type==='kicad-review:focus-project-search'){workspaceSearch?.input.focus();workspaceSearch?.input.select?.();return;}
     if(event.data?.type==='kicad-review:hierarchy'&&['head','pair'].includes(side)&&!isBoard(new URL(frames.get(side).src).searchParams.get('file'))){latestHierarchy={...event.data,repository:request.headRepository,ref:request.head};if(activeWorkspace==='schematic')sourceFor(latestHierarchy.hierarchy?.active);parent.postMessage(latestHierarchy,origin());$('projectWorkspace').children[0]?.contentWindow?.postMessage(latestHierarchy,origin());return;}
     if(event.data?.type==='kicad-review:comments-changed'){
       for(const [name,frame] of frames)if(name!==side)frame.contentWindow?.postMessage({type:'kicad-review:command',command:'refresh-comments'},origin());return;
@@ -369,7 +403,7 @@
     if (request.base) showProject("base", request.status === "added" ? "" : request.repository, request.base, request.oldFile);
     if(isDrawing(request.file))showProject("head", request.status === "removed" ? "" : request.headRepository, request.head, request.file);
     status("");workspaceTabs();pairTools();if(!isDrawing(entryFile))projectWorkspace();
-    mountPicker();
+    mountPicker();mountWorkspaceSearch();
     if(request.base){const compare=projectControl(request.pullNumber?'Compare commits':'Comparison controls',()=>{comparison.hidden=false;$('projectWorkspace').hidden=true;toolbar.hidden=!toolbar.hidden;});compare.setAttribute('aria-controls','toolbar');}
   }
   start().catch(error=>status(error.message,true));

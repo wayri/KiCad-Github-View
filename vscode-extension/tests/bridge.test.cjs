@@ -1,8 +1,8 @@
 const test=require("node:test"),assert=require("node:assert/strict"),fs=require("node:fs"),vm=require("node:vm"),path=require("node:path");
 const script=fs.readFileSync(path.join(__dirname,"../webview-bridge.js"),"utf8");
-function harness() {
+function harness(contextOverrides={}) {
   const events={},outgoing=[],dispatched=[],timers=new Map(),token="a".repeat(48);let n=0;
-  const window={},host={},sandbox={window,globalThis:null,KiCadVSCodeContext:{token},location:{origin:"https://viewer.example",href:"https://viewer.example/index.html"},URL,
+  const window={},host={},sandbox={window,globalThis:null,KiCadVSCodeContext:{token,...contextOverrides},location:{origin:"https://viewer.example",href:"https://viewer.example/index.html"},URL,URLSearchParams,
     CustomEvent:class{constructor(type,options={}){this.type=type;this.detail=options.detail;}},dispatchEvent:(event)=>dispatched.push(event),
     acquireVsCodeApi:()=>({postMessage:(m)=>outgoing.push(m)}),addEventListener:(name,fn)=>{events[name]=fn;},
     setTimeout:(fn)=>{timers.set(++n,fn);return n;},clearTimeout:(id)=>timers.delete(id)};
@@ -10,6 +10,24 @@ function harness() {
   const respond=(msg,changes={})=>events.message({source:host,origin:sandbox.location.origin,data:{channel:"kicad-vscode:v1",token,id:msg.id,reply:{ok:true,result:"ok"}},...changes});
   return {sandbox,events,outgoing,dispatched,timers,respond,host,token};
 }
+
+test('initial and live search targets wait for renderer readiness and authenticate the exact drawing',async()=>{
+ const result={kind:'object',path:'board.kicad_pcb',uuid:'part',position:{x:1,y:2},netName:'SUPPLY',view:'3d'};
+ const h=harness({drawingFile:result.path,search:'repository=local%2Fworkspace&ref=workspace&file=board.kicad_pcb',searchResult:result});
+ assert.equal(h.dispatched.length,0);const ready=h.sandbox.KiCadVSCodeBridge.workspaceReady();assert.equal(h.dispatched.length,1);assert.equal(h.dispatched[0].type,'kicad-review:search-result');assert.deepEqual(h.dispatched[0].detail,result);
+ assert.equal(h.outgoing[0].request.type,'workspace-search-ready');h.respond(h.outgoing[0]);await ready;
+ await h.sandbox.KiCadVSCodeBridge.workspaceReady();assert.equal(h.dispatched.length,1);assert.equal(h.outgoing.length,1);
+ const event=(result,changes={})=>h.events.message({origin:h.sandbox.location.origin,source:h.host,data:{channel:'kicad-vscode:v1',token:h.token,eventId:1,event:{type:'workspace-search-result',result}},...changes});
+ event({...result,path:'other.kicad_pcb'});event({...result,document:{}});event({...result,position:{x:1e9,y:0}});event(result,{source:{}});event(result,{origin:'https://evil.example'});assert.equal(h.dispatched.length,1);
+ event(result);assert.equal(h.dispatched.length,2);event(result);assert.equal(h.dispatched.length,2,'authenticated event replay is rejected');
+ h.events.pagehide();event(result);assert.equal(h.dispatched.length,2);
+});
+
+test('an authenticated search event arriving during load is queued until workspaceReady',async()=>{
+ const result={kind:'object',path:'board.kicad_pcb',uuid:'part',view:'3d'},h=harness({drawingFile:result.path});
+ h.events.message({origin:h.sandbox.location.origin,source:h.host,data:{channel:'kicad-vscode:v1',token:h.token,eventId:1,event:{type:'workspace-search-result',result}}});assert.equal(h.dispatched.length,0);
+ await h.sandbox.KiCadVSCodeBridge.workspaceReady();assert.equal(h.dispatched[0].type,'kicad-review:search-result');assert.deepEqual(h.dispatched[0].detail,result);
+});
 test("actual VS Code same-origin enclosing sender is accepted; origin/token/session sender mismatch ignored",async()=> {
   const h=harness(),promise=h.sandbox.chrome.runtime.sendMessage({type:"project"}),msg=h.outgoing[0];
   h.respond(msg,{origin:"https://evil.example"});assert.equal(h.timers.size,1);

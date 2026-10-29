@@ -10,7 +10,7 @@ const pairedReview = require('../paired-review.js');
 const source = fs.readFileSync(path.join(__dirname, '../browser-viewer.js'), 'utf8');
 const tick = () => new Promise((resolve) => setImmediate(resolve));
 
-function viewer(parameters, read) {
+function viewer(parameters, read, extras={}) {
   class Element {
     constructor(tag = 'div') {
       this.tagName = tag.toUpperCase(); this.children = []; this.attributes = {}; this.listeners = {};
@@ -39,7 +39,7 @@ function viewer(parameters, read) {
     matchMedia: () => ({ matches: true }), addEventListener: (name, callback) => {const all=listeners.get(name)||[];all.push(callback);listeners.set(name,all);},
     chrome: { runtime: { getURL: (name) => 'chrome-extension://test-id/'+name,
       sendMessage: async (message) => { calls.push(message); return read(message); } } },
-    document: { getElementById: get, createElement: (tag) => new Element(tag) } });
+    document: { getElementById: get, createElement: (tag) => new Element(tag) },...extras });
   return { get, calls, parent, parentMessages,expire:()=>{for(const timer of [...timers])timer.fn();},pagehide:()=>listeners.get('pagehide')?.forEach(fn=>fn()), message: (event) => listeners.get('message').forEach(callback=>callback(event)), click: (text) => get('toolbar').children.find((node) => node.textContent === text).click() };
 }
 const parameters = {repository:'wayri/board', headRepository:'fork/board', file:'new.kicad_sch',
@@ -332,4 +332,17 @@ test('embedded drawing Project tab returns to the owning shell without nesting a
  assert.equal(view.get('projectWorkspace').children.length,0);
  assert.equal(view.get('headDrawing').children[0],drawing);
  assert.equal(view.calls.length,0);
+});
+
+
+test('global search keeps saved results inside the workspace and focuses only owned drawing frames',async()=>{
+ let search;const view=viewer({...parameters,base:''},()=>({ok:false,error:'unexpected read'}),{KiCadWorkspaceSearch:{mount:options=>{search=options;return{input:{focus(){},select(){}},destroy(){}};}}});
+ assert.equal(search.scope.ref,parameters.head);const frame=view.get('headDrawing').children[0];
+ await search.open({kind:'object',path:parameters.file,uuid:'saved-symbol',position:{x:10,y:20}});
+ assert.equal(frame.messages.length,0,'wait for the source frame to be ready');
+ view.message({origin:'chrome-extension://test-id',source:frame.contentWindow,data:{type:'kicad-review:view',phase:'ready',file:parameters.file,view:{x:0,y:0,zoom:1}}});
+ assert.equal(frame.messages.at(-1).message.command,'search-result');assert.equal(frame.messages.at(-1).message.result.uuid,'saved-symbol');
+ await search.open({kind:'report',path:'results/transient.csv',label:'Transient'});
+ assert.equal(view.get('comparison').hidden,true);const report=view.get('searchWorkspace').children[0];assert.equal(new URL(report.src).pathname,'/analysis-viewer.html');assert.equal(new URL(report.src).searchParams.get('ref'),parameters.head);
+ await assert.rejects(search.open({kind:'report',path:'../private.csv'}),/Invalid search/);
 });

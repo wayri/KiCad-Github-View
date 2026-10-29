@@ -390,6 +390,7 @@
       if(event.source!==parent||event.origin!==ownOrigin||event.data?.type!=='kicad-review:command')return;
 
       const msg=event.data;
+      if(msg.command==='search-result'){const value=msg.result;if(value&&globalThis.KiCadWorkspaceSearch?.safePath(value.path)&&['object','file','report','draft'].includes(value.kind))workspace.openWorkspaceSearchResult?.(value).catch(error=>{label('reviewNotice',error.message);$('reviewNotice').hidden=false;});return;}
       if(msg.command==='detach-sync'&&typeof msg.enabled==='boolean'){windowLink?.setEnabled(msg.enabled);return;}
       if(msg.command==='workspace-view'){
         if(!['schematic','layout','3d','draftsman','simulation'].includes(msg.mode))return;
@@ -423,6 +424,9 @@
 
     if(params.get('focusNet'))workspace?.focusSignalNet(params.get('focusNet'));
     if(params.get('focusUuid'))workspace?.focusSaved(requestedFile,params.get('focusUuid'));
+    if(params.get('view')==='3d'&&pcb&&!$('mode3d').disabled)$('mode3d').click();
+    addEventListener('kicad-review:search-result',event=>{if(globalThis.KiCadVSCodeContext&&event.detail)workspace.openWorkspaceSearchResult?.(event.detail).catch(error=>{label('reviewNotice',error.message);$('reviewNotice').hidden=false;});});
+    globalThis.KiCadVSCodeBridge?.workspaceReady?.();
     if(params.has('focusX')&&params.has('focusY'))focus({x:Number(params.get('focusX')),y:Number(params.get('focusY'))});
 
   }

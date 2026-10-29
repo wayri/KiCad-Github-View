@@ -1,0 +1,44 @@
+CHROME WEB STORE UPDATE — 0.12.76
+
+UPLOAD FILE
+kicad-visual-review-chrome-edge-brave-opera-vivaldi-chromium-0.12.76.zip
+Use the audited file from dist/release-0.12.76 and compare SHA256SUMS.txt.
+
+WHAT'S NEW
+- Centered compact workspace navigation and project-wide search (Ctrl+K).
+- Search saved parts, pins/pads, net names, files/settings, supported saved report and simulation text, and scoped Draftsman documents. PCB part results offer Show in 3D.
+- Removes duplicate project headers, setup bands and outer file trees while a drawing is open. Project returns to settings without reloading the drawing.
+- Mechanical/assembly Draftsman now uses orthographic 3D views without copper. Top, bottom, side and isometric views retain board/holes/component placement; top views support saved-coordinate dimensions and snapping.
+- GitHub project viewing uses repository website metadata and raw files, with a bounded client-side temporary buffer shared across viewer windows. It does not use GitHub REST/GraphQL for drawing discovery or project-file/model/report reads. Explicit account/review actions can still use provider APIs.
+- Retains detached linked schematic/layout/3D windows and existing analysis/review tools. Coverage and host policies still apply.
+
+DETAILED DESCRIPTION
+Review saved KiCad schematics, PCB layouts and supported 3D models in a compact interface, without installing KiCad for viewing. Click the extension icon on a supported GitHub/GitLab repository to open its project in a dedicated viewer tab, or import a local project folder. Use the project dashboard to revisit recent locations.
+
+What's new in 0.12.76
+Centered workspace navigation and a single project-wide search reduce toolbar clutter. Ctrl+K searches saved parts, pins/pads, nets, files, settings, supported report/simulation text and scoped Draftsman documents. PCB part results offer Show in 3D. Search builds a bounded client-side index only after a query and reports incomplete/oversized inputs. Binary 3D-model contents and unsaved edits are not indexed.
+
+Drawings fill the project workspace by default: duplicate project headers, setup bands and outer file trees stay out of the drawing viewport. Its Project tab returns to settings without reloading the drawing.
+
+Draftsman creates mechanical/assembly orthographic 3D views: top, bottom, front, back, left, right and isometric. Copper tracks/zones/pads/vias and electrical overlays are excluded. Board geometry, mounting holes and component placement remain, with missing/approximate model diagnostics. Top views support source-coordinate dimensions and snapping; other projections show geometry only. Retain Modern or KiCad-style worksheets, notes, BoM tables and PDF/SVG/editable JSON exports. Source fingerprints must match when reopening documents.
+
+GitHub project viewing reads website repository metadata and raw files without GitHub REST/GraphQL for discovery, drawings, settings, models or saved reports. Bounded temporary client-side buffers reuse immutable public bytes across windows. Private reads remain in the signed-in repository context. Explicit provider review/account actions may still use APIs; website access and administrator restrictions still apply.
+
+Inspect and document
+Navigate schematic hierarchy or view loaded sheets together. Search parts, pins/pads, nets and saved properties; cross-select supported schematic, layout and 3D objects. Use copper/layer and object filters, close-zoom labels, measurements and saved settings. Review linked 3D models with axis views, universal lighting and selected-net internal-layer/via inspection. Missing or approximate geometry remains identified.
+
+Detach schematic, layout and 3D views into linked independent browser windows; toggle cross-selection while cameras remain independent. Browser popup and administrator policies apply. Imported local projects require the original workspace to remain open.
+
+Review with a team
+Compare saved revisions, inspect property changes and use supported commit actions. Read Issue/Discussion conversations, reply, mention contributors and attach drawing context or screenshots. Review the destination before posting. Colour-coded review severity/state, filters and permission-checked Close/Reopen actions help triage findings. Skipped is a local review decision. Provider permissions and administrator policies apply; no live presence or typing indicators are promised.
+
+Use BoM grouping/columns, local assembly checklists, supported saved simulation workbooks/results, and imported ERC/DRC markers. Saved reports are displayed; native KiCad ERC/DRC or simulation solvers are not executed. Experimental Fast PI provides bounded DC copper screening, requires reviewed stackup inputs and mesh checks, and does not model return impedance, AC or temperature feedback.
+
+Privacy and access
+Local viewing needs no connected provider account. Private access and publication require authorization. The dashboard stores recent project locations locally, not imported local source contents. Optional Open in KiCad requests downloads/nativeMessaging only for that action and requires a separately installed desktop helper. Managed settings can restrict networking and provider writes.
+
+Rendering coverage and host capabilities vary. Validate engineering decisions in native tools. This independent product is not affiliated with KiCad, GitHub or GitLab. Some screenshots show earlier UI versions.
+
+User guide: https://github.com/wayri/KiCad-Github-View/blob/v0.12.76/USER-GUIDE.md
+Support: support.kivi@sigharmonic.com
+Privacy: https://wayri.github.io/KiCad-Github-View/chrome-privacy.html
