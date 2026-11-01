@@ -2,6 +2,7 @@
 /* Bounded STEP mesh contract and interruptible decoder client. No credentials. */
 ((root)=>{
  'use strict';
+ const meshOptions=Object.freeze({linearUnit:'millimeter',linearDeflectionType:'absolute_value',linearDeflection:.02,angularDeflection:.2});
  function meshes(result){
   if(result?.success!==true||!Array.isArray(result.meshes)||!result.meshes.length||result.meshes.length>512)throw new Error('STEP did not produce a supported mesh.');
   let vertices=0,triangles=0;
@@ -47,7 +48,7 @@
   });}
   dispose(){this.disposed=true;this.loadingAbort?.abort();this.pending?.();this.worker?.terminate();this.worker=null;}
  }
- root.KiCadStepDecoder={meshes,Client,bundledWorker};if(typeof module==='object'&&module.exports)module.exports=root.KiCadStepDecoder;
+ root.KiCadStepDecoder={meshes,Client,bundledWorker,meshOptions};if(typeof module==='object'&&module.exports)module.exports=root.KiCadStepDecoder;
 })(typeof globalThis==='object'?globalThis:this);
 
 
@@ -82,7 +83,7 @@ self.onmessage=async event=>{
   const wasmUrl=event.data.wasmUrl||new URL('vendor/occt/occt-import-js.wasm',self.location.href).href;
   kernel ||=occtimportjs({locateFile:()=>wasmUrl});
   const occt=await kernel;
-  const meshes=KiCadStepDecoder.meshes(occt.ReadStepFile(bytes,{linearUnit:'millimeter',linearDeflectionType:'absolute_value',linearDeflection:.05,angularDeflection:.5}));
+  const meshes=KiCadStepDecoder.meshes(occt.ReadStepFile(bytes,KiCadStepDecoder.meshOptions));
   const buffers=meshes.flatMap(m=>[m.positions.buffer,m.index.buffer,...(m.normals?[m.normals.buffer]:[])]);
   self.postMessage({ok:true,meshes},buffers);
  }catch(error){kernel=null;self.postMessage({ok:false,error:String(error?.message||'STEP conversion failed.').slice(0,300)});}
