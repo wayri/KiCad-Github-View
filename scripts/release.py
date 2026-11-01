@@ -54,7 +54,7 @@ def run_tests(root: Path = ROOT):
         raise ValueError('No JavaScript acceptance tests found.')
     run([sys.executable, 'scripts/package_vscode.py'], root)
     run([sys.executable, '-m', 'unittest', 'discover', '-s', 'tests', '-v'], root)
-    run(['node', '--test', *tests], root)
+    run(['node', '--test', '--test-concurrency=1', *tests], root)
 
 
 def source_commit(root: Path = ROOT, tag: str | None = None) -> str | None:

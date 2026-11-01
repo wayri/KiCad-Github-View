@@ -36,3 +36,12 @@ Double-click a sheet symbol to enter its loaded subsheet, or select it and press
 E opens the property inspector for the object under the pointer, falling back to the selected object or net. H highlights a saved net under the pointer; a selected part with several connections opens its filtered net list. `/` opens and focuses global search. C opens a review comment for the pointed/selected object, or the pointed position. Space, while the canvas is focused, centers the pointed location. `?` toggles the visible keyboard guide. Existing F/Home/+/−/D/M/Escape shortcuts remain available.
 
 Shortcuts ignore text inputs, select controls, editable content, modifier combinations and repeated keys. Alt+Up is the explicit navigation exception. Source files and geometry remain read-only: no routing, footprint movement, schematic editing or property changes. Comments, variants and page/view overrides remain review metadata. The property inspector displays saved settings; E does not open an editor.
+
+
+## Interactive probe windows (development)
+
+Select a saved component, pin/pad or net, then choose **Probe views**. Each miniature has its own camera: drag its header to move the window, drag the drawing to pan, scroll to zoom, and use the quarter-turn controls to rotate a 2D view. The selection filter chooses parts, nets or pins; selecting in a probe sends the same saved identity through cross-selection.
+
+**Schematic**, **Layout** and **3D** switch the probe to the corresponding saved drawing. **Open probe** creates another independent window. All windows belong to the main workspace, so closing the originating popup leaves its children open. The **Links** toggle controls subtle curved provenance links. Cross-view matching uses saved identities and qualified net names; missing or ambiguous matches produce a diagnostic rather than guessing another sheet or unit.
+
+Up to four probes can be open, including two interactive 3D probes alongside their parent 3D scene. The 3D probe shares loaded CPU geometry and model data, with its own camera and a bounded GPU context. It shows geometry visible in the parent scene; it does not generate new internal-copper geometry. Closing the main workspace releases all probes. The shared implementation passed integrated-browser checks on small saved fixtures: direct 2D pin picking, 3D part picking, independent windows, cross-view switching and popup-to-popup creation. Complex-board performance and packaged-platform checks remain pending. These changes are included in 0.12.78.

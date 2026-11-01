@@ -8,6 +8,7 @@ import {sourceCopperPlan} from '../extension/spike/copperStack.mjs';
 const require=createRequire(import.meta.url),location=['../extension/node_modules/three/build/three.cjs','../.vizdiff/build-deps/node_modules/three/build/three.cjs'].map(p=>new URL(p,import.meta.url)).find(existsSync),THREE=location?require(fileURLToPath(location)):null;
 const {parse}=require('../extension/design-diff.js');
 const near=(a,b)=>assert.ok(Math.abs(a-b)<1e-6,`${a} != ${b}`);
+const boreDepth=object=>{if(object.geometry.type!=='BufferGeometry')return 0;object.geometry.computeBoundingBox();return object.geometry.boundingBox.max.z-object.geometry.boundingBox.min.z;};
 function fixture(){
  const board={nets:{1:'SIGNAL',2:'OTHER'},layers:['F.Cu','In1.Cu','In2.Cu','B.Cu'],stackup:[{name:'F.Cu',thickness:.04},{name:'dielectric 1',type:'core',thickness:.2},{name:'In1.Cu',thickness:.03},{name:'dielectric 2',type:'core',thickness:1},{name:'In2.Cu',thickness:.03},{name:'dielectric 3',type:'core',thickness:.4},{name:'B.Cu',thickness:.04}],tracks:[],vias:[],pads:[]};
  for(const [index,layer] of board.layers.entries())board.tracks.push({id:'track-'+index,layer,net:'SIGNAL',start:[1,2],end:[3,2],width:.3});board.tracks.push({id:'other',layer:'F.Cu',net:'OTHER',start:[4,4],end:[5,5],width:.2});
@@ -21,13 +22,13 @@ function fixture(){
 }
 
 test('selected net retains all four source layers, real via spans, plated transitions and inert unfilled boundaries',{skip:!THREE},()=>{
- const {view,plan}=fixture(),state=view.update({netCodes:[1]});assert.equal(state.active,true);assert.equal(state.tracks,4);assert.equal(state.pads,4);assert.equal(state.vias,4);assert.equal(state.platedPads,1);assert.equal(state.fills,1);assert.equal(state.boundaries,1);assert.equal(state.omitted,0);
+ const {view,plan}=fixture(),state=view.update({netCodes:[1]});assert.equal(state.active,true);assert.equal(state.tracks,4);assert.equal(state.pads,4);assert.equal(state.vias,4);assert.equal(state.platedPads,1);assert.equal(state.fills,1);assert.equal(state.boundaries,1);assert.equal(state.omitted,0);assert.match(state.warnings.join(' '),/plating thickness is not inferred/);
  assert.deepEqual(new Set(view.group.children.filter(o=>o.userData.layer).map(o=>o.userData.layer)),new Set(['F.Cu','In1.Cu','In2.Cu','B.Cu']));
  assert.equal(view.group.children.some(o=>o.userData.records?.some(r=>r.id==='other'||r.id==='npth')),false);
- for(const [id,span] of plan.viaSpans){const barrel=view.group.children.find(o=>o.userData.records?.some(r=>r.id===id)&&Math.abs((o.geometry.parameters.options?.depth||0)-(span.zMax-span.zMin))<1e-7);assert.ok(barrel,id);const matrix=new THREE.Matrix4();barrel.getMatrixAt(0,matrix);near(matrix.elements[14],span.zMin);}
+ for(const [id,span] of plan.viaSpans){const barrel=view.group.children.find(o=>o.userData.records?.some(r=>r.id===id)&&Math.abs(boreDepth(o)-(span.zMax-span.zMin))<1e-7);assert.ok(barrel,id);const matrix=new THREE.Matrix4();barrel.getMatrixAt(0,matrix);near(matrix.elements[14],span.zMin);}
  const fill=view.group.children.find(o=>o.userData.record?.id==='fill');const box=new THREE.Box3().setFromObject(fill);near(box.min.x,7);near(box.max.x,9);near(box.min.y,-4);near(box.max.y,-2);assert.equal(fill.material.transparent,true);assert.equal(fill.material.depthWrite,false);
  const boundary=view.group.children.find(o=>o.userData.record?.id==='boundary');assert.equal(boundary.isLineLoop,true);
- const padBarrel=view.group.children.find(o=>o.userData.records?.some(r=>r.id==='plated')&&o.geometry.parameters.options?.depth>1);assert.ok(padBarrel);const m=new THREE.Matrix4();padBarrel.getMatrixAt(padBarrel.userData.records.findIndex(r=>r.id==='plated'),m);near(m.elements[12],4.2);near(m.elements[13],-4.9);view.dispose();
+ const padBarrel=view.group.children.find(o=>o.userData.records?.some(r=>r.id==='plated')&&boreDepth(o)>1);assert.ok(padBarrel);const m=new THREE.Matrix4();padBarrel.getMatrixAt(padBarrel.userData.records.findIndex(r=>r.id==='plated'),m);near(m.elements[12],4.2);near(m.elements[13],-4.9);view.dispose();
 });
 
 test('net changes reuse unchanged geometry, dispose instance buffers and clear counters without changing source',{skip:!THREE},()=>{

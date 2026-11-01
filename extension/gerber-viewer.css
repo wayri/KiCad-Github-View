@@ -5,3 +5,5 @@
 
 body.gerber-tool button,body.gerber-tool input{padding:8px 12px;min-height:40px}body.gerber-tool .file-action.primary{background:var(--accent);color:var(--surface);font-weight:650}.canvas-footer{background:var(--panel)}body.gerber-tool .empty-state small{color:#b1becb}body.gerber-tool #status[data-error=true],body.gerber-tool button.danger{color:#cf5757}
 @media(max-width:760px){body.gerber-tool .file-action,.layer-header label,.layer input[type=range]{min-height:44px}.layer-header label{align-items:center}}
+
+.analysis-table{width:100%;border-collapse:collapse;font-size:11px;table-layout:fixed}.analysis-table th,.analysis-table td{text-align:left;vertical-align:top;padding:7px 4px;border-bottom:1px solid var(--line);overflow-wrap:anywhere}.analysis-table th{color:var(--muted);font-weight:500}.analysis-table td:last-child{font-variant-numeric:tabular-nums}.analysis-section h3{font-size:12px;margin:16px 0 6px}.analysis-table th:first-child{width:52%}

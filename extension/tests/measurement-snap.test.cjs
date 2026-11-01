@@ -40,3 +40,9 @@ test('touch tolerance is screen-scaled and bounded, while bypass and grid behavi
  assert.deepEqual(tools.snap({x:5.1,y:3.9},[line],{mode:'corners-grid',zoom:10,pitch:1}).point,{x:5,y:4});
  assert.equal(tools.snap({x:5,y:0},[{...line,hidden:true}],{mode:'edges',zoom:10}).kind,'free');
 });
+
+test('viewer measurement candidates use the spatial index and preserve physical holes on hidden copper',()=>{
+ const {measurementCandidates}=require('../review-workspace.js'),hole={type:'circle',kind:'drill',objectCategory:'pads',hole:true,x:16,y:9,r:.7,layer:'B.Cu'},text={type:'text',x:16,y:9,text:'H1'},hidden={type:'line',hidden:true};let query;
+ const canvas={viewport:{camera:{zoom:20}},design:{primitives:[hole,text,hidden]},visibleLayers:new Set(['Edge.Cuts']),geometryVisible:p=>!p.hidden,candidates:box=>{query=box;return [hole,text,hidden];},focusedLayer:'F.Cu',layerFocusMode:'isolate'};
+ const candidates=measurementCandidates(canvas,{x:16.1,y:9.1});assert.deepEqual(candidates,[hole]);assert.ok(query.w<1);const result=tools.snap({x:16.1,y:9.1},candidates,{mode:'geometry',zoom:20,filter:'pads',includeHoles:true,circleCenters:true});assert.equal(result.kind,'hole center');assert.deepEqual(result.point,{x:16,y:9});query=null;measurementCandidates(canvas,{x:16,y:9},8,true);assert.equal(query,null,'axis-constrained candidates must not omit projected intersections');
+});

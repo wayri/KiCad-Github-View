@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { viewportPixelRatio,qualityName,qualityViewport,graphicsProfile,boardOcclusion,padHasMaskOpening, boardClipRange, studioLights, studioMaterials } from '../extension/spike/renderQuality.mjs';
+import { viewportPixelRatio,probeViewportPlan,qualityName,qualityViewport,graphicsProfile,boardOcclusion,padHasMaskOpening, boardClipRange, studioLights, studioMaterials } from '../extension/spike/renderQuality.mjs';
 
 test('mobile graphics tiers use actual limits instead of treating touch screens as low GPUs',()=>{
  const premium=graphicsProfile({maxTextureSize:16384,maxRenderbufferSize:16384,deviceMemory:8,hardwareConcurrency:8,floatTargets:true,android:true});
@@ -99,3 +99,6 @@ test('normal board view improves depth precision and close inspection lowers the
     assert.ok(Number.isFinite(fallback.near) && Number.isFinite(fallback.far));
   }
 });
+
+test('sharp edge mode preserves balanced resolution with bounded postprocessing memory',()=>{for(const size of [[1920,1080],[390,740],[3840,2160]])for(const limited of [false,true]){const sharp=qualityViewport(...size,2,4096,'sharp',limited);assert.equal(qualityName('sharp'),'sharp');assert.ok(sharp.pixels<=sharp.maxPixels);assert.ok(sharp.estimatedBytes<300000000);if(!limited)assert.equal(sharp.ratio,qualityViewport(...size,2,4096,'balanced',limited).ratio);}});
+test('3D probe HiDPI sampling retains its original half-million-pixel ceiling',()=>{assert.equal(probeViewportPlan(300,300,2).ratio,2);for(const [w,h,dpr]of [[320,320,3],[2000,1000,3],[1,1,0],[NaN,-1,Infinity]]){const plan=probeViewportPlan(w,h,dpr);assert.ok(plan.width*plan.height<=500000);assert.ok(plan.width<=1024&&plan.height<=1024);assert.ok(plan.ratio>0&&plan.ratio<=2);}});

@@ -55,3 +55,41 @@ test('diagnostic growth is bounded and reports suppression',()=>{
  const p={kind:'drill',type:'circle',x:0,y:0,r:.1,fill:true};const a=analyze([layer('hits',Array.from({length:1500},()=>({...p})))],{minDrill:1});
  assert.equal(a.diagnostics.length,LIMITS.diagnostics+1);assert.equal(a.diagnostics.at(-1).code,'diagnostics-truncated');
 });
+
+
+test('saved apertures and object inventory count used parsed operations only',()=>{
+ const text='%FSLAX24Y24*%%MOMM*%%ADD10C,2*%%ADD11R,2X4*%%ADD12C,9*%D10*X000000Y000000D03*X100000Y000000D02*X200000Y000000D01*D11*X000000Y100000D03*%LPC*%X000000Y200000D03*M02*';
+ const result=analyze([{path:'inventory.gbr',model:build(text,'inventory.gbr')}]),l=result.layers[0];
+ assert.deepEqual(l.objects,{line:1,arc:0,circle:1,polygon:2});
+ assert.deepEqual(l.usedTools,[{reference:'D10',operations:2,dark:2,clear:0},{reference:'D11',operations:2,dark:1,clear:1}]);
+ close(l.metrics.pathLength,10);close(l.metrics.darkOperationArea,Math.PI+20+Math.PI+8);close(l.metrics.clearOperationArea,8);
+ assert.equal(l.metrics.computedAreaOperations,4);assert.equal(l.metrics.omittedAreaOperations,0);close(l.metrics.envelopeArea,l.bounds.width*l.bounds.height);
+ assert.match(result.disclaimer,/not board area/);
+});
+
+test('drill tools and projected operation areas include repeated hits without union claims',()=>{
+ const m=build('M48\nMETRIC\nT1C1.0\nT2C2.0\n%\nT1\nX1.0Y2.0\nX1.0Y2.0\nT2\nX3.0Y4.0\nM30','tools.drl'),l=analyze([{path:'tools.drl',model:m}]).layers[0];
+ assert.deepEqual(l.usedTools,[{reference:'T1',operations:2,dark:2,clear:0},{reference:'T2',operations:1,dark:1,clear:0}]);
+ close(l.metrics.darkOperationArea,1.5*Math.PI);assert.equal(l.metrics.pathLength,0);
+});
+
+test('arc path lengths and circle ring areas retain exact millimetre units',()=>{
+ const a=analyze([layer('geometry.gbr',[{type:'arc',start:{x:2,y:0},mid:{x:0,y:2},end:{x:-2,y:0},width:.2},{type:'circle',x:10,y:0,r:2,width:.2}])]).layers[0];
+ close(a.metrics.pathLength,6*Math.PI);close(a.metrics.darkOperationArea,.8*Math.PI);
+ assert.equal(a.metrics.computedAreaOperations,1);assert.equal(a.metrics.omittedAreaOperations,1);
+});
+
+test('region and self-intersecting area are explicitly omitted',()=>{
+ const region={type:'polygon',fill:true,points:[{x:0,y:0},{x:4,y:0},{x:4,y:4},{x:0,y:4}],reference:'Region'},star={type:'polygon',fill:true,aperture:10,points:[{x:0,y:3},{x:2,y:-3},{x:-3,y:1},{x:3,y:1},{x:-2,y:-3}]};
+ const l=analyze([layer('regions.gbr',[region,star])]).layers[0];assert.equal(l.metrics.omittedAreaOperations,2);assert.equal(l.metrics.computedAreaOperations,0);assert.equal(l.metrics.darkOperationArea,0);
+});
+
+test('undefined, underdetermined and overflowing derived geometry reject analytics',()=>{
+ for(const primitive of [null,{type:'circle',x:0,y:0,r:1,fill:true,polarity:'invalid'},{type:'line',points:[{x:0,y:0}]},{type:'polygon',points:[{x:0,y:0},{x:1,y:0}]},{type:'circle',x:1e308,y:0,r:1e308,fill:true}])assert.throws(()=>analyze([layer('invalid.gbr',[primitive])]),/geometry|bounds|measurements/i);
+});
+
+test('retained fabrication fixture has a complete used-aperture and extent inventory',()=>{
+ const fs=require('node:fs'),path=require('node:path'),name='sensor-F_Cu.gbr',text=fs.readFileSync(path.join(__dirname,'fixtures/gerbers',name),'utf8'),m=build(text,name),l=analyze([{path:name,model:m}]).layers[0];
+ assert.equal(Object.values(l.objects).reduce((a,b)=>a+b,0),m.primitives.length);assert.ok(l.usedTools.length>0);assert.equal(l.usedTools.reduce((n,t)=>n+t.operations,0),m.primitives.filter(p=>/^[DT]\d+$/.test(p.reference||'')).length);
+ assert.ok(l.metrics.envelopeArea>0);assert.equal(l.metrics.computedAreaOperations+l.metrics.omittedAreaOperations,m.primitives.length);
+});

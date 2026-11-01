@@ -14,7 +14,7 @@ async function readFiles(entries,{stripFolder=false}={}){
   inventory.push({path,type:'blob'});
   // Keep every selected filename in the tree without reading unsupported bytes.
   if(!local.textFile(path)&&! /\.(step|stp|wrl|vrml|glb|pdf)$/i.test(path)){ignored++;continue;}
-  if(!Number.isSafeInteger(file.size)||file.size<0||file.size>32*1024*1024||(total+=file.size)>MAX)throw Error('Local imports allow 32 MiB per file and 96 MiB per project.');
+  if(!Number.isSafeInteger(file.size)||file.size<0||file.size>(local.textFile(path)?local.textFileByteLimit(path):32*1024*1024)||(total+=file.size)>MAX)throw Error('Local imports allow 64 MiB per PCB, 8 MiB per schematic/library, 32 MiB per other file and 96 MiB per project.');
   const buffer=await file.arrayBuffer();if(buffer.byteLength!==file.size)throw Error('File changed while importing: '+path);
   const bytes=new Uint8Array(buffer);
   if(local.textFile(path)){

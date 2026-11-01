@@ -222,7 +222,7 @@
 
       super();this.host=host;this.geometryBounds=new WeakMap();this.frameRequest=null;this.canvas=document.createElement('canvas');this.canvas.className='owned-canvas';this.canvas.tabIndex=0;this.canvas.setAttribute('aria-label','Interactive KiCad drawing; click to select, right-drag to pan, wheel to zoom');host.append(this.canvas);
 
-      this.ctx=this.canvas.getContext('2d');if(!this.ctx)throw new Error('Canvas2D rendering is unavailable.');this.viewport={camera:new Camera()};this.primitives=[];this.visibleLayers=new Set();this.dark=Boolean(options.dark);this.pcb=Boolean(options.pcb);this.grid=false;this.selected=null;this.drag=null;this.netHighlight=null;this.netPrimitives=new Set();this.isolateNet=false;this.paperVisible=!this.pcb;this.activeLayer='F.Cu';this.focusedLayer=null;this.layerFocusMode='dim';this.layerSnapshot=null;
+      this.ctx=this.canvas.getContext('2d');if(!this.ctx)throw new Error('Canvas2D rendering is unavailable.');this.viewport={camera:new Camera()};this.primitives=[];this.visibleLayers=new Set();this.dark=Boolean(options.dark);this.pcb=Boolean(options.pcb);this.grid=false;this.selected=null;this.drag=null;this.netHighlight=null;this.netPrimitives=new Set();this.isolateNet=false;this.paperVisible=options.worksheet!==false;this.worksheetVisible=options.worksheet!==false;this.activeLayer='F.Cu';this.focusedLayer=null;this.layerFocusMode='dim';this.layerSnapshot=null;
       this.acceleration=options.acceleration==='off'?'off':'auto';this.motion=null;this.motionActive=false;this.motionFailed=false;this.motionTimer=null;this.wheelMotion=false;
 
       this.layers={query_point:at=>this.query(at).map(p=>({bbox:{context:{uuid:p.uuid,reference:p.reference,kind:p.kind,name:p.name,pinNumber:p.pinNumber,pinName:p.pinName,ownerUuid:p.ownerUuid,connectPoint:p.connectPoint,parent:p.ownerUuid?{uuid:p.ownerUuid}:null},primitive:p}}))};
@@ -245,12 +245,12 @@
 
     }
 
-    resize(){const r=this.host.getBoundingClientRect(),c=this.viewport.camera;c.width=Math.max(1,r.width);c.height=Math.max(1,r.height);const dpr=globalThis.devicePixelRatio||1;this.canvas.width=Math.max(1,Math.round(c.width*dpr));this.canvas.height=Math.max(1,Math.round(c.height*dpr));this.canvas.style.width=c.width+'px';this.canvas.style.height=c.height+'px';}
+    resize(){const r=this.host.getBoundingClientRect(),c=this.viewport.camera;c.width=Math.max(1,r.width);c.height=Math.max(1,r.height);const dpr=globalThis.devicePixelRatio||1;const width=Math.max(1,Math.round(c.width*dpr)),height=Math.max(1,Math.round(c.height*dpr));if(this.canvas.width!==width)this.canvas.width=width;if(this.canvas.height!==height)this.canvas.height=height;const cssWidth=c.width+'px',cssHeight=c.height+'px';if(this.canvas.style.width!==cssWidth)this.canvas.style.width=cssWidth;if(this.canvas.style.height!==cssHeight)this.canvas.style.height=cssHeight;}
 
     setDocument(design,path){this.resize();this.design=design;this.document={filename:path};this.primitives=design.primitives;this.visibleLayers=new Set((design.layers||[]).filter(layer=>!this.pcb||['F.Cu','B.Cu','F.SilkS','B.SilkS','Edge.Cuts'].includes(layer)));this.selected=null;this.focusedLayer=null;this.layerSnapshot=null;this.setNetHighlight(null);this.zoom_to_board();this.draw();}
 
     get primitives(){return this._primitives;}
-    set primitives(value){this._primitives=value;this.spatialIndex=null;this.geometryBounds=new WeakMap();this.textBoundsCache=new WeakMap();this.ownedGeometry=new Map();for(const p of value||[])if(p.ownerUuid&&p.kind!=='footprint-hit'){const list=this.ownedGeometry.get(p.ownerUuid)||[];list.push(p);this.ownedGeometry.set(p.ownerUuid,list);}}
+    set primitives(value){this._primitives=value;this.spatialIndex=null;this.geometryBounds=new WeakMap();this.textBoundsCache=new WeakMap();this.pointCache=new WeakMap();this.pathCache=new WeakMap();this.pathCachePoints=0;this.pathCacheCount=0;this.ownedGeometry=new Map();for(const p of value||[])if(p.ownerUuid&&p.kind!=='footprint-hit'){const list=this.ownedGeometry.get(p.ownerUuid)||[];list.push(p);this.ownedGeometry.set(p.ownerUuid,list);}}
     candidates(box){
       if(this.primitives.length<512)return this.primitives;
       if(!this.spatialIndex||this.spatialIndex.length!==this.primitives.length)this.spatialIndex=new SpatialIndex(this.primitives);
@@ -304,11 +304,13 @@
 
     }
 
-    fitLayer(){const primitives=this.primitives.filter(p=>this.geometryVisible(p)&&!p.frame&&p.layer===this.focusedLayer);const b=bounds(primitives);if(!b)return false;const margin=Math.max(1,Math.max(b.w,b.h)*.08);this.viewport.camera.bbox={x:b.x-margin,y:b.y-margin,w:b.w+2*margin,h:b.h+2*margin};this.paperVisible=false;return true;}
+    fitLayer(){const primitives=this.primitives.filter(p=>this.geometryVisible(p)&&!p.frame&&p.layer===this.focusedLayer);const b=bounds(primitives);if(!b)return false;const margin=Math.max(1,Math.max(b.w,b.h)*.08);this.viewport.camera.bbox={x:b.x-margin,y:b.y-margin,w:b.w+2*margin,h:b.h+2*margin};this.paperVisible=this.worksheetVisible;return true;}
 
-    zoom_to_board(){this.paperVisible=!this.pcb;const edges=this.pcb?this.primitives.filter(p=>p.layer==='Edge.Cuts'):[];const b=bounds(edges.length?edges:this.primitives);if(b){const margin=Math.max(3,Math.max(b.w,b.h)*.06);this.viewport.camera.bbox={x:b.x-margin,y:b.y-margin,w:b.w+2*margin,h:b.h+2*margin};}else this.zoom_to_page();}
+    setWorksheetVisible(visible){this.worksheetVisible=Boolean(visible);this.paperVisible=this.worksheetVisible;this.finishMotion();}
 
-    zoom_to_page(){this.paperVisible=true;const p=this.design?.page||{width:297,height:210};this.viewport.camera.bbox={x:-5,y:-5,w:p.width+10,h:p.height+10};}
+    zoom_to_board(){this.paperVisible=this.worksheetVisible;const edges=this.pcb?this.primitives.filter(p=>p.layer==='Edge.Cuts'):[];const b=bounds(edges.length?edges:this.primitives);if(b){const margin=Math.max(3,Math.max(b.w,b.h)*.06);this.viewport.camera.bbox={x:b.x-margin,y:b.y-margin,w:b.w+2*margin,h:b.h+2*margin};}else this.zoom_to_page();}
+
+    zoom_to_page(){this.worksheetVisible=true;this.paperVisible=true;const p=this.design?.page||{width:297,height:210};this.viewport.camera.bbox={x:-5,y:-5,w:p.width+10,h:p.height+10};}
 
     background(){return this.dark?'#151820':'#e7ebf1';}
 
@@ -387,7 +389,7 @@
       this.motion?.hide();if(this.motion)this.motion.saved=null;this.canvas.style.opacity='';this.motionActive=false;this.drawGeometry();
     }
     drawGeometry(){
-
+      const started=root.performance?.now?.();
       const c=this.viewport.camera,ctx=this.ctx,dpr=globalThis.devicePixelRatio||1;ctx.setTransform(1,0,0,1,0,0);ctx.fillStyle=this.background();ctx.fillRect(0,0,this.canvas.width,this.canvas.height);ctx.setTransform(dpr,0,0,dpr,0,0);
 
       if(this.grid&&c.zoom>2){let step=Number.isFinite(this.gridPitch)&&this.gridPitch>=.001&&this.gridPitch<=100?this.gridPitch:(c.zoom>12?1:5);while(step*c.zoom<5)step*=10;const b=c.bbox;ctx.fillStyle=this.dark?'#2b3b46':'#d3d3c7';let count=0;for(let x=Math.ceil(b.x/step)*step;x<b.x+b.w&&count<20000;x+=step)for(let y=Math.ceil(b.y/step)*step;y<b.y+b.h&&count++<20000;y+=step){const s=c.world_to_screen({x,y});ctx.fillRect(s.x,s.y,1,1);}}
@@ -396,29 +398,53 @@
 
       const view=c.bbox;
       const margin=3/c.zoom;
+      let lineBatch=null,batched=0,batches=0;
+      const flushLines=()=>{if(lineBatch){ctx.stroke();ctx.restore();lineBatch=null;batches++;}};
+      const batchLine=(p,override)=>{const source=p.color||'#819baa',color=override||(this.pcb?(root.KiCadLayerColors?.reviewColorFor?.(p.layer,this.dark)||source):schematicColor(source,this.dark)),width=Math.max(.65,(p.width||.15)*c.zoom),ps=this.primitivePoints(p);if(!ps.length)return;
+        if(lineBatch&&(lineBatch.color!==color||lineBatch.width!==width||lineBatch.count>=512))flushLines();
+        if(!lineBatch){ctx.save();ctx.strokeStyle=color;ctx.globalAlpha=1;ctx.lineWidth=width;ctx.lineCap='round';ctx.lineJoin='round';ctx.beginPath();lineBatch={color,width,count:0};}
+        let q=c.world_to_screen(ps[0]);ctx.moveTo(q.x,q.y);for(let i=1;i<ps.length;i++){q=c.world_to_screen(ps[i]);ctx.lineTo(q.x,q.y);}lineBatch.count++;batched++;
+      };
+      // Selection is painted on saved geometry, never on an enclosing box.
+      const picked=new Set(this.selected?.kind==='footprint-hit'?(this.ownedGeometry.get(this.selected.ownerUuid||this.selected.uuid)||[]):this.selected?[this.selected]:[]);
       if(this.renderPrimitives)this.renderPrimitives(ctx,c,this);else for(const p of this.candidates({x:view.x-margin,y:view.y-margin,w:view.w+2*margin,h:view.h+2*margin})){
 
-        if(!this.geometryVisible(p)||!this.inView(p,view))continue;
+        if(p.kind==='footprint-hit'||p.frame&&!this.paperVisible||!p.frame&&p.layer&&!this.visibleLayers.has(p.layer))continue;
+        if(!this.geometryVisible(p))continue;
 
-        if(p.frame&&!this.paperVisible)continue;
-
-        if(!p.frame&&p.layer&&!this.visibleLayers.has(p.layer))continue;
-
-        const matches=this.netPrimitives.has(p),dim=this.netHighlight&&!p.frame&&!matches,layerDim=this.focusedLayer&&!p.frame&&p.layer!==this.focusedLayer;
+        const matches=this.netPrimitives.has(p)||(!this.netHighlight&&picked.has(p)),dim=this.netHighlight&&!p.frame&&!matches,layerDim=this.focusedLayer&&!p.frame&&p.layer!==this.focusedLayer;
 
         if(layerDim&&this.layerFocusMode==='isolate'&&!p.hole&&p.layer!=='Edge.Cuts')continue;
 
         if(dim&&this.isolateNet&&!p.hole&&p.layer!=='Edge.Cuts')continue;
 
-        this.paint(p,{color:dim&&this.highlightMode!=='bright'&&!p.hole?(this.dark?'#87919d':'#8b919a'):matches&&!p.hole&&this.selectionColor!=='source'?(this.pcb?'#ffe18b':this.dark?'#78d5ff':'#006ca8'):this.netClassColors?.get(p)||null,opacity:Math.min(dim&&!p.hole&&this.highlightMode!=='bright'&&p.layer!=='Edge.Cuts'?(this.pcb?.42:.38):1,layerDim&&!p.hole?.18:1)});
+        if(!this.inView(p,view))continue;
+        const color=dim&&this.highlightMode!=='bright'&&!p.hole?(this.dark?'#87919d':'#8b919a'):matches&&!p.hole&&this.selectionColor!=='source'?(this.pcb?'#ffe18b':this.dark?'#78d5ff':'#006ca8'):this.netClassColors?.get(p)||null,opacity=Math.min(dim&&!p.hole&&this.highlightMode!=='bright'&&p.layer!=='Edge.Cuts'?(this.pcb?.42:.38):1,layerDim&&!p.hole?.18:1);
+        if(!this.netHighlight&&!layerDim&&!p.frame&&!p.hole&&p.type==='line'&&!p.fill&&p.stroke!==false&&(p.opacity===undefined||p.opacity===1)&&this.paint===Viewport.prototype.paint){batchLine(p,color);continue;}
+        flushLines();this.paint(p,{color,opacity});
 
       }
 
+      flushLines();
+      if(this.host.dataset){this.host.dataset.strokeBatches=String(batches);this.host.dataset.batchedPrimitives=String(batched);}
       this.drawNetNames();
-      if(this.selected&&this.geometryVisible(this.selected)){const b=this.selectionBounds();if(b){const a=c.world_to_screen(b),z=c.world_to_screen({x:b.x+b.w,y:b.y+b.h}),x=Math.min(a.x,z.x)-5,y=Math.min(a.y,z.y)-5,w=Math.abs(z.x-a.x)+10,h=Math.abs(z.y-a.y)+10;ctx.save();ctx.setLineDash([]);ctx.strokeStyle=this.dark?'#07121e':'#ffffff';ctx.lineWidth=5;ctx.strokeRect(x,y,w,h);ctx.strokeStyle=this.dark?'#6dffc4':'#007d54';ctx.lineWidth=2;ctx.strokeRect(x,y,w,h);ctx.restore();}}
 
+
+      if(Number.isFinite(started)&&this.host.dataset){this.host.dataset.drawTimeMs=(root.performance.now()-started).toFixed(2);this.host.dataset.renderPrimitives=String(this.primitives.length);this.host.dataset.retainedPaths=String(this.pathCacheCount);}
     }
 
+    primitivePoints(p){if(this.pointCache.has(p))return this.pointCache.get(p);const saved=points(p);this.pointCache.set(p,saved);return saved;}
+    retainedPath(p){
+      if(typeof root.Path2D!=='function'||p.type==='text'||p.type==='arc'||p.type==='circle'||p.r)return null;
+      if(this.pathCache.has(p))return this.pathCache.get(p);
+      const ps=this.primitivePoints(p);let path=null;
+      // Retain complex saved vectors; cap both object count and vertices. Camera,
+      // layer, theme and highlight changes reuse geometry without caching pixels.
+      if(ps.length>=8&&this.pathCacheCount<4000&&this.pathCachePoints+ps.length<=200000){
+        path=new root.Path2D();path.moveTo(ps[0].x,ps[0].y);for(let i=1;i<ps.length;i++)path.lineTo(ps[i].x,ps[i].y);if(p.type==='polygon'||p.type==='pad')path.closePath();this.pathCachePoints+=ps.length;this.pathCacheCount++;
+      }
+      this.pathCache.set(p,path);return path;
+    }
     paint(p,style={}){
 
       const ctx=this.ctx,c=this.viewport.camera;ctx.save();let color=style.color||p.color||'#819baa';if(p.hole)color=this.paperVisible?this.paperColor():this.background();else if(!style.color){if(!this.pcb)color=schematicColor(color,this.dark);else if(p.layer&&root.KiCadLayerColors?.reviewColorFor)color=root.KiCadLayerColors.reviewColorFor(p.layer,this.dark);}
@@ -427,13 +453,15 @@
 
       if(p.type==='text'){const q=c.world_to_screen(p);ctx.translate(q.x,q.y);ctx.rotate((p.angle||0)*Math.PI/180*(c.flipped?-1:1));ctx.font=this.textFont(p);ctx.textAlign=p.align||'center';ctx.textBaseline=p.baseline||'middle';const height=p.fontHeight||p.size||1.27;if(p.fontWidth&&height>0)ctx.scale(p.fontWidth/height,1);const lines=String(p.text||'').split('\n');lines.forEach((text,i)=>ctx.fillText(text,0,(i-(lines.length-1)/2)*height*c.zoom*(p.lineSpacing||1.5)));ctx.restore();return;}
 
+      const retained=this.retainedPath(p);
+      if(retained){const width=ctx.lineWidth;ctx.translate(c.width/2,c.height/2);ctx.scale(c.flipped?-c.zoom:c.zoom,c.zoom);ctx.translate(-c.center.x,-c.center.y);ctx.lineWidth=width/c.zoom;if(p.fill)ctx.fill(retained);if(!p.hole&&p.stroke!==false)ctx.stroke(retained);ctx.restore();return;}
       ctx.beginPath();
 
-      if(p.type==='arc'){const a=arcThrough(p.start,p.mid,p.end);if(a){const q=c.world_to_screen(a);const start=c.flipped?Math.PI-a.start:a.start,end=c.flipped?Math.PI-a.end:a.end;ctx.arc(q.x,q.y,a.r*c.zoom,start,end,c.flipped?!a.ccw:a.ccw);}else{const ps=points(p);if(ps.length){const q=c.world_to_screen(ps[0]);ctx.moveTo(q.x,q.y);for(const t of ps.slice(1)){const s=c.world_to_screen(t);ctx.lineTo(s.x,s.y);}}}}
+      if(p.type==='arc'){const a=arcThrough(p.start,p.mid,p.end);if(a){const q=c.world_to_screen(a);const start=c.flipped?Math.PI-a.start:a.start,end=c.flipped?Math.PI-a.end:a.end;ctx.arc(q.x,q.y,a.r*c.zoom,start,end,c.flipped?!a.ccw:a.ccw);}else{const ps=this.primitivePoints(p);if(ps.length){const q=c.world_to_screen(ps[0]);ctx.moveTo(q.x,q.y);for(const t of ps.slice(1)){const s=c.world_to_screen(t);ctx.lineTo(s.x,s.y);}}}}
 
       else if(p.type==='circle'||p.type==='pad'&&p.r){const q=c.world_to_screen(p);ctx.arc(q.x,q.y,p.r*c.zoom,0,2*Math.PI);}
 
-      else{const ps=points(p);if(ps.length){const q=c.world_to_screen(ps[0]);ctx.moveTo(q.x,q.y);for(const t of ps.slice(1)){const s=c.world_to_screen(t);ctx.lineTo(s.x,s.y);}if(p.type==='polygon'||p.type==='pad')ctx.closePath();}}
+      else{const ps=this.primitivePoints(p);if(ps.length){const q=c.world_to_screen(ps[0]);ctx.moveTo(q.x,q.y);for(const t of ps.slice(1)){const s=c.world_to_screen(t);ctx.lineTo(s.x,s.y);}if(p.type==='polygon'||p.type==='pad')ctx.closePath();}}
 
       if(p.fill)ctx.fill();if(!p.hole&&p.stroke!==false)ctx.stroke();ctx.restore();
 

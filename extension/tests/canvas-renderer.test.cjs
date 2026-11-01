@@ -181,9 +181,9 @@ test('selection emits owned object identity and disposal releases observer/canva
 test('board fitting and full-sheet fitting switch the paper without fitting hidden geometry',()=>{
  const {canvas}=runtime(),edge={type:'line',points:[{x:10,y:20},{x:40,y:20}],layer:'Edge.Cuts'},frame={type:'line',points:[{x:0,y:0},{x:297,y:210}],frame:true},hidden={type:'circle',x:900,y:900,r:5,hidden:true,uuid:'hidden'};
  canvas.setDocument({page:{width:297,height:210},layers:['Edge.Cuts'],primitives:[edge,frame,hidden]},'board.kicad_pcb');
- assert.equal(canvas.paperVisible,false);assert.equal(canvas.query({x:900,y:900}).length,0);assert.ok(canvas.viewport.camera.center.x<100);
+ assert.equal(canvas.paperVisible,true);assert.equal(canvas.query({x:900,y:900}).length,0);assert.ok(canvas.viewport.camera.center.x<100);
  canvas.zoom_to_page();assert.equal(canvas.paperVisible,true);near(canvas.viewport.camera.center.x,148.5);near(canvas.viewport.camera.center.y,105);
- canvas.zoom_to_board();assert.equal(canvas.paperVisible,false);near(canvas.viewport.camera.center.x,25);
+ canvas.zoom_to_board();assert.equal(canvas.paperVisible,true);near(canvas.viewport.camera.center.x,25);
 });
 test('net highlight respects layer visibility, dims unrelated copper and preserves drill holes',()=>{
  const {canvas}=runtime(),pad={type:'circle',x:20,y:30,r:1,uuid:'pad',layer:'F.Cu'},other={...pad,uuid:'other',x:30},back={...pad,uuid:'back',layer:'B.Cu'},hole={...pad,uuid:'hole',hole:true},hidden={...pad,uuid:'hidden',hidden:true};
@@ -206,7 +206,7 @@ test('schematic net highlight contrasts with white paper and retains readable su
  canvas.focusLayer('B.Cu','isolate');painted.length=0;canvas.draw();assert.deepEqual(painted.map(x=>x.p.uuid).filter(Boolean),['back','hole']);assert.deepEqual(canvas.query({x:10,y:10}).map(x=>x.uuid),['back']);canvas.restoreLayers();assert.deepEqual([...canvas.visibleLayers],before);assert.equal(canvas.focusedLayer,null);
  });
  test('layer presets restore the original view across consecutive focus and preset changes',()=>{const {canvas}=runtime();canvas.setDocument({layers:['F.Cu','In1.Cu','B.Cu','F.SilkS','B.SilkS','Edge.Cuts'],primitives:[]},'board.kicad_pcb');const initial=[...canvas.visibleLayers];canvas.layerPreset('copper');assert.deepEqual([...canvas.visibleLayers],['F.Cu','In1.Cu','B.Cu','Edge.Cuts']);canvas.focusLayer('F.SilkS');canvas.layerPreset('back');assert.deepEqual([...canvas.visibleLayers],['B.Cu','B.SilkS','Edge.Cuts']);canvas.restoreLayers();assert.deepEqual([...canvas.visibleLayers],initial);assert.equal(canvas.layerPreset('unknown'),false);assert.equal(canvas.focusLayer('unknown'),false);canvas.layerPreset('none');assert.equal(canvas.visibleLayers.size,0);canvas.restoreLayers();assert.deepEqual([...canvas.visibleLayers],initial);});
- test('fit layer uses only its drawable geometry and ignores worksheet, hidden and other layers',()=>{const {canvas}=runtime();canvas.setDocument({layers:['F.Cu','B.Cu'],primitives:[{type:'circle',x:20,y:30,r:1,layer:'F.Cu'},{type:'circle',x:900,y:900,r:2,layer:'B.Cu'},{type:'circle',x:800,y:800,r:2,layer:'F.Cu',hidden:true}]},'board.kicad_pcb');canvas.focusLayer('F.Cu');assert.equal(canvas.fitLayer(),true);near(canvas.viewport.camera.center.x,20);near(canvas.viewport.camera.center.y,30);assert.equal(canvas.paperVisible,false);canvas.focusLayer('B.Cu');canvas.primitives=[];assert.equal(canvas.fitLayer(),false);canvas.setDocument({layers:['F.Cu'],primitives:[]},'next.kicad_pcb');assert.equal(canvas.focusedLayer,null);assert.equal(canvas.layerSnapshot,null);});
+ test('fit layer uses only its drawable geometry and ignores worksheet, hidden and other layers',()=>{const {canvas}=runtime();canvas.setDocument({layers:['F.Cu','B.Cu'],primitives:[{type:'circle',x:20,y:30,r:1,layer:'F.Cu'},{type:'circle',x:900,y:900,r:2,layer:'B.Cu'},{type:'circle',x:800,y:800,r:2,layer:'F.Cu',hidden:true}]},'board.kicad_pcb');canvas.focusLayer('F.Cu');assert.equal(canvas.fitLayer(),true);near(canvas.viewport.camera.center.x,20);near(canvas.viewport.camera.center.y,30);assert.equal(canvas.paperVisible,true);canvas.focusLayer('B.Cu');canvas.primitives=[];assert.equal(canvas.fitLayer(),false);canvas.setDocument({layers:['F.Cu'],primitives:[]},'next.kicad_pcb');assert.equal(canvas.focusedLayer,null);assert.equal(canvas.layerSnapshot,null);});
 
  test('ruler grid spacing coarsens at low zoom and rejects unsafe pitch values',()=>{const {canvas,operations}=runtime();canvas.grid=true;canvas.gridPitch=.25;canvas.viewport.camera.zoom=40;canvas.draw();const dots=operations.filter(op=>op[0]==='fillRect'&&op[3]===1&&op[4]===1);assert.ok(dots.length>0);assert.ok(dots.length<=20000);for(const pitch of [-1,0,Infinity,NaN]){canvas.gridPitch=pitch;assert.doesNotThrow(()=>canvas.draw());}});
 
@@ -286,9 +286,26 @@ test('selection encloses measured rotated glyphs and visible footprint children'
  canvas.visibleLayers.clear();assert.equal(canvas.selectionBounds(proxy),null);canvas.dispose();
 });
 
-test('flipped selection rectangle encloses both screen-space corners with positive width',()=>{
+test('selected saved geometry stays highlighted without an enclosing rectangle in either orientation',()=>{
  const {canvas,operations}=runtime();const pad={type:'circle',x:5,y:5,r:2,layer:'F.Cu'};
- canvas.primitives=[pad];canvas.visibleLayers=new Set(['F.Cu']);canvas.selected=pad;canvas.viewport.camera.zoom=10;canvas.viewport.camera.flipped=true;
- operations.length=0;canvas.draw();const rectangles=operations.filter(o=>o[0]==='strokeRect');
- assert.equal(rectangles.length,2);for(const rect of rectangles){assert.equal(rect[3],50);assert.equal(rect[4],50);}canvas.dispose();
+ canvas.primitives=[pad];canvas.visibleLayers=new Set(['F.Cu']);canvas.selected=pad;canvas.viewport.camera.zoom=10;
+ const painted=[];canvas.paint=(primitive,style)=>painted.push({primitive,style});
+ for(const flip of [false,true]){canvas.viewport.camera.flipped=flip;operations.length=0;painted.length=0;canvas.draw();assert.equal(operations.filter(o=>o[0]==='strokeRect').length,0);assert.equal(painted[0].primitive,pad);assert.ok(painted[0].style.color,'selection remains visible on the saved primitive');}canvas.dispose();
+});
+
+test('retained native paths reuse complex source vectors across camera/theme changes and reset on document replacement',()=>{
+ const paths=[];class Path{constructor(){this.commands=[];paths.push(this);}moveTo(...p){this.commands.push(['M',...p]);}lineTo(...p){this.commands.push(['L',...p]);}closePath(){this.commands.push(['Z']);}}
+ const {canvas,operations}=runtime(2,{Path2D:Path});const p={type:'polygon',points:Array.from({length:12},(_,i)=>({x:i,y:i%2})),fill:true,width:.2};canvas.primitives=[p];canvas.viewport.camera.zoom=10;canvas.viewport.camera.center={x:5,y:6};canvas.paint(p);const native=paths[0];assert.equal(paths.length,1);assert.deepEqual(native.commands[0],['M',0,0]);assert.deepEqual(native.commands.at(-1),['Z']);assert.ok(operations.some(op=>op[0]==='fill'&&op[1]===native));assert.ok(operations.some(op=>op[0]==='stroke'&&op[1]===native));canvas.dark=false;canvas.viewport.camera.flipped=true;canvas.viewport.camera.zoom=20;canvas.paint(p);assert.equal(paths.length,1);assert.ok(operations.some(op=>op[0]==='scale'&&op[1]===-20&&op[2]===20));canvas.primitives=[p];canvas.paint(p);assert.equal(paths.length,2);canvas.dispose();
+});
+test('worksheet visibility survives board/layer fits and remains explicitly switchable',()=>{
+ const {canvas}=runtime();canvas.setDocument({page:{width:297,height:210},layers:['F.Cu'],primitives:[{type:'circle',x:20,y:30,r:1,layer:'F.Cu'}]},'board.kicad_pcb');assert.equal(canvas.paperVisible,true);canvas.zoom_to_board();assert.equal(canvas.paperVisible,true);canvas.setWorksheetVisible(false);canvas.zoom_to_board();assert.equal(canvas.paperVisible,false);canvas.focusLayer('F.Cu');canvas.fitLayer();assert.equal(canvas.paperVisible,false);canvas.zoom_to_page();assert.equal(canvas.paperVisible,true);canvas.zoom_to_board();assert.equal(canvas.paperVisible,true);canvas.dispose();
+});
+
+test('warm vector painting validates saved points once and canvas resize avoids unchanged bitmap resets',()=>{
+ const {canvas,element}=runtime();let reads=0;const points=Array.from({length:6},(_,i)=>({get x(){reads++;return i;},y:i%2})),p={type:'polygon',points,fill:true};canvas.primitives=[p];canvas.paint(p);const first=reads;canvas.paint(p);assert.equal(reads-first,6,'warm paint should project x once per point, not validate it again');let widthWrites=0,heightWrites=0,w=element.width,h=element.height;Object.defineProperty(element,'width',{get:()=>w,set:v=>{w=v;widthWrites++;}});Object.defineProperty(element,'height',{get:()=>h,set:v=>{h=v;heightWrites++;}});canvas.resize();canvas.resize();assert.equal(widthWrites,0);assert.equal(heightWrites,0);canvas.dispose();
+});
+
+test('opaque consecutive line batches reduce native strokes while preserving ordering and translucent operations',()=>{
+ const {canvas,operations}=runtime();const lines=Array.from({length:600},(_,i)=>({type:'line',kind:'track',layer:'F.Cu',color:'#ff0000',width:.2,points:[{x:i/100,y:0},{x:i/100,y:1}]}));canvas.setDocument({layers:['F.Cu'],primitives:lines},'board.kicad_pcb');canvas.viewport.camera.bbox={x:-1,y:-1,w:10,h:5};operations.length=0;canvas.draw();assert.equal(operations.filter(op=>op[0]==='stroke').length,2);assert.equal(operations.filter(op=>op[0]==='moveTo').length,600);assert.equal(operations.filter(op=>op[0]==='lineTo').length,600);
+ canvas.primitives=[lines[0],{...lines[1],opacity:.5},lines[2]];operations.length=0;canvas.draw();assert.equal(operations.filter(op=>op[0]==='stroke').length,3,'translucent geometry must remain separately composited');canvas.dispose();
 });

@@ -7,7 +7,7 @@ test('selected folder keeps hierarchy/model paths and imports only supported ine
 test('local import rejects unsafe paths, collisions, oversized and non-UTF8 sources before install',async()=>{
  for(const path of ['../root.kicad_sch','/root.kicad_sch','C:/root.kicad_sch'])await assert.rejects(api.readFiles([{path,file:file('x','(kicad_sch)')}]),/Invalid local path/);
  await assert.rejects(api.readFiles([file('root.kicad_sch','a'),file('root.kicad_sch','b')]),/Duplicate/);
- let read=false;await assert.rejects(api.readFiles([{name:'board.kicad_pcb',size:33*1024*1024,arrayBuffer:async()=>{read=true;}}]),/32 MiB/);assert.equal(read,false);
+ let read=false;await assert.rejects(api.readFiles([{name:'board.kicad_pcb',size:64*1024*1024+1,arrayBuffer:async()=>{read=true;}}]),/64 MiB/);assert.equal(read,false);
  await assert.rejects(api.readFiles([{name:'root.kicad_sch',size:1,arrayBuffer:async()=>Uint8Array.of(255).buffer}]),/UTF-8/);
  await assert.rejects(api.readFiles([{name:'root.kicad_sch',size:3,arrayBuffer:async()=>Uint8Array.of(1).buffer}]),/changed/);
  await assert.rejects(api.readFiles([file('README.md','not a design')]),/Choose a KiCad/);
@@ -31,4 +31,10 @@ test('other file inventory preserves nested paths without reading unsupported by
  assert.equal(reads,0);assert.deepEqual(result.project.repositoryTree.entries.map(e=>e.path),['board.kicad_pcb','docs/README.md','firmware/firmware.bin']);assert.equal(result.project.files.length,1);
  const transport=local.transport(result.project,{getItem:()=>null,setItem(){}},{local:true});assert.equal((await transport.send({type:'project-file',file:'firmware/firmware.bin'})).ok,false);
  await assert.rejects(api.readFiles([{path:'x.md',file:metadata},{path:'x.md',file:metadata}]),/Duplicate/);
+});
+
+test('real file selection imports a PCB above32MiB using its format budget and legacy sources',async()=>{
+ const content='(kicad_pcb)'+ ' '.repeat(33*1024*1024),result=await api.readFiles([file('large.kicad_pcb',content),file('root.sch','EESchema Schematic File Version 2\n$EndSCHEMATC'),file('root.pro','[general]'),file('root-cache.lib','EESchema-LIBRARY Version 2.4')]);
+ assert.equal(result.project.files[0].content,content);assert.equal(result.project.files.length,4);assert.equal(result.ignored,0);
+ for(const [name,size]of [['small.sch',8*1024*1024+1],['model.step',32*1024*1024+1],['manual.pdf',32*1024*1024+1]]){let read=false;await assert.rejects(api.readFiles([{name,size,arrayBuffer:async()=>{read=true;}}]),/MiB/);assert.equal(read,false);}
 });

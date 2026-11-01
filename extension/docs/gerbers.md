@@ -27,3 +27,32 @@ Aperture macros, aperture holes, non-circular aperture strokes, single-quadrant 
 The engine is independent of third-party rendering libraries. Focused tests use synthetic, source-retained snippets to exercise coordinate interpretation, physical aperture dimensions, modal axes, arc direction, compound contours, polarity compositing, drill diameters, unsupported constructs, and malformed/oversize input. These checks establish those contracts; they do not claim full Gerber conformance or native GerbView pixel equivalence.
 
 Format references: [Ucamco Gerber layer specification 2024.05](https://www.ucamco.com/files/downloads/file_en/456/gerber-layer-format-specification-revision-2024-05_en.pdf), [Ucamco XNC specification 2021.11](https://www.ucamco.com/files/downloads/file_en/452/xnc-format-specification-revision-2021-11_en.pdf), and [KiCad Excellon reader source](https://docs.kicad.org/doxygen/excellon__read__drill__file_8cpp_source.html).
+
+## Geometry analysis
+
+The Analysis panel and JSON export report per-layer line, arc, circle and polygon
+operation counts; dark/clear counts; source-coordinate extents; minimum rendered
+stroke; used aperture/tool IDs and their operation counts; drill diameters and
+hit/slot counts. IDs count only retained parsed geometry, not unused declarations
+or omitted unsupported operations. Repeated hits remain separate operations.
+The renderer's `units: 'mm'` contract also applies to these measurements; reported
+source Y ranges reverse the viewport's Y-down display transform.
+
+Rendered path length sums stroked line, circular and arc centre lines in mm.
+Obround flashes contribute their rendered centre-line segment, so this value is
+not electrical routing length. The extent rectangle is width times height in
+mm² and is not a board-area or outline-closure measurement.
+
+Operation-area sums in mm² cover filled circles, circular stroke rings, round-
+capped two-point line strokes and convex standard polygon/rectangle flashes.
+Arc strokes, regions and compound or unsupported polygons are excluded, with
+computed/omitted operation counts included in each layer's metrics. Areas sum
+individual operations before overlap removal, repeated-hit removal or clear
+polarity subtraction. They do not measure net copper coverage, material removal,
+plating, connectivity or manufacturing compliance. Parser warnings still mark
+partial coverage. Use a fabrication toolchain for boolean film areas and DFM.
+
+Analysis is cached while source models and criteria remain unchanged. Panning,
+zooming, visibility and opacity changes do not rerun geometry analysis; fitting
+visible layers reuses the cached per-layer extents. Tables show at most 60 tool
+IDs or drill sizes per layer; JSON export retains the bounded full inventory.

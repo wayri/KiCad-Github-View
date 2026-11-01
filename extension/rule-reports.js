@@ -86,6 +86,31 @@
   const revision=options.revision===undefined?null:string(options.revision,'Report provenance revision',200);
   return {kind,metadata:{schema:data.$schema??null,source,date,kicadVersion,coordinateUnits:data.coordinate_units,reportPath,revision,associatedFile:file,associationVerified:false,includedSeverities,ignoredChecks},sheets,findings,warnings};
  }
- root.KiCadRuleReports={parse,validFile,MAX_BYTES,MAX_FINDINGS};
+ function reportCandidates(entries,{limit=12,kind}={}){
+  if(!Array.isArray(entries))return [];
+  const ranked=new Map();
+  for(const entry of entries.slice(0,20000)){
+   const path=typeof entry==='string'?entry:entry?.path;
+   if(typeof path!=='string'||path.length>500||!path.endsWith('.json')||path.startsWith('/')||/[\\:\x00-\x1f\x7f]/.test(path)||path.split('/').some(p=>!p||p==='.'||p==='..'))continue;
+   if(Number.isFinite(entry?.size)&&entry.size>MAX_BYTES)continue;
+   const name=path.split('/').at(-1),typed=/(?:^|[_.-])(erc|drc)(?:[_.-]|$)/i.exec(name);
+   if(typed&&kind&&typed[1].toLowerCase()!==kind)continue;
+   const generic=/(?:^|[_.-])(?:report|checks?|violations)(?:[_.-]|$)/i.test(name)||/(?:^|\/)(?:reports?|checks?)(?:\/)/i.test(path);
+   if(!typed&&!generic)continue;
+   ranked.set(path,typed?0:1);
+  }
+  return [...ranked].sort((a,b)=>a[1]-b[1]||a[0].localeCompare(b[0])).slice(0,Math.max(0,Math.min(12,Number(limit)||12))).map(([path])=>path);
+ }
+ function associateSource(report,files,{complete=true}={}){
+  if(!report?.metadata||!['erc','drc'].includes(report.kind)||!Array.isArray(files))return null;
+  const source=report.metadata.source.replace(/\\/g,'/');
+  if(/[\x00-\x1f\x7f]/.test(source)||source.split('/').some(p=>p==='..'))return null;
+  const normalized=source.replace(/^\.\//,''),absolute=/^(?:[A-Za-z]:\/|\/)/.test(normalized);
+  const candidates=[...new Set(files.slice(0,20000).map(f=>typeof f==='string'?f:f?.path).filter(path=>validFile(path,report.kind)))];
+  const basenameOnly=!normalized.includes('/');
+  const matches=basenameOnly?(complete?candidates.filter(path=>path.split('/').at(-1)===normalized):[]):absolute?(complete?candidates.filter(path=>normalized.endsWith('/'+path)):[]):candidates.filter(path=>path===normalized);
+  return matches.length===1?matches[0]:null;
+ }
+ root.KiCadRuleReports={parse,validFile,reportCandidates,associateSource,MAX_BYTES,MAX_FINDINGS};
  if(typeof module==='object'&&module.exports)module.exports=root.KiCadRuleReports;
 })(globalThis);

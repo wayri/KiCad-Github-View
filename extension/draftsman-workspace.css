@@ -13,3 +13,5 @@
 .draftsman .draftsman-control-group>select[aria-label="Sheet zoom"]{max-width:90px}
 .draftsman .draftsman-control-group>select[aria-label="Mechanical viewpoint"]{max-width:100px}
 @media(max-width:700px){.draftsman .draftsman-toolbar{gap:4px}.draftsman-control-group{gap:4px;padding-right:5px}.draftsman .draftsman-control-group>select[aria-label="Source drawing"]{max-width:135px}.draftsman .draftsman-control-group>select{max-width:110px}.draftsman .draftsman-header>strong{max-width:none;flex-basis:100%}}
+
+.draftsman-download-links{display:flex;flex-wrap:wrap;gap:4px 12px;font-size:12px}.draftsman-download-links:empty{display:none}.draftsman-download-links a{color:var(--link,#70b5ff);text-underline-offset:2px}

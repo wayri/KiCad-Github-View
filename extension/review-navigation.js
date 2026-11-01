@@ -60,10 +60,11 @@
     function identityIndex(){const current=currentObjects();if(identityObjects===current&&identitySearch===searchObjects)return identities;identityObjects=current;identitySearch=searchObjects;identities=new Map();for(const object of [...current,...searchObjects]){if(!object.uuid)continue;let entries=identities.get(object.uuid);if(!entries){entries=new Map();identities.set(object.uuid,entries);}const key=JSON.stringify([object.path,object.id]);if(!entries.has(key))entries.set(key,object);}return identities;}
     function resolveItem(finding,item){
       // Report UUIDs are file scoped; repeated matches never select a guessed sheet.
-      if(item.uuid){const entries=identityIndex().get(item.uuid);if(entries?.size===1){const object=entries.values().next().value;return {file:object.path,position:item.position||object.position,object};}}
+      if(item.uuid){const entries=identityIndex().get(item.uuid);if(entries?.size>1)return {file:null,position:item.position};if(entries?.size===1){const object=entries.values().next().value;return {file:object.path,position:item.position||object.position,object};}}
       return {file:item.file||finding.file,position:item.position};
     }
-    function visibleFindings(){const query=$('ruleSearch').value.toLowerCase(),severity=$('ruleSeverity').value;return reports.flatMap(r=>r.findings).filter(f=>(severity==='all'||f.severity===severity)&&($('showExcludedRules').checked||!f.excluded)&&`${f.description} ${f.type} ${f.sheetPath||''}`.toLowerCase().includes(query));}
+    const showSeverity={error:true,warning:true};
+    function visibleFindings(){const query=$('ruleSearch').value.toLowerCase(),severity=$('ruleSeverity').value;return reports.flatMap(r=>r.findings).filter(f=>showSeverity[f.severity]!==false&&(severity==='all'||f.severity===severity)&&($('showExcludedRules').checked||!f.excluded)&&`${f.description} ${f.type} ${f.sheetPath||''}`.toLowerCase().includes(query));}
     function locateFinding(finding,itemIndex=0){
       selectedFinding=finding;selectedItem=itemIndex;noteDismissed=false;const item=finding.items[itemIndex],target=item&&resolveItem(finding,item);
       if(!target?.file||!target.position){$('ruleStatus').textContent='This item has no resolved drawing location. Associate the report sheet or load project drawings to resolve its saved UUID.';options.redraw();renderRules();return;}
@@ -90,21 +91,49 @@
     $('importNetClasses').onclick=()=>$('netClassFile').click();
     $('netClassFile').onchange=async()=>{const file=$('netClassFile').files?.[0];if(!file)return;try{if(file.size>1024*1024)throw new Error('Project settings exceed 1 MiB.');const classes=KiCadProjectSearch.parseNetClasses(await file.text());classSettings=classes;index=buildIndex(searchObjects.length?searchObjects:currentObjects(),searchNets.length?searchNets:options.getNets(),classes);options.setNetClasses?.(classes);status(`Imported net classes from ${file.name}`);renderSearch();}catch(error){status(error.message);}finally{$('netClassFile').value='';}};
     $('importRuleReport').onclick=()=>$('ruleReportFile').click();
-    function addReport(text,name){
+    function addReport(text,name,{file,automatic=false,revision=options.ref}={}){
       if(reports.length>=4)throw new Error('At most four reports per review session; clear reports first.');
-      const report=KiCadRuleReports.parse(text,{file:$('ruleDrawing').value,reportPath:name,revision:options.ref});reports.push(report);selectedFinding=null;
+      const report=KiCadRuleReports.parse(text,{file:file===undefined?$('ruleDrawing').value:file,reportPath:name,revision});if(automatic&&reports.some(r=>r.metadata.reportPath===name))return false;reports.push(report);selectedFinding=null;
       $('ruleProvenance').textContent=reports.map(r=>`${r.metadata.source} · ${r.metadata.date||'date unknown'} · KiCad ${r.metadata.kicadVersion||'unknown'} · imported ${r.metadata.reportPath}`).join(' | ')+'. Report revision is unverified; no ERC/DRC is run in the browser.';
-      $('ruleStatus').textContent=report.warnings.join(' ');renderSheetMappings();renderRules();options.onRuleReportLoaded?.();options.redraw();
+      $('ruleStatus').textContent=report.warnings.join(' ');renderSheetMappings();renderRules();options.onRuleReportLoaded?.({automatic,report});options.redraw();return true;
+    }
+    let discovery=null,discoveryDone=false;
+    const discover=button('Find saved ERC/DRC reports',()=>discoverReports({force:true}));discover.id='discoverRuleReports';discover.setAttribute('aria-label','Find saved ERC and DRC reports');$('loadRepoReport').parentElement?.append(discover);
+    async function discoverReports({force=false}={}){
+      if(disposed)return {loaded:0};if(discovery)return discovery;if(discoveryDone&&!force)return {loaded:0,cached:true};
+      const ticket=reportEpoch;discover.disabled=true;
+      discovery=(async()=>{let loaded=0,checked=0;const warnings=[];
+       try{
+        const inventory=await options.request('project-inventory',{repository:options.repository,ref:options.ref,file:options.rootFile});if(disposed||ticket!==reportEpoch)return {loaded:0};
+        const entries=inventory?.files;if(!Array.isArray(entries))throw Error('The project inventory did not provide saved report paths.');
+        const complete=entries.length<=20000&&inventory.truncated!==true&&!(inventory.warnings||[]).some(w=>/truncat|incomplete|first \d+/i.test(String(w)));if(!complete)warnings.push('Project inventory is incomplete; filename-only and absolute-path source associations are disabled.');
+        const kind=/\.kicad_pcb$/i.test(options.rootFile)?'drc':'erc',paths=KiCadRuleReports.reportCandidates(entries,{kind}),revision=inventory.snapshotRef||options.ref;
+        for(const path of paths){
+         if(disposed||ticket!==reportEpoch||reports.length>=4)break;if(reports.some(r=>r.metadata.reportPath===path))continue;
+         checked++;try{
+          const result=await options.request('rule-report',{repository:options.repository,ref:revision,file:options.rootFile,reportPath:path});if(disposed||ticket!==reportEpoch)break;
+          if(result?.path!==path)throw Error('Report transport returned another source path.');
+          const parsed=KiCadRuleReports.parse(result.content,{kind,reportPath:path,revision}),file=KiCadRuleReports.associateSource(parsed,entries,{complete});
+          if(!file)throw Error('Source drawing is missing, unrelated or ambiguous.');
+          if(addReport(result.content,path,{file,automatic:true,revision}))loaded++;
+         }catch(error){warnings.push(path+': '+error.message);}
+        }
+        if(disposed||ticket!==reportEpoch)return {loaded,cancelled:true};
+        discoveryDone=true;$('ruleStatus').textContent=`Loaded ${loaded} saved ${kind.toUpperCase()} report(s); inspected ${checked} candidate(s). `+warnings.slice(0,4).join(' ')+(warnings.length>4?' More candidates were rejected.':'')+(paths.length===12?' Discovery is limited to 12 candidates.':'');
+        return {loaded,checked,warnings};
+       }catch(error){if(!disposed)$('ruleStatus').textContent='Saved report discovery unavailable: '+error.message;return {loaded,checked,warnings:[error.message]};}
+      })().finally(()=>{discovery=null;if(!disposed)discover.disabled=false;});return discovery;
     }
     $('ruleReportFile').onchange=async()=>{const file=$('ruleReportFile').files?.[0];if(!file)return;try{if(file.size>4*1024*1024)throw new Error('Rule report exceeds 4 MiB.');addReport(await file.text(),file.name);}catch(error){$('ruleStatus').textContent=error.message;}finally{$('ruleReportFile').value='';}};
     $('loadRepoReport').onclick=async()=>{const ticket=++reportEpoch;$('loadRepoReport').disabled=true;$('ruleStatus').textContent='Loading saved repository report…';try{const result=await options.request('rule-report',{repository:options.repository,ref:options.ref,file:options.rootFile,reportPath:$('repoReportPath').value.trim()});if(!disposed&&ticket===reportEpoch)addReport(result.content,result.path);}catch(error){$('ruleStatus').textContent=error.message;}finally{$('loadRepoReport').disabled=false;}};
     for(const id of ['ruleSearch','ruleSeverity','showExcludedRules'])$(id).oninput=()=>{renderRules();options.redraw();};
     const noteLabel=make('label'),noteToggle=make('input');noteLabel.className='check';noteToggle.id='showRuleNotes';noteToggle.type='checkbox';noteToggle.checked=true;noteLabel.append(noteToggle,make('span','Show selected finding note'));$('showRuleMarkers').parentElement?.parentElement?.append(noteLabel);
     noteToggle.onchange=()=>{noteDismissed=false;options.redraw();};
+    for(const severity of ['error','warning']){const label=make('label'),toggle=make('input');label.className='check';toggle.type='checkbox';toggle.checked=true;toggle.id='showRule'+(severity==='error'?'Errors':'Warnings');toggle.setAttribute('aria-label','Show saved '+severity+' findings');toggle.onchange=()=>{showSeverity[severity]=toggle.checked;renderRules();options.redraw();};label.append(toggle,make('span',severity==='error'?'Errors':'Warnings'));$('showRuleMarkers').parentElement?.parentElement?.append(label);}
     $('showRuleMarkers').onchange=()=>options.redraw();
     for(const [id,step]of [['previousRule',-1],['nextRule',1]])$(id).onclick=()=>{const list=visibleFindings();if(!list.length)return;const at=list.indexOf(selectedFinding),next=at<0?(step>0?0:list.length-1):(at+step+list.length)%list.length;locateFinding(list[next]);};
     for(const [id,step]of [['previousRuleItem',-1],['nextRuleItem',1]])$(id).onclick=()=>{if(!selectedFinding?.items.length)return;locateFinding(selectedFinding,(selectedItem+step+selectedFinding.items.length)%selectedFinding.items.length);};
-    $('clearRuleReports').onclick=()=>{reports=[];selectedFinding=null;renderSheetMappings();$('ruleStatus').textContent='Reports cleared.';$('ruleProvenance').textContent='Import a saved KiCad JSON ERC or DRC report. Reports may be stale; source files remain unchanged.';renderRules();options.redraw();};
+    $('clearRuleReports').onclick=()=>{reportEpoch++;discoveryDone=true;reports=[];selectedFinding=null;renderSheetMappings();$('ruleStatus').textContent='Reports cleared.';$('ruleProvenance').textContent='Import a saved KiCad JSON ERC or DRC report. Reports may be stale; source files remain unchanged.';renderRules();options.redraw();};
     function draw(overlay,pins,screen,svg){
       if(!$('showRuleMarkers').checked||options.is3D())return;const host=$('drawingHost').getBoundingClientRect();let count=0;
       const findings=visibleFindings();if(findings.includes(selectedFinding)){findings.splice(findings.indexOf(selectedFinding),1);findings.unshift(selectedFinding);}
@@ -120,14 +149,14 @@
           const height=note.getBoundingClientRect?.().height||layout.maxHeight;start={x:Math.max(layout.x,Math.min(layout.x+layout.width,x)),y:Math.max(layout.y,Math.min(layout.y+Math.min(height,layout.maxHeight),y))};
         }}
         if(active){const arrow=arrowGeometry(start,{x,y});if(arrow)overlay.append(svg('line',{...arrow.shaft,stroke:color,'stroke-width':2}),svg('path',{d:arrow.head,fill:'none',stroke:color,'stroke-width':2}));}
-        const marker=button(active?'➤':'!',()=>{options.showRules();locateFinding(finding,i);});marker.className='pin rule-marker'+(active?' active':'');marker.style.left=x+'px';marker.style.top=y+'px';marker.style.background=color;marker.setAttribute('aria-label',`${finding.kind.toUpperCase()} ${finding.severity}: ${finding.description}; ${item.description}`);marker.title=`${finding.description}${x!==point.x||y!==point.y?' · offscreen: click to locate':''}`;pins.append(marker);
+        const marker=button(active?'➤':'!',()=>{options.showRules();locateFinding(finding,i);});marker.className='pin rule-marker'+(active?' active':'');marker.setAttribute('data-severity',finding.severity);marker.style.left=x+'px';marker.style.top=y+'px';marker.style.background=color;marker.setAttribute('aria-label',`${finding.kind.toUpperCase()} ${finding.severity}: ${finding.description}; ${item.description}`);marker.title=`${finding.description}${x!==point.x||y!==point.y?' · offscreen: click to locate':''}`;pins.append(marker);
        }
       }
 
     }
     function routingReports(path){return reports.filter(r=>r.kind==='drc'&&r.metadata.associatedFile===path).map(r=>({metadata:{...r.metadata},unconnectedFindings:r.findings.filter(f=>f.category==='unconnected_items'&&!f.excluded).length,excludedUnconnectedFindings:r.findings.filter(f=>f.category==='unconnected_items'&&f.excluded).length,warnings:[...r.warnings]}));}
     updateAssociations();renderRules();
-    return {routingReports,setClasses(classes){classSettings=classes;index=buildIndex(searchObjects.length?searchObjects:currentObjects(),searchNets.length?searchNets:options.getNets(),classes);options.setNetClasses?.(classes);},query(value){$('projectSearch').value=value;return renderSearch();},loadProject,renderSearch,renderRules,updateAssociations,draw,dispose(){disposed=true;epoch++;reportEpoch++;}};
+    return {discoverReports,routingReports,setClasses(classes){classSettings=classes;index=buildIndex(searchObjects.length?searchObjects:currentObjects(),searchNets.length?searchNets:options.getNets(),classes);options.setNetClasses?.(classes);},query(value){$('projectSearch').value=value;return renderSearch();},loadProject,renderSearch,renderRules,updateAssociations,draw,dispose(){disposed=true;epoch++;reportEpoch++;}};
   }
   root.KiCadReviewNavigation={mount,arrowGeometry,notePlacement};
   if(typeof module==='object'&&module.exports)module.exports=root.KiCadReviewNavigation;

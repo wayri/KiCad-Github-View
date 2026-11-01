@@ -1,5 +1,5 @@
 const test=require('node:test'),assert=require('node:assert/strict'),fs=require('node:fs');
-const {meshes,Client,bundledWorker}=require('../step-decoder.js');
+const {meshes,Client,bundledWorker,meshOptions}=require('../step-decoder.js');
 const valid=()=>({success:true,meshes:[{attributes:{position:{array:[0,0,0,1,0,0,0,1,0]}},index:{array:[0,1,2]},color:[1,0,0]}]});
 test('STEP mesh contract rejects malformed and excessive tessellation',()=>{
  assert.equal(meshes(valid())[0].positions.constructor,Float32Array);
@@ -7,7 +7,7 @@ test('STEP mesh contract rejects malformed and excessive tessellation',()=>{
 });
 test('actual pinned OCCT STEP decoder preserves millimetre cube dimensions and closed faces',async()=>{
  const occt=await require('../vendor/occt/occt-import-js.js')();
- const output=meshes(occt.ReadStepFile(fs.readFileSync(require.resolve('./fixtures/step/cube.stp')),{linearUnit:'millimeter',linearDeflectionType:'absolute_value',linearDeflection:.05,angularDeflection:.5}));
+ const output=meshes(occt.ReadStepFile(fs.readFileSync(require.resolve('./fixtures/step/cube.stp')),meshOptions));
  assert.equal(output.length,1);const m=output[0];assert.equal(m.index.length/3,12);
  const bounds=[0,1,2].map(axis=>{const a=Array.from(m.positions).filter((_,i)=>i%3===axis);return[Math.min(...a),Math.max(...a)];});
  assert.deepEqual(bounds,[[0,300],[0,300],[0,300]]);
@@ -40,6 +40,6 @@ test('real STEP bindings operate when dynamic JavaScript construction is prohibi
  const context=vm.createContext({module:{exports:{}},exports:{},require:createRequire(file),__dirname:path.dirname(file),process,console,TextDecoder,TextEncoder,performance,WebAssembly,setTimeout,clearTimeout},{codeGeneration:{strings:false,wasm:true}});
  vm.runInContext(fs.readFileSync(file,'utf8'),context,{filename:file});
  const occt=await context.module.exports();
- const result=meshes(occt.ReadStepFile(fs.readFileSync(require.resolve('./fixtures/step/cube.stp')),{linearUnit:'millimeter',linearDeflectionType:'absolute_value',linearDeflection:.05,angularDeflection:.5}));
+ const result=meshes(occt.ReadStepFile(fs.readFileSync(require.resolve('./fixtures/step/cube.stp')),meshOptions));
  assert.equal(result.length,1);assert.equal(result[0].index.length/3,12);
 });

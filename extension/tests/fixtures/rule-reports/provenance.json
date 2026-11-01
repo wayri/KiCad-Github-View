@@ -1,0 +1,19 @@
+{
+  "generator": "KiCad CLI 10.0.6",
+  "date": "2026-11-01",
+  "operation": "pcb drc / sch erc --format json; no save-board option",
+  "reports": [
+    {
+      "report": "inspection-drc.json",
+      "reportSha256": "d407fe24aca4ea199f7af1dc2ab8b42a6919ff3f0a0e65ba4932db41bebbd7ee",
+      "source": "net3d/inspection.kicad_pcb",
+      "sourceSha256": "932738a50b8487d52e7e18a2dea94c934fa05b6d46b8c5f8fd0966e9e2041660"
+    },
+    {
+      "report": "custom_fields-erc.json",
+      "reportSha256": "0e7c517aa16f963ca17ec89d085d4b45cd443997da33f59c46997ad6e954cb3f",
+      "source": "kicad8/custom_fields.kicad_sch",
+      "sourceSha256": "d5db28793628bc9dd0e24d115fa41d118da56c7d3d44d5496256e8644b801f4e"
+    }
+  ]
+}

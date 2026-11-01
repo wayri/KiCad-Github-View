@@ -139,3 +139,15 @@ body[data-workspace-chrome] #reviewHeader #sourceLink{margin-left:auto;flex:none
 @media(max-width:1599px){body[data-workspace-chrome] #reviewHeader #sourceLink{display:none}}
 @media(max-width:1099px){body[data-workspace-chrome] #reviewHeader{grid-template-columns:minmax(0,1fr) minmax(180px,260px);gap:6px}.workspace-action-cluster{grid-column:1/-1;justify-content:center}body[data-workspace-chrome] #reviewHeader #projectTools{justify-content:center}.workspace-nav-cluster{justify-content:flex-start}}
 @media(max-width:699px){body[data-workspace-chrome] #reviewHeader{grid-template-columns:minmax(0,1fr);gap:3px;padding:3px 5px}.workspace-nav-cluster{justify-content:center}#workspaceSearchHost{width:min(100%,400px);justify-self:center}.workspace-action-cluster{display:flex;overflow-x:auto;max-width:100%;justify-content:flex-start}.workspace-project-search-popup{position:fixed;top:92px;left:10px;right:10px;transform:none;width:auto;max-height:55dvh}.workspace-search-holder{min-width:120px;flex-basis:200px}.workspace-project-search>input{height:32px;min-height:32px}}
+
+/* Keep each compact tool glyph centered, including dynamically added actions. */
+body[data-workspace-chrome] :is(#frameControls,#drawingTools) button:not([hidden]):has(.ui-icon){display:inline-flex;align-items:center;justify-content:center;gap:5px;line-height:1}
+body[data-workspace-chrome] #drawingTools button{padding:7px;flex:0 0 auto}
+body[data-workspace-chrome] #drawingTools .ui-icon{width:18px;height:18px;flex:0 0 18px;margin:0}
+body[data-workspace-chrome] #drawingTools .button-label{display:none}
+@media(pointer:coarse){body[data-workspace-chrome] #drawingTools button{padding:13px}}
+
+@media(pointer:fine){
+ body[data-workspace-chrome] #frameControls :is(#focusView,.workspace-view-options,.workspace-mode-switch){width:28px;min-width:28px;flex:0 0 28px;height:28px;min-height:28px;padding:5px}
+ body[data-workspace-chrome] #frameControls #netQuickViews{height:28px;min-height:28px;padding:4px 8px;font-size:11px}
+}

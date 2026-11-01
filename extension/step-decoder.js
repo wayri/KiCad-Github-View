@@ -1,6 +1,7 @@
 /* Bounded STEP mesh contract and interruptible decoder client. No credentials. */
 ((root)=>{
  'use strict';
+ const meshOptions=Object.freeze({linearUnit:'millimeter',linearDeflectionType:'absolute_value',linearDeflection:.02,angularDeflection:.2});
  function meshes(result){
   if(result?.success!==true||!Array.isArray(result.meshes)||!result.meshes.length||result.meshes.length>512)throw new Error('STEP did not produce a supported mesh.');
   let vertices=0,triangles=0;
@@ -46,5 +47,5 @@
   });}
   dispose(){this.disposed=true;this.loadingAbort?.abort();this.pending?.();this.worker?.terminate();this.worker=null;}
  }
- root.KiCadStepDecoder={meshes,Client,bundledWorker};if(typeof module==='object'&&module.exports)module.exports=root.KiCadStepDecoder;
+ root.KiCadStepDecoder={meshes,Client,bundledWorker,meshOptions};if(typeof module==='object'&&module.exports)module.exports=root.KiCadStepDecoder;
 })(typeof globalThis==='object'?globalThis:this);

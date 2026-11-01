@@ -3,7 +3,7 @@
  * the exact selected net set changes. Saved XY coordinates are never altered.
  */
 import {selectionNetNames} from './selectionState.mjs';
-import {nativePadOutline} from './padGeometry.mjs';
+import {smoothPadOutline as nativePadOutline,copperStrokeBatches,smoothDrillOutline,drillWallGeometry} from './copperGeometry.mjs';
 
 export function createNetInspection(THREE,{board,plan,zones,pads,world,colorForLayer,sourceLimited=false}) {
  const group=new THREE.Group();group.name='Selected net — all copper layers';group.visible=false;
@@ -26,10 +26,9 @@ export function createNetInspection(THREE,{board,plan,zones,pads,world,colorForL
   const wanted=new Set(nets);let used=0,geometryBatches=0;const shapeBudget=()=>{if(geometryBatches>=512){state.omitted++;return false;}geometryBatches++;return true;};const take=record=>{if(!wanted.has(record.net))return false;if(used++>=budget){state.omitted++;return false;}return true;};
   for(const layer of plan.layers){
    const thickness=Math.max(.001,layer.thickness),z=layer.z;
-   const tracks=board.tracks.filter(track=>track.layer===layer.name&&take(track));state.tracks+=tracks.length;
-   instances(new THREE.BoxGeometry(1,1,1),tracks,layer.name,(object,track)=>{const a=world(track.start),b=world(track.end);object.position.set((a[0]+b[0])/2,(a[1]+b[1])/2,z);object.rotation.z=Math.atan2(b[1]-a[1],b[0]-a[0]);object.scale.set(Math.hypot(b[0]-a[0],b[1]-a[1]),track.width,thickness);});
-   const caps=tracks.flatMap(track=>[{track,at:track.start},{track,at:track.end}]);
-   instances(new THREE.CylinderGeometry(1,1,1,12),caps,layer.name,(object,{track,at})=>{const[x,y]=world(at);object.position.set(x,y,z);object.rotation.x=Math.PI/2;object.scale.set(track.width/2,thickness,track.width/2);});
+   const tracks=board.tracks.filter(track=>track.layer===layer.name&&take(track)),stroke=copperStrokeBatches(THREE,tracks,{world,z,thickness});state.tracks+=stroke.tracks.length;state.omitted+=stroke.invalid;
+   if(stroke.plan?.limited)state.warnings.push(`${layer.name}: track cap tessellation reached its 128-segment display limit.`);
+   for(const batch of stroke.batches)instances(batch.geometry,batch.records,layer.name,batch.place);
    const batches=new Map();
    for(const pad of pads){
     if(!wanted.has(pad.net)||pad.nativeType==='np_thru_hole'||!(pad.layer===layer.name||pad.layers?.includes(layer.name)||pad.layers?.includes('*.Cu')||pad.layers?.includes('F&B.Cu')&&['F.Cu','B.Cu'].includes(layer.name)))continue;
@@ -49,8 +48,8 @@ export function createNetInspection(THREE,{board,plan,zones,pads,world,colorForL
   function barrel(record,span,pad=false){
    const width=pad?(record.drillWidth||record.drill):record.drill,height=pad?(record.drillHeight||record.drill):record.drill;
    if(!(width>0&&height>0)||!span||span.zMax<=span.zMin){state.omitted++;return;}
-   // Saved drill geometry is exact; barrel plating thickness is illustrative.
-   const outline=nativePadOutline({shape:width===height?'circle':'oval',width:width+.05,height:height+.05,drill:record.drill,drillWidth:width,drillHeight:height,drillShape:width===height?'circle':'oval'});
+   // A zero-thickness wall follows the saved bore; plating thickness is unknown.
+   const outline=smoothDrillOutline({drill:record.drill,drillWidth:width,drillHeight:height,drillShape:width===height?'circle':'oval'});
    if(!outline){state.omitted++;return;}const key=JSON.stringify([outline,span.zMin,span.zMax,span.from]);
    if(!barrels.has(key)){if(!shapeBudget())return;barrels.set(key,{outline,span,records:[]});}barrels.get(key).records.push(record);
   }
@@ -62,10 +61,10 @@ export function createNetInspection(THREE,{board,plan,zones,pads,world,colorForL
   }
   for(const pad of pads){if(pad.nativeType!=='thru_hole'||!(pad.drill>0)||!take(pad))continue;const front=plan.byLayer.get('F.Cu'),back=plan.byLayer.get('B.Cu');if(!front||!back)continue;barrel(pad,{zMin:back.z,zMax:front.z,from:'F.Cu',to:'B.Cu'},true);state.platedPads++;}
   for(const batch of annuli.values())instances(new THREE.ExtrudeGeometry(shapeFor(batch.outline),{depth:batch.layer.thickness,bevelEnabled:false,curveSegments:8}),batch.records,batch.layer.name,(object,record)=>{const[x,y]=world(record.at);object.position.set(x,y,batch.layer.z-batch.layer.thickness/2);});
-  for(const batch of barrels.values())instances(new THREE.ExtrudeGeometry(shapeFor(batch.outline),{depth:batch.span.zMax-batch.span.zMin,bevelEnabled:false,curveSegments:8}),batch.records,batch.span.from,(object,record)=>{const[x,y]=world(record.at);object.rotation.z=(record.rotation||0)*Math.PI/180;const[dx,dy]=record.drillOffset||[0,0],c=Math.cos(object.rotation.z),s=Math.sin(object.rotation.z);object.position.set(x+dx*c+dy*s,y+dx*s-dy*c,batch.span.zMin);});
+  for(const batch of barrels.values())instances(drillWallGeometry(THREE,batch.outline,batch.span.zMax-batch.span.zMin),batch.records,batch.span.from,(object,record)=>{const[x,y]=world(record.at);object.rotation.z=(record.rotation||0)*Math.PI/180;const[dx,dy]=record.drillOffset||[0,0],c=Math.cos(object.rotation.z),s=Math.sin(object.rotation.z);object.position.set(x+dx*c+dy*s,y+dx*s-dy*c,batch.span.zMin);});
   state.active=state.tracks+state.pads+state.vias+state.platedPads+state.fills+state.boundaries>0;group.visible=state.active;
   if(state.boundaries)state.warnings.push('Unfilled saved zones are boundary-only; no copper fill is inferred.');
-  if(state.vias||state.platedPads)state.warnings.push('Barrel plating wall thickness is illustrative (25 µm); saved drill size and layer span are retained.');
+  if(state.vias||state.platedPads)state.warnings.push('Saved drill wall surfaces and layer spans are shown; plating thickness is not inferred.');
   if(state.omitted)state.warnings.push(`${state.omitted} selected primitives were omitted because saved geometry was unsupported or the display budget was reached.`);
   return snapshot();
  }

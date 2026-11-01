@@ -8,7 +8,7 @@ export function viewportPixelRatio(width, height, deviceRatio = 1, maxDimension 
   return Math.min(dpr, 3, Math.sqrt(4_000_000 / w / h), dimension / w, dimension / h);
 }
 
-export function qualityName(value){return ['low','balanced','high'].includes(value)?value:'balanced';}
+export function qualityName(value){return ['low','balanced','sharp','high'].includes(value)?value:'balanced';}
 // Touch input says nothing about GPU capacity. Use reported capabilities and
 // memory only; unknown devices retain the normal, bounded allocation policy.
 export function graphicsProfile({maxTextureSize=4096,maxRenderbufferSize=maxTextureSize,deviceMemory,hardwareConcurrency=0,floatTargets=false,android=false}={}){
@@ -24,9 +24,9 @@ export function graphicsProfile({maxTextureSize=4096,maxRenderbufferSize=maxText
 export function qualityViewport(width,height,deviceRatio=1,maxDimension=4096,quality='balanced',constrained=false){
  const mode=qualityName(quality),w=Number.isFinite(width)&&width>0?width:1,h=Number.isFinite(height)&&height>0?height:1;
  const profile=constrained&&typeof constrained==='object'?constrained:null,limited=profile?profile.constrained:constrained;
- const maxPixels=mode==='high'?(profile?profile.highMaxPixels:limited?1_000_000:2_000_000):mode==='low'?1_000_000:limited?3_000_000:4_000_000;
+ const maxPixels=mode==='sharp'?(limited?2_000_000:4_000_000):mode==='high'?(profile?profile.highMaxPixels:limited?1_000_000:2_000_000):mode==='low'?1_000_000:limited?3_000_000:4_000_000;
  const ratio=Math.min(viewportPixelRatio(w,h,deviceRatio,maxDimension),Math.sqrt(maxPixels/w/h));
- const pixels=Math.floor(w*ratio)*Math.floor(h*ratio),bytesPerPixel=mode==='high'?96:mode==='low'?12:24;
+ const pixels=Math.floor(w*ratio)*Math.floor(h*ratio),bytesPerPixel=mode==='high'?96:mode==='sharp'?64:mode==='low'?12:24;
  return {quality:mode,ratio,width:Math.max(1,Math.floor(w*ratio)),height:Math.max(1,Math.floor(h*ratio)),pixels,maxPixels,estimatedBytes:pixels*bytesPerPixel+(mode==='low'?0:2*1024*1024*4)};
 }
 export function boardOcclusion(thickness=1.6){
@@ -59,3 +59,10 @@ export const studioMaterials=Object.freeze({
   copper:Object.freeze({metalness:.62,roughness:.38}),
   proxy:Object.freeze({color:0x353d49,metalness:.06,roughness:.66})
 });
+
+// Direct miniature rendering keeps MSAA/HiDPI detail without HDR/AO buffers.
+export function probeViewportPlan(width,height,deviceRatio=1){
+ const w=Number.isFinite(width)&&width>0?width:1,h=Number.isFinite(height)&&height>0?height:1,dpr=Number.isFinite(deviceRatio)&&deviceRatio>0?deviceRatio:1;
+ const ratio=Math.min(Math.max(1,dpr),2,1024/w,1024/h,Math.sqrt(500000/(w*h)));
+ return {ratio,width:Math.max(1,Math.floor(w*ratio)),height:Math.max(1,Math.floor(h*ratio)),maxPixels:500000};
+}

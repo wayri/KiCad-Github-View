@@ -11,11 +11,11 @@ class Element{
  emit(name,values={}){for(const handler of this.listeners[name]||[])handler({button:0,pointerId:1,clientX:10,clientY:10,preventDefault(){},stopPropagation(){},target:this,...values});}
 }
 function descendants(element){return[element,...element.children.flatMap(descendants)];}
-function fixture(count=5){const document={createElement:tag=>new Element(tag,document)},holder=new Element('div',document),viewports=[],located=[];
+function fixture(count=5,options={}){const document={createElement:tag=>new Element(tag,document)},holder=new Element('div',document),viewports=[],located=[];
  const designs=Array.from({length:count},(_,i)=>({primitives:[{type:'line',uuid:'line'+i,points:[{x:i,y:0},{x:i+3,y:4}],layer:'F.Cu'}],layers:['F.Cu']}));
  const entries=designs.map((design,i)=>({path:'sheet'+i+'.kicad_sch',label:'Sheet '+i,instanceId:'instance'+i,design,groups:[{id:'net'+i,name:'Power '+i,primitives:design.primitives}]}));
  const canvasAPI={bounds:owned.bounds,mount(host){const viewport={canvas:new Element('canvas',document),viewport:{camera:new owned.Camera(280,280)},setDocument(design,path){this.design=design;this.path=path;},setNetHighlights(groups){this.groups=groups;},draw(){},requestDraw(){},dispose(){this.disposed=true;}};host.append(viewport.canvas);viewports.push(viewport);return viewport;}};
- const quick=mount({holder,getEntries:()=>entries,onLocate:(...args)=>located.push(args),canvasAPI,document});const button=label=>descendants(holder).find(element=>element.tag==='button'&&element.attributes['aria-label']===label);return{document,holder,quick,entries,viewports,located,button,canvasAPI};}
+ const quick=mount({holder,getEntries:()=>entries,onLocate:(...args)=>located.push(args),canvasAPI,document,...options});const button=label=>descendants(holder).find(element=>element.tag==='button'&&element.attributes['aria-label']===label);return{document,holder,quick,entries,viewports,located,button,canvasAPI};}
 test('occurrences use only saved primitives from each exact source and preserve hierarchy instances',()=>{
  const live={uuid:'pad',type:'pad'},stale={...live},design={primitives:[live]};const entries=[{path:'a.kicad_sch',instanceId:'one',design,groups:[{id:'net',name:'VCC',primitives:[live,stale]}]},{path:'a.kicad_sch',instanceId:'two',design,groups:[{id:'net',name:'VCC',primitives:[live]}]}],before=JSON.stringify(entries),rows=occurrences(entries);
  assert.equal(rows.length,2);assert.notEqual(rows[0].id,rows[1].id);assert.deepEqual(rows[0].group.primitives,[live]);assert.equal(rows[0].group.primitives[0],live);assert.equal(JSON.stringify(entries),before);assert.equal(occurrences([{...entries[0],groups:[{primitives:[stale]}]}]).length,0);
@@ -37,4 +37,36 @@ test('rotated miniature pan and cursor-anchored wheel zoom preserve world-coordi
 });
 test('renderer failures clean up a partial miniature and show a bounded diagnostic',()=>{
  const f=fixture(1);f.canvasAPI.mount=()=>{throw Error('Canvas unavailable');};f.quick.open();f.button('Power 0 · Sheet 0').emit('click');assert.equal(descendants(f.holder).filter(node=>node.className==='net-quick-view-window').length,0);assert.ok(descendants(f.holder).some(node=>node.textContent==='Quick view unavailable: Canvas unavailable'));f.quick.dispose();
+});
+
+const tick=()=>new Promise(resolve=>setImmediate(resolve));
+test('popup click selects live geometry through authoritative filter mapping but3px drags only pan',()=>{
+ const selected=[],calls=[],f=fixture(1,{onSelect:(...args)=>selected.push(args),resolveSelection:(entry,p,filter)=>{calls.push({entry,p,filter});return{kind:'pin',primitive:p,primitives:[p],pinNumber:'1'};}});f.quick.open();f.button('Power 0 · Sheet 0').emit('click');const host=descendants(f.holder).find(n=>n.className==='net-quick-view-canvas'),filter=descendants(f.holder).find(n=>n.tag==='select'),p=f.entries[0].design.primitives[0];f.viewports[0].query=()=>[p];filter.value='pin';filter.emit('change');
+ host.emit('pointerdown');host.emit('pointerup');assert.equal(selected.length,1);assert.equal(calls.at(-1).filter,'pin');assert.equal(calls.at(-1).p,p);assert.equal(selected[0][0],f.entries[0]);assert.match(selected[0][2].windowId,/^probe-/);
+ host.emit('pointerdown');host.emit('pointermove',{clientX:14});host.emit('pointerup',{clientX:14});assert.equal(selected.length,1);f.quick.dispose();
+});
+test('popupspawn permits duplicates with uniqueIDs and flat rootownership boundedatfour',async()=>{
+ const requests=[],f=fixture(1,{resolveViews:async(row,selection,mode)=>{requests.push({row,selection,mode});return[row];}}),row=occurrences(f.entries)[0],first=f.quick.openProbe(row);f.button('Open probe').emit('click');await tick();const sections=descendants(f.holder).filter(n=>n.className==='net-quick-view-window');assert.equal(sections.length,2);assert.equal(sections[0].parent,sections[1].parent);assert.notEqual(sections[0].attributes['data-window-id'],sections[1].attributes['data-window-id']);assert.equal(requests[0].mode,'schematic');f.quick.closeProbe(first);assert.equal(descendants(f.holder).filter(n=>n.className==='net-quick-view-window').length,1);for(let i=0;i<5;i++)f.quick.openProbe(row);assert.equal(descendants(f.holder).filter(n=>n.className==='net-quick-view-window').length,4);f.quick.dispose();
+});
+test('async3D close disposes lateadapter and unresolvedspawn cannot resurrectclosedparent',async()=>{
+ let release,disposed=0;const f=fixture(1,{mount3D:()=>new Promise(resolve=>release=resolve)}),id=f.quick.openProbe(occurrences(f.entries)[0],{mode:'3d'});await tick();f.quick.closeProbe(id);release({dispose(){disposed++;},fit(){}});await tick();assert.equal(disposed,1);assert.equal(descendants(f.holder).filter(n=>n.className==='net-quick-view-window').length,0);f.quick.dispose();
+ let resolve;const g=fixture(1,{resolveViews:()=>new Promise(r=>resolve=r)}),row=occurrences(g.entries)[0],parent=g.quick.openProbe(row);g.button('Open probe').emit('click');g.quick.closeProbe(parent);resolve(row);await tick();assert.equal(descendants(g.holder).filter(n=>n.className==='net-quick-view-window').length,0);g.quick.dispose();
+});
+test('failed3D switch retains existing2Drenderer and exposesdiagnostic',async()=>{
+ const f=fixture(1,{mount3D:async()=>{throw Error('graphics budget');},resolveViews:async row=>row}),id=f.quick.openProbe(occurrences(f.entries)[0]);f.button('3D').emit('click');await tick();assert.equal(f.viewports[0].disposed,undefined);assert.ok(descendants(f.holder).some(n=>n.textContent==='Quick view unavailable: graphics budget'));assert.equal(descendants(f.holder).filter(n=>n.className==='net-quick-view-window').length,1);f.quick.closeProbe(id);assert.equal(f.viewports[0].disposed,true);f.quick.dispose();
+});
+test('fallback selection never usesstalegeometry anddistinguishesliveparts/pins/nets',()=>{
+ const {selectionFor}=require('../net-quick-view.js'),pin={kind:'pad',reference:'J1',uuid:'p1',pinNumber:'1'},body={kind:'footprint',reference:'J1',uuid:'part'},wire={kind:'wire',uuid:'wire'},entry={design:{primitives:[pin,body,wire]},groups:[{name:'VCC',primitives:[pin,wire]}]};
+ assert.equal(selectionFor(entry,pin).kind,'pin');assert.equal(selectionFor(entry,body).kind,'part');assert.equal(selectionFor(entry,wire).kind,'net');assert.equal(selectionFor(entry,wire,'part'),null);assert.equal(selectionFor(entry,{...pin}),null);assert.deepEqual(selectionFor(entry,pin,'part').primitives,[pin,body]);
+});
+
+test('switching back to current2D while3D ispending prevents latereplacement',async()=>{
+ let release,disposed=0;const f=fixture(1,{resolveViews:async row=>row,mount3D:()=>new Promise(resolve=>release=resolve)});f.quick.openProbe(occurrences(f.entries)[0]);f.button('3D').emit('click');await tick();f.button('Schematic').emit('click');release({dispose(){disposed++;},fit(){}});await tick();assert.equal(disposed,1);assert.equal(f.viewports[0].disposed,undefined);assert.equal(f.button('Schematic').attributes['aria-pressed'],'true');f.quick.dispose();
+});
+test('links use flat screengeometry, arepointertransparent, toggleandretirescheduledwork',async()=>{
+ const f=fixture(1,{getAnchor:()=>({x:700,y:200})}),row=occurrences(f.entries)[0];f.quick.openProbe(row,{selection:{kind:'part'}});await new Promise(resolve=>setTimeout(resolve,22));const svg=descendants(f.holder).find(n=>n.attributes.class==='net-quick-view-links');assert.equal(svg.children.length,1);assert.match(svg.children[0].attributes.d,/^M 700 200 C/);assert.equal(svg.children[0].attributes.stroke,'#a5a0de');assert.match(descendants(f.holder).find(n=>n.tag==='style').textContent,/pointer-events:none/);f.button('Links').emit('click');await new Promise(resolve=>setTimeout(resolve,22));assert.equal(svg.children.length,0);f.quick.dispose();
+});
+
+test('initial part andpin groupselection reaches resolver without being guessed asnet',async()=>{
+ for(const kind of ['part','pin']){const received=[],f=fixture(1,{resolveViews:async(row,selection)=>{received.push(selection);return row;}}),group=f.entries[0].groups[0],canonical={kind,reference:'J1',...(kind==='pin'?{pinNumber:'1'}:{})};group.selection={kind,canonical,primitives:group.primitives};f.quick.open();f.button('Power 0 · Sheet 0').emit('click');f.button('Layout').emit('click');await tick();assert.equal(received[0],group.selection);assert.equal(received[0].canonical,canonical);f.quick.dispose();}
 });

@@ -54,3 +54,14 @@ test('dedicated tool, rule and visibility paths do not fall back to parts',()=>{
  const{paths}=require('../ui-icons.js');for(const name of ['calculator','pdf','erc','drc','eye','eye-off','tools']){assert.ok(paths[name]);assert.notEqual(paths[name],paths.parts);}
  assert.notEqual(paths.erc,paths.drc);assert.notEqual(paths.eye,paths['eye-off']);
 });
+
+
+test('viewer entrypoints resolve every explicit icon and distinct viewport actions keep distinct glyphs',()=>{
+ const{paths}=require('../ui-icons.js');
+ for(const file of ['schematic-viewer.html','pcb-viewer.html','project-viewer.html','revision-viewer.html']){
+  const html=fs.readFileSync(require.resolve('../'+file),'utf8');
+  for(const [,name]of html.matchAll(/data-icon="([^"]+)"/g))assert.ok(paths[name]||['github','gitlab'].includes(name),`${file}: missing ${name}`);
+ }
+ const names=['maximize','restore','fit','page','sheets','parts','inspect','comment','ruler','grid','flip','fast-pi','draftsman','download','tools'];
+ assert.equal(new Set(names.map(name=>paths[name])).size,names.length);
+});

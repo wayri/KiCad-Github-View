@@ -18,7 +18,7 @@
   const loading=globalThis.KiCadLoading?.indicator(document.body,{onStop:()=>stopLoading()});
   function loadWait(promise){return new Promise((resolve,reject)=>{const signal=loadController?.signal,abort=()=>reject(signal?.reason||Object.assign(Error('Loading stopped.'),{name:'AbortError'}));if(signal?.aborted){abort();return;}signal?.addEventListener('abort',abort,{once:true});Promise.resolve(promise).then(value=>{signal?.removeEventListener('abort',abort);signal?.aborted?abort():resolve(value);},error=>{signal?.removeEventListener('abort',abort);reject(error);});});}
   const loadSend=message=>{const pending=send({...message,...(remoteLoad?{loadId}:{})});const signal=loadController?.signal,abort=()=>{if(remoteLoad)void send({type:'load-cancel',loadId}).catch(()=>{});};signal?.addEventListener('abort',abort,{once:true});return loadWait(pending).finally(()=>signal?.removeEventListener('abort',abort));};
-  let sheetOverview=null,compatibilityUI=null,windowLink=null;
+  let sheetOverview=null,compatibilityUI=null,windowLink=null,probeMaster=null,probeMasterHost=null,probeAssets=null;
   const viewSession=/^[a-zA-Z0-9_-]{32,128}$/.test(params.get('viewSession')||'')?params.get('viewSession'):globalThis.crypto?.randomUUID?.()||null;
   let dark=pcb,workspace=null,canvas=null,scene=null,modelAssetCache=null,disposed=false,applying=false,crossApplying=false,lastView='',lastFile='';
 
@@ -78,7 +78,7 @@
 
     const designs=new Map(prepared.design?[[initialFile,prepared.design]]:[]),host=$('drawingHost');globalThis.KiCadUIIcons?.decorate();$('frameControls').hidden=false;
 
-    canvas=KiCadOwnedCanvas.mount(host,{dark,pcb,acceleration:preferences.acceleration});status.remove();
+    canvas=KiCadOwnedCanvas.mount(host,{dark,pcb,acceleration:preferences.acceleration,worksheet:preferences.worksheet!==false});status.remove();
     compatibilityUI=globalThis.KiCadFileCompatibility?.mountStatus($('frameControls'),()=>canvas.design?.compatibility);
 
     const currentFile=()=>canvas.document?.filename||initialFile;
@@ -151,10 +151,11 @@
         add('Overview','Restore layer view before focusing',()=>canvas.restoreLayers());
         add('Filled copper','Toggle saved filled copper zones',()=>canvas.setZoneVisibility({filled:canvas.showFilledCopper===false}));
         add('Zone outlines','Toggle saved zone boundary outlines',()=>canvas.setZoneVisibility({outlines:canvas.showZoneOutlines===false}));
+        add('Worksheet','Show or hide the saved KiCad page and title block',()=>{preferences.worksheet=!canvas.paperVisible;canvas.setWorksheetVisible(preferences.worksheet);savePreferences();});
         add('Net names','Show saved pad numbers and copper net names in 2D and 3D',()=>{preferences.showNetNames=!canvas.showNetNames;applyTheme();savePreferences();});
       }
       for(const [name,button] of floatingButtons){
-        const selected=name==='Net names'?canvas.showNetNames===true:name==='Filled copper'?canvas.showFilledCopper!==false:name==='Zone outlines'?canvas.showZoneOutlines!==false:name==='All'?!canvas.focusedLayer&&(canvas.design.layers||[]).every(layer=>canvas.visibleLayers.has(layer)):name==='Overview'?!canvas.focusedLayer&&!canvas.layerSnapshot:canvas.focusedLayer===name;
+        const selected=name==='Worksheet'?canvas.paperVisible:name==='Net names'?canvas.showNetNames===true:name==='Filled copper'?canvas.showFilledCopper!==false:name==='Zone outlines'?canvas.showZoneOutlines!==false:name==='All'?!canvas.focusedLayer&&(canvas.design.layers||[]).every(layer=>canvas.visibleLayers.has(layer)):name==='Overview'?!canvas.focusedLayer&&!canvas.layerSnapshot:canvas.focusedLayer===name;
         if(button.getAttribute('aria-pressed')!==String(selected))button.setAttribute('aria-pressed',String(selected));
       }
       if(floatingToggle&&floatingToggle.textContent!==(canvas.focusedLayer||'Layers'))floatingToggle.textContent=canvas.focusedLayer||'Layers';
@@ -231,9 +232,85 @@
     loading?.show('Displaying drawing…');
     await globalThis.KiCadLoading?.paint();
     if(disposed)return;if(loadController?.signal.aborted)throw loadController.signal.reason;
+    // Probe sources are resolved once per immutable revision, never during pan/zoom.
+    const probeProjects=new Map(),probeDesigns=new Map(),probeModels=new WeakMap(),probeNets=new WeakMap();let probeInventory=null,probeEngine=null,probeMasterPath=null,probeMasterLoading=false;
+    async function probeFiles(kind){
+      if(!probeProjects.has(kind))probeProjects.set(kind,(async()=>{
+        const known=files.filter(f=>(/\.kicad_pcb$/i.test(f.path)?'layout':/\.(kicad_sch|sch)$/i.test(f.path)?'schematic':null)===kind);
+        if(known.length)return known;
+        const response=await (probeInventory||=send({type:'drawing-files',repository,ref,file:rootFile}));
+        if(!response?.ok)throw Error(response?.error||'Project drawing inventory unavailable.');
+        const paths=(response.result?.files||[]).map(f=>typeof f==='string'?f:f.path).filter(p=>kind==='layout'?/\.kicad_pcb$/i.test(p):/\.(kicad_sch|sch)$/i.test(p));
+        const paired=params.get('pairedFile'),stem=rootFile.replace(/\.(kicad_(pcb|sch)|sch)$/i,'');
+        const path=paths.includes(paired)?paired:paths.find(p=>p.replace(/\.(kicad_(pcb|sch)|sch)$/i,'')===stem)||(paths.length===1?paths[0]:null);
+        if(!path)throw Error(paths.length?'Multiple drawings are available; open the matching project drawing first.':'No saved '+kind+' drawing in this project.');
+        const reply=await send({type:'project',repository,ref,file:path});
+        if(!reply?.ok||!Array.isArray(reply.result))throw Error(reply?.error||'Probe drawing sources unavailable.');
+        return reply.result;
+      })().catch(error=>{probeProjects.delete(kind);throw error;}));
+      return probeProjects.get(kind);
+    }
+    async function resolveProbeViews(row,selection,mode){
+      if(disposed)throw Error('Workspace closed.');
+      const kind=mode==='3d'?'layout':mode,source=await probeFiles(kind);
+      if(disposed)throw Error('Workspace closed.');
+      if(!probeModels.has(source))probeModels.set(source,KiCadDesignModel.buildProject(source));
+      const model=probeModels.get(source),canonical=selection?.canonical;
+      if(!KiCadPairedReview.validSelection(canonical))throw Error('Select a saved part, net or pin before switching probe views.');
+      const targetBoard=kind==='layout',sameKind=/\.kicad_pcb$/i.test(canonical.path)===targetBoard;
+      const getDesign=path=>{
+        if(designs.has(path))return designs.get(path);
+        if(!probeDesigns.has(path)){
+          const file=source.find(f=>f.path===path);if(!file)throw Error('Saved probe source unavailable.');
+          probeDesigns.set(path,(targetBoard?KiCadPCBRenderer:KiCadSchematicRenderer).build(KiCadDesignDiff.parse(file.content,{libraries:file.legacyLibraries}),path,{textVariables:file.textVariables}));
+        }return probeDesigns.get(path);
+      };
+      const paths=source.filter(f=>targetBoard?/\.kicad_pcb$/i.test(f.path):/\.(kicad_sch|sch)$/i.test(f.path)).map(f=>f.path);
+      let object,group,path;
+      if(canonical.kind==='part'||canonical.kind==='pin'){
+        if(sameKind){const matches=model.objects.filter(o=>o.path===canonical.path&&o.kind===(targetBoard?'footprint':'symbol')&&(canonical.ownerUuid||canonical.uuid?o.uuid===(canonical.ownerUuid||canonical.uuid):o.reference===canonical.reference));if(matches.length===1)object=matches[0];}
+        else {const part={kind:'part',reference:canonical.reference,path:canonical.path};for(const key of ['symbolUuid','tstampPath'])if(canonical[key])part[key]=canonical[key];if(canonical.ownerUuid||canonical.uuid)part.uuid=canonical.ownerUuid||canonical.uuid;const result=KiCadPairedReview.relatedPart(model.objects,part);object=result.object;if(!object)throw Error(result.error);}
+        if(!object)throw Error('No unambiguous saved component for this probe.');path=object.path;
+        const design=getDesign(path),primitives=design.primitives.filter(p=>!p.frame&&(p.ownerUuid===object.uuid||p.uuid===object.uuid||!p.ownerUuid&&p.reference===object.reference)&&
+          (canonical.kind!=='pin'||String(p.pinNumber??p.name??'')===canonical.pinNumber&&['pad','pin','pin-marker','pin-number','pin-name'].includes(p.kind)));
+        if(!primitives.length)throw Error('The saved terminal/component has no rendered geometry.');group={id:object.id,kind:canonical.kind,name:object.reference,primitives};
+      }else{
+        const netDesigns=new Map(paths.map(path=>[path,getDesign(path)])),nets=KiCadNetModel.build(source,netDesigns).nets;
+        const direct=sameKind?nets.filter(n=>n.path===canonical.path&&(n.name===canonical.netName||n.names?.includes(canonical.netName))):[];
+        const result=direct.length===1?{net:direct[0]}:KiCadPairedReview.relatedNet(nets,model.objects,canonical);
+        if(!result.net)throw Error(result.error||'No unambiguous saved net.');group=result.net;path=group.path;
+      }
+      const design=getDesign(path);if(!probeNets.has(design))probeNets.set(design,KiCadNetModel.build(source.filter(f=>f.path===path),new Map([[path,design]])).nets);const nets=probeNets.get(design);
+      let targetSelection;if(object){const part=KiCadPairedReview.partSelection(object);targetSelection={kind:canonical.kind,reference:object.reference,object,primitives:group.primitives,primitive:group.primitives[0],...(canonical.kind==='pin'?{pinNumber:canonical.pinNumber}:{}),canonical:canonical.kind==='pin'?{...part,kind:'pin',ownerUuid:object.uuid,pinNumber:canonical.pinNumber}:part};}
+      else {const qualified=KiCadPairedReview.qualifiedNetName(group,model.objects);targetSelection={kind:'net',netName:group.name,group,primitives:group.primitives,canonical:{kind:'net',path,netName:group.name,...(qualified?{qualifiedNetName:qualified}:{})}};}
+      return {id:JSON.stringify([path,group.id,mode]),name:group.name,label:path,group,selection:targetSelection,entry:{path,kind,design,groups:nets,nets,objects:model.objects,model,sourceFiles:source}};
+    }
+    const loadProbeEngine=()=>probeEngine||=new Promise((resolve,reject)=>{
+      if(globalThis.SpikeBoard3D?.mountBoard3D)return resolve(SpikeBoard3D);
+      const script=document.createElement('script');script.src='vendor/spike-board3d.bundle.js';script.onload=()=>globalThis.SpikeBoard3D?resolve(SpikeBoard3D):reject(Error('3D engine unavailable.'));script.onerror=()=>{probeEngine=null;reject(Error('3D engine could not load.'));};document.head.append(script);
+    });
+    async function mountProbe3D(holder,{entry,group,onSelect}){
+      if(disposed)throw Error('Workspace closed.');
+      let parentScene=scene&&entry.path===rootFile?scene:probeMaster;
+      if(parentScene&&probeMasterPath&&probeMasterPath!==entry.path)throw Error('Close the current 3D probe before probing another board.');
+      if(!parentScene){
+        if(probeMasterLoading)throw Error('A 3D probe is already loading. Wait for it to finish.');probeMasterLoading=true;
+        try{const engine=await loadProbeEngine(),file=(entry.sourceFiles||files).find(f=>f.path===entry.path);
+        if(disposed)throw Error('Workspace closed.');if(!file)throw Error('3D board source unavailable.');
+        probeMasterHost=document.createElement('div');Object.assign(probeMasterHost.style,{position:'fixed',left:'-400px',top:'0',width:'320px',height:'320px',visibility:'hidden'});document.body.append(probeMasterHost);
+        const assets=probeAssets=KiCadBrowserData.createModelAssetCache(async path=>{const reply=await send({type:'repo-asset',repository,ref,file:path});if(!reply?.ok)throw Error(reply?.error||'Saved model unavailable.');return reply.result;});
+        const inventory=await send({type:'repo-model-index',repository,ref});if(disposed){assets.clear();probeMasterHost.remove();throw Error('Workspace closed.');}
+        parentScene=probeMaster=engine.mountBoard3D(probeMasterHost,file.content,{dark,boardPath:entry.path,assetPaths:inventory?.ok?inventory.result?.paths||[]:[],loadAsset:assets.load,externalInspector:true,onSelect:record=>workspace?.select3D(record),onInspect:record=>workspace?.inspect3D(record),onComment:record=>workspace?.comment3D(record),onViewChange:()=>workspace?.sceneViewChanged()});probeMasterPath=entry.path;
+        }catch(error){if(!probeMaster){probeAssets?.clear();probeMasterHost?.remove();}throw error;}finally{probeMasterLoading=false;}
+      }
+      if(!parentScene.createProbeViewport)throw Error('Update the 3D renderer to enable interactive probes.');
+      const appearance=value=>value?.kind==='net'?{netNames:[value.netName||value.group?.name]}:value?.kind==='part'?{references:[value.reference]}:{uuids:(value?.primitives||group.primitives||[]).map(p=>p.uuid).filter(Boolean)};
+      const viewport=parentScene.createProbeViewport(holder,{selection:group.kind==='net'||group.code!==undefined?{netNames:[group.name]}:group.kind==='part'?{references:[group.name]}:{uuids:(group.primitives||[]).map(p=>p.uuid).filter(Boolean)},onSelect:record=>onSelect({...record,probeRecord:true}),dark});
+      const setSelection=viewport.setSelection?.bind(viewport);if(setSelection)viewport.setSelection=value=>setSelection(appearance(value));return viewport;
+    }
     workspace=KiCadReviewWorkspace.mount({initialModel:prepared.model,initialDesign:prepared.design,initialNetModel:prepared.nets,files,repository,provider,host:providerContext.host,ref,rootFile,pcb,pairedFile:params.get('pairedFile')||undefined,getCanvas:()=>canvas,currentFile,focus,openSheet,getRulerUnits:()=>preferences.rulerUnits,
 
-      getDesigns:()=>designs,updateDiagnostics,onOverviewHighlights:()=>sheetOverview?.refresh(),
+      getDesigns:()=>designs,resolveProbeViews,mountProbe3D,updateDiagnostics,onOverviewHighlights:()=>sheetOverview?.refresh(),
       onHierarchy(hierarchy){if(!disposed)parent.postMessage({type:'kicad-review:hierarchy',repository,ref,hierarchy},ownOrigin);},
       onSelection(selection){if(crossApplying||!globalThis.KiCadPairedReview?.validSelection(selection))return;windowLink?.publish(selection);if(globalThis.KiCadVSCodeBridge?.selection)globalThis.KiCadVSCodeBridge.selection(selection);else parent.postMessage({type:'kicad-review:selection',selection},ownOrigin);},
       onCommentsChanged(){if(globalThis.KiCadVSCodeBridge?.onCommentsChanged)globalThis.KiCadVSCodeBridge.onCommentsChanged();else parent.postMessage({type:'kicad-review:comments-changed'},ownOrigin);},pullNumber:Number(params.get('pullNumber'))||null,pullRepository:params.get('pullRepository')||repository});
@@ -360,13 +437,15 @@
 
       mode.onclick=async()=>{
 
-        if(busy)return;if(scene){scene.dispose();scene=null;pane.hidden=true;canvas.canvas.hidden=false;workspace.setScene(null);$('drawingLegend').hidden=false;lock(false);mode.setAttribute('aria-pressed','false');if($('renderMode'))$('renderMode').textContent='2D';canvas.resize();canvas.draw();return;}
+        if(busy)return;if(scene){if(scene.getProbeCount?.()>0){probeMaster=scene;probeMasterPath=rootFile;}else scene.dispose();scene=null;pane.hidden=true;canvas.canvas.hidden=false;workspace.setScene(null);$('drawingLegend').hidden=false;lock(false);mode.setAttribute('aria-pressed','false');if($('renderMode'))$('renderMode').textContent='2D';canvas.resize();canvas.draw();return;}
 
         busy=true;mode.disabled=true;
 
         try{const engine=await load(),modelPaths=await assetPaths();if(disposed)return;pane.hidden=false;canvas.canvas.hidden=true;
 
-          scene=engine.mountBoard3D(pane,files.find(file=>file.path===rootFile).content,{dark,showNetNames:canvas.showNetNames,onTerminalLabelsChange:visible=>{preferences.showNetNames=visible;applyTheme();savePreferences();},boardPath:rootFile,assetPaths:modelPaths,assetWarnings,loadAsset:modelAssetCache.load,externalInspector:true,onViewChange:()=>workspace?.sceneViewChanged(),onAnchor:({point})=>workspace?.positionSimulation(point),onMeasurementMode:active=>{$("measureButton").setAttribute("aria-pressed",String(active));$("measurementStatus").textContent=active?"3D measurement: select two model surface points.":"";},onSelect:record=>workspace?.select3D(record),onInspect:record=>workspace?.inspect3D(record),onComment:record=>workspace?.comment3D(record)});
+          if(probeMasterLoading)throw Error('Wait for the 3D probe to finish loading.');
+          if(probeMaster&&probeMasterPath===rootFile){scene=probeMaster;probeMaster=null;if(probeMasterHost){Object.assign(probeMasterHost.style,{position:'absolute',left:'0',top:'0',width:'100%',height:'100%',visibility:'visible'});pane.append(probeMasterHost);}}
+          else scene=engine.mountBoard3D(pane,files.find(file=>file.path===rootFile).content,{dark,showNetNames:canvas.showNetNames,onTerminalLabelsChange:visible=>{preferences.showNetNames=visible;applyTheme();savePreferences();},boardPath:rootFile,assetPaths:modelPaths,assetWarnings,loadAsset:modelAssetCache.load,externalInspector:true,onViewChange:()=>workspace?.sceneViewChanged(),onAnchor:({point})=>workspace?.positionSimulation(point),onMeasurementMode:active=>{$("measureButton").setAttribute("aria-pressed",String(active));$("measurementStatus").textContent=active?"3D measurement: select two model surface points.":"";},onSelect:record=>workspace?.select3D(record),onInspect:record=>workspace?.inspect3D(record),onComment:record=>workspace?.comment3D(record)});
 
           workspace.setScene(scene);syncFloatingLayers();$('drawingLegend').hidden=true;lock(true);mode.setAttribute('aria-pressed','true');if($('renderMode'))$('renderMode').textContent='3D';
 
@@ -435,7 +514,7 @@
 
   }
 
-  addEventListener('pagehide',()=>{windowLink?.dispose();disposed=true;loadController?.abort();loading?.dispose();modelAssetCache?.clear();sheetOverview?.dispose();compatibilityUI?.dispose();workspace?.dispose();scene?.dispose();canvas?.dispose();});
+  addEventListener('pagehide',()=>{windowLink?.dispose();disposed=true;loadController?.abort();loading?.dispose();modelAssetCache?.clear();sheetOverview?.dispose();compatibilityUI?.dispose();workspace?.dispose();probeMaster?.dispose();probeMasterHost?.remove();probeAssets?.clear();scene?.dispose();canvas?.dispose();});
 
   const deadline=setTimeout(()=>stopLoading('Loading stopped after 5 minutes. Retry or open a smaller project.'),300000);
   start().catch(error=>{loading?.hide();if(disposed)return;workspace?.dispose();canvas?.dispose();$('frameControls').hidden=true;status.textContent=loadController?.signal.aborted?(loadController.signal.reason?.message||'Loading stopped.'):error.message;if(error.name!=='AbortError')status.classList.add('error');const retry=document.createElement('button');retry.type='button';retry.textContent='Retry loading';retry.onclick=()=>location.reload();status.append(retry);if(!status.isConnected)$('drawingHost').append(status);}).finally(()=>{loadFinished=true;clearTimeout(deadline);});

@@ -9,6 +9,8 @@ import { EffectComposer } from "three/addons/postprocessing/EffectComposer.js";
 import { RenderPass } from "three/addons/postprocessing/RenderPass.js";
 import { GTAOPass } from "three/addons/postprocessing/GTAOPass.js";
 import { OutputPass } from "three/addons/postprocessing/OutputPass.js";
+import { ShaderPass } from "three/addons/postprocessing/ShaderPass.js";
+import { FXAAShader } from "three/addons/shaders/FXAAShader.js";
 import { SMAAPass } from "three/addons/postprocessing/SMAAPass.js";
 import "../design-diff.js";
 import "../repo-models.js";
@@ -19,7 +21,6 @@ import "../step-decoder.js";
 import { parseKicadBoard } from "@spike/boardParser";
 import "../layer-colors.js";
 const layerThreeColor = name => Number.parseInt(globalThis.KiCadLayerColors.hexFor(name).slice(1), 16);
-import { trackCapsuleDimensions } from "@spike/trackGeometry";
 import { viewportSceneIdentity } from "@spike/viewportScenePolicy";
 import { populationMask, uniqueComponentIndexes } from "./componentState.mjs";
 import { footprintProxies } from "./footprintProxies.mjs";
@@ -32,8 +33,10 @@ import { sphereFitDistance,boxFitDistance } from "./fitPolicy.mjs";
 import { qualityName, qualityViewport, graphicsProfile, boardOcclusion, boardClipRange, studioMaterials, padHasMaskOpening, physicalColors } from "./renderQuality.mjs";
 import { createResultOverlay } from "./result3d.js";
 import { sourceZoneGeometry,drillLoopInsideBoard } from "./sourceGeometry.mjs";
-import { nativePadOutline,padSourceDetails,nativeDrillOutline } from "./padGeometry.mjs";
+import { padSourceDetails } from "./padGeometry.mjs";
 import {sourceSelectionRecords} from './sourceSelection.mjs';
+import {drillWallGeometry,copperStrokeBatches,smoothPadOutline,smoothDrillOutline,outerCopperPlacement,substrateEnvelope,refineCopperTracks} from './copperGeometry.mjs';
+import {createProbeRegistry,createSharedProbeViewport} from './probeViewport.mjs';
 import { MeasurementSession,distanceLabel,snapProjectedEdges } from "./measurement3d.mjs";
 import { boardViewPresets,boardViewPreset } from "./viewPresets.mjs";
 export { mountResultScene } from "./result3d.js";
@@ -173,11 +176,11 @@ export function mountBoard3D(container, source, options = {}) {
   }
   bar.append(title, detail, spacer);
   const qualityKey='pocket-kivi:3d-quality:v1';let initialQuality='balanced',savedQuality=false;
-  try{const saved=localStorage.getItem(qualityKey);if(['low','balanced','high'].includes(saved)){initialQuality=saved;savedQuality=true;}}catch{}
+  try{const saved=localStorage.getItem(qualityKey);if(['low','balanced','sharp','high'].includes(saved)){initialQuality=saved;savedQuality=true;}}catch{}
   if(options.quality)initialQuality=qualityName(options.quality);
   const qualityLabel=document.createElement('label');qualityLabel.className='quality-label';const qualityCaption=document.createElement('span');qualityCaption.textContent='Quality';
-  const qualitySelect=document.createElement('select');qualitySelect.setAttribute('aria-label','3D rendering quality');qualitySelect.title='High: enhanced antialiasing and Studio ambient occlusion. Balanced: responsive lighting. Low: reduced memory.';
-  for(const [value,label]of [['low','Low'],['balanced','Balanced'],['high','High']]){const option=document.createElement('option');option.value=value;option.textContent=label;qualitySelect.append(option);}qualitySelect.value=initialQuality;qualityLabel.append(qualityCaption,qualitySelect);
+  const qualitySelect=document.createElement('select');qualitySelect.setAttribute('aria-label','3D rendering quality');qualitySelect.title='Sharp: higher-resolution antialiased edges without ambient occlusion. High: Studio ambient occlusion. Balanced: responsive native antialiasing. Low: reduced memory.';
+  for(const [value,label]of [['low','Low'],['balanced','Balanced'],['sharp','Sharp · edges'],['high','High · AO']]){const option=document.createElement('option');option.value=value;option.textContent=label;qualitySelect.append(option);}qualitySelect.value=initialQuality;qualityLabel.append(qualityCaption,qualitySelect);
 
   const lightingKey='pocket-kivi:3d-lighting:v1';let lighting='studio';
   try{lighting=lightingName(localStorage.getItem(lightingKey));}catch{}
@@ -213,7 +216,10 @@ export function mountBoard3D(container, source, options = {}) {
   }
   function disposePipeline(){if(!pipeline)return;for(const pass of pipeline.passes){pass.dispose?.();if(pass instanceof GTAOPass){pass.gtaoMaterial.dispose();pass.blendMaterial.dispose();pass.depthTexture?.dispose();}}pipeline.composer.dispose();pipeline=null;}
   function createPipeline(){
-    disposePipeline();if(quality!=='high')return;
+    disposePipeline();if(quality==='sharp'){
+      const target=new THREE.WebGLRenderTarget(1,1,{type:renderer.extensions.has('EXT_color_buffer_float')?THREE.HalfFloatType:THREE.UnsignedByteType,depthBuffer:true,stencilBuffer:false});
+      const composer=new EffectComposer(renderer,target),passes=[new RenderPass(scene,camera),new OutputPass(),new ShaderPass(FXAAShader)];pipeline={composer,passes,fxaa:passes[2]};for(const pass of passes)composer.addPass(pass);return;
+    }if(quality!=='high')return;
     if(!renderer.extensions.has('EXT_color_buffer_float'))throw Error('Floating-point render targets are unavailable.');
     const target=new THREE.WebGLRenderTarget(1,1,{type:THREE.HalfFloatType,depthBuffer:true,stencilBuffer:false});
     const composer=new EffectComposer(renderer,target),passes=[];pipeline={composer,passes};
@@ -230,7 +236,7 @@ export function mountBoard3D(container, source, options = {}) {
   function applyQuality(value,persist=true){quality=qualityName(value);qualitySelect.value=quality;host.dataset.quality=quality;qualityNotice.hidden=true;shaderFailure=false;
     if(persist)try{localStorage.setItem(qualityKey,quality);}catch{}
     lightingRig.set(lighting,quality);
-    try{createPipeline();}catch{fallbackQuality('High quality is unavailable on this graphics device. Balanced rendering is active.');}
+    try{createPipeline();}catch{fallbackQuality('The selected rendering quality is unavailable on this graphics device. Balanced rendering is active.');}
     sizeViewport();invalidate();return quality;
   }
   qualitySelect.onchange=()=>applyQuality(qualitySelect.value);
@@ -264,6 +270,8 @@ export function mountBoard3D(container, source, options = {}) {
   lightingSelect.onchange=()=>applyLighting(lightingSelect.value);
   applyLighting(lighting,false);
   const boardGroup = new THREE.Group(); scene.add(boardGroup);
+  const probeRegistry=createProbeRegistry(2),probeMaterials=new WeakMap(),probeInstanceColors=new WeakMap();
+  function rememberProbeResources(group){group.traverse(object=>{if(object.material&&!probeMaterials.has(object))probeMaterials.set(object,object.material);if(object.isInstancedMesh&&!probeInstanceColors.has(object))probeInstanceColors.set(object,object.instanceColor);});}
   const copperGroups = new Map(), pickables = [];
   let objectVisibility=objectVisibilityPolicy();
   const visibilityRecords=[];
@@ -274,7 +282,7 @@ export function mountBoard3D(container, source, options = {}) {
   const appearanceLabel=document.createElement('label');appearanceLabel.append(document.createTextNode('Appearance'));
   const appearanceSelect=document.createElement('select');appearanceSelect.setAttribute('aria-label','3D board appearance');
   for(const [value,label]of [['realistic','Realistic'],['layers','Layer colors']]){const option=document.createElement('option');option.value=value;option.textContent=label;appearanceSelect.append(option);}appearanceLabel.append(appearanceSelect);
-  const qualityHelp=document.createElement('p');qualityHelp.className='quality-help';qualityHelp.textContent='High adds enhanced antialiasing; Studio also adds ambient occlusion. Universal evenly lights both faces and edges without shadows. Linked model availability is shown below the viewport.';renderingOptions.append(appearanceLabel,qualityLabel,lightingLabel,qualityHelp);
+  const qualityHelp=document.createElement('p');qualityHelp.className='quality-help';qualityHelp.textContent='Sharp prioritizes crisp copper and model edges without ambient occlusion. High adds Studio ambient occlusion at a lower pixel budget. Universal evenly lights both faces and edges without shadows. Linked model availability is shown below the viewport.';const qualityStats=document.createElement('small');qualityStats.setAttribute('aria-label','3D render sampling');qualityStats.className='quality-help';renderingOptions.append(appearanceLabel,qualityLabel,lightingLabel,qualityHelp,qualityStats);
   function applyAppearance(){if(selectionAppearanceReady)selectionAppearance.restore();for(const record of appearanceRecords){const {mesh,role,layer}=record;
     if(role==='pads'){mesh.material.color.setHex(0xffffff);record.pads.forEach((pad,index)=>mesh.setColorAt(index,new THREE.Color(realistic?(padHasMaskOpening(pad,layer)?physicalColors.exposedCopper:physicalColors.coatedCopper):layerThreeColor(layer))));if(mesh.instanceColor)mesh.instanceColor.needsUpdate=true;}
     else mesh.material.color.setHex(realistic?physicalColors.coatedCopper:layerThreeColor(layer));
@@ -286,6 +294,9 @@ export function mountBoard3D(container, source, options = {}) {
     if (!copperGroups.has(layer)) { const group = new THREE.Group(); group.name = layer; boardGroup.add(group); copperGroups.set(layer, group); group.visible=!mechanical; }
     return copperGroups.get(layer);
   };
+  const refinedTracks=refineCopperTracks(board.tracks,sourceAST);geometryDiagnostics.push(...refinedTracks.warnings);
+  const substratePose=substrateEnvelope(thickness,copperPlan.byLayer);
+  if(substratePose.missingOuterDepths)geometryDiagnostics.push('Outer copper inner-face depths are incomplete; missing substrate faces use the nominal board envelope.');
   const shape = boardShape(board, world);
   // Saved pad/via drill loops cut the substrate itself; NPTH does not need a
   // copper annulus. Cap triangulation work and disclose omissions explicitly.
@@ -293,7 +304,7 @@ export function mountBoard3D(container, source, options = {}) {
   const inside=(point,loop)=>{let result=false;for(let i=0,j=loop.length-1;i<loop.length;j=i++){const [a,b]=[loop[i],loop[j]];if((a[1]>point[1])!==(b[1]>point[1])&&point[0]<(b[0]-a[0])*(point[1]-a[1])/(b[1]-a[1])+a[0])result=!result;}return result;};
   const outer=board.outlineLoops?.[0],outlineHoles=board.outlineLoops?.slice(1)||[];
   for(const item of [...nativePads,...(mechanical?[]:board.vias.filter(via=>copperPlan.viaSpans.get(via.id)?.through).map(via=>({...via,shape:'circle',width:via.size,height:via.size,drillShape:'circle',rotation:0})))]){
-    if(!(item.drill>0))continue;const loop=nativeDrillOutline(item);if(!loop){omittedDrills++;continue;}
+    if(!(item.drill>0))continue;const loop=smoothDrillOutline(item);if(!loop){omittedDrills++;continue;}
     const angle=(item.rotation||0)*Math.PI/180,c=Math.cos(angle),s=Math.sin(angle),[cx,cy]=world(item.at);
     if(outlineHoles.some(hole=>inside(item.at,hole)))continue;
     const points=loop.map(([x,y])=>[cx+x*c+y*s,cy+x*s-y*c]);
@@ -302,41 +313,35 @@ export function mountBoard3D(container, source, options = {}) {
     drilled.add(key);drillCount++;drillPoints+=points.length;shape.holes.push(pathFor(points,point=>point));
   }
   if(omittedDrills)geometryDiagnostics.push(`${omittedDrills} drill loops could not be cut within the saved-geometry/triangulation budget.`);
-  const substrate = new THREE.Mesh(new THREE.ExtrudeGeometry(shape, { depth: thickness, bevelEnabled: false, curveSegments: 8 }),
+  const substrate = new THREE.Mesh(new THREE.ExtrudeGeometry(shape, { depth: substratePose.depth, bevelEnabled: false, curveSegments: 8 }),
     [new THREE.MeshPhysicalMaterial(studioMaterials.solderMask),
       new THREE.MeshStandardMaterial(studioMaterials.substrateEdge)]);
-  substrate.position.z = bottom;
+  substrate.position.z = substratePose.bottom;
   substrate.receiveShadow = true;
   substrate.userData.record = { type: "Board", name: "Substrate", layer: "Edge.Cuts", id: "board" };
   substrate.userData.identity = viewportSceneIdentity("substrate", "Edge.Cuts", "board");
   boardGroup.add(substrate); pickables.push(substrate);
   const edges = new THREE.LineSegments(new THREE.EdgesGeometry(substrate.geometry, 20),
     new THREE.LineBasicMaterial({ color: 0x9bb7ac, transparent: true, opacity: .42 }));
-  edges.position.z = bottom; boardGroup.add(edges);
+  edges.position.z = substratePose.bottom; boardGroup.add(edges);
 
   for (const [layer, color] of [["F.Cu", layerThreeColor("F.Cu")], ["B.Cu", layerThreeColor("B.Cu")]]) {
-    const z = layer === "F.Cu" ? top + .025 : bottom - .025;
+    const placement=outerCopperPlacement(layer,thickness,copperPlan.byLayer.get(layer)?.thickness||.035,copperPlan.byLayer.get(layer)?.z),z=placement.center;
     for(const category of ['tracks','arcs']){
-    const tracks = board.tracks.filter((item) => item.layer === layer&&(isArc(item)?'arcs':'tracks')===category);
-    const trackMesh = makeInstanced(groupFor(layer), new THREE.PlaneGeometry(1, 1),
-      new THREE.MeshStandardMaterial({ color, ...studioMaterials.copper, side: THREE.DoubleSide }), tracks,
-      (object, track) => {
-        const a = world(track.start), b = world(track.end);
-        const length = Math.hypot(b[0] - a[0], b[1] - a[1]);
-        const capsule = trackCapsuleDimensions(length, track.width);
-        object.position.set((a[0] + b[0]) / 2, (a[1] + b[1]) / 2, z);
-        object.rotation.set(0, 0, Math.atan2(b[1] - a[1], b[0] - a[0]));
-        object.scale.set(Math.max(.04, capsule.shapeLength), Math.max(.04, capsule.width), 1);
-      }, viewportSceneIdentity("copper-track", layer, category));
-    if (trackMesh) {visibilityRecord(trackMesh,category,layer);pickables.push(trackMesh);appearanceRecords.push({mesh:trackMesh,role:'tracks',layer});}
+    const candidates=refinedTracks.tracks.filter(item=>item.layer===layer&&(isArc(item)?'arcs':'tracks')===category),stroke=copperStrokeBatches(THREE,candidates,{world,z,thickness:placement.thickness});
+    if(stroke.invalid)geometryDiagnostics.push(`${layer}: invalid saved track widths or positions omitted.`);
+    if(stroke.plan?.limited)geometryDiagnostics.push(`${layer}: large track caps exceed the ${stroke.plan.tolerance} mm tessellation tolerance at the 128-segment display limit.`);
+    const trackMaterial=new THREE.MeshStandardMaterial({color,...studioMaterials.copper});
+    for(const batch of stroke.batches){const mesh=makeInstanced(groupFor(layer),batch.geometry,trackMaterial,batch.records,batch.place,viewportSceneIdentity('copper-track',layer,category+'-'+batch.part));if(mesh){visibilityRecord(mesh,category,layer);pickables.push(mesh);appearanceRecords.push({mesh,role:'tracks',layer});}}
+    if(!stroke.batches.length)trackMaterial.dispose();
     }
     const pads = nativePads.filter((item) => item.layer === layer || item.layers?.includes(layer)||item.layers?.includes('*.Cu'));
     const batches=new Map();let omittedPads=0;
-    for(const pad of pads){const outline=nativePadOutline(pad);if(!outline){omittedPads++;continue;}const key=JSON.stringify([pad.shape,pad.width,pad.height,pad.roundrectRatio,pad.drill,pad.drillShape,pad.drillWidth,pad.drillHeight,pad.drillOffset]);if(!batches.has(key)){if(batches.size>=256){omittedPads++;continue;}batches.set(key,{outline,pads:[]});}batches.get(key).pads.push(pad);}
+    for(const pad of pads){const key=JSON.stringify([pad.shape,pad.width,pad.height,pad.roundrectRatio,pad.drill,pad.drillShape,pad.drillWidth,pad.drillHeight,pad.drillOffset]);if(!batches.has(key)){const outline=smoothPadOutline(pad);if(!outline||batches.size>=256){omittedPads++;continue;}if(outline.tessellation.limited)geometryDiagnostics.push(`${layer}: a pad contour retains validated geometry because the 0.0025 mm tolerance could not be met within hole-containment/display limits.`);batches.set(key,{outline,pads:[]});}batches.get(key).pads.push(pad);}
     if(omittedPads)geometryDiagnostics.push(`${layer}: ${omittedPads} unsupported/ambiguous pad shapes omitted; no rectangular stand-ins were substituted.`);
-    const padMaterial=new THREE.MeshStandardMaterial({color:0xffffff,...studioMaterials.copper});
-    for(const [key,batch]of batches){const geometry=new THREE.ExtrudeGeometry(padShape(batch.outline),{depth:.04,bevelEnabled:false,curveSegments:8});
-      const padMesh=makeInstanced(groupFor(layer),geometry,padMaterial,batch.pads,(object,pad)=>{const[x,y]=world(pad.at);object.position.set(x,y,z-.02);object.rotation.z=(pad.rotation||0)*Math.PI/180;},viewportSceneIdentity('copper-pad',layer,key));
+    const padMaterial=new THREE.MeshStandardMaterial({color:0xffffff,...studioMaterials.copper,polygonOffset:true,polygonOffsetFactor:-1,polygonOffsetUnits:-1});
+    for(const [key,batch]of batches){const geometry=new THREE.ExtrudeGeometry(padShape(batch.outline),{depth:placement.thickness,bevelEnabled:false,curveSegments:8});
+      const padMesh=makeInstanced(groupFor(layer),geometry,padMaterial,batch.pads,(object,pad)=>{const[x,y]=world(pad.at);object.position.set(x,y,placement.base);object.rotation.z=(pad.rotation||0)*Math.PI/180;},viewportSceneIdentity('copper-pad',layer,key));
       if(padMesh){visibilityRecord(padMesh,'pads',layer);pickables.push(padMesh);appearanceRecords.push({mesh:padMesh,role:'pads',layer,pads:batch.pads});}
     }
     for (const zone of savedZones.records.filter((item) => item.layer === layer)) {
@@ -347,26 +352,30 @@ export function mountBoard3D(container, source, options = {}) {
         if (index === 0) zoneShape.moveTo(point.x, point.y); else zoneShape.lineTo(point.x, point.y);
       });
       const mesh = new THREE.Mesh(new THREE.ShapeGeometry(zoneShape),
-        new THREE.MeshStandardMaterial({ color, transparent: true, opacity: .34, side: THREE.DoubleSide, depthWrite: false }));
-      mesh.position.z = z - (layer === "F.Cu" ? .005 : -.005); mesh.userData.record = { ...zone, type: "Zone" };
+        new THREE.MeshStandardMaterial({ color,...studioMaterials.copper,side:THREE.DoubleSide,depthWrite:true }));
+      mesh.position.z = layer==='F.Cu'?placement.base+placement.thickness-.0005:placement.base+.0005; mesh.userData.record = { ...zone, type: "Zone" };
       groupFor(layer).add(mesh);visibilityRecord(mesh,'fills',layer); pickables.push(mesh);
       appearanceRecords.push({mesh,role:'zone',layer});
     }
   }
   const viaBatches=new Map();let omittedVias=0;
-  for(const via of board.vias){const span=copperPlan.viaSpans.get(via.id),outline=nativePadOutline({shape:'circle',width:via.size,height:via.size,drill:via.drill,drillShape:'circle'});if(!outline||!span){omittedVias++;continue;}const key=JSON.stringify([via.size,via.drill,span.zMin,span.zMax]);if(!viaBatches.has(key)){if(viaBatches.size>=128){omittedVias++;continue;}viaBatches.set(key,{outline,span,vias:[]});}viaBatches.get(key).vias.push(via);}
+  for(const via of board.vias){const span=copperPlan.viaSpans.get(via.id),outline=smoothPadOutline({shape:'circle',width:via.size,height:via.size,drill:via.drill,drillShape:'circle'});if(!outline||!span){omittedVias++;continue;}const key=JSON.stringify([via.size,via.drill,span.zMin,span.zMax]);if(!viaBatches.has(key)){if(viaBatches.size>=128){omittedVias++;continue;}viaBatches.set(key,{outline,span,vias:[]});}viaBatches.get(key).vias.push(via);}
   if(omittedVias)geometryDiagnostics.push(`${omittedVias} via bodies with unsupported annuli or unknown saved spans omitted.`);
   const viaMaterial=new THREE.MeshStandardMaterial({color:physicalColors.exposedCopper,...studioMaterials.copper});
-  for(const[key,batch]of viaBatches){const geometry=new THREE.ExtrudeGeometry(padShape(batch.outline),{depth:batch.span.zMax-batch.span.zMin,bevelEnabled:false,curveSegments:8});const mesh=makeInstanced(boardGroup,geometry,viaMaterial,batch.vias,(object,via)=>{const[x,y]=world(via.at);object.position.set(x,y,batch.span.zMin);},viewportSceneIdentity('via-barrel',batch.span.from+'-'+batch.span.to,key));if(mesh){visibilityRecord(mesh,'vias',batch.span.through?'through':batch.span.from+'-'+batch.span.to);pickables.push(mesh);}}
+  for(const[key,batch]of viaBatches){const geometry=drillWallGeometry(THREE,smoothDrillOutline({drill:batch.vias[0].drill,drillShape:'circle'}),batch.span.zMax-batch.span.zMin);
+    const wallMaterial=viaMaterial.clone();wallMaterial.side=THREE.DoubleSide;
+    // Render the saved bore wall, not a solid annulus through the dielectric.
+    const mesh=makeInstanced(boardGroup,geometry,wallMaterial,batch.vias,(object,via)=>{const[x,y]=world(via.at);object.position.set(x,y,batch.span.zMin);},viewportSceneIdentity('via-barrel',batch.span.from+'-'+batch.span.to,key));if(mesh){visibilityRecord(mesh,'vias',batch.span.through?'through':batch.span.from+'-'+batch.span.to);pickables.push(mesh);}}
+  geometryDiagnostics.push('Outer copper uses saved plan centers/thickness (or the disclosed stackup fallback) with a 0.001 mm outward display offset; the substrate spans the outer copper inner faces. Saved zone fills are opaque zero-height display films 0.0005 mm below the outer copper face. Via bodies show the saved drill wall; plating thickness is not inferred.');
   // Surface annuli remain on the ordinary outer copper planes; blind/buried
   // barrel endpoints still follow their saved internal spans.
   for(const layer of ['F.Cu','B.Cu'])for(const [key,batch]of viaBatches){
     if(batch.span.from!==layer&&batch.span.to!==layer)continue;
-    const z=layer==='F.Cu'?top+.025:bottom-.025,geometry=new THREE.ExtrudeGeometry(padShape(batch.outline),{depth:.04,bevelEnabled:false,curveSegments:8});
-    const cap=makeInstanced(groupFor(layer),geometry,viaMaterial,batch.vias,(object,via)=>{const[x,y]=world(via.at);object.position.set(x,y,z-.02);},viewportSceneIdentity('via-annulus',layer,key));
+    const placement=outerCopperPlacement(layer,thickness,copperPlan.byLayer.get(layer)?.thickness||.035,copperPlan.byLayer.get(layer)?.z),geometry=new THREE.ExtrudeGeometry(padShape(batch.outline),{depth:placement.thickness,bevelEnabled:false,curveSegments:8});
+    const cap=makeInstanced(groupFor(layer),geometry,viaMaterial,batch.vias,(object,via)=>{const[x,y]=world(via.at);object.position.set(x,y,placement.base);},viewportSceneIdentity('via-annulus',layer,key));
     if(cap){visibilityRecord(cap,'vias',layer);pickables.push(cap);}
   }
-  const netInspection=createNetInspection(THREE,{board,plan:copperPlan,zones:savedZones.records,sourceLimited:savedZones.truncated,pads:nativePads,world,colorForLayer:layerThreeColor});scene.add(netInspection.group);
+  const netInspection=createNetInspection(THREE,{board:{...board,tracks:refinedTracks.tracks},plan:copperPlan,zones:savedZones.records,sourceLimited:savedZones.truncated,pads:nativePads,world,colorForLayer:layerThreeColor});scene.add(netInspection.group);
   let fullNet3D=true;
   const netInspectionHelp=document.createElement('p');netInspectionHelp.className='quality-help';netInspectionHelp.hidden=true;renderingOptions.append(netInspectionHelp);
   applyAppearance();
@@ -508,6 +517,7 @@ export function mountBoard3D(container, source, options = {}) {
         loadedModelIndexes.add(index);
         if (entry.format === "glb") modelDiagnostics.push(`${entry.reference}: GLB geometry is interpreted in millimetres.`);
         updateComponentVisibility();
+        rememberProbeResources(group);probeRegistry.sourceAdded(group);
         setSelection(externalSelection);
       } catch (error) {
         modelDiagnostics.push(`${entry.reference}: ${entry.path}: ${error?.message || String(error)}`);
@@ -536,8 +546,9 @@ export function mountBoard3D(container, source, options = {}) {
     const plan=qualityViewport(viewportWidth,viewportHeight,globalThis.devicePixelRatio,graphics.maxDimension,quality,graphics),ratio=plan.ratio;
     if (renderer.getPixelRatio() !== ratio) renderer.setPixelRatio(ratio);
     renderer.setSize(viewportWidth, viewportHeight, false); camera.aspect = viewportWidth / viewportHeight;
-    if(pipeline){pipeline.composer.setPixelRatio(ratio);pipeline.composer.setSize(viewportWidth,viewportHeight);}
+    if(pipeline){pipeline.composer.setPixelRatio(ratio);pipeline.composer.setSize(viewportWidth,viewportHeight);pipeline.fxaa?.material.uniforms.resolution.value.set(1/plan.width,1/plan.height);}
     camera.updateProjectionMatrix();
+    const sampling=plan.width+' × '+plan.height+' px · '+(pipeline?.fxaa?'FXAA':pipeline?'SMAA':gl.getContextAttributes()?.antialias?'native MSAA':'driver antialiasing unavailable');if(qualityStats.textContent!==sampling)qualityStats.textContent=sampling;
     invalidate();
   }
   function fit(view = 'iso') {
@@ -691,6 +702,7 @@ export function mountBoard3D(container, source, options = {}) {
   let selected = null;
   const gesture = tapGesture();
   let selectionDim=true;
+  rememberProbeResources(boardGroup);
   const selectionAppearance=createSelectionAppearance(THREE,()=>{const objects=[];boardGroup.traverse(object=>{if(object.material)objects.push(object);});return objects;});
   selectionAppearanceReady=true;
   const selectionLimit = 2000;
@@ -895,10 +907,11 @@ export function mountBoard3D(container, source, options = {}) {
   function notifyView(){const rect=renderer.domElement.getBoundingClientRect(),signature=JSON.stringify([camera.matrixWorld.elements,camera.projectionMatrix.elements,rect.left,rect.top,rect.width,rect.height]);if(signature!==viewSignature){viewSignature=signature;options.onViewChange?.();}notifyAnchor();}
   function drawFrame(){frame=0;if(!active||contextLost)return;controls.update();updateMeasurementGraphics();updateTerminalLabels();
     let rendered=false;try{
-      if(pipeline){pipeline.composer.render();if(shaderFailure||renderer.getContext().getError()!==renderer.getContext().NO_ERROR)throw Error('Enhanced rendering failed.');}
+      if(pipeline){pipeline.composer.render();const graphicsError=gl.getError();if(shaderFailure||graphicsError!==gl.NO_ERROR)throw Error(`Enhanced rendering failed (shader=${shaderFailure}, WebGL=${graphicsError}).`);}
       else renderer.render(scene,camera);
       renderCount++;rendered=true;
-    }catch{
+    }catch(error){
+      console.warn('3D rendering fallback:',error?.message||String(error));
       if(pipeline){fallbackQuality('Enhanced rendering could not complete. Balanced rendering is active.');invalidate();}
       else graphicsNotice('The graphics device could not draw this view. Try Low quality or reopen 3D.');
     }
@@ -946,6 +959,13 @@ export function mountBoard3D(container, source, options = {}) {
     return {image,warnings,projection:'orthographic',view,width:pixelWidth,height:pixelHeight,mmPerPixel:worldHeight/pixelHeight,planar:view==='top',bounds:captureFrame.bounds,viewBounds:{left:-worldWidth/2,right:worldWidth/2,top:worldHeight/2,bottom:-worldHeight/2},mechanical:true};
   }
   return { host, board,ready:modelReady,captureMechanicalView,
+    getProbeCount(){return probeRegistry.size();},
+    createProbeViewport(probeHost,probeOptions={}){
+      if(!active)throw Error('The parent 3D scene is closed.');
+      return probeRegistry.create(()=>createSharedProbeViewport({THREE,OrbitControls,host:probeHost,source:boardGroup,sourceScene:scene,sourceRenderer:renderer,board,
+        materialFor:object=>probeMaterials.get(object)||object.material,instanceColorFor:object=>probeInstanceColors.has(object)?probeInstanceColors.get(object):object.instanceColor,
+        dark:host.dataset.theme!=='light',...probeOptions}));
+    },
     objectVisibilityCapabilities(){return {supportedTypes:[...objectVisibility.supportedTypes],unsupportedTypes:['graphics','texts','regions','dimensions','rooms','footprints']};},
     setObjectVisibility(input={}) {
       const next=objectVisibilityPolicy(input||{});
@@ -959,7 +979,7 @@ export function mountBoard3D(container, source, options = {}) {
     setMeasurementMode,clearMeasurements,setTerminalLabels,
     measurementState(){return{mode:measuring,unit:measurementUnit,...measurementSession.snapshot()};},
     setQuality(value){return applyQuality(value);},
-    getRenderStats(){const plan=qualityViewport(canvasHost.clientWidth,canvasHost.clientHeight,globalThis.devicePixelRatio,graphics.maxDimension,quality,graphics);return{...plan,graphicsTier:graphics.tier,defaultQuality:graphics.defaultQuality,maxDimension:graphics.maxDimension,antialias:gl.getContextAttributes()?.antialias===true,floatTargets:graphics.premium||renderer.extensions.has('EXT_color_buffer_float'),environmentLighting:Boolean(scene.environment),ambientOcclusion:Boolean(pipeline?.passes.some(pass=>pass instanceof GTAOPass&&pass.enabled)),lighting:lightingRig.state(),renderCount,contextLost,gpuTextures:renderer.info.memory.textures,drawCalls:renderer.info.render.calls,loadedModelCount:loadedModelIndexes.size,componentCount:board.components.length};},
+    getRenderStats(){const plan=qualityViewport(canvasHost.clientWidth,canvasHost.clientHeight,globalThis.devicePixelRatio,graphics.maxDimension,quality,graphics);return{...plan,graphicsTier:graphics.tier,defaultQuality:graphics.defaultQuality,maxDimension:graphics.maxDimension,antialias:gl.getContextAttributes()?.antialias===true,effectiveAntialias:pipeline?.fxaa?'fxaa':pipeline?'smaa':gl.getContextAttributes()?.antialias?'native-msaa':'none',postprocessSamples:pipeline?.composer.renderTarget1.samples||0,floatTargets:graphics.premium||renderer.extensions.has('EXT_color_buffer_float'),environmentLighting:Boolean(scene.environment),ambientOcclusion:Boolean(pipeline?.passes.some(pass=>pass instanceof GTAOPass&&pass.enabled)),lighting:lightingRig.state(),renderCount,contextLost,gpuTextures:renderer.info.memory.textures,drawCalls:renderer.info.render.calls,loadedModelCount:loadedModelIndexes.size,componentCount:board.components.length};},
     setAnalysisOverlay(surface) {
       if (!active) return { placed: false, reason: "3D viewer is closed." };
       if(mechanical)return {placed:false,reason:'Mechanical views exclude electrical result overlays.'};
@@ -1039,7 +1059,7 @@ export function mountBoard3D(container, source, options = {}) {
         if (index != null && !population[index]) clearSelection();
       }
     },
-    dispose() { if(measuring)options.onMeasurementMode?.(false);active = false;captureAbort.abort(); analysisOverlay?.dispose(); stepClient?.dispose(); cancelAnimationFrame(frame); cancelAnimationFrame(layoutFrame); observer.disconnect();controls.removeEventListener('change',invalidate); controls.removeEventListener("change", updateClipping); controls.removeEventListener("start", cameraInteraction); controls.dispose();disposePipeline();lightingRig.dispose();environment?.dispose();renderer.domElement.removeEventListener('webglcontextlost',onContextLost);renderer.domElement.removeEventListener('webglcontextrestored',onContextRestored);document.removeEventListener('pointerdown',closeVisibility);shadow.removeEventListener('keydown',escapeVisibility,true);shadow.removeEventListener('keydown',escapeMeasurement);
+    dispose() { probeRegistry.dispose();if(measuring)options.onMeasurementMode?.(false);active = false;captureAbort.abort(); analysisOverlay?.dispose(); stepClient?.dispose(); cancelAnimationFrame(frame); cancelAnimationFrame(layoutFrame); observer.disconnect();controls.removeEventListener('change',invalidate); controls.removeEventListener("change", updateClipping); controls.removeEventListener("start", cameraInteraction); controls.dispose();disposePipeline();lightingRig.dispose();environment?.dispose();renderer.domElement.removeEventListener('webglcontextlost',onContextLost);renderer.domElement.removeEventListener('webglcontextrestored',onContextRestored);document.removeEventListener('pointerdown',closeVisibility);shadow.removeEventListener('keydown',escapeVisibility,true);shadow.removeEventListener('keydown',escapeMeasurement);
     renderer.domElement.removeEventListener('pointerdown',measurementTouchCapture,true);netInspection.dispose();selectionAppearance.dispose();const resources = new Set(); scene.traverse((object) => {object.shadow?.dispose?.(); if (object.geometry) resources.add(object.geometry);
       const materials = Array.isArray(object.material) ? object.material : object.material ? [object.material] : [];
       materials.forEach((item) => resources.add(item)); }); resources.forEach((item) => item.dispose());terminalLabelCache.forEach(texture=>texture.dispose()); labelGeometry.dispose(); hold.dispose(); renderer.dispose(); host.remove(); } };

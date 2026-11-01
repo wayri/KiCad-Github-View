@@ -1,0 +1,30 @@
+<!doctype html><meta charset="utf-8"><title>Draftsman pointer snapping regression</title>
+<link rel="stylesheet" href="../../draftsman-workspace.css">
+<button id="run">Run pointer regression</button><output id="result">Loading…</output><div id="canvas-host" hidden></div>
+<script src="../../legacy-kicad.js"></script><script src="../../design-diff.js"></script><script src="../../worksheet.js"></script><script src="../../file-compatibility.js"></script><script src="../../layer-colors.js"></script><script src="../../pcb-renderer.js"></script><script src="../../review-tools.js"></script><script src="../../pad-labels.js"></script><script src="../../owned-canvas.js"></script><script src="../../draftsman-model.js"></script><script src="../../draftsman-export.js"></script><script src="../../draftsman-snap.js"></script><script src="../../draftsman-mechanical.js"></script><script src="../../draftsman-workspace.js"></script>
+<script>
+(async()=>{
+ const content=await (await fetch('net3d/inspection.kicad_pcb')).text(),file='inspection.kicad_pcb',hash=Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(content))),v=>v.toString(16).padStart(2,'0')).join(''),source={provider:'local',repository:'local/snap-fixture',ref:'saved',hashes:{[file]:hash}},doc=KiCadDraftsmanModel.create(source,'Pointer regression');
+ const view=(id,x,rotation)=>({id,type:'view',file,side:'top',layers:['Edge.Cuts','F.SilkS'],x,y:30,width:105,height:100,rotation,scale:'fit',caption:id});
+ doc.pages[0].items=[view('left',15,0),view('right',155,90)];
+ const canvas=KiCadOwnedCanvas.mount(document.querySelector('#canvas-host'),{pcb:true});
+ const session=await KiCadDraftsmanWorkspace.open({files:[{path:file,content}],currentFile:file,source,initialDocument:doc,getCanvas:()=>canvas});
+ const run=()=>{try{
+  const dialog=document.querySelector('.draftsman'),sheet=dialog.querySelector('[aria-label="Drawing sheet preview"]'),dimension=dialog.querySelector('button[aria-label="Dimension"]');
+  // The left view is the default selection. Points on the right must choose its
+  // rotated transform rather than silently dimensioning the first view.
+  dimension.click();
+  const image=sheet.querySelector('[data-item="right"] image');
+  const pointer=(x,y)=>{const point=new DOMPoint(x,y).matrixTransform(image.getScreenCTM());sheet.dispatchEvent(new PointerEvent('pointermove',{bubbles:true,clientX:point.x+3,clientY:point.y+2,pointerType:'mouse'}));sheet.dispatchEvent(new PointerEvent('pointerdown',{bubbles:true,cancelable:true,button:0,clientX:point.x+3,clientY:point.y+2,pointerType:'mouse'}));};
+  pointer(1,1);pointer(16,9);
+  const item=session.getDocument().pages[0].items.find(i=>i.type==='dimension');
+  if(!item||item.viewId!=='right'||Math.hypot(item.a.x-1,item.a.y-1)>1e-8||Math.hypot(item.b.x-16,item.b.y-9)>1e-8)throw Error('Wrong view or unsnapped points: '+JSON.stringify(item));
+  document.querySelector('#result').textContent='PASS: real DOM pointer events chose the right rotated view and saved exact corner (1,1) / hole (16,9).';
+  console.log(document.querySelector('#result').textContent);
+ }catch(error){document.querySelector('#result').textContent='FAIL: '+error.message;console.error(error);}};
+ document.querySelector('.draftsman-header').append(document.querySelector('#run'));document.querySelector('.draftsman>footer').prepend(document.querySelector('#result'));document.querySelector('#run').onclick=run;window.runDraftsmanSnapRegression=run;
+ const instructions=document.createElement('p');instructions.id='pointer-instructions';instructions.style.cssText='margin:4px 10px;color:#dce5ed';document.querySelector('.draftsman>footer').append(instructions);
+ const coordinates=()=>{const image=document.querySelector('[data-item="right"] image');if(!image)return;const corner=new DOMPoint(1,1).matrixTransform(image.getScreenCTM()),hole=new DOMPoint(16,9).matrixTransform(image.getScreenCTM());instructions.textContent='Manual check: click Dimension, then the right rotated view corner near viewport ('+Math.round(corner.x+3)+', '+Math.round(corner.y+2)+'), then mounting hole near ('+Math.round(hole.x+3)+', '+Math.round(hole.y+2)+'). Expected source points (1,1) and (16,9) mm. Button runs the same path using dispatched DOM pointer events.';};requestAnimationFrame(coordinates);window.addEventListener('resize',coordinates);
+document.querySelector('#result').textContent='Ready: call runDraftsmanSnapRegression() with the drawing dialog open.';
+})().catch(error=>{document.querySelector('#result').textContent=error.stack;});
+</script>

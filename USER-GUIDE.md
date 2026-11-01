@@ -430,7 +430,7 @@ This is a local browser source preview using the retained synthetic `inspection.
 
 [Watch the local Draftsman walkthrough](docs/images/draftsman/walkthrough.webm): choose the KiCad-style template, preview a mounting-hole snap, add dimensions/notes/BoM, create a second sheet and export a PDF. This uses the same synthetic local fixture; it ends before any simulated provider-write workflow.
 
-**Save to folder** asks where to create a separate output folder when supported. **Save to repo** is an extension-only, account-authorized action: review the repository, new branch and path before confirming. It creates documentation on a new branch from the viewed commit. Downloading a PDF does not publish anything.
+**Save to folder** asks where to create a separate output folder when supported. **Save to GitHub** / **Save to GitLab** is an extension-only, account-authorized action: review the repository, new branch and path before confirming. It creates documentation on a new branch from the viewed commit. Downloading a PDF does not publish anything.
 
 Drawing views in exported sheets are raster previews; dimensions, notes and tables in SVG are vector elements. Automatic dimensions reflect saved outline geometry, without inferred manufacturing tolerances. Read the [complete Draftsman guide](docs/DRAFTSMAN.md) for source matching, export limits and partial-save handling.
 

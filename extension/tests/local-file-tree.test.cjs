@@ -32,3 +32,10 @@ test('all selected filenames appear in foldable folders without granting unsuppo
  f.get('fileFilter').value='program';f.render();assert.ok(flatten(f.get('fileList')).some(n=>n.tag==='button'&&n.textContent==='program.bin'));assert.ok(flatten(f.get('fileList')).filter(n=>n.tag==='details').every(n=>n.open));
  f.get('fileFilter').value='';f.render();assert.ok(flatten(f.get('fileList')).filter(n=>n.tag==='details').every(n=>!n.open));
 });
+
+test('legacy schematic and project files are labeled and route to their corresponding bundled viewers',()=>{
+ const f=fixture(['hardware/root.sch','hardware/root.pro','hardware/root-cache.lib']),nodes=flatten(f.get('fileList'));
+ assert.equal(nodes.find(n=>n.textContent==='root.sch').dataset.kind,'schematic');assert.equal(nodes.find(n=>n.textContent==='root.pro').dataset.kind,'project');
+ const route=source.slice(source.indexOf('function pageFor('),source.indexOf('function url(')),scope={KiCadLocalProject:require('../local-project.js')};vm.runInNewContext(route+';globalThis.route=pageFor;',scope);
+ assert.equal(scope.route('hardware/root.sch'),'schematic-viewer.html');assert.equal(scope.route('hardware/root.pro'),'project-viewer.html');assert.equal(scope.route('board.kicad_pcb'),'pcb-viewer.html');
+});

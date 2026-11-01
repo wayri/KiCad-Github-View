@@ -10,7 +10,7 @@ async function revision(query='',extraFiles=[],options={}){
  const camera=new core.Camera(800,600),parent={postMessage:(data,origin)=>reports.push({data,origin})};
  const canvas={setNetHighlights(){},canvas:new Element(),viewport:{camera},document:null,visibleLayers:new Set(),addEventListener:(type,callback)=>canvasListeners.set(type,callback),resize(){},draw(){calls.draw++;},dispose(){calls.disposed++;},
   setDocument(design,file){this.design=design;this.document={filename:file};this.zoom_to_board();this.draw();},
-  zoom_to_board(){calls.board++;camera.bbox={x:92,y:192,w:16,h:16};},zoom_to_page(){calls.page++;camera.bbox={x:0,y:0,w:297,h:210};}};
+  setWorksheetVisible(on){this.paperVisible=on;},zoom_to_board(){calls.board++;camera.bbox={x:92,y:192,w:16,h:16};},zoom_to_page(){calls.page++;camera.bbox={x:0,y:0,w:297,h:210};}};
  for(const name of ['focusLayer','restoreLayers','layerPreset'])canvas[name]=function(...args){if(name==='focusLayer'){if(!this.layerSnapshot)this.layerSnapshot=new Set(this.visibleLayers);this.focusedLayer=args[0];this.layerFocusMode=args[1];this.visibleLayers.add(args[0]);}else if(name==='layerPreset'){if(!this.layerSnapshot)this.layerSnapshot=new Set(this.visibleLayers);this.focusedLayer=null;this.visibleLayers=new Set(this.design.layers);}else{if(this.layerSnapshot)this.visibleLayers=new Set(this.layerSnapshot);this.layerSnapshot=null;this.focusedLayer=null;}};
  const initialFile=options.file||(options.pcb?'board.kicad_pcb':'root.kicad_sch');
  const context={AbortController,setTimeout:(fn,ms)=>{const timer=setTimeout(fn,ms);if(ms>100)timer.unref();return timer;},clearTimeout,URL,URLSearchParams,console,location:{search:'?repository=wayri/board&ref=main&file='+initialFile+query},parent,
@@ -19,9 +19,10 @@ async function revision(query='',extraFiles=[],options={}){
   KiCadPairedReview:require('../paired-review.js'),KiCadReviewTools:require('../review-tools.js'),KiCadWorksheet:require('../worksheet.js'),KiCadBrowserData:require('../browser-data.js'),KiCadDesignModel:require('../design-model.js'),KiCadDesignDiff:require('../design-diff.js'),KiCadViewState:viewState,
   KiCadSchematicRenderer:{build:()=>({primitives:[],layers:[],page:{width:297,height:210},warnings:[]})},
   KiCadPCBRenderer:{build:()=>({primitives:[],layers:options.layers||[],page:{width:297,height:210},warnings:[]})},
-  SpikeBoard3D:{mountBoard3D(_pane,_source,config){calls.modelOptions=config;return{dispose(){},setTheme(){},setTerminalLabels(visible){calls.terminalLabels=visible;}};}},
+  SpikeBoard3D:{mountBoard3D(_pane,_source,config){calls.modelOptions=config;return{getProbeCount(){return calls.activeProbes||0;},dispose(){calls.sceneDisposed=(calls.sceneDisposed||0)+1;},setTheme(){},setTerminalLabels(visible){calls.terminalLabels=visible;}};}},
   KiCadOwnedCanvas:{mount:()=>canvas},KiCadReviewWorkspace:{composeSheetOverview:require('../review-workspace.js').composeSheetOverview,sheetPageHighlights:require('../review-workspace.js').sheetPageHighlights,mount:options=>{calls.workspaceOptions=options;return {draw(){},setScene(){},attachCanvas(){calls.attach++;},dispose(){calls.disposed++;},highlightRelated(selection){calls.related=selection;options.onSelection?.(selection);},refreshComments(){calls.refreshed=(calls.refreshed||0)+1;},options};}},
   addEventListener:(type,callback)=>listeners.set(type,callback)};
+ if(options.realRender){context.KiCadNetModel=require('../net-model.js');context.KiCadPCBRenderer=require('../pcb-renderer.js');context.KiCadSchematicRenderer=require('../schematic-renderer.js');}
  if(options.android){context.KiCadNetModel=require('../net-model.js');context.KiCadAndroidUI={};context.setTimeout=(fn,ms)=>{const timer=setTimeout(fn,ms);if(ms>100)timer.unref();return timer;};context.requestAnimationFrame=fn=>setTimeout(fn,0);context.cancelAnimationFrame=clearTimeout;context.IntersectionObserver=class{constructor(callback){this.callback=callback;calls.overviewObserver=this;this.observed=[];}observe(node){this.observed.push(node);}disconnect(){this.observed=[];}};const mount=context.KiCadReviewWorkspace.mount;context.KiCadReviewWorkspace.mount=opts=>({...mount(opts),overviewSheets:()=>[{sheet:{path:initialFile,label:'Root'},depth:0},...extraFiles.map(file=>({sheet:{path:file.path,label:'Power supply'},depth:1}))],overviewSelection:path=>options.overviewSelection?.(path)||({netIds:[],uuids:[],mode:'dim'})});}
  if(options.worker)context.KiCadLoading={indicator:(_host,config)=>{calls.stopLoading=config.onStop;return{show(){},hide(){},dispose(){}};},paint:async()=>{},run:async(_job,payload,prepare)=>{calls.workerPayload=payload;return {...prepare(),design:context.KiCadSchematicRenderer.build()};}};
  vm.runInNewContext(fs.readFileSync(path.join(__dirname,'../revision-viewer.js'),'utf8'),context);await tick();
@@ -122,12 +123,12 @@ test('remote viewer pins branch before loading drawings and passes the same comm
 test('floating saved copper layer selector isolates, shows all and restores the previous view',async()=>{
  const v=await revision('',[],{pcb:true,layers:['F.Cu','In1.Cu','In2.Cu','B.Cu','Edge.Cuts']});
  const bar=v.get('drawingHost').children.find(child=>child.id==='floatingLayerSelector');
- assert.ok(bar);assert.equal(bar.hidden,false);const toggle=bar.children[0],buttons=bar.children[1].children;assert.equal(toggle.attributes['aria-expanded'],'false');toggle.click();assert.equal(toggle.attributes['aria-expanded'],'true');assert.deepEqual(buttons.map(button=>button.dataset.layer),['F.Cu','In1.Cu','In2.Cu','B.Cu','All','Overview','Filled copper','Zone outlines','Net names']);
+ assert.ok(bar);assert.equal(bar.hidden,false);const toggle=bar.children[0],buttons=bar.children[1].children;assert.equal(toggle.attributes['aria-expanded'],'false');toggle.click();assert.equal(toggle.attributes['aria-expanded'],'true');assert.deepEqual(buttons.map(button=>button.dataset.layer),['F.Cu','In1.Cu','In2.Cu','B.Cu','All','Overview','Filled copper','Zone outlines','Worksheet','Net names']);
  v.canvas.visibleLayers=new Set(['F.Cu','Edge.Cuts']);
  buttons[1].click();assert.equal(toggle.attributes['aria-expanded'],'false');assert.equal(toggle.textContent,'In1.Cu');assert.equal(v.canvas.focusedLayer,'In1.Cu');assert.equal(v.canvas.layerFocusMode,'isolate');assert.equal(buttons[1].attributes['aria-pressed'],'true');
  buttons[4].click();assert.deepEqual([...v.canvas.visibleLayers],v.canvas.design.layers);assert.equal(v.canvas.focusedLayer,null);
  buttons[5].click();assert.deepEqual([...v.canvas.visibleLayers],['F.Cu','Edge.Cuts']);assert.equal(v.canvas.layerSnapshot,null);
- buttons[8].click();assert.equal(v.canvas.showNetNames,true);assert.equal(v.get('showNetNames').checked,true);assert.equal(buttons[8].attributes['aria-pressed'],'true');buttons[8].click();assert.equal(v.canvas.showNetNames,false);
+ buttons[8].click();assert.equal(v.canvas.paperVisible,true);buttons[8].click();assert.equal(v.canvas.paperVisible,false);buttons[9].click();assert.equal(v.canvas.showNetNames,true);assert.equal(v.get('showNetNames').checked,true);assert.equal(buttons[9].attributes['aria-pressed'],'true');buttons[9].click();assert.equal(v.canvas.showNetNames,false);
  await v.get('mode3d').click();assert.equal(bar.hidden,true);await v.get('mode3d').click();assert.equal(bar.hidden,false);
  const schematic=await revision();assert.equal(schematic.get('drawingHost').children.some(child=>child.id==='floatingLayerSelector'),false);
 });
@@ -190,4 +191,26 @@ test('pad and net-name preference is shared across 2D and the mounted 3D scene',
  assert.equal(v.calls.modelOptions.showNetNames,true);
  v.calls.modelOptions.onTerminalLabelsChange(false);assert.equal(v.canvas.showNetNames,false);assert.equal(v.get('showNetNames').checked,false);assert.equal(v.calls.terminalLabels,false);
  v.get('showNetNames').checked=true;v.get('showNetNames').onchange();assert.equal(v.calls.terminalLabels,true);
+});
+
+// Exercise actual saved geometry through the workspace callbacks, not a fake resolver.
+test('probe switching resolves saved component and terminal identity with cached geometry',async()=>{
+ const pcb='(kicad_pcb (version 20241229) (layers (0 "F.Cu" signal)) (footprint "R" (layer "F.Cu") (at 10 20) (uuid fp) (path "/root/sym") (property "Reference" "R9") (pad "1" smd rect (at 0 0) (size 2 1) (layers "F.Cu") (uuid pad1))))';
+ const v=await revision('',[{path:'board.kicad_pcb',content:pcb}],{realRender:true});
+ const resolve=v.calls.workspaceOptions.resolveProbeViews;
+ const first=await resolve(null,{canonical:{kind:'part',path:'root.kicad_sch',reference:'R1',uuid:'sym'}},'layout');
+ assert.equal(first.entry.path,'board.kicad_pcb');assert.equal(first.group.name,'R9');assert.ok(first.group.primitives.length);
+ const pin=await resolve(null,{canonical:{kind:'pin',path:'root.kicad_sch',reference:'R1',ownerUuid:'sym',pinNumber:'1'}},'3d');
+ assert.equal(pin.entry.design,first.entry.design);assert.ok(pin.group.primitives.every(p=>String(p.pinNumber??p.name)==='1'));
+ assert.equal(v.calls.requests.filter(r=>r.type==='project').length,1);
+ await assert.rejects(resolve(null,{canonical:{kind:'pin',path:'root.kicad_sch',reference:'R1',ownerUuid:'sym',pinNumber:'999'}},'layout'),/no rendered geometry/);
+ await assert.rejects(resolve(null,null,'layout'),/Select a saved/);
+ v.hide();await assert.rejects(resolve(null,{canonical:{kind:'part',path:'root.kicad_sch',reference:'R1',uuid:'sym'}},'layout'),/closed/);
+});
+
+test('switching the main view to2D retains its active3Dprobe parent until workspace close',async()=>{
+ const v=await revision('',[],{pcb:true});await v.get('mode3d').click();const config=v.calls.modelOptions;v.calls.activeProbes=1;
+ await v.get('mode3d').click();assert.equal(v.calls.sceneDisposed||0,0);assert.equal(v.get('threePane').hidden,true);
+ await v.get('mode3d').click();assert.equal(v.calls.modelOptions,config);assert.equal(v.get('threePane').hidden,false);
+ v.hide();assert.equal(v.calls.sceneDisposed,1);
 });

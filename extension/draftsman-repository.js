@@ -30,6 +30,7 @@
    if(busy)throw Error('A Draftsman repository save is already running.');
    if(value?.confirmed!==true||!['github','gitlab'].includes(value.provider)||!SHA.test(value.ref||'')||!BRANCH.test(value.branch||'')||!PATH.test(value.path||''))throw Error('Confirm a new Draftsman branch and document path before saving.');
    value={...value};
+   const receipt=(sha,route)=>{const base=host+'/'+repo+route+sha+'/',output=artifacts.find(file=>file.path.endsWith('.pdf'));return {branch:value.branch,path:value.path,paths:artifacts.map(item=>item.path),sha,url:base+value.path,outputUrl:base+(output?.path||value.path)};};
    const provider=value.provider,host=provider==='github'?'https://github.com':value.host||'https://gitlab.com';let url;try{url=new URL(host);}catch{throw Error('Invalid repository host.');}
    if(url.protocol!=='https:'||url.origin!==host||url.username||url.password)throw Error('Invalid repository host.');
    const repo=value.repository;if(typeof repo!=='string'||!(provider==='github'?/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/:/^[A-Za-z0-9_.-]+(?:\/[A-Za-z0-9_.-]+)+$/).test(repo)||repo.split('/').some(p=>p==='.'||p==='..'))throw Error('Invalid repository.');
@@ -44,13 +45,13 @@
      const tree=await request('/git/trees',{base_tree:base.tree.sha,tree:entries});if(!SHA.test(tree.sha||''))throw Error('Invalid saved document tree.');
      const commit=await request('/git/commits',{message:'Add Draftsman document: '+doc.title,tree:tree.sha,parents:[value.ref]});if(!SHA.test(commit.sha||''))throw Error('Invalid saved document commit.');
      const result=await request('/git/refs',{ref:'refs/heads/'+value.branch,sha:commit.sha});if(result.ref!=='refs/heads/'+value.branch||result.object?.sha!==commit.sha)throw Error('Repository did not confirm the new branch. Refresh the repository before retrying.');
-     return{branch:value.branch,path:value.path,paths:artifacts.map(item=>item.path),sha:commit.sha,url:host+'/'+repo+'/blob/'+commit.sha+'/'+value.path};
+     return receipt(commit.sha,'/blob/');
     }
     if(await request('/repository/branches/'+encodeURIComponent(value.branch),undefined,true))throw Error('This branch already exists. Choose a new Draftsman branch.');
     const base=await request('/repository/commits/'+value.ref);if(base.id!==value.ref)throw Error('Source commit could not be verified.');
     const created=await request('/repository/branches',{branch:value.branch,ref:value.ref});if(created.name!==value.branch||created.commit?.id!==value.ref)throw Error('Repository did not confirm the new Draftsman branch.');
     let result;try{result=await request('/repository/commits',{branch:value.branch,commit_message:'Add Draftsman document: '+doc.title,actions:artifacts.map(item=>({action:'create',file_path:item.path,content:item.content,encoding:item.encoding==='base64'?'base64':'text'}))});}catch(error){throw Error(error.message+' The new branch '+value.branch+' may exist without all Draftsman outputs. Check it before retrying.');}if(!SHA.test(result.id||'')||!Array.isArray(result.parent_ids)||result.parent_ids.length!==1||result.parent_ids[0]!==value.ref)throw Error('Repository did not confirm the saved commit. Refresh the repository before retrying.');
-    return{branch:value.branch,path:value.path,paths:artifacts.map(item=>item.path),sha:result.id,url:host+'/'+repo+'/-/blob/'+result.id+'/'+value.path};
+    return receipt(result.id,'/-/blob/');
    }finally{busy=false;}
   }
   return{save};
