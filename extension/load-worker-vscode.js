@@ -1,4 +1,88 @@
 /* Self-contained VS Code preparation worker. Regenerate with scripts/build_load_worker.py. */
+/* Bounded read-only adapter for saved Eeschema v2/v4 schematics and cache libraries.
+   Source remains unchanged; unsupported records produce visible diagnostics. */
+((root)=>{'use strict';
+ const MAX_BYTES=8*1024*1024,MAX_LINES=150000,MM=.0254;
+ const q=quoted=>({quoted:String(quoted??'')}),mm=x=>{const n=Number(x);if(!Number.isFinite(n)||Math.abs(n)>1e8)throw Error('Invalid legacy schematic coordinate.');return Math.round(n*MM*1e8)/1e8;};
+ const tokens=line=>[...line.matchAll(/"((?:\\.|[^"\\])*)"|([^\s]+)/g)].map(m=>m[1]!==undefined?m[1].replace(/\\(["\\])/g,'$1'):m[2]);
+ const at=(x,y,angle=0)=>['at',mm(x),mm(y),angle],effects=(size=50,hide=false)=>['effects',['font',['size',mm(size),mm(size)]],...(hide?['hide']:[])];
+ function lines(source){if(typeof source!=='string'||new TextEncoder().encode(source).length>MAX_BYTES)throw Error('Legacy schematic/library exceeds its size limit.');const result=source.replace(/^\uFEFF/,'').split(/\r?\n/);if(result.length>MAX_LINES)throw Error('Legacy schematic/library exceeds its line limit.');return result;}
+ function libraries(sources,warn){
+  const result=new Map();let total=0;
+  if(!Array.isArray(sources))return result;
+  if(sources.length>16)throw Error('Too many legacy symbol libraries.');
+  for(const entry of sources){const source=typeof entry==='string'?entry:entry?.content;if(typeof source!=='string')continue;total+=source.length;if(total>16*1024*1024)throw Error('Legacy symbol libraries exceed their combined limit.');
+   let definition=null,aliases=[],drawing=false,units=new Map();
+   for(const line of lines(source)){const t=tokens(line),type=t[0];if(!type||type[0]==='#')continue;
+    if(type==='DEF'){definition=t;aliases=[];units=new Map();continue;}if(!definition)continue;
+    if(type==='ALIAS'){aliases.push(...t.slice(1));continue;}if(type==='DRAW'){drawing=true;continue;}if(type==='ENDDRAW'){drawing=false;continue;}
+    if(type==='ENDDEF'){const name=definition[1],body=['symbol',q(name),...(definition[9]==='P'?[['power']]:[]),...(definition[5]==='N'?[['pin_numbers','hide']]:[]),...(definition[6]==='N'?[['pin_names','hide']]:[]),...units.values()];for(const alias of [name,...aliases])if(!result.has(alias))result.set(alias,body);definition=null;continue;}
+    if(!drawing)continue;
+    const add=(unit,style,node)=>{const key=unit+'_'+style;if(!units.has(key))units.set(key,['symbol',q(definition[1]+'_'+key)]);units.get(key).push(node);};
+    const stroke=width=>['stroke',['width',Math.max(mm(width||6),.01)]],fill=code=>['fill',['type',code==='F'?'outline':code==='f'?'background':'none']];
+    if(type==='S')add(t[5],t[6],['rectangle',['start',mm(t[1]),mm(t[2])],['end',mm(t[3]),mm(t[4])],stroke(t[7]),fill(t[8])]);
+    else if(type==='C')add(t[4],t[5],['circle',['center',mm(t[1]),mm(t[2])],['radius',mm(t[3])],stroke(t[6]),fill(t[7])]);
+    else if(type==='P'){const count=Number(t[1]);if(!Number.isInteger(count)||count<2||count>10000||t.length<5+2*count)throw Error('Invalid legacy library polyline.');add(t[2],t[3],['polyline',['pts',...Array.from({length:count},(_,i)=>['xy',mm(t[5+i*2]),mm(t[6+i*2])])],stroke(t[4]),fill(t[5+count*2])]);}
+    else if(type==='A'){
+     const cx=mm(t[1]),cy=mm(t[2]),radius=mm(t[3]),start=Number(t[4])*Math.PI/1800,end=Number(t[5])*Math.PI/1800;
+     let sweep=end-start;while(sweep<0)sweep+=Math.PI*2;
+     const xy=a=>[cx+radius*Math.cos(a),cy+radius*Math.sin(a)];
+     add(t[6],t[7],['arc',['start',...xy(start)],['mid',...xy(start+sweep/2)],['end',...xy(start+sweep)],stroke(t[8]),fill(t[9])]);
+    }else if(type==='X'){
+     const pinTypes={I:'input',O:'output',B:'bidirectional',T:'tri_state',P:'passive',U:'unspecified',W:'power_in',w:'power_out',C:'open_collector',E:'open_emitter',N:'no_connect'},angle={R:0,U:90,L:180,D:270}[t[6]];
+     const styles={'':'line',I:'inverted',C:'clock',CI:'inverted_clock',L:'input_low',CL:'clock_low',V:'output_low',F:'edge_clock_high',X:'non_logic'},raw=t[12]||'',hidden=raw.includes('N'),style=styles[raw.replace(/N/g,'')];
+     if(angle===undefined||!style){warn('Unsupported legacy pin orientation/style omitted: '+t[1]);continue;}
+     add(t[9],t[10],['pin',pinTypes[t[11]]||'unspecified',style,at(t[3],t[4],angle),['length',mm(t[5])],['name',q(t[1]),effects(t[8])],['number',q(t[2]),effects(t[7])],...(hidden?['hide']:[])]);
+    }else if(type==='T'){warn('Legacy library text is omitted; convert a copy in KiCad for complete typography.');}
+    else warn('Unsupported legacy library graphic '+type+' omitted.');
+   }
+  }
+  return result;
+ }
+ function parse(source,options={}){
+  const input=lines(source);if(!/^EESchema Schematic File Version [24]\b/.test(input[0]))throw Error('Only legacy Eeschema v2/v4 schematics are supported.');
+  const diagnostics=new Set(['Restricted legacy schematic preview: only recognized saved records and supplied cache-library graphics are rendered. Convert a separate copy in KiCad for a complete modern preview.']);
+  const warn=text=>{if(diagnostics.size<200)diagnostics.add(text);},defs=libraries(options.libraries,warn),ast=['kicad_sch',['version',Number(input[0].match(/\d+$/)[0])],['legacy_source',q(input[0])]],embedded=['lib_symbols'],placed=[];
+  const property=(name,text,x,y,size=50,hide=false,angle=0)=>['property',q(name),q(text),at(x,y,angle),effects(size,hide)];
+  function block(start,end){const result=[];let i=start;for(;i<input.length&&input[i]!==end;i++)result.push(tokens(input[i]));if(i===input.length)throw Error('Incomplete legacy schematic '+end+' block.');return {records:result,end:i};}
+  for(let i=1;i<input.length;i++){
+   const t=tokens(input[i]),type=t[0];if(!type||type[0]==='#')continue;
+   if(type==='$Descr'){ast.push(['paper',q(t[1])]);continue;}
+   if(/^Comment[1-9]$/.test(type)){let title=ast.find(x=>Array.isArray(x)&&x[0]==='title_block');if(!title){title=['title_block'];ast.push(title);}title.push(['comment',Number(type.slice(7)),q(t[1])]);continue;}
+   if(['Title','Date','Rev','Comp'].includes(type)){let title=ast.find(x=>Array.isArray(x)&&x[0]==='title_block');if(!title){title=['title_block'];ast.push(title);}title.push([{Title:'title',Date:'date',Rev:'rev',Comp:'company'}[type],q(t[1])]);continue;}
+   if(type==='Wire'||type==='Entry'){const next=tokens(input[++i]||'');if(next.length!==4)throw Error('Invalid legacy wire record.');if(type==='Entry'){warn('Legacy bus-entry geometry omitted.');continue;}ast.push([t[1]==='Bus'?'bus':'wire',['pts',['xy',mm(next[0]),mm(next[1])],['xy',mm(next[2]),mm(next[3])]]]);continue;}
+   if(type==='Connection'||type==='NoConn'){ast.push([type==='Connection'?'junction':'no_connect',at(t[2],t[3])]);continue;}
+   if(type==='Text'){
+    const text=input[++i]??'',kind={Label:'label',GLabel:'global_label',HLabel:'hierarchical_label',Notes:'text'}[t[1]];
+    if(!kind){warn('Unsupported legacy text record '+t[1]+' omitted.');continue;}
+    const angles=[0,90,180,270],angle=angles[Number(t[4])];if(angle===undefined){warn('Unsupported legacy text orientation omitted.');continue;}
+    const shape={Input:'input',Output:'output',BiDi:'bidirectional',TriState:'tri_state',UnSpc:'passive'}[t[6]];
+    if(!['text','label'].includes(kind)&&!shape)warn('Unknown legacy label shape '+t[6]+'; passive outline used.');
+    ast.push([kind,q(text.replace(/\\n/g,'\n')),at(t[2],t[3],angle),effects(t[5]),...(kind==='text'||kind==='label'?[]:[['shape',shape||'passive']])]);continue;
+   }
+   if(type==='$Sheet'){
+    const b=block(i+1,'$EndSheet');i=b.end;const r=b.records,S=r.find(x=>x[0]==='S'),U=r.find(x=>x[0]==='U');if(!S)throw Error('Legacy sheet has no bounds.');const sheet=['sheet',at(S[1],S[2]),['size',mm(S[3]),mm(S[4])],['uuid',q(U?.[1]||'legacy-sheet-'+i)]];
+    for(const f of r.filter(x=>/^F\d+$/.test(x[0]))){if(f[0]==='F0'||f[0]==='F1')sheet.push(property(f[0]==='F0'?'Sheetname':'Sheetfile',f[1],S[1],S[2],f[2]));else{const side=f[3],angle={L:180,R:0,U:90,D:270}[side];sheet.push(['pin',q(f[1]),{I:'input',O:'output',B:'bidirectional',T:'tri_state',U:'passive'}[f[2]]||'passive',at(f[4],f[5],angle??0),effects(f[6])]);}}
+    ast.push(sheet);continue;
+   }
+   if(type==='$Comp'){
+    const b=block(i+1,'$EndComp');i=b.end;const r=b.records,L=r.find(x=>x[0]==='L'),U=r.find(x=>x[0]==='U'),P=r.find(x=>x[0]==='P');if(!L||!P)throw Error('Incomplete legacy component.');const id=L[1],matrix=r.find(x=>x.length===4&&x.every(n=>/^-?\d+$/.test(n)))?.map(Number)||[1,0,0,-1];let orientation=null;
+    for(const angle of [0,90,180,270])for(const mirror of ['', 'x','y']){const rad=angle*Math.PI/180,c=Math.round(Math.cos(rad)),s=Math.round(Math.sin(rad)),sx=mirror==='y'?-1:1,sy=mirror==='x'?1:-1,actual=[sx*c,sy*s,-sx*s,sy*c];if(matrix.every((n,j)=>n===actual[j]))orientation={angle,mirror};}
+    if(!orientation){warn('Legacy component '+id+' has an unsupported orientation and is omitted.');continue;}
+    const node=['symbol',['lib_id',q(id)],at(P[1],P[2],orientation.angle),['unit',Number(U?.[1]||1)],['convert',Number(U?.[2]||1)],['uuid',q(U?.[3]||'legacy-component-'+i)],...(orientation.mirror?[['mirror',orientation.mirror]]:[])];
+    for(const f of r.filter(x=>x[0]==='F')){const name=['Reference','Value','Footprint','Datasheet'][Number(f[1])]||f[11]||'Field'+f[1];node.push(property(name,f[2],f[4],f[5],f[6],f[7]!=='0000',f[3]==='V'?90:0));}
+    const definition=defs.get(id)||defs.get(id.split(':').pop());if(definition){if(!placed.includes(id)){embedded.push(['symbol',q(id),...definition.slice(2)]);placed.push(id);}}else warn('Missing saved legacy library definition for '+id+': symbol body and pins omitted; fields remain visible.');ast.push(node);continue;
+   }
+   if(['$Bitmap','$EndBitmap'].includes(type))warn('Legacy bitmap omitted.');
+  }
+  if(!input.some(line=>line==='$EndSCHEMATC'))throw Error('Incomplete legacy schematic terminator.');
+  ast.push(embedded,...[...diagnostics].map(text=>['legacy_diagnostic',q(text)]));return ast;
+ }
+ function sheetFiles(source){const input=lines(source),names=[];let sheet=false;for(const line of input){if(line==='$Sheet')sheet=true;else if(line==='$EndSheet')sheet=false;else if(sheet){const t=tokens(line);if(t[0]==='F1')names.push(t[1]);}}return names;}
+ root.KiCadLegacy={parse,sheetFiles};if(typeof module==='object'&&module.exports)module.exports=root.KiCadLegacy;
+})(globalThis);
+
+;
 /* Saved KiCad object comparison. Browser-only; no geometry renderer required. */
 ((root) => {
   "use strict";
@@ -10,7 +94,7 @@
   const SCHEMATIC = new Set(["symbol", "sheet", "wire", "bus", "bus_entry", "label",
     "global_label", "hierarchical_label", "junction", "no_connect", "text", "text_box",
     "polyline", "rectangle", "circle", "arc", "image"]);
-  const BOARD = new Set(["footprint", "segment", "arc", "via", "zone", "gr_line",
+  const BOARD = new Set(["module", "footprint", "segment", "arc", "via", "zone", "gr_line",
     "gr_rect", "gr_circle", "gr_arc", "gr_poly", "gr_curve", "gr_text", "gr_text_box",
     "gr_bitmap", "dimension", "target"]);
   const OMIT = new Set(["uuid", "tstamp", "filled_polygon", "fill_segments"]);
@@ -19,8 +103,14 @@
   // KiCad files are overwhelmingly ASCII. Keep the same ECMAScript whitespace
   // grammar without constructing/testing a regular expression for every byte.
   const spaceCode=code=>code===32||(code>=9&&code<=13)||(code>127&&/\s/.test(String.fromCharCode(code)));
-  function parse(source) {
+  function parse(source, options = {}) {
     if (typeof source !== "string") throw new TypeError("KiCad source must be a string.");
+    if (/^\s*PCBNEW-BOARD/.test(source))throw Error('Legacy .brd boards are detected but this drawing format is not yet rendered. Open and save a separate .kicad_pcb copy in KiCad.');
+    if (/^\s*EESchema Schematic File Version [24]\b/.test(source)) {
+      const legacy=root.KiCadLegacy||(typeof module==='object'&&module.exports?require('./legacy-kicad.js'):null);
+      if(!legacy)throw Error('Legacy schematic adapter is unavailable; reload the extension.');
+      return legacy.parse(source,options);
+    }
     const board = /^\s*\(kicad_pcb(?:\s|\))/.test(source);
     if (new TextEncoder().encode(source).length > (board ? 64 * 1024 * 1024 : MAX_FILE)) throw new Error("KiCad file exceeds browser parser size limits.");
     const nodeLimit = board ? 6000000 : MAX_NODES;
@@ -65,7 +155,14 @@
       while (i < source.length) { const code=source.charCodeAt(i);if(code===40||code===41||code===59||code===34||spaceCode(code))break;i++; }
       if (start === i) throw new Error("Unexpected KiCad source character.");
       const token = source.slice(start, i);
-      if (NUMBER.test(token)) {
+      // Legacy hexadecimal timestamps and unquoted names may look like
+      // decimal exponents (e.g. 59E99999). Keep identity fields lexical.
+      const parent = stack[stack.length - 1], tag = parent?.[0];
+      const lexical = ["uuid", "tstamp", "tedit", "path", "lib_id", "host", "generator", "generator_version"].includes(tag) ||
+        (["module", "footprint", "symbol"].includes(tag) && parent.length === 1) ||
+        (tag === "net" && parent.length === 2) || (tag === "fp_text" && parent.length === 2) ||
+        (tag === "gr_text" && parent.length === 1) || (tag === "pad" && parent.length === 1);
+      if (NUMBER.test(token) && !lexical) {
         const number = Number(token);
         if (!Number.isFinite(number)) throw new Error("Invalid numeric KiCad value.");
         append(number);
@@ -77,7 +174,7 @@
     return roots[0];
   }
   const value = (item) => item && typeof item === "object" && !Array.isArray(item) ? item.quoted : item;
-  const kindOf = (form) => Array.isArray(form) ? String(value(form[0])) : "";
+  const kindOf = (form) => Array.isArray(form) ? (value(form[0]) === "module" ? "footprint" : String(value(form[0]))) : "";
   const children = (form, kind) => form.filter((item) => Array.isArray(item) && kindOf(item) === kind);
   const child = (form, kind) => children(form, kind)[0];
   const second = (form, kind) => value(child(form, kind)?.[1]);
@@ -173,8 +270,8 @@
     return { key, scope: key, signature, metadata: {
       uuid: identityValue.uuid, position, properties: props }, path, kind, label, form };
   }
-  function collect(path, content, onParsed = null) {
-    const rootForm = parse(content);
+  function collect(path, content, onParsed = null, options = {}) {
+    const rootForm = parse(content, options);
     onParsed?.(rootForm);
     const rootKind = kindOf(rootForm);
     if (rootKind !== "kicad_sch" && rootKind !== "kicad_pcb") throw new Error("Expected a KiCad schematic or board.");
@@ -193,7 +290,7 @@
       const definition = kindOf(form) === "symbol" ? definitions.get(String(second(form, "lib_id"))) : null;
       const record = objectRecord(path, form, null, definition);
       objects.push(record);
-      if (rootKind === "kicad_pcb" && record.kind === "footprint") {
+      if (rootKind === "kicad_pcb" && ["footprint","module"].includes(record.kind)) {
         for (const pad of children(form, "pad")) objects.push(objectRecord(path, pad,
           { form, position: record.metadata.position, scope: record.scope, label: record.label }));
       }
@@ -205,7 +302,7 @@
   function prepareProject(files) {
     const parsed = new Map(), records = projectObjects(files, (file, ast) => parsed.set(file.path, ast));
     const snapshot = Object.freeze({});
-    preparedProjects.set(snapshot, {files: files.map(file => ({path: file.path, content: file.content})), parsed, records});
+    preparedProjects.set(snapshot, {files: files.map(file => ({path: file.path, content: file.content, libraries:JSON.stringify(file.legacyLibraries||[])})), parsed, records});
     return snapshot;
   }
   function preparedFile(snapshot, path) {
@@ -217,7 +314,7 @@
     if (snapshot) {
       const state = preparedProjects.get(snapshot);
       if (!state || !Array.isArray(files) || files.length !== state.files.length ||
-          files.some((file, index) => file?.path !== state.files[index].path || file?.content !== state.files[index].content)) {
+          files.some((file, index) => file?.path !== state.files[index].path || file?.content !== state.files[index].content || JSON.stringify(file.legacyLibraries||[]) !== state.files[index].libraries)) {
         throw new Error('Prepared KiCad project differs from source.');
       }
       for (const file of files) onParsed?.(file, state.parsed.get(file.path));
@@ -229,14 +326,14 @@
     let total = 0;
     for (const file of files) {
       if (!file || typeof file.path !== "string" || typeof file.content !== "string" ||
-        !/\.kicad_(?:sch|pcb)$/i.test(file.path) || paths.has(file.path)) {
+        !/(?:\.kicad_(?:sch|pcb)|\.(?:sch|brd))$/i.test(file.path) || paths.has(file.path)) {
         throw new Error("Invalid or duplicate KiCad file entry.");
       }
       paths.add(file.path);
       const size = new TextEncoder().encode(file.content).length;
       total += size;
       if (size > (/\.kicad_pcb$/i.test(file.path) ? 64 * 1024 * 1024 : MAX_FILE) || total > MAX_PROJECT) throw new Error("KiCad project exceeds browser comparison size limits.");
-      for (const object of collect(file.path, file.content, ast => onParsed?.(file, ast))) objects.push(object);
+      for (const object of collect(file.path, file.content, ast => onParsed?.(file, ast), {libraries:file.legacyLibraries})) objects.push(object);
     }
     return objects;
   }
@@ -299,7 +396,7 @@
   const RESERVED = new Set(["reference", "uuid", "path", "dnp", "exclude from bom",
     "exclude from board", "unit", "source fingerprint"]);
   const validPath = (path) => typeof path === "string" && path.length <= 500 &&
-    /\.kicad_(?:sch|pcb)$/i.test(path) && !path.startsWith("/") &&
+    /(?:\.kicad_(?:sch|pcb)|\.(?:sch|brd))$/i.test(path) && !path.startsWith("/") &&
     path.split("/").every((part) => part && part !== "." && part !== ".." && !/[\\\x00-\x1f]/.test(part));
   // Variant rules also identify parts in inert imported BoM sources. Drawing
   // traversal continues to use validPath and accepts native KiCad files only.
@@ -334,7 +431,7 @@
     return { populated: !dnp, populationReason, excludeFromBom, excludeFromBoard };
   }
   function childPath(parent, name) {
-    if (typeof name !== "string" || !/\.kicad_sch$/i.test(name) || name.startsWith("/") || name.includes("\\")) return null;
+    if (typeof name !== "string" || !/(?:\.kicad_sch|\.sch)$/i.test(name) || name.startsWith("/") || name.includes("\\")) return null;
     const parts = parent.split("/").slice(0, -1);
     for (const part of name.split("/")) {
       if (part === "..") { if (!parts.length) return null; parts.pop(); }
@@ -705,23 +802,54 @@
 /* Saved-format capability disclosure; never upgrades or rewrites a design. */
 ((root)=>{'use strict';
  const value=x=>x&&typeof x==='object'&&!Array.isArray(x)?x.quoted:x;
- const common='version generator generator_version uuid paper title_block embedded_fonts embedded_files'.split(' ');
- const known={kicad_pcb:new Set([...common,...'general layers setup net footprint segment arc via zone gr_line gr_arc gr_rect gr_circle gr_poly gr_text gr_curve gr_text_box gr_bitmap dimension target property group image'.split(' ')]),kicad_sch:new Set([...common,...'lib_symbols symbol sheet wire bus bus_entry junction no_connect label global_label hierarchical_label netclass_flag text text_box image rule_area polyline rectangle circle arc sheet_instances symbol_instances group'.split(' ')])};
+ const common='version generator generator_version uuid paper title_block embedded_fonts embedded_files legacy_source legacy_diagnostic'.split(' ');
+ const known={kicad_pcb:new Set([...common,...'general layers setup net footprint module host page net_class segment arc via zone gr_line gr_arc gr_rect gr_circle gr_poly gr_text gr_curve gr_text_box gr_bitmap dimension target property group image'.split(' ')]),kicad_sch:new Set([...common,...'lib_symbols symbol sheet wire bus bus_entry junction no_connect label global_label hierarchical_label netclass_flag text text_box image rule_area polyline rectangle circle arc sheet_instances symbol_instances group'.split(' ')])};
+ // Resolve saved text only: no environment, filesystem access or expression evaluation.
+ function textResolver(ast,options={},warn=()=>{}){
+  const fields=node=>{const result=Object.fromEntries((node||[]).filter(x=>Array.isArray(x)&&value(x[0])==='property').map(x=>[String(value(x[1])),String(value(x[2])??'')]));for(const key of ['Reference','Value','Footprint','Datasheet'])if(Object.prototype.hasOwnProperty.call(result,key))result[key.toUpperCase()]=result[key];return result;};
+  const saved=Object.create(null),title=(ast||[]).find(x=>Array.isArray(x)&&value(x[0])==='title_block');
+  for(const entry of title||[]){if(!Array.isArray(entry))continue;const key=String(value(entry[0]));if(['title','date','rev','company'].includes(key))saved[{title:'TITLE',date:'ISSUE_DATE',rev:'REVISION',company:'COMPANY'}[key]]=String(value(entry[1])??'');if(key==='comment')saved['COMMENT'+value(entry[1])]=String(value(entry[2])??'');}
+  const project=options.textVariables||options.project?.text_variables||options.projectSettings?.text_variables||{};
+  for(const [key,text] of Object.entries(project))if(typeof text==='string'&&key.length<=200&&text.length<=65536)saved[key]=text;
+  Object.assign(saved,fields(ast));
+  if(typeof options.path==='string'){saved.FILENAME=options.path.split('/').pop();saved.FILEPATH=options.path;}
+  for(const [key,text] of [['#',options.sheetNumber],['##',options.sheetCount],['SHEETNAME',options.sheetName],['PROJECTNAME',options.projectName]])if(text!==undefined)saved[key]=String(text);
+  const references=new Map();
+  for(const node of ast||[]){if(!Array.isArray(node)||!['symbol','footprint','module'].includes(value(node[0])))continue;const local=fields(node),ref=local.Reference;if(ref)references.set(ref,references.has(ref)?null:local);}
+  const reported=new Set();
+  function resolve(input,local={}){
+   const raw=String(input??'');if(!raw.includes('${'))return raw;
+   let count=0;
+   const expand=(text,chain=[])=>text.replace(/\$\{([^{}]{1,200})\}/g,(token,key)=>{
+    if(++count>256||chain.length>=8||chain.includes(key)){if(!reported.has(key)){reported.add(key);warn('Text variable '+token+' is recursive or exceeds the substitution limit; preserved literally.');}return token;}
+    const separator=key.lastIndexOf(':'),target=separator>0?references.get(key.slice(0,separator)):null,field=separator>0?key.slice(separator+1):key;
+    const own=target&&Object.prototype.hasOwnProperty.call(target,field)?target:Object.prototype.hasOwnProperty.call(local,key)?local:saved,lookup=own===target?field:key;
+    if(!Object.prototype.hasOwnProperty.call(own,lookup)||typeof own[lookup]!=='string'){if(!reported.has(key)){reported.add(key);warn('Unresolved saved text variable '+token+'; preserved literally.');}return token;}
+    return expand(own[lookup],chain.concat(key));
+   });
+   const resolved=expand(raw);if(resolved.length>65536){warn('Expanded text exceeds the saved-text limit; preserved literally.');return raw;}return resolved;
+  }
+  return {resolve,fields};
+ }
  function inspect(ast){
   const kind=String(value(ast?.[0])),field=name=>value(ast.find(x=>Array.isArray(x)&&value(x[0])===name)?.[1]);
   if(!Array.isArray(ast)||!known[kind])throw Error('Unsupported KiCad drawing root.');
   const generatorVersion=String(field('generator_version')??''),formatVersion=field('version')??null,major=/^(\d+)(?:\.|$)/.exec(generatorVersion),warnings=[];
   if(major&&Number(major[1])>10)warnings.push(`KiCad ${generatorVersion} is a forward-compatibility preview: only recognized saved constructs are rendered; new version features are not verified.`);
+  for(const node of ast.filter(x=>Array.isArray(x)&&value(x[0])==='legacy_diagnostic'))warnings.push(String(value(node[1])));
+  if(kind==='kicad_pcb'&&formatVersion!==null&&Number(formatVersion)<20200000)warnings.push('Restricted legacy PCB preview: saved modules, pads, tracks and supported graphics are rendered; unsupported constructs are disclosed.');
+  const restrictedPreview=Boolean(field('legacy_source')||major&&Number(major[1])<8||kind==='kicad_pcb'&&formatVersion!==null&&Number(formatVersion)<20200000);
+  if(restrictedPreview&&!field('legacy_source')&&!(kind==='kicad_pcb'&&Number(formatVersion)<20200000))warnings.push('Restricted KiCad 4–7 preview: only recognized saved constructs are rendered.');
   const unknown=[...new Set(ast.filter(Array.isArray).map(x=>String(value(x[0]))).filter(x=>!known[kind].has(x)))];
   if(unknown.length)warnings.push('Unrecognized saved drawing constructs omitted: '+unknown.slice(0,40).join(', ')+(unknown.length>40?' …':''));
-  return {majorVersion:major?Number(major[1]):null,kind,generatorVersion:generatorVersion||null,formatVersion,forwardPreview:Boolean(major&&Number(major[1])>10),unknown,warnings};
+  return {legacy:Boolean(field('legacy_source')||kind==='kicad_pcb'&&formatVersion!==null&&Number(formatVersion)<20200000),restrictedPreview,majorVersion:major?Number(major[1]):null,kind,generatorVersion:generatorVersion||null,formatVersion,forwardPreview:Boolean(major&&Number(major[1])>10),unknown,warnings};
  }
  const features=Object.freeze([
-  {id:'drawing',label:'Saved schematic / PCB geometry',since:8,implemented:true},
-  {id:'review',label:'Selection, properties, comments and comparison',since:8,implemented:true},
-  {id:'hierarchy',label:'Sheet navigation and cross-sheet highlighting',since:8,implemented:true},
-  {id:'copper',label:'Saved copper fills and zone outlines',since:8,implemented:true},
-  {id:'models',label:'Repository-linked 3D models',since:8,implemented:true},
+  {id:'drawing',label:'Saved schematic / PCB geometry',since:4,implemented:true},
+  {id:'review',label:'Selection, properties, comments and comparison',since:4,implemented:true},
+  {id:'hierarchy',label:'Sheet navigation and cross-sheet highlighting',since:4,implemented:true},
+  {id:'copper',label:'Saved copper fills and zone outlines',since:4,implemented:true},
+  {id:'models',label:'Repository-linked 3D models',since:4,implemented:true},
   {id:'embeddedAssets',label:'Embedded fonts and 3D assets',since:9,implemented:false},
   {id:'componentClasses',label:'Component-class rules',since:9,implemented:false},
   {id:'netclassRuleAreas',label:'Schematic net-class rule areas',since:9,implemented:false},
@@ -748,16 +876,17 @@
   }
   function show(){
    const info=read();dialog.replaceChildren(make('h2','Saved-file compatibility'),make('p',info?.generatorVersion?`KiCad ${info.generatorVersion} · saved format ${info.formatVersion??'unknown'}`:'Generator version unknown; no major version inferred from the format date.'));
+   if(info?.restrictedPreview)dialog.append(make('p','Restricted legacy preview. Missing libraries, unsupported saved graphics and connectivity limits are reported by the drawing; feature availability does not imply complete format coverage.'));
    for(const feature of features){const result=capability(info,feature.id),row=make('button',`${result.available?'Available':'Blocked'} · ${feature.label}${result.available?'':' · Why?'}`);row.type='button';row.className='compatibility-feature';row.setAttribute('data-blocked',String(!result.available));row.title=result.reason;row.onclick=()=>result.available?undefined:explain(feature);dialog.append(row);}
    if(info?.unknown?.length)dialog.append(make('p','Omitted saved constructs: '+info.unknown.join(', ')+'. These are renderer limitations; upgrading alone is not a remedy.'));
    const close=make('button','Close');close.type='button';close.onclick=()=>dialog.close();dialog.append(close);if(!dialog.open)dialog.showModal();
   }
   dialog.addEventListener('click',event=>{if(event.target===dialog){const rect=dialog.getBoundingClientRect();if(event.clientX<rect.left||event.clientX>rect.right||event.clientY<rect.top||event.clientY>rect.bottom)dialog.close();}});
   button.onclick=show;
-  const refresh=()=>{const info=read();button.textContent=info?.majorVersion?`KiCad ${info.majorVersion} · Features`:'File features';if(dialog.open)dialog.close();};refresh();
+  const refresh=()=>{const info=read();button.textContent=info?.restrictedPreview?'Legacy · Restricted':info?.majorVersion?`KiCad ${info.majorVersion} · Features`:'File features';if(dialog.open)dialog.close();};refresh();
   return {refresh,check(id){const feature=features.find(f=>f.id===id);return feature?explain(feature):false;},dispose(){dialog.remove();button.remove();}};
  }
- root.KiCadFileCompatibility={inspect,features,capability,mountStatus};if(typeof module==='object'&&module.exports)module.exports=root.KiCadFileCompatibility;
+ root.KiCadFileCompatibility={textResolver,inspect,features,capability,mountStatus};if(typeof module==='object'&&module.exports)module.exports=root.KiCadFileCompatibility;
 })(typeof globalThis==='object'?globalThis:this);
 
 ;
@@ -946,15 +1075,18 @@
       if (primitives.length >= MAX_PRIMITIVES) throw new Error("Schematic has too many drawing primitives.");
       primitives.push({ ...primitive, path });
     }
+    const variableText=Compatibility?.textResolver(rootAST,{...sheetOptions,path},warn), variableFields=new Map();
+    for(const node of [...forms(rootAST,"symbol"),...forms(rootAST,"sheet")])if(ownId(node))variableFields.set(ownId(node),variableText?.fields(node));
+    const resolveText=(string,owner={})=>variableText?.resolve(string,variableFields.get(owner.ownerUuid||owner.uuid)||{})??String(string??"");
     const page = pageSettings(rootAST, warn);
     function line(a, b, color, width, owner = {}) {
       if (a && b) emit({ type: "line", points: [a, b], color, width, ...owner });
     }
     function text(position, string, size, angle, color, owner = {}) {
       if (position && string !== undefined && string !== null && String(string)) {
-        const parsed = overbarText(string);
+        const parsed = overbarText(resolveText(string,owner));
         emit({ type: "text", x: position.x, y: position.y, text: parsed.text,
-          ...(parsed.bars.length ? { rawText: String(string) } : {}),
+          ...((parsed.bars.length||String(string)!==parsed.text) ? { rawText: String(string) } : {}),
           size, angle: finite(angle) ? angle : 0, color, ...owner });
         if (parsed.bars.length) {
           const width = owner.fontWidth || size, height = owner.fontHeight || size;
@@ -1172,7 +1304,7 @@
       if (isHidden(node)) return;
       const at = point(node, "at");
       if (!at) { warn(`${kind} without position was skipped.`); return; }
-      const content = value(node[1]), size = fontSize(node), angle = value(form(node, "at")?.[3]) || 0;
+      const content = resolveText(value(node[1]),owner), size = fontSize(node), angle = value(form(node, "at")?.[3]) || 0;
       const shape = scalar(node, "shape") || (kind === "sheet-pin" ? value(node[2]) : "input");
       const style = fontStyle(node), color = kind === "global_label" ? COLOR.symbol : "#725600";
       const labelOwner = { ...owner, kind, connectPoint: at };
@@ -1334,7 +1466,7 @@
     A: [279.4, 215.9], B: [431.8, 279.4], C: [558.8, 431.8], D: [863.6, 558.8], E: [1117.6, 863.6],
     USLetter: [279.4, 215.9], USLegal: [355.6, 215.9], USLedger: [431.8, 279.4] };
   function pageOf(ast, warnings) {
-    const paper = child(ast, "paper");
+    const paper = child(ast, "paper") || child(ast, "page");
     const name = String(value(paper?.[1]) || "A4");
     let size = paperSizes[name];
     if (name === "User") size = [num(paper?.[2]), num(paper?.[3])];
@@ -1377,11 +1509,12 @@
     }
     return oval(height, width).map((p) => ({x:p.y,y:p.x}));
   }
-  function build(ast, path = "") {
+  function build(ast, path = "", options = {}) {
     const warnings = [], primitives = [];
     if (kind(ast) !== "kicad_pcb") throw new Error("Expected a KiCad PCB AST.");
     const compatibility=Compatibility?.inspect(ast);
     warnings.push(...(compatibility?.warnings||[]));
+    const variableText=Compatibility?.textResolver(ast,{...options,path},message=>{if(!warnings.includes(message))warnings.push(message);}),variableFields=new Map();
     const page = pageOf(ast, warnings);
     const layerNames = (child(ast, "layers") || []).slice(1).filter(Array.isArray).map((part) => String(value(part[1])));
     const push = (primitive) => {
@@ -1420,7 +1553,13 @@
       };
       if (["gr_line", "fp_line"].includes(type)) withPoints("line", [point(node,"start"),point(node,"end")]);
       else if (["gr_arc", "fp_arc", "arc"].includes(type)) {
-        const start = point(node,"start"), mid = point(node,"mid"), end = point(node,"end");
+        let start = point(node,"start"), mid = point(node,"mid"), end = point(node,"end");
+        if(start && end && !mid && child(node,"angle")){
+          // KiCad 4/5 arcs store a centre and start point, with a signed sweep.
+          const center=start,sweep=num(field(node,"angle"))*Math.PI/180,dx=end.x-center.x,dy=end.y-center.y;
+          const at=theta=>({x:center.x+dx*Math.cos(theta)-dy*Math.sin(theta),y:center.y+dx*Math.sin(theta)+dy*Math.cos(theta)});
+          start=end;mid=at(sweep/2);end=at(sweep);
+        }
         if (start && mid && end) push({ type:"arc", start:transform(start), mid:transform(mid), end:transform(end), width, ...meta });
         else warn(type, node);
       } else if (["gr_rect", "fp_rect"].includes(type)) {
@@ -1443,7 +1582,7 @@
         const effects = child(node,"effects"), font = child(effects,"font");
         const fontSize = child(font,"size"), justify = child(effects,"justify");
         const justification = justify?.slice(1).map((part) => String(value(part))) || [];
-        if (at && content != null) push({ type:"text", text:String(content), ...transform(at),
+        if (at && content != null) push({ type:"text", text:variableText?.resolve(content,variableFields.get(owner.uuid)||{})??String(content), ...transform(at),
           size:num(fontSize?.[2],1), angle:-rotation(node), width:.15,
           property:type==="property"?String(value(node[1])):type==="fp_text"&&value(node[1])==="reference"?"Reference":type==="fp_text"&&value(node[1])==="value"?"Value":undefined,
           bold:hasAtom(font,"bold") || !!child(font,"bold"),
@@ -1544,7 +1683,7 @@
           if (drill > 0) push({ type:"circle", ...at, r:drill/2, layer:copper, color:"#111b25", fill:true,
             hole:true, uuid:uuid(node) || undefined, kind:"drill", objectCategory:"vias" });
         }
-      } else if (type === "footprint") {
+      } else if (["footprint","module"].includes(type)) {
         const origin = point(node,"at");
         if (!origin) { warn("Footprint without placement",node); continue; }
         const angle = rotation(node);
@@ -1552,7 +1691,11 @@
         // flip. Applying another mirror places pads on the wrong side.
         const transform = transformed(origin,angle);
         const properties = children(node,"property");
-        const reference = String(value(properties.find((part) => String(value(part[1])) === "Reference")?.[2]) || "");
+        const local=variableText?.fields(node)||{};
+        for(const sub of children(node,"fp_text")){const name=String(value(sub[1]));if(name==='reference')local.Reference=String(value(sub[2])??'');if(name==='value')local.Value=String(value(sub[2])??'');}
+        if(local.Reference!==undefined)local.REFERENCE=local.Reference;if(local.Value!==undefined)local.VALUE=local.Value;
+        if(uuid(node))variableFields.set(uuid(node),local);
+        const reference = local.Reference||"";
         const owner = { uuid:uuid(node), reference };
         const firstPrimitive = primitives.length;
         for (const sub of node.slice(1)) {
@@ -1560,7 +1703,7 @@
           const subType = kind(sub), subLayer = String(field(sub,"layer") || layer);
           if (subType === "pad") pad(sub,owner,transform);
           else if (["fp_line","fp_arc","fp_rect","fp_circle","fp_poly","fp_text"].includes(subType)) drawShape(sub,subLayer,transform,owner);
-          else if (subType === "property" && ["Reference","Value"].includes(String(value(sub[1])))) drawShape(sub,subLayer,transform,owner);
+          else if (subType === "property") drawShape(sub,subLayer,transform,owner);
         }
         const padPrimitives = primitives.slice(firstPrimitive).filter((part) => part.type === "pad");
         const coordinates = padPrimitives.flatMap((part) => part.points || (part.r ? [
@@ -1976,7 +2119,7 @@
       if(!Array.isArray(files)||files.length>(diff.MAX_FILES||128))throw new Error("Too many KiCad files to compare.");
       const paths=new Set(), inputs=[];let sourceBytes=0;
       for(const file of files) {
-        if(!file||typeof file.path!=="string"||typeof file.content!=="string"||!/\.kicad_(?:sch|pcb)$/i.test(file.path)||paths.has(file.path))throw new Error("Invalid or duplicate KiCad file entry.");
+        if(!file||typeof file.path!=="string"||typeof file.content!=="string"||!/(?:\.kicad_(?:sch|pcb)|\.(?:sch|brd))$/i.test(file.path)||paths.has(file.path))throw new Error("Invalid or duplicate KiCad file entry.");
         paths.add(file.path);
         const previous=cache.get(file.path),size=previous?.content===file.content?previous.sourceBytes:encoder.encode(file.content).length;
         sourceBytes+=size;
@@ -2211,8 +2354,8 @@ onmessage=event=>{
       const {files,rootFile,pcb}=payload,snapshot=KiCadDesignDiff.prepareProject(files),model=KiCadDesignModel.buildProject(files,null,snapshot),file=files.find(f=>f.path===rootFile);
       if(!file)throw Error('The requested drawing is absent.');
       postMessage({stage:'Building drawing geometry…'});
-      const sheets=files.filter(f=>/\.kicad_sch$/i.test(f.path));
-      const design=(pcb?KiCadPCBRenderer:KiCadSchematicRenderer).build(KiCadDesignDiff.preparedFile(snapshot,rootFile),rootFile,{sheetNumber:sheets.findIndex(f=>f.path===rootFile)+1,sheetCount:sheets.length,sheetName:'/'});
+      const sheets=files.filter(f=>/\.(kicad_sch|sch)$/i.test(f.path));
+      const design=(pcb?KiCadPCBRenderer:KiCadSchematicRenderer).build(KiCadDesignDiff.preparedFile(snapshot,rootFile),rootFile,{textVariables:file.textVariables,sheetNumber:sheets.findIndex(f=>f.path===rootFile)+1,sheetCount:sheets.length,sheetName:'/'});
       postMessage({stage:'Resolving saved connectivity…'});
       const nets=KiCadNetModel.build(files,new Map([[rootFile,design]]),snapshot);
       result={model,rules:[...model._rules],design,nets};

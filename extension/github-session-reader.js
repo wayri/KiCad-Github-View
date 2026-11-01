@@ -33,12 +33,17 @@
       const {repository,ref,action,path='',limit=8*1024*1024}=message;scope(repository,ref);
       const here=new URL(location.href);
       if(here.origin!=='https://github.com'||here.pathname.split('/').slice(1,3).join('/').toLowerCase()!==repository.toLowerCase())throw Error('A signed-in tab for this repository must remain open.');
-      if(!['resolve','directory','file','asset'].includes(action)||!safePath(path,true))throw Error('Unsupported GitHub session read.');
-      if(action!=='resolve'&&!SHA.test(ref))throw Error('GitHub session reads require a pinned commit.');
+      if(!['resolve','directory','file','asset','history'].includes(action)||!safePath(path,true))throw Error('Unsupported GitHub session read.');
+      if(!['resolve','history'].includes(action)&&!SHA.test(ref))throw Error('GitHub session reads require a pinned commit.');
       if(signal?.aborted)throw Error('Project loading cancelled.');
       const controller=new AbortController(),abort=()=>controller.abort(),timer=setTimeout(()=>controller.abort(),30000);
       signal?.addEventListener('abort',abort,{once:true});
       try {
+        if(action==='history'){
+          const url=`https://github.com/${repository}/commits/${encodeURIComponent(ref)}.atom`,response=await fetcher(url,{credentials:'same-origin',redirect:'error',cache:'no-store',signal:controller.signal});
+          if(!response.ok||response.url&&response.url!==url||!/atom|xml/i.test(response.headers.get('content-type')||''))throw Error('GitHub website commit history is unavailable for this repository.');
+          return {ref,content:await bounded(response,4*1024*1024,controller.signal)};
+        }
         if(action==='file'||action==='asset') {
           if(!safePath(path)||!Number.isInteger(limit)||limit<1||limit>32*1024*1024)throw Error('Invalid GitHub session file.');
           const suffix=`/${repository}/${ref}/${path.split('/').map(encodeURIComponent).join('/')}`;

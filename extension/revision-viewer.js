@@ -65,8 +65,8 @@
     loading?.show('Preparing saved objects and drawing geometry…');
     const prepare=()=>{
       const snapshot=KiCadDesignDiff.prepareProject(files),model=KiCadDesignModel.buildProject(files,null,snapshot);
-      const sheets=files.filter(file=>/\.kicad_sch$/i.test(file.path));
-      const design=(pcb?KiCadPCBRenderer:KiCadSchematicRenderer).build(KiCadDesignDiff.preparedFile(snapshot,initialFile),initialFile,{sheetNumber:sheets.findIndex(file=>file.path===initialFile)+1,sheetCount:sheets.length,sheetName:'/'});
+      const sheets=files.filter(file=>/\.(kicad_sch|sch)$/i.test(file.path));
+      const design=(pcb?KiCadPCBRenderer:KiCadSchematicRenderer).build(KiCadDesignDiff.preparedFile(snapshot,initialFile),initialFile,{textVariables:files.find(f=>f.path===initialFile)?.textVariables,sheetNumber:sheets.findIndex(file=>file.path===initialFile)+1,sheetCount:sheets.length,sheetName:'/'});
       const nets=globalThis.KiCadNetModel?.build(files,new Map([[initialFile,design]]),snapshot);
       return {model,design,nets};
     };
@@ -93,7 +93,7 @@
 
       const phase=lastFile===file?'change':'ready';lastView=signature;lastFile=file;
 
-      parent.postMessage({type:'kicad-review:view',phase,file,view},ownOrigin);
+      parent.postMessage({type:'kicad-review:view',phase,file,view,ref},ownOrigin);
 
     };
 
@@ -207,7 +207,7 @@
         const file=files.find(source=>source.path===path);
         if(!file)throw new Error('The referenced sheet is absent.');
         const sheets=files.filter(source=>/\.kicad_sch$/i.test(source.path));
-        designs.set(path,(pcb?KiCadPCBRenderer:KiCadSchematicRenderer).build(KiCadDesignDiff.parse(file.content),path,{sheetNumber:sheets.findIndex(source=>source.path===path)+1,sheetCount:sheets.length,sheetName:path===rootFile?'/':'/'+path.split('/').at(-1).replace(/\.kicad_sch$/i,'')+'/'}));
+        designs.set(path,(pcb?KiCadPCBRenderer:KiCadSchematicRenderer).build(KiCadDesignDiff.parse(file.content,{libraries:file.legacyLibraries}),path,{textVariables:file.textVariables,sheetNumber:sheets.findIndex(source=>source.path===path)+1,sheetCount:sheets.length,sheetName:path===rootFile?'/':'/'+path.split('/').at(-1).replace(/\.kicad_sch$/i,'')+'/'}));
       }
       return designs.get(path);
     }
@@ -279,7 +279,7 @@
           overviewView=KiCadOwnedCanvas.mount(surface,{dark,pcb:false,acceleration:'off'});overviewView.canvas.addEventListener('wheel',()=>{overviewFitted=false;},{passive:true});overviewView.canvas.addEventListener('pointerdown',event=>{if(event.button===1||event.button===2)overviewFitted=false;});
           const baseDraw=overviewView.draw.bind(overviewView);overviewView.draw=()=>{
             baseDraw();if(!composition)return;const ctx=overviewView.ctx;if(!ctx)return;
-            ctx.save();ctx.setLineDash([6,4]);if(netLinksToggle.getAttribute('aria-pressed')==='true')for(const wire of composition.airwires)overviewView.paint(wire);ctx.restore();
+            ctx.save();ctx.setLineDash([6,4]);if(netLinksToggle.getAttribute('aria-pressed')==='true'){if(globalThis.KiCadSheetHierarchyLinks)KiCadSheetHierarchyLinks.draw(overviewView,{links:composition.airwires},dark,{color:dark?'#d4b565a0':'#9e7b29a0',dashed:true});else for(const wire of composition.airwires)overviewView.paint(wire);}ctx.restore();
             if(hierarchyToggle.getAttribute('aria-pressed')==='true')globalThis.KiCadSheetHierarchyLinks?.draw(overviewView,hierarchyGraph,dark);
           };
           overviewView.addEventListener('kicad:select',()=>{const hit=overviewView.selected;if(hit?.sourcePath&&hit.uuid){if($('selectionMode').value==='net'||!workspace.selectOverviewObject?.(hit.sourcePath,hit.uuid))workspace.selectOverviewNet?.(hit.sourcePath,hit.uuid,hit.sourceInstanceId);}});
@@ -379,7 +379,7 @@
     }
 
     const related=selection=>{if(!globalThis.KiCadPairedReview?.validSelection(selection))return;crossApplying=true;try{workspace.highlightRelated?.(selection);}finally{crossApplying=false;}};
-    if(globalThis.KiCadWindowLink&&viewSession&&(/^[a-f0-9]{40}$/i.test(ref)||globalThis.KiCadLocalRuntime&&globalThis.KiCadLocalWorkspace?.openDetached))try{windowLink=KiCadWindowLink.mount({session:viewSession,scope:JSON.stringify([provider,providerContext.host||'https://github.com',repository,ref]),onSelection:selection=>{crossApplying=true;try{workspace.applyWindowSelection?.(selection);}finally{crossApplying=false;}},onEnabled:enabled=>{dispatchEvent(new CustomEvent('kicad-review:detach-state',{detail:{enabled}}));if(parent!==window)parent.postMessage({type:'kicad-review:detach-state',enabled},ownOrigin);}});}catch(error){$('engineNotice').textContent=error.message;$('engineNotice').hidden=false;updateDiagnostics();}
+    if(globalThis.KiCadWindowLink&&viewSession&&(/^[a-f0-9]{40}$/i.test(ref)||globalThis.KiCadLocalRuntime&&globalThis.KiCadLocalWorkspace?.openDetached))try{windowLink=KiCadWindowLink.mount({session:viewSession,scope:JSON.stringify([provider,providerContext.host||'https://github.com',repository,ref]),onTheme:theme=>{preferences.uiTheme=preferences.drawingTheme=theme;applyTheme();savePreferences();},onSelection:selection=>{crossApplying=true;try{workspace.applyWindowSelection?.(selection);}finally{crossApplying=false;}},onEnabled:enabled=>{dispatchEvent(new CustomEvent('kicad-review:detach-state',{detail:{enabled}}));if(parent!==window)parent.postMessage({type:'kicad-review:detach-state',enabled},ownOrigin);}});}catch(error){$('engineNotice').textContent=error.message;$('engineNotice').hidden=false;updateDiagnostics();}
     addEventListener('kicad-review:detach-sync',event=>{if(typeof event.detail?.enabled==='boolean')windowLink?.setEnabled(event.detail.enabled);});
     addEventListener('kicad-review:detach-view',event=>{const mode=event.detail?.mode;if(!['schematic','layout','3d'].includes(mode))return;globalThis.KiCadDetachedView?.chooser({mode,current:currentFile(),unavailable:Boolean(globalThis.KiCadVSCodeContext||globalThis.KiCadLocalRuntime&&!globalThis.KiCadLocalWorkspace?.openDetached||globalThis.KiCadAndroidRuntime),getEntries:async()=>{const reply=await send({type:'project-inventory',repository,ref,file:rootFile});if(!reply?.ok)throw Error(reply?.error||'Project inventory unavailable.');return reply.result.files;},buildURL:file=>KiCadDetachedView.url({base:location.href,mode,file,repository,ref,provider,host:providerContext.host,session:viewSession,allowLocal:Boolean(globalThis.KiCadLocalRuntime&&globalThis.KiCadLocalWorkspace?.openDetached)}),onError:message=>{$('engineNotice').textContent=message;$('engineNotice').hidden=false;updateDiagnostics();}});});
     if(params.get('initialView')==='3d'&&pcb)$('mode3d').click();
@@ -390,6 +390,10 @@
       if(event.source!==parent||event.origin!==ownOrigin||event.data?.type!=='kicad-review:command')return;
 
       const msg=event.data;
+      if(msg.command==='set-theme'){
+        if(!['light','dark'].includes(msg.theme))return;
+        preferences.uiTheme=preferences.drawingTheme=msg.theme;applyTheme();savePreferences();windowLink?.publishTheme?.(msg.theme);return;
+      }
       if(msg.command==='search-result'){const value=msg.result;if(value&&globalThis.KiCadWorkspaceSearch?.safePath(value.path)&&['object','file','report','draft'].includes(value.kind))workspace.openWorkspaceSearchResult?.(value).catch(error=>{label('reviewNotice',error.message);$('reviewNotice').hidden=false;});return;}
       if(msg.command==='detach-sync'&&typeof msg.enabled==='boolean'){windowLink?.setEnabled(msg.enabled);return;}
       if(msg.command==='workspace-view'){

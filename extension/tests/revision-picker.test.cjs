@@ -6,9 +6,9 @@ test('comparison keeps fork/base identities, encoded paths and immutable revisio
  const single=comparisonQuery(request,null,sha('b'));assert.equal(single.get('repository'),'fork/design');assert.equal(single.get('oldFile'),'board.kicad_pcb');assert.equal(single.has('base'),false);
  for(const [r,b,h] of [[request,'main',sha('b')],[request,sha('a'),'moving-branch'],[{...request,file:'../bad.kicad_pcb'},sha('a'),sha('b')],[{...request,repository:'../owner'},sha('a'),sha('b')],[{...request,pullNumber:9},sha('a'),sha('b')]])assert.throws(()=>comparisonQuery(r,b,h));
 });
-function harness(send){
+function harness(send,extra={}){
  const nodes=[];const doc={createElement(tag){const node={tag,ownerDocument:doc,children:[],listeners:{},value:'',textContent:'',append(...items){this.children.push(...items);},replaceChildren(...items){this.children=items;},setAttribute(key,value){this[key]=value;},addEventListener(key,fn){this.listeners[key]=fn;},remove(){this.removed=true;},get firstChild(){return this.children[0];}};nodes.push(node);return node;}};
- const holder=doc.createElement('div'),navigated=[];const picker=mount({holder,request,send,navigate:p=>navigated.push(p)});return {nodes,holder,navigated,picker};
+ const holder=doc.createElement('div'),navigated=[];const picker=mount({holder,request,send,...extra,navigate:p=>navigated.push(p)});return {nodes,holder,navigated,picker};
 }
 test('picker resolves each immutable source in its own repository before navigation',async()=>{
  const calls=[],h=harness(async message=>{calls.push(message);return {ok:true,result:{repository:message.repository,sha:message.repository==='owner/design'?sha('a'):sha('b')}};});
@@ -28,4 +28,19 @@ test('GitLab comparison preserves provider and nested namespaces',()=>{
  const query=comparisonQuery({...request,provider:'gitlab',repository:'group/sub/design',headRepository:'group/sub/design'},sha('a'),sha('b'));
  assert.equal(query.get('provider'),'gitlab');assert.equal(query.get('repository'),'group/sub/design');
  assert.throws(()=>comparisonQuery({...request,repository:'group/sub/design'},sha('a'),sha('b')));
+});
+
+
+test('history renders commit actions and loads exact immutable commit',async()=>{
+ const calls=[],h=harness(async m=>{calls.push(m);return {ok:true,result:{repository:m.repository,file:m.file,snapshotRef:sha('d'),commits:[{sha:sha('c'),message:'Change regulator\nDetails',author:'Engineer',date:'2026-10-30'}],warnings:['Initial website window']}};});
+ await h.picker.loadHistory();assert.equal(calls[0].type,'revision-commits');assert.ok(h.nodes.some(n=>n.tag==='strong'&&n.textContent==='Change regulator'));assert.ok(h.nodes.some(n=>n.textContent==='Load commit'));assert.ok(h.nodes.some(n=>n.textContent==='Compare with current'));
+ await h.picker.openCommit(sha('c'));assert.equal(h.navigated[0].get('head'),sha('c'));assert.equal(h.navigated[0].has('base'),false);
+});
+test('compare from history preserves the displayed pinned revision despite a moving branch',async()=>{
+ const calls=[],h=harness(async m=>{calls.push(m);return {ok:true,result:{repository:m.repository,sha:sha('e')}};},{getCurrentRef:()=>sha('d')});
+ await h.picker.openCommit(sha('c'),true);assert.equal(calls.length,0);assert.equal(h.navigated[0].get('base'),sha('c'));assert.equal(h.navigated[0].get('head'),sha('d'));assert.equal(h.navigated[0].get('repository'),'fork/design');
+});
+test('history rejects invalid revisions and late response after disposal',async()=>{
+ const bad=harness(async m=>({ok:true,result:{repository:m.repository,commits:[{sha:'moving-branch'}]}}));await bad.picker.loadHistory();assert.ok(bad.nodes.some(n=>n.textContent==='Invalid bounded commit history.'));await bad.picker.openCommit('bad');assert.equal(bad.navigated.length,0);
+ let finish;const late=harness(()=>new Promise(resolve=>finish=resolve));const work=late.picker.loadHistory();late.picker.dispose();finish({ok:true,result:{repository:'fork/design',commits:[{sha:sha('c')}]}});await work;assert.equal(late.nodes.find(n=>n['aria-label']==='Commit history').children.length,0);
 });

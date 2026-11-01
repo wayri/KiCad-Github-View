@@ -37,7 +37,7 @@ function workspaceRuntime(respond=async()=>[], hooks={}){
     set id(value){this.attributes.id=value;elements.set(value,this);}get id(){return this.attributes.id;}get className(){return this.attributes.class||'';}set className(value){this.attributes.class=value;this.classes=new Set(value.split(/\s+/));}
     set textContent(value){this.text=String(value);this.children=[];}get textContent(){return this.text+this.children.map(c=>c.textContent).join(' ');}
     append(...children){for(const child of children){child.remove();child.parentElement=this;this.children.push(child);}}replaceChildren(...children){for(const child of this.children)child.parentElement=null;this.text='';this.children=[];this.append(...children);}remove(){if(this.parentElement)this.parentElement.children=this.parentElement.children.filter(c=>c!==this);this.parentElement=null;}
-    insertBefore(child,reference){child.remove();child.parentElement=this;const index=this.children.indexOf(reference);if(index<0)this.children.push(child);else this.children.splice(index,0,child);}
+    insertBefore(child,reference){if(reference!=null&&!this.children.includes(reference))throw new Error('NotFoundError: reference is not a direct child');child.remove();child.parentElement=this;const index=this.children.indexOf(reference);if(reference==null)this.children.push(child);else this.children.splice(index,0,child);}
     setAttribute(k,v){this.attributes[k]=String(v);if(k==='id')this.id=v;if(k==='class')this.className=v;}matches(selector){return selector.startsWith('.')?this.classes.has(selector.slice(1)):selector.startsWith('#')?this.id===selector.slice(1):this.tagName.toLowerCase()===selector.split('.')[0]&&(!selector.includes('.')||this.classes.has(selector.split('.')[1]));}
     closest(selector){for(let node=this;node;node=node.parentElement)if(node.matches(selector))return node;return null;}querySelector(selector){for(const child of this.children){if(child.matches(selector))return child;const nested=child.querySelector(selector);if(nested)return nested;}return null;}
     contains(node){return node===this||this.children.some(child=>child.contains(node));}focus(){this.focused=true;}click(){return this.onclick?.();}getBoundingClientRect(){return{left:0,top:0,width:hooks.width||800,height:this.id==='reviewWorkspace'?(hooks.workspaceHeight||600):(hooks.frameHeight||600)};}
@@ -79,6 +79,10 @@ function workspaceRuntime(respond=async()=>[], hooks={}){
   function key(value,extra={}){const event={key:value,target:canvas.canvas,composedPath:()=>[],preventDefault(){this.defaultPrevented=true;},...extra};for(const fn of keyHandlers)fn(event);return event;}
   return{get,workspace,canvas,design,load,receipts,key,document:context.document,chatDraft:()=>context.KiCadChatDraft,resize(width){hooks.width=width;resizeCallback?.();}};
 }
+const descendants=node=>[node,...node.children.flatMap(descendants)];
+const action=(node,text)=>descendants(node).find(item=>item.tagName==='BUTTON'&&item.textContent===text);
+async function sendComment(view){await view.get('postComment').click();if(view.get('commentPostReview').open)await view.get('confirmCommentPost').click();await new Promise(setImmediate);}
+function chooseDestination(view){const button=descendants(view.get('commentEditor')).find(node=>node.attributes['aria-label']==='Choose comment destination');assert.ok(button);return button.click();}
 test('workspace initializes net geometry after the drawing loads without a file-path change',()=>{
   const view=workspaceRuntime();assert.equal(view.get('netList').children.length,0);view.load();assert.equal(view.get('netCount').textContent,'1 net');
   view.get('netList').children[0].click();assert.equal(view.canvas.netHighlight.name,'SIGNAL');assert.ok(view.canvas.netHighlight.primitives.some(p=>p.uuid==='pad'));
@@ -169,8 +173,8 @@ test('saving metadata stays local until explicit publish and records its thread 
  const remoteRef={kind:'issue',repository:'wayri/fixture',number:7,url:'https://github.com/wayri/fixture/issues/7',publishedAt:'2026-10-04T00:00:00.000Z'};
  const view=workspaceRuntime(async m=>{messages.push(m);if(m.type==='comment-list')return notes;if(m.type==='comment-save'){notes=[m.comment];return m.comment;}if(m.type==='github-publish-comment')return{remoteRef};return[];});view.load();await new Promise(resolve=>setImmediate(resolve));
  view.get('newComment').click();view.get('commentText').value='Review R1';view.get('commentSeverity').value='major';view.get('commentState').value='resolved';view.get('commentTags').value='assembly, review';view.get('commentMentions').value='@alice, bob';await view.get('saveComment').click();
- assert.equal(messages.some(m=>m.type==='github-publish-comment'),false);assert.equal(notes[0].state,'resolved');assert.deepEqual(Array.from(notes[0].tags),['assembly','review']);assert.deepEqual(Array.from(notes[0].mentions),['alice','bob']);
- const card=view.get('commentList').children[0],actions=card.children.at(-1);await actions.children.find(e=>e.textContent==='Publish to GitHub').click();await view.get('confirmCommentPost').click();
+ assert.equal(messages.some(m=>m.type==='github-publish-comment'),false);assert.equal(notes[0].anchor.sheetName,'board.kicad_pcb');assert.equal(notes[0].state,'resolved');assert.deepEqual(Array.from(notes[0].tags),['assembly','review']);assert.deepEqual(Array.from(notes[0].mentions),['alice','bob']);
+ const card=view.get('commentList').children[0],actions=card.children.at(-1);await action(actions,'Publish to GitHub').click();if(view.get('commentPostReview').open)await view.get('confirmCommentPost').click();await new Promise(setImmediate);
  const publish=messages.find(m=>m.type==='github-publish-comment');assert.equal(publish.destination,'new-issue');assert.equal(publish.comment.anchor.repository,'wayri/fixture');assert.equal(notes[0].remoteRefs[0].url,remoteRef.url);assert.match(view.get('commentStatus').textContent,/Posted to GitHub issue #7/);
  assert.deepEqual(validator.parseSidecar(validator.serializeSidecar(notes))[0].tags,['assembly','review']);
 });
@@ -178,9 +182,9 @@ test('known repository policy restriction disables direct publish while preservi
  const validate=require('../review-comments.js').validateComment;const note=validate({id:'policy-note',text:'Review placement',createdAt:'2025-01-01T00:00:00.000Z',anchor:{repository:'wayri/fixture',ref:'main',file:'board.kicad_pcb'}});
  const view=workspaceRuntime(async request=>request.type==='comment-list'?[note]:request.type==='comment-policy-status'?{mode:'allowlist',allowed:false,reason:'Only approved reviewers may publish',login:'alice'}:[]);
  view.load();await view.workspace.refreshComments();await view.get('refreshCommentPolicy').click();await new Promise(resolve=>setImmediate(resolve));
- const actions=view.get('commentList').children[0].children.at(-1),publish=actions.children.find(node=>node.textContent==='Publish to GitHub');
+ const actions=view.get('commentList').children[0].children.at(-1),publish=action(actions,'Publish to GitHub');
  assert.equal(publish.disabled,true);assert.match(view.get('commentPolicyStatus').textContent,/publishing restricted/);
- assert.ok(actions.children.find(node=>node.textContent==='Edit'));assert.equal(view.get('refreshCommentPolicy').disabled,false);
+ assert.ok(action(actions,'Edit'));assert.equal(view.get('refreshCommentPolicy').disabled,false);
 });
 test('read receipts, lifecycle actions and creation order remain independent',async()=>{
  const validate=require('../review-comments.js').validateComment;const changed=[];
@@ -189,10 +193,10 @@ test('read receipts, lifecycle actions and creation order remain independent',as
  const view=workspaceRuntime(async request=>{if(request.type==='comment-list')return notes;if(request.type==='comment-save'){notes=notes.map(n=>n.id===request.comment.id?request.comment:n);return request.comment;}return[];},{onCommentsChanged:()=>changed.push(true)});
  view.load();await view.workspace.refreshComments();view.get('commentSort').value='newest';view.get('commentSort').onchange();
  assert.match(view.get('commentList').children[0].textContent,/New question/);
- const actions=view.get('commentList').children[0].children.at(-1);actions.children.find(node=>node.textContent==='Mark read').click();
+ const actions=view.get('commentList').children[0].children.at(-1);action(actions,'Mark read').click();
  view.get('readFilter').value='unread';view.get('readFilter').onchange();assert.equal(view.get('commentList').children.length,1);assert.match(view.get('commentList').textContent,/Old question/);
  view.get('readFilter').value='all';view.get('readFilter').onchange();
- await view.get('commentList').children[0].children.at(-1).children.find(node=>node.textContent==='Skip').click();
+ await action(view.get('commentList').children[0],'Skip').click();
  assert.equal(notes.find(n=>n.id==='newer').state,'skipped');assert.equal(changed.length,1);
  view.get('stateFilter').value='skipped';view.get('stateFilter').onchange();assert.equal(view.get('commentList').children.length,1);
  assert.match(view.get('commentList').textContent,/Unread/);
@@ -483,7 +487,7 @@ test('conversation catalog combines issues and discussions, filters by category 
  assert.match(view.get('commentThreadReader').textContent,/Connector clearance/);assert.match(view.get('commentThreadReader').textContent,/Assembly review/);
  const category=view.get('commentConversationKind');assert.equal(category.value,'all');category.value='discussion';await category.onchange();
  assert.doesNotMatch(view.get('commentThreadReader').textContent,/Connector clearance/);assert.match(view.get('commentThreadReader').textContent,/Assembly review/);
- view.get('newConversation').click();assert.equal(view.get('editorThreadType').value,'discussion');assert.equal(view.get('editorDestination').value,'discussion');
+ view.get('newConversation').click();assert.equal(view.get('editorThreadType').value,'discussion');assert.equal(view.get('editorDestination').value,'existing-discussion');
  assert.equal(view.get('commentComposeTop').parentElement.id,'commentEditor');assert.equal(view.get('commentComposeTop').closest('#commentComposerMenu'),null);assert.equal(view.get('saveComment').closest('#commentComposerMenu').id,'commentComposerMenu');assert.equal(view.get('commentFormatting').hidden,true);
  assert.equal(calls.some(message=>['github-publish-comment','comment-publish','chat-message-write'].includes(message.type)),false);view.workspace.dispose();
 });
@@ -506,7 +510,7 @@ test('GitHub collaboration lives in View comments and preserves supported destin
  const calls=[];const view=workspaceRuntime(async m=>{calls.push(m);if(m.type==='comment-policy-status')return{allowed:true,mode:'everyone'};return[];},{pullNumber:42,pullRepository:'wayri/reviews'});view.load();await new Promise(resolve=>setImmediate(resolve));
  view.get('showGitHub').click();assert.equal(view.get('githubPane').hidden,false);assert.equal(view.get('commentsPane').hidden,false);assert.equal(view.get('designInspector').hidden,true);assert.equal(view.get('commentCollaboration').open,true);assert.equal(view.get('viewCommentsTab').attributes['aria-selected'],'true');
  assert.equal(view.get('repositoryIssues').href,'https://github.com/wayri/reviews/issues');assert.equal(view.get('commentDestination').value,'pull-request');assert.equal(view.get('githubCommentType').value,'issue');
- view.get('githubCommentType').value='discussion';view.get('githubCommentType').onchange();assert.deepEqual(Array.from(view.get('commentDestination').children,e=>e.value),['discussion','existing-discussion']);assert.equal(view.get('discussionCategoryLabel').hidden,false);
+ view.get('githubCommentType').value='discussion';view.get('githubCommentType').onchange();assert.deepEqual(Array.from(view.get('commentDestination').children,e=>e.value),['existing-discussion','discussion']);assert.equal(view.get('commentDestination').value,'existing-discussion');assert.equal(view.get('discussionCategoryLabel').hidden,true);
  view.get('commentDestination').value='existing-discussion';view.get('commentDestination').onchange();assert.equal(view.get('threadNumberLabel').hidden,false);assert.equal(view.get('discussionCategoryLabel').hidden,true);assert.equal(view.get('threadNumber').placeholder,'Discussion number');
  view.get('githubCommentType').value='issue';view.get('githubCommentType').onchange();assert.deepEqual(Array.from(view.get('commentDestination').children,e=>e.value),['issue','existing-issue','pull-request']);
  view.get('showComments').click();assert.equal(view.get('githubPane').closest('#commentSettings').id,'commentSettings');assert.equal(view.get('commentsPane').hidden,false);assert.equal(calls.some(m=>m.type==='github-publish-comment'),false);
@@ -529,15 +533,15 @@ test('Android local projects explain phone repository collaboration without exte
 test('new discussion publication requires the selected category and saved notes expose linked conversations',async()=>{
  const calls=[];let notes=[];const remoteRef={kind:'discussion',repository:'wayri/fixture',number:8,url:'https://github.com/wayri/fixture/discussions/8',publishedAt:'2026-10-04T00:00:00.000Z'};
  const view=workspaceRuntime(async m=>{calls.push(m);if(m.type==='comment-list')return notes;if(m.type==='comment-save'){notes=[m.comment];return m.comment;}if(m.type==='github-discussion-categories')return[{id:'category-1',name:'Design review'}];if(m.type==='github-publish-comment')return{remoteRef};return[];});view.load();await new Promise(resolve=>setImmediate(resolve));
- view.get('githubCommentType').value='discussion';view.get('githubCommentType').onchange();view.get('newComment').click();view.get('commentText').value='Question about the board';await view.get('saveComment').click();await view.get('loadCategories').click();assert.equal(view.get('discussionCategory').children[0].textContent,'Design review');view.get('discussionCategory').value='category-1';
- const actions=view.get('commentList').children[0].children.at(-1);await actions.children.find(e=>e.textContent==='Publish to GitHub').click();await view.get('confirmCommentPost').click();const publish=calls.find(m=>m.type==='github-publish-comment');assert.equal(publish.destination,'new-discussion');assert.equal(publish.categoryId,'category-1');assert.match(view.get('githubThreadList').textContent,/discussion #8/);assert.equal(view.get('githubThreadList').children[0].children[0].href,remoteRef.url);
+ view.get('githubCommentType').value='discussion';view.get('githubCommentType').onchange();view.get('newComment').click();view.get('commentText').value='Question about the board';await view.get('saveComment').click();view.get('commentDestination').value='discussion';view.get('commentDestination').onchange();await view.get('loadCategories').click();assert.equal(view.get('discussionCategory').children[0].textContent,'Design review');view.get('discussionCategory').value='category-1';
+ const actions=view.get('commentList').children[0].children.at(-1);await action(actions,'Publish to GitHub').click();await view.get('confirmCommentPost').click();const publish=calls.find(m=>m.type==='github-publish-comment');assert.equal(publish.destination,'new-discussion');assert.equal(publish.categoryId,'category-1');assert.match(view.get('githubThreadList').textContent,/discussion #8/);assert.equal(view.get('githubThreadList').children[0].children[0].href,remoteRef.url);
 });
 
 test('saved annotation type survives editing and rejects accidental publication to the other thread type',async()=>{
  let notes=[];const calls=[];const view=workspaceRuntime(async m=>{calls.push(m);if(m.type==='comment-list')return notes;if(m.type==='comment-save'){notes=[m.comment];return m.comment;}return[];});view.load();await new Promise(resolve=>setImmediate(resolve));
  view.get('newComment').click();view.get('commentText').value='Fix this issue';await view.get('saveComment').click();assert.equal(notes[0].threadType,'issue');assert.match(view.get('commentList').textContent,/Issue/);
- view.get('githubCommentType').value='discussion';view.get('githubCommentType').onchange();view.get('commentCategoryAll').click();let actions=view.get('commentList').children[0].children.at(-1);await actions.children.find(e=>e.textContent==='Publish to GitHub').click();await view.get('confirmCommentPost').click();assert.equal(calls.some(m=>m.type==='github-publish-comment'),false);assert.match(view.get('commentStatus').textContent,/Choose a matching destination/);
- actions.children.find(e=>e.textContent==='Edit').click();assert.equal(view.get('githubCommentType').value,'issue');
+ view.get('githubCommentType').value='discussion';view.get('githubCommentType').onchange();view.get('commentCategoryAll').click();let actions=view.get('commentList').children[0].children.at(-1);await action(actions,'Publish to GitHub').click();await view.get('confirmCommentPost').click();assert.equal(calls.some(m=>m.type==='github-publish-comment'),false);assert.match(view.get('commentStatus').textContent,/Choose a matching destination/);
+ action(actions,'Edit').click();assert.equal(view.get('githubCommentType').value,'issue');
  view.get('githubCommentType').value='discussion';view.get('githubCommentType').onchange();await view.get('saveComment').click();assert.equal(notes[0].threadType,'discussion');
 });
 
@@ -554,14 +558,14 @@ test('editor posts formatted Issue and Discussion directly and saves confirmed t
   let notes=[];const calls=[];const remoteRef={kind:type,repository:'wayri/fixture',number:12,url:`https://github.com/wayri/fixture/${type==='issue'?'issues':'discussions'}/12`,publishedAt:'2026-10-04T00:00:00.000Z'};
   const view=workspaceRuntime(async m=>{calls.push(m);if(m.type==='comment-list')return notes;if(m.type==='comment-save'){notes=[m.comment];return m.comment;}if(m.type==='github-discussion-categories')return[{id:'category-1',name:'Design review'}];if(m.type==='github-publish-comment')return{remoteRef};return[];});view.load();await new Promise(resolve=>setImmediate(resolve));
   view.get('newComment').click();view.get('commentText').value='Check connector clearance';view.get('commentSeverity').value='major';view.get('editorThreadType').value=type;view.get('editorThreadType').onchange();view.get('editorTitle').value='Connector clearance review';
-  if(type==='discussion')await view.get('editorLoadCategories').click();
+  if(type==='discussion'){view.get('editorDestination').value='discussion';view.get('editorDestination').onchange();await view.get('editorLoadCategories').click();}
   view.get('editorPreview').click();assert.match(view.get('editorMarkdown').textContent,/## KiCad visual review/);assert.doesNotMatch(view.get('editorMarkdown').textContent,/kicad-review:v1/);assert.equal(calls.some(m=>m.type==='github-publish-comment'),false);
-  await view.get('postComment').click();await view.get('confirmCommentPost').click();const publication=calls.find(m=>m.type==='github-publish-comment');assert.equal(publication.destination,`new-${type}`);assert.equal(publication.title,'Check connector clearance');assert.equal(publication.comment.threadType,type);if(type==='discussion')assert.equal(publication.categoryId,'category-1');assert.equal(notes[0].remoteRefs[0].url,remoteRef.url);assert.equal(view.get('commentEditor').hidden,true);assert.match(view.get('commentStatus').textContent,/Posted to GitHub/);
+  await sendComment(view);const publication=calls.find(m=>m.type==='github-publish-comment');assert.equal(publication.destination,`new-${type}`);assert.equal(publication.title,'Check connector clearance');assert.equal(publication.comment.threadType,type);if(type==='discussion')assert.equal(publication.categoryId,'category-1');assert.equal(notes[0].remoteRefs[0].url,remoteRef.url);assert.equal(view.get('commentEditor').hidden,true);assert.match(view.get('commentStatus').textContent,/Posted to GitHub/);
  }
 });
 
 test('editor validates existing thread destinations before saving or posting',async()=>{
- const calls=[];const view=workspaceRuntime(async m=>{calls.push(m);return[];});view.load();await new Promise(resolve=>setImmediate(resolve));view.get('newComment').click();view.get('commentText').value='Review';view.get('editorDestination').value='existing-issue';view.get('editorDestination').onchange();view.get('editorThreadNumber').value='0';await view.get('postComment').click();await view.get('confirmCommentPost').click();assert.equal(calls.some(m=>m.type==='comment-save'||m.type==='github-publish-comment'),false);assert.match(view.get('commentStatus').textContent,/positive GitHub thread number/);assert.equal(view.get('commentEditor').hidden,false);
+ const calls=[];const view=workspaceRuntime(async m=>{calls.push(m);return[];});view.load();await new Promise(resolve=>setImmediate(resolve));view.get('newComment').click();view.get('commentText').value='Review';view.get('editorDestination').value='existing-issue';view.get('editorDestination').onchange();view.get('editorThreadNumber').value='0';await sendComment(view);assert.equal(calls.some(m=>m.type==='comment-save'||m.type==='github-publish-comment'),false);assert.match(view.get('commentStatus').textContent,/positive GitHub thread number/);assert.equal(view.get('commentEditor').hidden,false);
 });
 
 test('confirmed GitHub screenshot URLs persist with the remote thread and display without local PNG bytes',async()=>{
@@ -569,7 +573,7 @@ test('confirmed GitHub screenshot URLs persist with the remote thread and displa
  const attachment={provider:'github',repository:'wayri/fixture',mime:'image/png',width:200,height:100,url:'https://github.com/user-attachments/assets/01234567-89ab-cdef-0123-456789abcdef'};
  const remoteRef={kind:'issue',repository:'wayri/fixture',number:12,url:'https://github.com/wayri/fixture/issues/12',publishedAt:'2026-10-04T00:00:00.000Z'};
  const view=workspaceRuntime(async m=>{if(m.type==='comment-list')return notes;if(m.type==='comment-save'){notes=[m.comment];return m.comment;}if(m.type==='github-publish-comment')return{remoteRef,attachments:[attachment]};return[];});
- view.load();await new Promise(resolve=>setImmediate(resolve));view.get('newComment').click();view.get('commentText').value='Screenshot context';await view.get('postComment').click();await view.get('confirmCommentPost').click();
+ view.load();await new Promise(resolve=>setImmediate(resolve));view.get('newComment').click();view.get('commentText').value='Screenshot context';await sendComment(view);
  assert.deepEqual(JSON.parse(JSON.stringify(notes[0].attachments)),[attachment]);
  const findImages=node=>[...(node.tagName==='IMG'?[node]:[]),...node.children.flatMap(findImages)];
  assert.equal(findImages(view.get('commentList'))[0].src,attachment.url);
@@ -583,12 +587,12 @@ test('confirmed GitHub screenshot URLs persist with the remote thread and displa
 test('editor routes replies to the selected existing Issue or Discussion number',async()=>{
  for(const type of ['issue','discussion']){
   let notes=[];const calls=[];const remoteRef={kind:type,repository:'wayri/fixture',number:42,url:`https://github.com/wayri/fixture/${type==='issue'?'issues':'discussions'}/42`,publishedAt:'2026-10-04T00:00:00.000Z'};
-  const view=workspaceRuntime(async m=>{calls.push(m);if(m.type==='comment-list')return notes;if(m.type==='comment-save'){notes=[m.comment];return m.comment;}if(m.type==='github-publish-comment')return{remoteRef};return[];});view.load();await new Promise(resolve=>setImmediate(resolve));view.get('newComment').click();view.get('commentText').value='Additional clearance evidence';view.get('editorThreadType').value=type;view.get('editorThreadType').onchange();view.get('editorDestination').value=`existing-${type}`;view.get('editorDestination').onchange();view.get('editorThreadNumber').value='42';await view.get('postComment').click();await view.get('confirmCommentPost').click();const publication=calls.find(m=>m.type==='github-publish-comment');assert.equal(publication.destination,type);assert.equal(publication.number,42);assert.equal(publication.categoryId,undefined);assert.equal(notes[0].remoteRefs[0].number,42);
+  const view=workspaceRuntime(async m=>{calls.push(m);if(m.type==='comment-list')return notes;if(m.type==='comment-save'){notes=[m.comment];return m.comment;}if(m.type==='github-publish-comment')return{remoteRef};return[];});view.load();await new Promise(resolve=>setImmediate(resolve));view.get('newComment').click();view.get('commentText').value='Additional clearance evidence';view.get('editorThreadType').value=type;view.get('editorThreadType').onchange();view.get('editorDestination').value=`existing-${type}`;view.get('editorDestination').onchange();view.get('editorThreadNumber').value='42';await sendComment(view);const publication=calls.find(m=>m.type==='github-publish-comment');assert.equal(publication.destination,type);assert.equal(publication.number,42);assert.equal(publication.categoryId,undefined);assert.equal(notes[0].remoteRefs[0].number,42);
  }
 });
 
 test('failed direct publication preserves a saved editable draft and does not repeat the request',async()=>{
- let notes=[];const calls=[];const view=workspaceRuntime(async m=>{calls.push(m);if(m.type==='comment-list')return notes;if(m.type==='comment-save'){notes=[m.comment];return m.comment;}if(m.type==='github-publish-comment')throw new Error('Connect GitHub to publish');return[];});view.load();await new Promise(resolve=>setImmediate(resolve));view.get('newComment').click();view.get('commentText').value='Review';await view.get('postComment').click();await view.get('confirmCommentPost').click();assert.equal(notes.length,1);assert.equal(notes[0].remoteRefs.length,0);assert.equal(view.get('commentEditor').hidden,false);assert.match(view.get('commentStatus').textContent,/draft remains saved/);assert.equal(calls.filter(m=>m.type==='github-publish-comment').length,1);
+ let notes=[];const calls=[];const view=workspaceRuntime(async m=>{calls.push(m);if(m.type==='comment-list')return notes;if(m.type==='comment-save'){notes=[m.comment];return m.comment;}if(m.type==='github-publish-comment')throw new Error('Connect GitHub to publish');return[];});view.load();await new Promise(resolve=>setImmediate(resolve));view.get('newComment').click();view.get('commentText').value='Review';await sendComment(view);assert.equal(notes.length,1);assert.equal(notes[0].remoteRefs.length,0);assert.equal(view.get('commentEditor').hidden,false);assert.match(view.get('commentStatus').textContent,/draft remains saved/);assert.equal(calls.filter(m=>m.type==='github-publish-comment').length,1);
 });
 
 test('GitLab direct publication saves confirmed issue links and discussions target existing issues',async()=>{
@@ -597,7 +601,7 @@ test('GitLab direct publication saves confirmed issue links and discussions targ
   const view=workspaceRuntime(async m=>{calls.push(m);if(m.type==='comment-list')return notes;if(m.type==='comment-save'){notes=[m.comment];return m.comment;}if(m.type==='comment-publish')return{remoteRef};if(m.type==='comment-policy-status')return{allowed:true};return[];},{provider:'gitlab',host:'https://gitlab.example.com',repository:'group/project'});view.load();await new Promise(resolve=>setImmediate(resolve));
   view.get('newComment').click();view.get('commentText').value='Review connectivity';view.get('editorThreadType').value=type;view.get('editorThreadType').onchange();view.get('editorTitle').value='Connectivity review';
   if(type==='discussion'){assert.deepEqual(Array.from(view.get('editorDestination').children,e=>e.value),['existing-issue']);view.get('editorThreadNumber').value='42';}
-  assert.equal(view.get('editorCategoryLabel').hidden,true);await view.get('postComment').click();await view.get('confirmCommentPost').click();
+  assert.equal(view.get('editorCategoryLabel').hidden,true);await sendComment(view);
   const publication=calls.find(m=>m.type==='comment-publish');assert.equal(publication.provider,'gitlab');assert.equal(publication.host,'https://gitlab.example.com');assert.equal(publication.destination,type==='discussion'?'issue':'new-issue');assert.equal(publication.discussion,type==='discussion'?true:undefined);assert.equal(publication.categoryId,undefined);assert.equal(publication.comment.threadType,type);
   assert.equal(calls.some(m=>m.type==='github-publish-comment'),false);assert.equal(notes[0].remoteRefs[0].url,remoteRef.url);assert.match(view.get('commentStatus').textContent,/Posted to GitLab issue #42/);
  }
@@ -626,7 +630,7 @@ test('net review drafts preserve the selected saved net name in formatted GitHub
 test('uncertain posting exposes a read-only recovery control and saves its confirmed link without another publication',async()=>{
  let notes=[];const calls=[],ref={kind:'issue',repository:'wayri/fixture',number:19,url:'https://github.com/wayri/fixture/issues/19',publishedAt:'2026-10-05T01:00:00.000Z'};
  const view=workspaceRuntime(async m=>{calls.push(m);if(m.type==='comment-list')return notes;if(m.type==='comment-save'){notes=[m.comment];return m.comment;}if(m.type==='github-publish-comment')throw Error('Unconfirmed outcome');if(m.type==='github-recover-publication')return{remoteRef:ref,recovered:true};return[];});
- view.load();await new Promise(setImmediate);view.get('newComment').click();view.get('commentText').value='Check connection';await view.get('postComment').click();await view.get('confirmCommentPost').click();
+ view.load();await new Promise(setImmediate);view.get('newComment').click();view.get('commentText').value='Check connection';await sendComment(view);
  const row=view.get('postComment').parentElement.querySelector('.publication-recovery');assert.ok(row);assert.match(row.textContent,/never creates another post/);row.querySelector('input').value='19';await row.querySelector('button').click();
  const recovery=calls.find(m=>m.type==='github-recover-publication');assert.equal(recovery.recoveryNumber,19);assert.equal(recovery.destination,'new-issue');assert.equal(calls.filter(m=>m.type==='github-publish-comment').length,1);assert.equal(notes[0].remoteRefs[0].url,ref.url);assert.match(view.get('commentStatus').textContent,/Recovered link to/);assert.equal(view.get('postComment').parentElement.querySelector('.publication-recovery'),null);
 });
@@ -709,11 +713,11 @@ test('three pinned panes retain drawing width and reuse width resizing',()=>{
  const notes=['issue','discussion',null].map((threadType,i)=>({id:'category-'+i,text:'Category '+(threadType||'legacy'),...(threadType?{threadType}:{}),state:'open',severity:'info',createdAt:'2026-10-01T00:00:00Z',anchor:{repository:'wayri/fixture',ref:'main',file:'board.kicad_pcb'}})),calls=[];const view=workspaceRuntime(async message=>{calls.push(message.type);return message.type==='comment-list'?notes:[];});view.load();await view.workspace.refreshComments();
  assert.match(view.get('commentCategoryIssue').textContent,/Issues \(1\)/);assert.match(view.get('commentCategoryDiscussion').textContent,/Discussions \(1\)/);view.get('commentCategoryIssue').click();assert.equal(view.get('commentList').children.length,1);assert.match(view.get('commentList').textContent,/Category issue/);assert.equal(view.get('commentCategoryContent').attributes['aria-labelledby'],'commentCategoryIssue');
  view.get('newComment').click();view.get('commentText').value='Keep issue draft';assert.equal(view.get('editorThreadType').value,'issue');assert.equal(view.get('editorDestination').value,'issue');view.get('commentCategoryDiscussion').click();assert.equal(view.get('editorThreadType').value,'issue');assert.equal(view.get('commentText').value,'Keep issue draft');assert.match(view.get('commentList').textContent,/Category discussion/);
- view.get('cancelComment').click();view.get('newComment').click();assert.equal(view.get('editorThreadType').value,'discussion');assert.equal(view.get('editorDestination').value,'discussion');assert.equal(view.get('editorCategoryLabel').hidden,false);view.get('cancelComment').click();view.get('commentCategoryAll').click();assert.equal(view.get('commentList').children.length,3);
+ view.get('cancelComment').click();view.get('newComment').click();assert.equal(view.get('editorThreadType').value,'discussion');assert.equal(view.get('editorDestination').value,'existing-discussion');assert.equal(view.get('editorCategoryLabel').hidden,true);view.get('cancelComment').click();view.get('commentCategoryAll').click();assert.equal(view.get('commentList').children.length,3);
  view.get('commentCategoryTabs').dispatchEvent(uiEvent('keydown',{key:'Home'}));assert.equal(view.get('commentCategoryIssue').attributes['aria-selected'],'true');view.get('commentCategoryTabs').dispatchEvent(uiEvent('keydown',{key:'ArrowRight'}));assert.equal(view.get('commentCategoryDiscussion').attributes['aria-selected'],'true');assert.equal(calls.some(t=>/publish|comment-save/.test(t)),false);
  });
  test('category-created issue and discussion drafts publish only to their selected GitHub thread type',async()=>{
- for(const type of ['issue','discussion']){let notes=[];const calls=[];const view=workspaceRuntime(async message=>{calls.push(message);if(message.type==='comment-save'){notes=[message.comment];return message.comment;}if(message.type==='comment-list')return notes;if(message.type==='comment-policy-status')return{allowed:true,mode:'all'};if(message.type==='github-publish-comment')return{remoteRef:{kind:type,repository:'wayri/fixture',number:42,url:`https://github.com/wayri/fixture/${type==='issue'?'issues':'discussions'}/42`,publishedAt:'2026-10-05T00:00:00Z'}};return[];});view.load();await new Promise(resolve=>setImmediate(resolve));view.get(type==='issue'?'commentCategoryIssue':'commentCategoryDiscussion').click();view.get('newComment').click();view.get('commentText').value='Category review';view.get('editorTitle').value='Category review';if(type==='discussion')view.get('editorCategory').value='DIC_review';await view.get('postComment').click();await view.get('confirmCommentPost').click();const publication=calls.find(m=>m.type==='github-publish-comment');assert.ok(publication,view.get('commentStatus').textContent);assert.equal(publication.comment.threadType,type);assert.equal(publication.destination,type==='issue'?'new-issue':'new-discussion');assert.equal(view.get('commentEditor').hidden,true);assert.match(view.get('commentList').textContent,/Category review/);}
+ for(const type of ['issue','discussion']){let notes=[];const calls=[];const view=workspaceRuntime(async message=>{calls.push(message);if(message.type==='comment-save'){notes=[message.comment];return message.comment;}if(message.type==='comment-list')return notes;if(message.type==='comment-policy-status')return{allowed:true,mode:'all'};if(message.type==='github-publish-comment')return{remoteRef:{kind:type,repository:'wayri/fixture',number:42,url:`https://github.com/wayri/fixture/${type==='issue'?'issues':'discussions'}/42`,publishedAt:'2026-10-05T00:00:00Z'}};return[];});view.load();await new Promise(resolve=>setImmediate(resolve));view.get(type==='issue'?'commentCategoryIssue':'commentCategoryDiscussion').click();view.get('newComment').click();view.get('commentText').value='Category review';view.get('editorTitle').value='Category review';if(type==='discussion'){view.get('editorDestination').value='discussion';view.get('editorDestination').onchange();view.get('editorCategory').value='DIC_review';}await sendComment(view);const publication=calls.find(m=>m.type==='github-publish-comment');assert.ok(publication,view.get('commentStatus').textContent);assert.equal(publication.comment.threadType,type);assert.equal(publication.destination,type==='issue'?'new-issue':'new-discussion');assert.equal(view.get('commentEditor').hidden,true);assert.match(view.get('commentList').textContent,/Category review/);}
  });
 
 const groupBoard='(kicad_pcb '+['R1','R2','R3'].map((ref,i)=>`(footprint "Resistor" (layer "F.Cu") (at ${10+i*10} 20) (uuid "fp${i}") (property "Reference" "${ref}") (property "Value" "10k") (pad "1" smd rect (at 0 0) (size 2 2) (layers "F.Cu") (uuid "pad${i}")))`).join(' ')+')';
@@ -1031,24 +1035,24 @@ test('3D selection obeys Part and Net filters instead of selecting hidden altern
 test('destination review never saves or posts until final confirmation and can return to the draft',async()=>{
  const calls=[];let notes=[];const view=workspaceRuntime(async m=>{calls.push(m);if(m.type==='comment-list')return notes;if(m.type==='comment-save'){notes=[m.comment];return m.comment;}if(m.type==='github-publish-comment')return{remoteRef:{kind:'issue',repository:'wayri/fixture',number:37,url:'https://github.com/wayri/fixture/issues/37',publishedAt:'2026-10-10T12:00:00Z'}};return[];});
  view.load();await new Promise(setImmediate);view.get('newComment').click();view.get('commentText').value='Check connector';
- await view.get('postComment').click();assert.equal(view.get('commentPostReview').open,true);assert.equal(calls.some(m=>m.type==='comment-save'||m.type==='github-publish-comment'),false);
+ await chooseDestination(view);assert.equal(view.get('commentPostReview').open,true);assert.equal(calls.some(m=>m.type==='comment-save'||m.type==='github-publish-comment'),false);
  assert.match(view.get('commentPostReview').textContent,/wayri\/fixture/);const back=view.get('commentPostReview').querySelector('.inspector-actions').children[0];back.click();
- assert.equal(view.get('commentPostReview').open,false);assert.equal(view.get('commentText').value,'Check connector');assert.equal(view.get('editorDestination').closest('label').parentElement.id,'commentPostRow');
- await view.get('postComment').click();view.get('editorDestination').value='existing-issue';view.get('editorDestination').onchange();view.get('editorThreadNumber').value='37';
+ assert.equal(view.get('commentPostReview').open,false);assert.equal(view.get('commentText').value,'Check connector');assert.equal(view.get('editorDestination').closest('label').parentElement.className,'comment-composer-menu-body');
+ await chooseDestination(view);view.get('editorDestination').value='existing-issue';view.get('editorDestination').onchange();view.get('editorThreadNumber').value='37';
  await view.get('confirmCommentPost').click();const publication=calls.find(m=>m.type==='github-publish-comment');assert.equal(publication.destination,'issue');assert.equal(publication.number,37);assert.equal(view.get('commentPostReview').open,false);
 });
 test('one destination selector switches an issue draft to an existing GitHub discussion before confirmation',async()=>{
  const calls=[];let notes=[];const view=workspaceRuntime(async m=>{calls.push(m);if(m.type==='comment-list')return notes;if(m.type==='comment-save'){notes=[m.comment];return m.comment;}if(m.type==='github-publish-comment')return{remoteRef:{kind:'discussion',repository:'wayri/fixture',number:18,url:'https://github.com/wayri/fixture/discussions/18',publishedAt:'2026-10-10T12:00:00Z'}};return[];},{android:true,pullNumber:9});
- view.load();await new Promise(setImmediate);view.get('newComment').click();view.get('commentText').value='Review connector';await view.get('postComment').click();
+ view.load();await new Promise(setImmediate);view.get('newComment').click();view.get('commentText').value='Review connector';await chooseDestination(view);
  const selector=view.get('commentPostDestination');assert.deepEqual(Array.from(selector.children,item=>item.value),['issue','existing-issue','discussion','existing-discussion','pull-request']);
  selector.value='existing-discussion';selector.onchange();view.get('editorThreadNumber').value='18';assert.equal(view.get('editorThreadType').value,'discussion');assert.equal(view.get('editorNumberLabel').hidden,false);assert.equal(view.get('editorCategoryLabel').hidden,true);assert.equal(calls.some(m=>m.type==='comment-save'||m.type==='github-publish-comment'),false);
- view.get('commentPostReview').querySelector('.inspector-actions').children[0].click();assert.equal(view.get('editorDestination').value,'existing-discussion');assert.equal(view.get('editorThreadNumber').value,'18');assert.deepEqual(Array.from(view.get('editorDestination').children,item=>item.value),['discussion','existing-discussion']);await view.get('postComment').click();assert.equal(selector.value,'existing-discussion');
+ view.get('commentPostReview').querySelector('.inspector-actions').children[0].click();assert.equal(view.get('editorDestination').value,'existing-discussion');assert.equal(view.get('editorThreadNumber').value,'18');assert.deepEqual(Array.from(view.get('editorDestination').children,item=>item.value),['existing-discussion','discussion']);await chooseDestination(view);assert.equal(selector.value,'existing-discussion');
  await view.get('confirmCommentPost').click();const publication=calls.find(m=>m.type==='github-publish-comment');assert.equal(publication.destination,'discussion');assert.equal(publication.number,18);assert.equal(publication.comment.threadType,'discussion');view.workspace.dispose();
 });
 
 test('GitLab destination selector posts discussions on issues without GitHub categories',async()=>{
  const calls=[];const view=workspaceRuntime(async m=>{calls.push(m);if(m.type==='comment-publish')return{remoteRef:{provider:'gitlab',host:'https://gitlab.com',kind:'discussion',repository:'group/project',number:12,url:'https://gitlab.com/group/project/-/issues/12#note_5',publishedAt:'2026-10-10T12:00:00Z'}};return[];},{provider:'gitlab',repository:'group/project',host:'https://gitlab.com',android:true});
- view.load();await new Promise(setImmediate);view.get('newComment').click();view.get('commentText').value='Discuss clearance';await view.get('postComment').click();const selector=view.get('commentPostDestination');assert.deepEqual(Array.from(selector.children,item=>item.value),['issue','existing-issue','issue-discussion']);selector.value='issue-discussion';selector.onchange();view.get('editorThreadNumber').value='12';assert.equal(view.get('editorCategoryLabel').hidden,true);assert.equal(calls.some(m=>m.type==='comment-publish'),false);await view.get('confirmCommentPost').click();const publication=calls.find(m=>m.type==='comment-publish');assert.equal(publication.destination,'issue');assert.equal(publication.discussion,true);assert.equal(publication.number,12);view.workspace.dispose();
+ view.load();await new Promise(setImmediate);view.get('newComment').click();view.get('commentText').value='Discuss clearance';await chooseDestination(view);const selector=view.get('commentPostDestination');assert.deepEqual(Array.from(selector.children,item=>item.value),['issue','existing-issue','issue-discussion']);selector.value='issue-discussion';selector.onchange();view.get('editorThreadNumber').value='12';assert.equal(view.get('editorCategoryLabel').hidden,true);assert.equal(calls.some(m=>m.type==='comment-publish'),false);await view.get('confirmCommentPost').click();const publication=calls.find(m=>m.type==='comment-publish');assert.equal(publication.destination,'issue');assert.equal(publication.discussion,true);assert.equal(publication.number,12);view.workspace.dispose();
 });
 
 test('unselect retains net highlights, while clearing highlights resets 2D and 3D selection',()=>{
@@ -1059,7 +1063,7 @@ test('unselect retains net highlights, while clearing highlights resets 2D and 3
 });
 
 test('content rules must be accepted before final publication',async()=>{
- const calls=[];const view=workspaceRuntime(async m=>{calls.push(m);return[];},{unacceptedRules:true});view.load();await new Promise(r=>setImmediate(r));view.get('newComment').click();view.get('commentText').value='A safe review';await view.get('postComment').click();await view.get('confirmCommentPost').click();assert.equal(calls.some(m=>m.type==='comment-save'||m.type==='github-publish-comment'),false);assert.match(view.get('commentPostReview').textContent,/Accept the content rules/);view.get('acceptContentRules').checked=true;await view.get('confirmCommentPost').click();assert.equal(view.receipts.get('kivi:content-rules'),'2026-10-10-terms-1');assert.equal(calls.filter(m=>m.type==='github-publish-comment').length,1);
+ const calls=[];const view=workspaceRuntime(async m=>{calls.push(m);return[];},{unacceptedRules:true});view.load();await new Promise(r=>setImmediate(r));view.get('newComment').click();view.get('commentText').value='A safe review';await sendComment(view);assert.equal(calls.some(m=>m.type==='comment-save'||m.type==='github-publish-comment'),false);assert.match(view.get('commentPostReview').textContent,/Accept the content rules/);view.get('acceptContentRules').checked=true;await view.get('confirmCommentPost').click();assert.equal(view.receipts.get('kivi:content-rules'),'2026-10-10-terms-1');assert.equal(calls.filter(m=>m.type==='github-publish-comment').length,1);
 });
 
 test('older content-only acceptance requires renewed terms acceptance before publication',async()=>{
@@ -1273,7 +1277,7 @@ test('thread state changes require current policy and Terms, and send only exact
  const blocked=captureChat(),other=workspaceRuntime(async()=>({allowed:false,reason:'Administrator blocked writes'}),{chatPanel:blocked.panel});other.load();await assert.rejects(blocked.options.onThreadState(details),/Administrator/);other.workspace.dispose();
 });
 test('chat uses exact source-bound net location and refuses another revision or provider',()=>{const chat=captureChat(),view=workspaceRuntime(undefined,{chatPanel:chat.panel});view.load();const anchor={...chat.options.getScope(),kind:'net',netName:'SIGNAL',objectId:'net:1'};assert.equal(chat.options.onLocate(anchor),true);assert.equal(view.canvas.netHighlight.name,'SIGNAL');assert.equal(chat.options.onLocate({...anchor,ref:'another'}),false);assert.equal(chat.options.onLocate({...anchor,provider:'gitlab',host:'https://gitlab.com'}),false);assert.equal(view.chatDraft().hasDraft(),true);view.workspace.dispose();assert.equal(view.chatDraft(),undefined);assert.equal(chat.calls.at(-1),'disposed');});
-test('chat confirmation names the verified VS Code remote while keeping local annotation scope',async()=>{const chat=captureChat(),collaboration={provider:'github',host:'https://github.com',repository:'real/project',ref:'a'.repeat(40),prefix:''},calls=[],view=workspaceRuntime(async m=>{calls.push(m);return[];},{chatPanel:chat.panel,vscode:{collaboration},repository:'local/workspace',ref:'workspace'});view.load();assert.equal(chat.options.getScope().repository,'local/workspace');const pending=chat.options.confirmSend({thread:{kind:'issue',number:4,title:'Review'},action:'create'}),dialog=view.document.body.children.find(n=>n.tagName==='DIALOG'&&n.className.includes('chat-send-review'));assert.match(dialog.textContent,/real\/project/);assert.equal(calls.some(m=>m.type==='chat-message-write'),false);dialog.querySelector('button').click();assert.equal(await pending,false);view.workspace.dispose();});
+test('chat confirmation names the verified VS Code remote while keeping local annotation scope',async()=>{const chat=captureChat(),collaboration={provider:'github',host:'https://github.com',repository:'real/project',ref:'a'.repeat(40),prefix:''},calls=[],view=workspaceRuntime(async m=>{calls.push(m);return[];},{chatPanel:chat.panel,vscode:{collaboration},repository:'local/workspace',ref:'workspace',unacceptedRules:true});view.load();assert.equal(chat.options.getScope().repository,'local/workspace');const pending=chat.options.confirmSend({thread:{kind:'issue',number:4,title:'Review'},action:'create'}),dialog=view.document.body.children.find(n=>n.tagName==='DIALOG'&&n.className.includes('chat-send-review'));assert.match(dialog.textContent,/real\/project/);assert.equal(calls.some(m=>m.type==='chat-message-write'),false);dialog.querySelector('button').click();assert.equal(await pending,false);view.workspace.dispose();});
 test('chat local draft saving rejects foreign provider context and preserves fork source identity',async()=>{const chat=captureChat(),calls=[],view=workspaceRuntime(async m=>{calls.push(m);return[];},{chatPanel:chat.panel,pullRepository:'base/project'});view.load();assert.throws(()=>chat.options.createAnnotation('Check',{id:'context',severity:'info',state:'open'}),/fork/);await chat.options.onSaveTextDraft({text:'Draft',thread:{kind:'issue',number:4},id:'draft-chat',scope:chat.options.getScope()});const saved=calls.find(m=>m.type==='comment-save').comment;assert.equal(saved.anchor.repository,'wayri/fixture');await assert.rejects(chat.options.onSaveDraft({...saved,anchor:{...saved.anchor,provider:'gitlab',host:'https://gitlab.com'}}),/no longer loaded/);view.workspace.dispose();});
 
 test('work board opens from Comments and carries GitLab provider, host and current drawing scope',async()=>{
@@ -1293,13 +1297,12 @@ test('GitLab annotation polling mounts with foreground lifecycle and source-scop
  view.workspace.dispose();assert.equal(disposed,true);
 });
 
-test('GitHub drawing startup never checks remote policy or starts provider polling',async()=>{
- const calls=[];let mounts=0;
- const view=workspaceRuntime(async m=>{calls.push(m);if(m.type==='github-annotations')return{notes:[],warnings:[]};return[];},{reviewSync:{create(){mounts++;throw Error('No automatic GitHub polling');}}});
- view.load();await new Promise(setImmediate);
- assert.equal(mounts,0);assert.equal(calls.some(m=>['comment-policy-status','github-annotations','chat-thread-list'].includes(m.type)),false);
- await view.get('refreshGitHub').click();assert.ok(calls.some(m=>m.type==='github-annotations'));
- view.workspace.dispose();
+test('GitHub drawing startup stays API-free and only visible Comments permit annotation polling',async()=>{
+ const calls=[];let sync,started,visibility=0;
+ const view=workspaceRuntime(async m=>{calls.push(m);if(m.type==='github-annotations')return{notes:[],warnings:[]};return[];},{reviewSync:{create:options=>{sync=options;const service=require('../review-sync.js').create({...options,setTimer:()=>1,clearTimer(){}});return{...service,start(scope){started=scope;service.start(scope);},visibilityChanged(){visibility++;service.visibilityChanged();}};}}});
+ view.load();await new Promise(setImmediate);assert.ok(sync);assert.equal(started.file,'board.kicad_pcb');assert.equal(sync.isVisible(),false);
+ assert.equal(calls.some(m=>['comment-policy-status','github-annotations','chat-thread-list'].includes(m.type)),false);
+ view.get('commentsButton').click();assert.equal(sync.isVisible(),true);assert.ok(visibility>0);await new Promise(setImmediate);assert.ok(calls.some(m=>m.type==='github-annotations'));view.workspace.dispose();
 });
 
 
@@ -1313,12 +1316,12 @@ test('phone comment Locate centers the saved point, clears obstructing panes and
  overlay.querySelector('.comment-focus-return').dispatchEvent(new Event('click'));assert.equal(view.get('commentsSidebar').hidden,false);assert.equal(overlay.hidden,true);assert.equal(view.chatDraft().hasDraft(),true);assert.deepEqual(chat.calls,[]);view.workspace.dispose();
 });
 
-test('comment Locate fits a saved area and rejects a missing object instead of guessing another location',()=>{
+test('comment Locate uses explicit saved area fallback and rejects missing identity without saved geometry',()=>{
  const chat=captureChat(),view=workspaceRuntime(undefined,{chatPanel:chat.panel});view.load();
  const anchor={...chat.options.getScope(),kind:'drawing',area:{x:100,y:200,width:30,height:10}};
  assert.equal(chat.options.onLocate(anchor),true);const box=view.canvas.viewport.camera.bbox;
  assert.ok(box.x<=100&&box.x+box.w>=130&&box.y<=200&&box.y+box.h>=210);assert.equal(box.x+box.w/2,115);assert.equal(box.y+box.h/2,205);
- const snapshot=JSON.stringify(box);assert.equal(chat.options.onLocate({...anchor,kind:'footprint',uuid:'missing'}),false);assert.equal(JSON.stringify(view.canvas.viewport.camera.bbox),snapshot);view.workspace.dispose();
+ const snapshot=JSON.stringify(box);assert.equal(chat.options.onLocate({...anchor,kind:'footprint',uuid:'missing'}),true);assert.equal(chat.options.onLocate({...anchor,area:undefined,kind:'footprint',uuid:'missing'}),false);assert.equal(JSON.stringify(view.canvas.viewport.camera.bbox),snapshot);view.workspace.dispose();
 });
 
 test('3D comment Locate focuses the saved source point and refreshes its marker when the view changes',()=>{
@@ -1361,8 +1364,8 @@ test('KiCad local composer shares visible review levels and primary save with th
 
 test('linked note state follows fetched issue state, filters closed and skips locally without any provider write',async()=>{
  const calls=[],note={id:'linked-review',text:'Review connector',severity:'minor',state:'open',createdAt:'2026-10-28T00:00:00Z',anchor:{repository:'wayri/fixture',ref:'main',file:'board.kicad_pcb'},github:{source:'issue',number:7,state:'closed',author:'reviewer',url:'https://github.com/wayri/fixture/issues/7'}},view=workspaceRuntime(async m=>{calls.push(m);return m.type==='comment-list'?[note]:[];});view.load();await view.workspace.refreshComments();const card=()=>view.get('commentList').children[0];assert.equal(card().attributes['data-state'],'closed');view.get('stateFilter').value='open';view.get('stateFilter').onchange();assert.equal(view.get('commentList').children.filter(n=>n.attributes['data-note-id']).length,0);view.get('stateFilter').value='closed';view.get('stateFilter').onchange();assert.equal(card().attributes['data-state'],'closed');
- await card().children.find(n=>n.className==='inspector-actions').children.find(n=>n.textContent==='Skip review').click();view.get('stateFilter').value='skipped';view.get('stateFilter').onchange();assert.equal(card().attributes['data-state'],'skipped');assert.ok(card().children.some(n=>n.className==='review-state-badge'&&n.textContent==='Skipped'));
- await card().children.find(n=>n.className==='inspector-actions').children.find(n=>n.textContent==='Follow issue state').click();view.get('stateFilter').value='closed';view.get('stateFilter').onchange();assert.equal(card().attributes['data-state'],'closed');assert.equal(note.state,'open');assert.equal(calls.some(m=>m.type==='chat-thread-state'||m.type==='comment-save'),false);view.workspace.dispose();
+ await action(card(),'Skip review').click();view.get('stateFilter').value='skipped';view.get('stateFilter').onchange();assert.equal(card().attributes['data-state'],'skipped');assert.ok(card().children.some(n=>n.className==='review-state-badge'&&n.textContent==='Skipped'));
+ await action(card(),'Follow issue state').click();view.get('stateFilter').value='closed';view.get('stateFilter').onchange();assert.equal(card().attributes['data-state'],'closed');assert.equal(note.state,'open');assert.equal(calls.some(m=>m.type==='chat-thread-state'||m.type==='comment-save'),false);view.workspace.dispose();
 });
 
 test('conversation state filters apply to provider rows and confirmed mutations update linked annotations',async()=>{
@@ -1384,4 +1387,50 @@ test('PCB shortcuts flip the view and select all six 3D axis sides without firin
  assert.equal(sides.length,count);assert.equal(flips,2);assert.equal(view.canvas.netHighlight,null);
  view.key('~');assert.equal(view.canvas.netHighlight.name,'SIGNAL');view.key('Escape');assert.equal(view.canvas.netHighlight,null);
  view.workspace.setScene(null);assert.equal(view.key('z').defaultPrevented,undefined);
+});
+
+test('destination dialog restores nested composer controls safely on repeated close events',async()=>{
+ const calls=[],view=workspaceRuntime(async m=>{calls.push(m);return[];});view.load();view.get('newComment').click();view.get('commentText').value='Keep this draft';
+ assert.notEqual(view.get('postComment').parentElement,view.get('commentPostRow'),'Send is nested inside its settings row');
+ for(let i=0;i<2;i++){
+  await chooseDestination(view);const dialog=view.get('commentPostReview');assert.equal(dialog.open,true);
+  const back=action(dialog,'Back to comment');assert.doesNotThrow(()=>back.click());assert.equal(dialog.open,false);assert.doesNotThrow(()=>dialog.close());
+  assert.equal(view.get('editorDestination').closest('label').parentElement.className,'comment-composer-menu-body');assert.equal(view.get('commentText').value,'Keep this draft');
+ }
+ assert.equal(calls.some(m=>m.type==='comment-save'||m.type==='github-publish-comment'),false);view.workspace.dispose();
+});
+test('Terms gate applies once while later sends and edits keep their explicit chosen destination',async()=>{
+ let notes=[];const calls=[],chat=captureChat();const view=workspaceRuntime(async m=>{calls.push(m);if(m.type==='comment-list')return notes;if(m.type==='comment-save'){notes=[m.comment];return m.comment;}if(m.type==='github-publish-comment')return{remoteRef:{kind:'issue',repository:'wayri/fixture',number:41,url:'https://github.com/wayri/fixture/issues/41',publishedAt:'2026-11-01T00:00:00Z'}};return[];},{unacceptedRules:true,chatPanel:chat.panel});
+ view.load();view.get('newComment').click();view.get('commentText').value='First send';await view.get('postComment').click();assert.equal(view.get('commentPostReview').open,true);assert.equal(calls.some(m=>m.type==='github-publish-comment'),false);
+ view.get('acceptContentRules').checked=true;await view.get('confirmCommentPost').click();assert.equal(calls.filter(m=>m.type==='github-publish-comment').length,1);assert.equal(view.get('commentPostReview').open,false);
+ view.get('newComment').click();view.get('commentText').value='Second send';await view.get('postComment').onclick(new Event('click'));await new Promise(setImmediate);assert.equal(calls.filter(m=>m.type==='github-publish-comment').length,2);assert.equal(view.get('commentPostReview').open,false);
+ for(const action of ['create','reply','edit'])assert.equal(await chat.options.confirmSend({thread:{kind:'issue',number:41,title:'Existing issue'},action}),true);
+ assert.equal(view.document.body.children.some(n=>n.tagName==='DIALOG'&&n.className.includes('chat-send-review')&&n.open),false);view.workspace.dispose();
+});
+
+test('new Discussion remains an explicit choice and missing existing-thread number cannot create one',async()=>{
+ const calls=[],view=workspaceRuntime(async m=>{calls.push(m);return[];});view.load();view.get('commentCategoryDiscussion').click();view.get('newComment').click();view.get('commentText').value='Discuss existing design';
+ assert.equal(view.get('editorDestination').value,'existing-discussion');await view.get('postComment').click();assert.equal(view.get('commentPostReview').open,true);await view.get('confirmCommentPost').click();
+ assert.equal(calls.some(m=>m.type==='comment-save'||m.type==='github-publish-comment'),false);assert.match(view.get('commentStatus').textContent,/positive GitHub thread number/);assert.equal(view.get('editorDestination').value,'existing-discussion');
+ view.workspace.dispose();
+});
+
+test('comments dock toggles closed without losing its draft, including after hover reveal',()=>{
+ const view=workspaceRuntime();view.load();view.get('commentText').value='Retain me';const dock=view.get('dockComments');dock.click();assert.equal(view.get('commentsSidebar').hidden,false);dock.click();assert.equal(view.get('commentsSidebar').hidden,true);assert.equal(view.get('commentText').value,'Retain me');dock.dispatchEvent(new Event('pointerenter'));dock.click();assert.equal(view.get('commentsSidebar').hidden,false);dock.click();assert.equal(view.get('commentsSidebar').hidden,true);view.workspace.dispose();
+});
+test('native KiCad field/value table precedes advanced object information',()=>{
+ const view=workspaceRuntime();view.load();view.get('objectList').children[0].click();const first=view.get('propertyList').children[0];assert.equal(first.className,'kicad-field-table');assert.equal(first.attributes['aria-label'],'KiCad fields and values');assert.match(first.textContent,/Field.*Value.*Reference.*R1/);view.workspace.dispose();
+});
+
+test('discussion catalog new-comment action retains existing-thread destination',()=>{
+ const view=workspaceRuntime();view.load();view.get('commentConversationKind').value='discussion';view.get('newConversation').click();assert.equal(view.get('editorThreadType').value,'discussion');assert.equal(view.get('editorDestination').value,'existing-discussion');view.workspace.dispose();
+});
+
+test('foreground annotation and catalog read failures propagate to sync backoff',async()=>{
+ for(const failing of ['github-annotations','chat-thread-list']){
+  let sync,mode='ok';const calls=[];const view=workspaceRuntime(async m=>{calls.push(m);if(mode==='fail'&&m.type===failing)throw Error('Provider unavailable');if(m.type==='github-annotations')return{notes:[],warnings:[]};if(m.type==='chat-thread-list')return{threads:[],hasMore:false};return[];},{reviewSync:{create:options=>{sync=options;return{start(){},visibilityChanged(){},dispose(){}};}}});
+  view.load();view.get('commentsButton').click();await new Promise(setImmediate);mode='fail';await assert.rejects(sync.load(),/Provider unavailable/);assert.ok(calls.some(m=>m.type===failing));
+  if(failing==='chat-thread-list'){const before=calls.filter(m=>m.type===failing).length;await assert.rejects(sync.load(),/Provider unavailable/);assert.ok(calls.filter(m=>m.type===failing).length>before,'failed catalog refresh never advances success timestamp');}
+  view.workspace.dispose();
+ }
 });

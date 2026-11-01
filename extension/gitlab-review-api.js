@@ -121,11 +121,13 @@ const KiCadGitLabReviewApi = (() => {
     finally{reader.releaseLock();}
     const bytes=new Uint8Array(total);let offset=0;for(const chunk of chunks){bytes.set(chunk,offset);offset+=chunk.byteLength;}return new TextDecoder().decode(bytes);
   }
-  async function request(host, path, { method = "GET", body, token, expectedEpoch, allow404 = false, forkResponse = false } = {}) {
+  const conversationCache = new Map();
+  async function request(host, path, { method = "GET", body, token, expectedEpoch, allow404 = false, forkResponse = false, conditional = false } = {}) {
     host = validateHost(host);
     if (typeof path !== "string" || !/^\/(?:api\/v4\/|oauth\/token(?:$|\?))/.test(path) || path.includes("\\") || new URL(host + path).origin !== host) throw fail("Invalid GitLab API destination.", true);
     if (expectedEpoch !== undefined && epoch(host) !== expectedEpoch) throw fail("GitLab account changed or signed out.", true);
-    const headers = { Accept: "application/json", ...(token ? { Authorization: `Bearer ${token}` } : {}) };
+    const cacheKey=JSON.stringify([host,epoch(host),!!token,path]),cached=conditional&&method==='GET'?conversationCache.get(cacheKey):null;
+    const headers = { ...(cached?{'If-None-Match':cached.etag}:{}), Accept: "application/json", ...(token ? { Authorization: `Bearer ${token}` } : {}) };
     const multipart=typeof FormData==='function'&&body instanceof FormData;
     if (body&&!multipart) headers["Content-Type"] = body instanceof URLSearchParams ? "application/x-www-form-urlencoded" : "application/json";
     const controller = new AbortController(), timer = setTimeout(() => controller.abort(), 30000);
@@ -133,6 +135,7 @@ const KiCadGitLabReviewApi = (() => {
       const response = await fetch(host + path, { method, headers, body: body ? multipart?body:body instanceof URLSearchParams ? body.toString() : JSON.stringify(body) : undefined,
         credentials: "omit", redirect: "error", cache: "no-store", signal: controller.signal });
       if (expectedEpoch !== undefined && epoch(host) !== expectedEpoch) throw fail("GitLab account changed or signed out.");
+      if(response.status===304&&cached)return JSON.parse(cached.text);
       if ((allow404 || forkResponse) && response.status === 404) return forkResponse?{status:404,data:null}:null;
       if (!response.ok) {
         if (response.status === 401 && token && expectedEpoch === epoch(host)) await clearToken(host);
@@ -140,7 +143,7 @@ const KiCadGitLabReviewApi = (() => {
       }
       const text = await responseText(response,multipart?65536:1024*1024);
       if(expectedEpoch!==undefined&&epoch(host)!==expectedEpoch)throw fail('GitLab account changed or signed out.');
-      try { const data=JSON.parse(text);return forkResponse?{status:response.status,data}:data; } catch { throw fail("GitLab returned an invalid API response."); }
+      try { const data=JSON.parse(text),etag=response.headers.get('etag');if(conditional&&method==='GET'&&typeof etag==='string'&&etag.length<=1024&&text.length<=131072){conversationCache.delete(cacheKey);conversationCache.set(cacheKey,{etag,text});if(conversationCache.size>16)conversationCache.delete(conversationCache.keys().next().value);}return forkResponse?{status:response.status,data}:data; } catch { throw fail("GitLab returned an invalid API response."); }
     } finally { clearTimeout(timer);controller.abort(); }
   }
   async function startOAuth(host) {
@@ -255,6 +258,7 @@ const KiCadGitLabReviewApi = (() => {
     }catch(error){if(error.definitive)await chrome.storage.local.remove(key);throw error;}
   }
   async function publish(message) {
+    invalidateReadCapabilities();
     await globalThis.KiCadManagedPolicy?.assertWrites();
     const host = validateHost(message.host), note = KiCadReviewComments.validateComment(message.comment);
     if (note.anchor.provider !== "gitlab" || (note.anchor.host && validateHost(note.anchor.host) !== host)) throw fail("This note belongs to another Git provider or host.", true);
@@ -270,9 +274,10 @@ const KiCadGitLabReviewApi = (() => {
     const work = publishLocked({ host, note, repository, destination, number, title: title.trim() }, key); locks.set(key, work);
     try { return await work; } finally { locks.delete(key); }
   }
+  const confirmedPublications = new Map();
   async function publishLocked(args, key) {
     const { host, note, repository, destination, number, title } = args, current = epoch(host);
-    const saved = (await chrome.storage.local.get(key))[key];
+    const saved = confirmedPublications.get(key)||(await chrome.storage.local.get(key))[key];
     if (saved?.status === "done") {
       const remote = saved.remoteRef;
       if (remote?.provider !== "gitlab" || remote.host !== host || remote.repository !== repository ||
@@ -305,15 +310,21 @@ const KiCadGitLabReviewApi = (() => {
       if (!Number.isSafeInteger(issue) || issue <= 0 || destination !== "new-issue" && (!Number.isSafeInteger(noteId) || noteId <= 0)) throw fail("GitLab did not confirm publication.");
       const remoteRef = { provider: "gitlab", host, repository, kind: destination === "discussion" ? "discussion" : "issue", number: issue,
         url: `${host}/${repository}/-/issues/${issue}${destination === "new-issue" ? "" : `#note_${noteId}`}`, publishedAt: new Date().toISOString() };
-      await chrome.storage.local.set({ [key]: { status: "done", remoteRef,...(attachments?.length?{attachments}:{}) } }); return { remoteRef,...(attachments?.length?{attachments}:{}) };
+      invalidateReadCapabilities();
+      const receipt={status:'done',remoteRef,...(attachments?.length?{attachments}:{})};
+      try{await chrome.storage.local.set({[key]:receipt});}
+      catch{confirmedPublications.set(key,receipt);if(confirmedPublications.size>100)confirmedPublications.delete(confirmedPublications.keys().next().value);return {remoteRef,...(attachments?.length?{attachments}:{}),receiptWarning:'Posted to GitLab; the local publication receipt could not be saved.'};}
+      return {remoteRef,...(attachments?.length?{attachments}:{})};
     } catch (error) { if (error.definitive) await chrome.storage.local.remove(key); throw error; }
   }
   // Issue discussions include ordinary notes and DiscussionNotes omitted by the Notes API.
+  const readCapabilityCache=new Map();let capabilityGeneration=0;
+  function invalidateReadCapabilities(){capabilityGeneration++;readCapabilityCache.clear();}
   async function readThread({host,repository,ref,file,kind='issue',number,provider='gitlab',includeCapabilities=false}={}) {
     host=validateHost(host);repository=repositoryPath(repository);
     KiCadReviewComments.normalizeScope({provider,host,repository,ref,file});
     if(provider!=='gitlab'||!['issue','discussion'].includes(kind)||!Number.isSafeInteger(number)||number<1)throw fail('Invalid GitLab thread request.',true);
-    const current=epoch(host),headers=await authorizationHeaders(host),token=headers.Authorization?.slice(7),options={token,expectedEpoch:current};
+    const current=epoch(host),headers=await authorizationHeaders(host),token=headers.Authorization?.slice(7),options={token,expectedEpoch:current,conditional:true};
     if(epoch(host)!==current)throw fail('GitLab account changed or signed out.',true);
     const warnings=[],comments=[],seen=new Set();let bytes=0,stopped=false;
     const warn=text=>{if(!warnings.includes(text))warnings.push(text);};
@@ -360,13 +371,16 @@ const KiCadGitLabReviewApi = (() => {
     }
     if(stopped)warn('Thread readback was truncated at 200 comments, 10 requests or the text limit. Open GitLab for the complete conversation.');
     if(epoch(host)!==current)throw fail('GitLab account changed or signed out.',true);
-    let allowed=false,login=null;
-    if(includeCapabilities&&token){try{const policy=await commentPolicyStatus(host,repository,project.id);allowed=policy.allowed===true;login=policy.login||null;}catch{warn('Chat permissions could not be verified.');}}
+    const capabilityKey=JSON.stringify([host,current,capabilityGeneration,repository,kind,number,thread.updatedAt,thread.state]),cached=includeCapabilities&&token?readCapabilityCache.get(capabilityKey):null;
+    const reused=cached&&Date.now()-cached.at<30000;
+    let allowed=reused?cached.allowed:false,login=reused?cached.login:null;
+    if(includeCapabilities&&token&&!reused){try{const policy=await commentPolicyStatus(host,repository,project.id);allowed=policy.allowed===true;login=policy.login||null;}catch{warn('Chat permissions could not be verified.');}}
     for(const comment of comments)comment.canEdit=allowed&&!!login&&comment.author?.toLowerCase()===login.toLowerCase()&&!comment.bodyTruncated&&!comment.body.includes('kicad-review:');
     if(epoch(host)!==current)throw fail('GitLab account changed or signed out.',true);
-    let canClose=false,canReopen=false;
-    if(allowed&&includeCapabilities){try{await globalThis.KiCadManagedPolicy?.assertWrites();const fresh=await threadStateSnapshot(host,repository,number,options);if(fresh.allowed&&fresh.issue.id===issue.id&&fresh.issue.updated_at===thread.updatedAt&&fresh.issue.state===issue.state){canClose=thread.state==='open';canReopen=thread.state==='closed';}}catch{warn('Conversation state permissions could not be verified.');}}
+    let canClose=reused?cached.canClose:false,canReopen=reused?cached.canReopen:false;
+    if(allowed&&includeCapabilities&&!reused){try{await globalThis.KiCadManagedPolicy?.assertWrites();const fresh=await threadStateSnapshot(host,repository,number,options);if(fresh.allowed&&fresh.issue.id===issue.id&&fresh.issue.updated_at===thread.updatedAt&&fresh.issue.state===issue.state){canClose=thread.state==='open';canReopen=thread.state==='closed';}}catch{warn('Conversation state permissions could not be verified.');}}
     if(epoch(host)!==current)throw fail('GitLab account changed or signed out.',true);
+    if(includeCapabilities&&token&&!reused){readCapabilityCache.set(capabilityKey,{at:Date.now(),allowed,login,canClose,canReopen});if(readCapabilityCache.size>32)readCapabilityCache.delete(readCapabilityCache.keys().next().value);}
     return {...thread,comments,warnings,capabilities:{canClose,canReopen,create:allowed,reply:allowed,edit:allowed,reactions:false,replyMode:'native'}};
   }
   async function threadStateSnapshot(host,repository,number,options) {
@@ -379,6 +393,7 @@ const KiCadGitLabReviewApi = (() => {
     return {project,issue,user,allowed};
   }
   async function chatThreadState(message) {
+    invalidateReadCapabilities();
     await globalThis.KiCadManagedPolicy?.assertWrites();
     if(message?.provider!==undefined&&message.provider!=='gitlab')throw fail('Invalid GitLab chat provider.',true);
     const host=validateHost(message?.host),repository=repositoryPath(message?.repository),scope=KiCadReviewComments.normalizeScope({...message,provider:'gitlab',host,repository});
@@ -399,11 +414,13 @@ const KiCadGitLabReviewApi = (() => {
       try{
         const result=await request(host,`/api/v4/projects/${fresh.project.id}/issues/${number}`,{...options,method:'PUT',body:{state_event:state==='closed'?'close':'reopen'}});
         if(result?.id!==fresh.issue.id||result.project_id!==fresh.project.id||result.iid!==number||result.state!==(state==='closed'?'closed':'opened')||typeof result.updated_at!=='string'||!Number.isFinite(Date.parse(result.updated_at)))throw fail('GitLab did not confirm the state change. Refresh and inspect the conversation before retrying.');
-        const response={provider:'gitlab',host,repository,kind,number,state,updatedAt:result.updated_at,url:`${host}/${repository}/-/issues/${number}`};await chrome.storage.local.set({[key]:{status:'done',result:response}});return response;
+        const response={provider:'gitlab',host,repository,kind,number,state,updatedAt:result.updated_at,url:`${host}/${repository}/-/issues/${number}`};invalidateReadCapabilities();await chrome.storage.local.set({[key]:{status:'done',result:response}});return response;
       }catch(error){if(error.definitive)await chrome.storage.local.remove(key);throw error;}
     })();locks.set(lock,work);try{return await work;}finally{locks.delete(lock);}
   }
+  const confirmedChat = new Map();
   async function chatMessageWrite(message) {
+    invalidateReadCapabilities();
     await globalThis.KiCadManagedPolicy?.assertWrites();
     if(message?.provider!==undefined&&message.provider!=='gitlab')throw fail('Invalid GitLab chat provider.',true);
     const host=validateHost(message?.host),repository=repositoryPath(message?.repository),scope=KiCadReviewComments.normalizeScope({...message,provider:'gitlab',host,repository});
@@ -424,7 +441,7 @@ const KiCadGitLabReviewApi = (() => {
       if(!policy.allowed||!policy.login)throw fail('Repository policy or account verification blocked this chat message.',true);
       const fingerprint=JSON.stringify([action,scope.ref,scope.file,message.messageId||null,message.replyTo||null,message.expectedUpdatedAt||null,message.body,note,policy.login.toLowerCase()]);
       const digest=Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(fingerprint))),b=>b.toString(16).padStart(2,'0')).join('');
-      const saved=(await chrome.storage.local.get(key))[key];
+      const saved=confirmedChat.get(key)||(await chrome.storage.local.get(key))[key];
       if(saved){if(saved.digest!==digest)throw fail('This chat request ID already belongs to another message.',true);if(saved.status==='done')return {...saved.result,duplicate:true};throw fail('Previous chat message has an unconfirmed outcome. Inspect GitLab before retrying.');}
       const thread=await readThread({...scope,host,kind,number});
       if(thread.projectId!==project.id)throw fail('GitLab project changed during chat preflight.',true);
@@ -449,7 +466,12 @@ const KiCadGitLabReviewApi = (() => {
         if(!Number.isSafeInteger(result?.id)||result.id<1||action==='edit'&&String(result.id)!==target.id)throw fail('GitLab did not confirm the chat message. Inspect the thread before retrying.');
         if(typeof result.updated_at!=='string'||!/^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d(?:\.\d{1,9})?Z$/.test(result.updated_at)||!Number.isFinite(Date.parse(result.updated_at)))throw fail('GitLab did not confirm the message revision. Inspect the thread before retrying.');
         const response={provider:'gitlab',kind,number,messageId:String(result.id),url:`${host}/${repository}/-/issues/${number}#note_${result.id}`,updatedAt:result.updated_at,replyTo:action==='reply'?(target.replyTo||target.id):null};
-        await chrome.storage.local.set({[key]:{status:'done',digest,result:response}});return response;
+        invalidateReadCapabilities();
+        // Remote acceptance is authoritative even if local receipt storage is full.
+        const receipt={status:'done',digest,result:response};
+        try{await chrome.storage.local.set({[key]:receipt});}
+        catch{response.receiptWarning='Message sent; its local receipt could not be saved. Open the provider conversation to verify it.';confirmedChat.set(key,receipt);if(confirmedChat.size>100)confirmedChat.delete(confirmedChat.keys().next().value);}
+        return response;
       }catch(error){if(error.definitive)await chrome.storage.local.remove(key);throw error;}
     })();
     locks.set(key,work);try{return await work;}finally{locks.delete(key);}
@@ -459,7 +481,7 @@ const KiCadGitLabReviewApi = (() => {
     KiCadReviewComments.normalizeScope({...message,provider:'gitlab',host,repository});
     if(message.provider!==undefined&&message.provider!=='gitlab'||!['issue','discussion'].includes(kind)||!Number.isSafeInteger(page)||page<1||page>5||message.cursor!==undefined&&message.cursor!==null)throw fail('Invalid chat conversation listing.',true);
     if(kind==='discussion')return {threads:[],hasMore:false,supported:false,warnings:['GitLab conversations are listed under Issues.']};
-    const current=epoch(host),headers=await authorizationHeaders(host),options={token:headers.Authorization?.slice(7),expectedEpoch:current};
+    const current=epoch(host),headers=await authorizationHeaders(host),options={token:headers.Authorization?.slice(7),expectedEpoch:current,conditional:true};
     const project=await request(host,`/api/v4/projects/${encodeURIComponent(repository)}`,options);
     if(project?.path_with_namespace!==repository||!Number.isSafeInteger(project.id)||project.id<1)throw fail('GitLab returned another project identity.',true);
     const rows=await request(host,`/api/v4/projects/${project.id}/issues?state=all&scope=all&order_by=updated_at&sort=desc&per_page=20&page=${page}`,options);

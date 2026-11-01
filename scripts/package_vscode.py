@@ -13,7 +13,7 @@ ASSETS = ('analysis-data.js', 'analysis-viewer.html', 'analysis-viewer.css', 'an
     'loading-ui.js', 'load-worker.js', 'bom-analytics.js', 'file-compatibility.js', 'html-preview.js', 'html-sandbox.html', 'html-sandbox.js',
     'parsing.js', 'project-viewer.html', 'project-viewer.css', 'project-viewer.js', 'project-settings.js', 'project-settings-ui.js', 'gerber-renderer.js',
     'revision-viewer.html', 'revision-viewer.css', 'revision-viewer.js', 'terms.html',
-    'ui-icons.js', 'browser-data.js', 'design-diff.js', 'design-model.js',
+    'ui-icons.js', 'browser-data.js', 'legacy-kicad.js', 'design-diff.js', 'design-model.js',
     'net-model.js', 'overview-connectivity.js', 'ratsnest.js', 'paired-review.js', 'project-search.js', 'workspace-search.js', 'rule-reports.js', 'review-navigation.js', 'view-state.js', 'review-comments.js', 'comment-compose.js', 'review-workspace.js', 'review-tools.js', 'repo-models.js',
     'worksheet.js', 'schematic-renderer.js', 'pcb-renderer.js', 'pad-labels.js', 'owned-canvas.js', 'touch-canvas.js', 'motion-webgl.js',
     'vendor/spike-board3d.bundle.js', 'vendor/SPIKE-ENGINE-NOTICE.md', 'vendor/THREE-LICENSE',
@@ -25,6 +25,7 @@ ASSETS += ('ui-foundation.css','tool-surfaces.css','gerber-camera.js')
 ASSETS += ('pdf-tools.js','pdf-viewer.html','pdf-viewer.css','pdf-viewer.js','vendor/pdfjs/FILES.json') + tuple('vendor/pdfjs/'+name for name in json.loads((ROOT/'extension/vendor/pdfjs/FILES.json').read_text())['files'])
 ASSETS += ('mention-users.js','repository-explorer.js','repository-explorer.css','layer-colors.js','load-worker-vscode.js')
 ASSETS += ('engineering-launcher.js', 'review-handoff.js', 'local-runtime.js')
+ASSETS += ('net-quick-view.js',)
 ASSETS += ('window-link.js','detached-view.js')
 ASSETS += ('fast-pi.js','fast-pi-worker.js','fast-pi-worker-vscode.js','fast-pi-workspace.js','fast-pi-workspace.css')
 BUILD_INPUTS = ('github-review-api.js', 'gitlab-review-api.js', 'step-decoder.js', 'step-worker.js', 'vendor/occt/occt-import-js.js')

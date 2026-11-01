@@ -73,6 +73,11 @@ test('linked camera messages do not echo and cannot cross sheets',async()=>{
  v.message({type:'kicad-review:command',command:'set-view',file:'root.kicad_sch',view:{x:1,y:2,zoom:Infinity}});assert.equal(v.camera.zoom,2);
 });
 test('active sheet identity is used in reports and received view filtering',async()=>{const v=await revision();v.canvas.document.filename='child.kicad_sch';v.key('f');assert.equal(v.reports.at(-1).data.file,'child.kicad_sch');assert.equal(v.reports.at(-1).data.phase,'ready');});
+test('trusted workspace theme command sets both preferences and rejects malformed or foreign messages',async()=>{
+ const v=await revision();v.message({type:'kicad-review:command',command:'set-theme',theme:'dark'});assert.equal(v.canvas.dark,true);assert.equal(v.context.document.body.dataset.uiTheme,'dark');
+ for(const [theme,source,origin]of [['light',{},'chrome-extension://ours'],['light',v.parent,'https://github.com'],['system',v.parent,'chrome-extension://ours']])v.message({type:'kicad-review:command',command:'set-theme',theme},source,origin);
+ assert.equal(v.canvas.dark,true);assert.equal(v.context.document.body.dataset.uiTheme,'dark');v.message({type:'kicad-review:command',command:'set-theme',theme:'light'});assert.equal(v.canvas.dark,false);assert.equal(v.context.document.body.dataset.uiTheme,'light');
+});
 test('zoom limits keep the camera finite and pagehide disposes owned UI resources',async()=>{const v=await revision();const center=plain(v.camera.center);v.get('zoomIn').click();assert.equal(v.camera.center.x,center.x);v.camera.zoom=9999;v.key('+');assert.equal(v.camera.zoom,10000);v.camera.zoom=.0011;v.key('-');assert.equal(v.camera.zoom,.001);v.hide();assert.equal(v.calls.disposed,2);});
 
  test('independent UI and drawing themes and ruler units persist through controls',async()=>{const v=await revision();v.get('uiTheme').value='dark';v.get('uiTheme').onchange();assert.equal(v.context.document.body.dataset.uiTheme,'dark');assert.equal(v.canvas.dark,false);v.get('drawingTheme').value='dark';v.get('drawingTheme').onchange();assert.equal(v.canvas.dark,true);v.get('rulerUnits').value='mil';v.get('rulerUnits').onchange();assert.equal(v.get('rulerUnits').value,'mil');});

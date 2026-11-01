@@ -2,6 +2,25 @@
 ((root)=>{
  'use strict';
  const text=v=>v&&typeof v==='object'?v.quoted:v;
+ const nativePath=value=>typeof value==='string'&&value.length<=2000&&value.startsWith('/')&&value.split('/').slice(1).every(p=>p&&p!=='.'&&p!=='..'&&!/[\\:\x00-\x1f\x7f]/.test(p))&&value.split('/').length<=65;
+ function tstampPath(object){
+  const value=text(object?.saved?.tree?.find?.(v=>Array.isArray(v)&&v[0]==='path')?.[1]);return nativePath(value)?value:null;
+ }
+ function symbolPaths(object){
+  const instances=object?.saved?.tree?.find?.(v=>Array.isArray(v)&&v[0]==='instances'),result=[];
+  for(const project of instances||[])if(Array.isArray(project)&&project[0]==='project')for(const path of project)if(Array.isArray(path)&&path[0]==='path'){
+   const prefix=text(path[1]),reference=text(path.find(v=>Array.isArray(v)&&v[0]==='reference')?.[1]);
+   if(nativePath(prefix)&&object.uuid)result.push({path:prefix+'/'+object.uuid,reference});
+  }
+  return result;
+ }
+ function partSelection(object,{instancePath}={}){
+  if(!object||!['symbol','footprint'].includes(object.kind)||!object.reference)return null;
+  let path=tstampPath(object);
+  if(object.kind==='symbol'){const paths=symbolPaths(object).filter(p=>instancePath?p.path===instancePath+'/'+object.uuid:p.reference===object.reference);if(paths.length===1)path=paths[0].path;}
+  const linked=symbolUuid(object),selection={kind:'part',reference:object.reference,path:object.path,...(object.uuid?{uuid:object.uuid}:{}),...(linked?{symbolUuid:linked}:{}),...(path?{tstampPath:path}:{})};
+  return validSelection(selection)?selection:null;
+ }
  function symbolUuid(object){
   const form=object?.saved?.tree;if(!Array.isArray(form))return null;
   const path=form.find(v=>Array.isArray(v)&&v[0]==='path');
@@ -16,7 +35,8 @@
   if(!value||typeof value!=='object'||!['part','net','pin'].includes(value.kind))return false;
   const bounded=(v,n)=>typeof v==='string'&&v.length>0&&v.length<=n&&!/[\x00-\x1f\x7f]/.test(v);
   if(!bounded(value.path,1000)||!/^.+\.kicad_(?:sch|pcb)$/i.test(value.path)||value.path.startsWith('/')||value.path.split('/').some(p=>!p||p==='.'||p==='..'||/[\\:]/.test(p)))return false;
-  const keys=value.kind==='pin'?['kind','reference','path','uuid','ownerUuid','symbolUuid','pinNumber']:value.kind==='part'?['kind','reference','path','uuid','symbolUuid']:['kind','netName','qualifiedNetName','path'];if(Object.keys(value).some(k=>!keys.includes(k)))return false;
+  const keys=value.kind==='pin'?['kind','reference','path','uuid','ownerUuid','symbolUuid','pinNumber','tstampPath']:value.kind==='part'?['kind','reference','path','uuid','symbolUuid','tstampPath']:['kind','netName','qualifiedNetName','path'];if(Object.keys(value).some(k=>!keys.includes(k)))return false;
+  if(value.tstampPath!==undefined&&(!nativePath(value.tstampPath)||value.symbolUuid&&value.tstampPath.split('/').at(-1)!==value.symbolUuid||/\.kicad_sch$/i.test(value.path)&&value.kind==='part'&&value.uuid&&value.tstampPath.split('/').at(-1)!==value.uuid))return false;
   if(value.kind==='net')return bounded(value.netName,500)&&(value.qualifiedNetName===undefined||bounded(value.qualifiedNetName,500));
   if(value.kind==='pin'&&(!bounded(value.pinNumber,200)||(value.ownerUuid!==undefined&&!bounded(value.ownerUuid,200))))return false;
   return bounded(value.reference,200)&&(value.uuid===undefined||bounded(value.uuid,200))&&(value.symbolUuid===undefined||bounded(value.symbolUuid,200));
@@ -26,11 +46,17 @@
   const board=/\.kicad_sch$/i.test(selection.path),kind=board?'footprint':'symbol';
   const parts=objects.filter(o=>o.kind===kind);
   const sourceId=board?selection.uuid:selection.symbolUuid;
-  const linked=sourceId?parts.filter(o=>(board?symbolUuid(o):o.uuid)===sourceId):[];
+  let linked=sourceId?parts.filter(o=>(board?symbolUuid(o):o.uuid)===sourceId):[];
+  if(selection.tstampPath){
+   linked=parts.filter(o=>board?tstampPath(o)===selection.tstampPath:o.uuid===selection.tstampPath.split('/').at(-1)&&(symbolPaths(o).some(p=>p.path===selection.tstampPath)||!symbolPaths(o).length&&!reusedSheet(o.path,objects)));
+   if(!board&&linked.length===1){const placements=symbolPaths(linked[0]).filter(p=>p.path===selection.tstampPath);if(placements.length>1||placements[0]?.reference&&placements[0].reference!==linked[0].reference)return {error:'This saved sheet instance has a different reference. Select the target sheet explicitly.'};}
+   if(!linked.length)return {error:'Saved schematic instance does not match this drawing; select the target sheet explicitly.'};
+  }else if(!board&&linked.length===1&&(symbolPaths(linked[0]).length>1||reusedSheet(linked[0].path,objects)))return {error:'Multiple saved instances match this source identity. Select the target sheet explicitly.'};
   if(linked.length===1)return {object:linked[0]};
   if(linked.length>1)return {error:'Multiple saved instances match this source identity. Select the target sheet explicitly.'};
   const refs=parts.filter(o=>o.reference===selection.reference);
   if(refs.length!==1)return {error:refs.length?'Reference is ambiguous across units or sheets. Select the target explicitly.':'No matching part in this drawing.'};
+  if(!board&&(symbolPaths(refs[0]).length>1||reusedSheet(refs[0].path,objects)))return {error:'Reference is ambiguous across saved sheet instances. Select the target explicitly.'};
   // A saved link that disagrees is evidence against reference-only matching.
   if(sourceId&&(board?symbolUuid(refs[0]):selection.symbolUuid))return {error:'Saved schematic identity does not match this part; update the design association.'};
   return {object:refs[0]};
@@ -41,7 +67,7 @@
   const fromSchematic=/\.kicad_sch$/i.test(selection.path);
   const match=relatedPart(objects,{kind:'part',reference:selection.reference,path:selection.path,
    ...(fromSchematic&&(selection.ownerUuid||selection.uuid)?{uuid:selection.ownerUuid||selection.uuid}:{}),
-   ...(!fromSchematic&&selection.symbolUuid?{symbolUuid:selection.symbolUuid}:{})});
+   ...(!fromSchematic&&selection.symbolUuid?{symbolUuid:selection.symbolUuid}:{}),...(selection.tstampPath?{tstampPath:selection.tstampPath}:{})});
   if(!match.object)return match;
   const object=match.object;
   const design=designs instanceof Map?designs.get(object.path):Array.isArray(designs)?designs.find(d=>d.path===object.path):designs?.[object.path];
@@ -58,6 +84,11 @@
   const parts=object.path.split('/');parts.pop();
   for(const part of name.split('/')){if(part==='..'){if(!parts.length)return null;parts.pop();}else if(part&&part!=='.')parts.push(part);}
   return parts.join('/');
+ }
+ function reusedSheet(path,objects){
+  const seen=new Set();let current=path;
+  while(!seen.has(current)&&seen.size<32){seen.add(current);const parents=objects.filter(o=>o.kind==='sheet'&&sheetTarget(o)===current);if(parents.length>1)return true;if(!parents.length)return false;current=parents[0].path;}
+  return true;
  }
  // Only a single saved hierarchy instance can provide a safe local-net prefix.
  function sheetPrefix(path,objects){
@@ -103,6 +134,6 @@
   result.objects=[...matchedObjects];result.nets=[...matchedNets];result.errors=[...errors];
   return result;
  }
- root.KiCadPairedReview={validSelection,relatedPart,relatedPin,symbolUuid,sheetPrefix,qualifiedNetName,relatedNet,relatedGroup};
+ root.KiCadPairedReview={validSelection,relatedPart,relatedPin,symbolUuid,tstampPath,partSelection,sheetPrefix,qualifiedNetName,relatedNet,relatedGroup};
  if(typeof module==='object'&&module.exports)module.exports=root.KiCadPairedReview;
 })(globalThis);

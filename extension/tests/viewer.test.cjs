@@ -346,3 +346,18 @@ test('global search keeps saved results inside the workspace and focuses only ow
  assert.equal(view.get('comparison').hidden,true);const report=view.get('searchWorkspace').children[0];assert.equal(new URL(report.src).pathname,'/analysis-viewer.html');assert.equal(new URL(report.src).searchParams.get('ref'),parameters.head);
  await assert.rejects(search.open({kind:'report',path:'../private.csv'}),/Invalid search/);
 });
+
+
+test('detached cross-select state also controls paired relay and clears pending selection',()=>{
+ const view=viewer({repository:'wayri/board',file:'board.kicad_pcb',head:'a'.repeat(40),pairedFile:'root.kicad_sch'},()=>({ok:true,result:[]}),{CustomEvent:class {constructor(type,options){this.type=type;this.detail=options.detail;}},dispatchEvent(){}});
+ const main=view.get('headDrawing').children[0],pair=view.get('pairDrawing').children[0],origin='chrome-extension://test-id';
+ const selection={kind:'part',reference:'R1',path:'board.kicad_pcb'};
+ view.message({origin,source:main.contentWindow,data:{type:'kicad-review:selection',selection}});
+ view.message({origin,source:main.contentWindow,data:{type:'kicad-review:detach-state',enabled:false}});
+ assert.equal(view.get('crossSelectToggle').getAttribute('aria-pressed'),'false');
+ view.message({origin,source:pair.contentWindow,data:{type:'kicad-review:view',phase:'ready',file:'root.kicad_sch',view:{x:0,y:0,zoom:1}}});
+ assert.equal(pair.messages.length,0);
+ view.message({origin,source:main.contentWindow,data:{type:'kicad-review:selection',selection}});assert.equal(pair.messages.length,0);
+ view.get('crossSelectToggle').click();assert.equal(view.get('crossSelectToggle').getAttribute('aria-pressed'),'true');assert.equal(pair.messages.at(-1).message.command,'detach-sync');
+ view.message({origin,source:main.contentWindow,data:{type:'kicad-review:selection',selection}});assert.equal(pair.messages.at(-1).message.command,'highlight-related');
+});

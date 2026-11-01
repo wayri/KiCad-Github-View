@@ -8,8 +8,9 @@ PCB viewport and solve. Change the pick layer between contacts for interlayer pa
 The worker solves the saved filled copper, straight tracks, supported pads and
 lumped plated via/through-hole barrel transitions. It never refills zones or
 modifies the design. Supply layer center elevations and copper thicknesses in mm;
-via plating thickness is required for barrel transitions. The displayed copper
-conductivity is an explicit editable room-temperature assumption. Dielectric
+via plating thickness is required for barrel transitions. Copper
+conductivity is a required explicit room-temperature input. Complete saved physical
+stackups are prefilled; incomplete stackups require explicit layer dimensions. Dielectric
 separation contributes to barrel length via layer elevations, not DC lateral
 conductivity. There is no invented stackup fallback.
 

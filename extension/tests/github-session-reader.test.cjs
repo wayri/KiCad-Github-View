@@ -3,6 +3,11 @@ const {create,treeData}=require('../github-session-reader.js');
 const sha='a'.repeat(40),repo='owner/private';
 const tree=(path='',items=[])=>[{payload:{codeViewTreeRoute:{path:path||'/',refInfo:{name:'feature/board',currentOid:sha},tree:{items,totalCount:items.length}}}}];
 const response=(text,url,type='text/plain')=>{const r=new Response(text,{headers:{'content-type':type}});Object.defineProperty(r,'url',{value:url});return r;};
+test('history feed stays on exact repository website with no API and supports explicit branch',async()=>{
+ let called=0;const api=create({location:{href:'https://github.com/'+repo},fetch:async(url,options)=>{called++;assert.equal(url,'https://github.com/'+repo+'/commits/feature%2Fboard.atom');assert.equal(options.credentials,'same-origin');assert.equal(options.redirect,'error');return response('<feed/>',url,'application/atom+xml');}});
+ assert.deepEqual(await api.read({repository:repo,ref:'feature/board',action:'history'}),{ref:'feature/board',content:'<feed/>'});assert.equal(called,1);
+ await assert.rejects(api.read({repository:'foreign/repo',ref:sha,action:'history'}),/tab/);assert.equal(called,1);
+});
 test('session reads stay in the repository tab, pin branch revisions and strip page metadata',async()=>{
  const calls=[],api=create({location:{href:'https://github.com/owner/private/blob/feature/board/main.kicad_pcb'},parseHTML:()=>tree(),fetch:async(url,init)=>{calls.push({url,init});return response('html',url);}});
  const result=await api.read({repository:repo,ref:'feature/board',action:'resolve'});

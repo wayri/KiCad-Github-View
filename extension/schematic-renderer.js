@@ -125,15 +125,18 @@
       if (primitives.length >= MAX_PRIMITIVES) throw new Error("Schematic has too many drawing primitives.");
       primitives.push({ ...primitive, path });
     }
+    const variableText=Compatibility?.textResolver(rootAST,{...sheetOptions,path},warn), variableFields=new Map();
+    for(const node of [...forms(rootAST,"symbol"),...forms(rootAST,"sheet")])if(ownId(node))variableFields.set(ownId(node),variableText?.fields(node));
+    const resolveText=(string,owner={})=>variableText?.resolve(string,variableFields.get(owner.ownerUuid||owner.uuid)||{})??String(string??"");
     const page = pageSettings(rootAST, warn);
     function line(a, b, color, width, owner = {}) {
       if (a && b) emit({ type: "line", points: [a, b], color, width, ...owner });
     }
     function text(position, string, size, angle, color, owner = {}) {
       if (position && string !== undefined && string !== null && String(string)) {
-        const parsed = overbarText(string);
+        const parsed = overbarText(resolveText(string,owner));
         emit({ type: "text", x: position.x, y: position.y, text: parsed.text,
-          ...(parsed.bars.length ? { rawText: String(string) } : {}),
+          ...((parsed.bars.length||String(string)!==parsed.text) ? { rawText: String(string) } : {}),
           size, angle: finite(angle) ? angle : 0, color, ...owner });
         if (parsed.bars.length) {
           const width = owner.fontWidth || size, height = owner.fontHeight || size;
@@ -351,7 +354,7 @@
       if (isHidden(node)) return;
       const at = point(node, "at");
       if (!at) { warn(`${kind} without position was skipped.`); return; }
-      const content = value(node[1]), size = fontSize(node), angle = value(form(node, "at")?.[3]) || 0;
+      const content = resolveText(value(node[1]),owner), size = fontSize(node), angle = value(form(node, "at")?.[3]) || 0;
       const shape = scalar(node, "shape") || (kind === "sheet-pin" ? value(node[2]) : "input");
       const style = fontStyle(node), color = kind === "global_label" ? COLOR.symbol : "#725600";
       const labelOwner = { ...owner, kind, connectPoint: at };

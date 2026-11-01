@@ -135,10 +135,10 @@ const latestTimer=h=>h.timers.findLast(fn=>!!fn);
 const tick=h=>{const at=h.timers.findLastIndex(fn=>!!fn),fn=h.timers[at];assert.ok(fn,'a timer is scheduled');h.timers[at]=null;return fn();};
 test('automatic refresh is enabled by default, visible-only and preserves drafts and reading position',async()=>{
  const h=harness();h.api.render(thread());h.type('Unsent message');const list=h.find('chat-messages');list.scrollTop=0;
- assert.equal(h.byId('chatAutoRefresh').checked,true);assert.equal(latestTimer(h).delay,10000);
- h.byId('chatAutoRefresh').checked=true;h.byId('chatAutoRefresh').onchange();assert.equal(latestTimer(h).delay,10000);
+ assert.equal(h.byId('chatAutoRefresh').checked,true);assert.equal(latestTimer(h).delay,3000);
+ h.byId('chatAutoRefresh').checked=true;h.byId('chatAutoRefresh').onchange();assert.equal(latestTimer(h).delay,3000);
  h.options.onRead=async()=>{h.reads.push({number:1});h.api.render(thread(1,{comments:[...thread().comments,{...thread().comments[0],id:'new',body:'New automatic read'}]}));};
- await tick(h);assert.equal(h.reads.length,1);assert.equal(h.byId('chatMessageText').value,'Unsent message');assert.equal(list.scrollTop,0);assert.equal(h.find('chat-jump-latest').hidden,false);assert.equal(latestTimer(h).delay,10000);
+ await tick(h);assert.equal(h.reads.length,1);assert.equal(h.byId('chatMessageText').value,'Unsent message');assert.equal(list.scrollTop,0);assert.equal(h.find('chat-jump-latest').hidden,false);assert.equal(latestTimer(h).delay,3000);
  h.container.hidden=true;await tick(h);assert.equal(h.reads.length,1,'hidden catalog does not poll');
  h.container.hidden=false;h.doc.body.hidden=true;await tick(h);assert.equal(h.reads.length,1,'hidden ancestors pause polling');h.doc.body.hidden=false;
  h.container.checkVisibility=()=>false;await tick(h);assert.equal(h.reads.length,1,'CSS-hidden conversation does not poll');h.container.checkVisibility=()=>true;
@@ -149,9 +149,9 @@ test('automatic refresh is enabled by default, visible-only and preserves drafts
 test('manual and automatic refresh do not overlap, and failures back off to five minutes',async()=>{
  let finish;const h=harness();h.api.render(thread());h.options.onRead=()=>{h.reads.push({number:1});return new Promise(resolve=>{finish=resolve;});};
  h.byId('chatAutoRefresh').checked=true;h.byId('chatAutoRefresh').onchange();const polling=tick(h);await new Promise(setImmediate);const manual=h.find('chat-refresh').onclick();assert.equal(h.reads.length,1);assert.equal(latestTimer(h),undefined);
- finish(false);await polling;await manual;assert.equal(latestTimer(h).delay,20000);assert.match(h.find('chat-status').textContent,/could not be refreshed/);
- h.options.onRead=async()=>false;await tick(h);assert.equal(latestTimer(h).delay,40000);await tick(h);assert.equal(latestTimer(h).delay,80000);await tick(h);assert.equal(latestTimer(h).delay,160000);await tick(h);assert.equal(latestTimer(h).delay,300000);
- h.options.onRead=async()=>true;await tick(h);assert.equal(latestTimer(h).delay,10000,'successful read resets backoff');
+ finish(false);await polling;await manual;assert.equal(latestTimer(h).delay,6000);assert.match(h.find('chat-status').textContent,/could not be refreshed/);
+ h.options.onRead=async()=>false;await tick(h);assert.equal(latestTimer(h).delay,12000);await tick(h);assert.equal(latestTimer(h).delay,24000);await tick(h);assert.equal(latestTimer(h).delay,48000);for(let i=0;i<4;i++)await tick(h);assert.equal(latestTimer(h).delay,300000);
+ h.options.onRead=async()=>true;await tick(h);assert.equal(latestTimer(h).delay,3000,'successful read resets backoff');
  h.api.dispose();assert.equal(latestTimer(h),undefined);assert.equal(h.events.has('visibilitychange'),false);
 });
 test('disabling automatic refresh during a pending read prevents further polling',async()=>{
@@ -160,7 +160,7 @@ test('disabling automatic refresh during a pending read prevents further polling
 });
 test('an old failed refresh cannot overwrite a newly enabled polling schedule',async()=>{
  let finish;const h=harness();h.api.render(thread());h.options.onRead=()=>new Promise(resolve=>{finish=resolve;});const checkbox=h.byId('chatAutoRefresh');checkbox.checked=true;checkbox.onchange();const pending=tick(h);await new Promise(setImmediate);
- checkbox.checked=false;checkbox.onchange();checkbox.checked=true;checkbox.onchange();const restarted=latestTimer(h);finish(false);await pending;assert.equal(latestTimer(h),restarted);assert.equal(latestTimer(h).delay,10000);
+ checkbox.checked=false;checkbox.onchange();checkbox.checked=true;checkbox.onchange();const restarted=latestTimer(h);finish(false);await pending;assert.equal(latestTimer(h),restarted);assert.equal(latestTimer(h).delay,3000);
 });
 test('compact chat shows only its header icons and +/Send strip until tools are requested',()=>{
  let back=0,settings=0,close=0;const h=harness({onBack:()=>back++,onSettings:()=>settings++,onClose:()=>close++,onAccount:()=>{}});h.api.render(thread());
@@ -258,4 +258,12 @@ test('attached review severity is selectable above the message and survives publ
 
 test('thread state badges and message filters infer issue closure without rewriting saved review data',()=>{
  const note={id:'state-note',text:'Connector review',createdAt:'2026-10-28T00:00:00Z',severity:'minor',state:'open',anchor:{repository:'owner/board',ref:'a'.repeat(40),file:'board.kicad_pcb'}},h=harness(),value=thread(1,{state:'closed',comments:[{id:'state-message',body:comments.toMarkdown(note),author:'reviewer',createdAt:'2026-10-28T00:00:00Z'}]});h.api.render(value,{state:'closed'});assert.equal(h.find('chat-thread-badge').textContent,'Closed');assert.equal(h.find('chat-review-state').textContent,'Closed');assert.equal(h.find('chat-review-state').attributes['data-state'],'closed');h.api.render(value,{state:'open'});assert.equal(h.find('chat-review-state'),undefined);assert.equal(note.state,'open');assert.equal(h.requests.length,0);h.api.dispose();
+});
+
+test('posting during an old read waits for a fresh post-acceptance readback',async()=>{
+ let finish;const h=harness();h.api.render(thread());let count=0;h.options.onRead=()=>{count++;return count===1?new Promise(resolve=>finish=resolve):Promise.resolve(true);};
+ const old=h.find('chat-refresh').onclick();await new Promise(setImmediate);h.type('New accepted message');const sending=h.find('chat-send').onclick();await new Promise(setImmediate);assert.equal(count,1);finish(true);await old;await sending;assert.equal(count,2);assert.equal(h.byId('chatMessageText').value,'');assert.equal(h.find('chat-status').textContent,'Message sent.');
+});
+test('mention lookup carries the collaboration provider and repository',async()=>{
+ const h=harness({provider:'gitlab',repository:'group/subgroup/repo'});h.api.render(thread());h.type('Hi @ali');await h.timers.at(-1)();assert.equal(h.requests[0].payload.provider,'gitlab');assert.equal(h.requests[0].payload.repository,'group/subgroup/repo');
 });

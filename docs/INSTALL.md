@@ -2,9 +2,9 @@
 
 Current GitHub preview: extension 0.12.75 and Android 1.75. Download the packages below; store availability is separate from GitHub release availability.
 
-The 0.12.76 development candidate adds [API-free GitHub project buffering](GITHUB-WEBSITE-VIEWING.md).
-Its build filenames are `kicad-visual-review-chrome-edge-brave-opera-vivaldi-chromium-0.12.76.zip`
-and `kicad-visual-review-vscode-0.12.76.vsix`; this does not claim a new store or GitHub release.
+The 0.12.77 development candidate adds [API-free GitHub project buffering](GITHUB-WEBSITE-VIEWING.md).
+Its build filenames are `kicad-visual-review-chrome-edge-brave-opera-vivaldi-chromium-0.12.77.zip`
+and `kicad-visual-review-vscode-0.12.77.vsix`; this does not claim a new store or GitHub release.
 
 Choose a prepared package from the [README download buttons](../README.md#downloads) or [GitHub Releases](https://github.com/wayri/KiCad-Github-View/releases). GitHub's automatic **Source code** archives are source checkouts, not installable extensions. The source repository and release downloads are public.
 

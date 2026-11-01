@@ -6,10 +6,10 @@ const ghComment=(id=11,extra={})=>({id,node_id:'IC_'+id,body:'Hello',user:{login
 const glComment=(id=11,extra={})=>({id,body:'Hello',author:{username:'reviewer'},created_at:stamp,updated_at:stamp,...extra});
 const discussionComment=(id=11,extra={})=>({id:'DC_'+id,databaseId:id,body:'Hello',author:{login:'reviewer'},createdAt:stamp,updatedAt:stamp,viewerCanUpdate:true,viewerDidAuthor:true,...extra});
 const page=nodes=>({nodes,pageInfo:{hasNextPage:false,endCursor:null}});
-async function harness(provider,override=()=>undefined){
- const maps={local:new Map(),session:new Map()},calls=[];
- const area=map=>({get:async key=>({[key]:map.get(key)}),set:async rows=>{for(const[k,v]of Object.entries(rows))map.set(k,v);},remove:async keys=>[].concat(keys).forEach(k=>map.delete(k))});
- const context=vm.createContext({URL,URLSearchParams,TextEncoder,TextDecoder,AbortController,setTimeout,clearTimeout,atob,btoa,FormData,Blob,crypto:require('node:crypto').webcrypto,KiCadReviewComments:comments,KiCadGitHubReviewApi:require('../github-review-api.js'),chrome:{storage:{local:area(maps.local),session:area(maps.session)}},fetch:async(url,init)=>{
+async function harness(provider,override=()=>undefined,beforeSet=()=>{}){
+ const maps={local:new Map(),session:new Map()},calls=[];let clock=Date.now();class TestDate extends Date{static now(){return clock;}};
+ const area=map=>({get:async key=>({[key]:map.get(key)}),set:async rows=>{await beforeSet(rows);for(const[k,v]of Object.entries(rows))map.set(k,v);},remove:async keys=>[].concat(keys).forEach(k=>map.delete(k))});
+ const context=vm.createContext({Date:TestDate,URL,URLSearchParams,TextEncoder,TextDecoder,AbortController,setTimeout,clearTimeout,atob,btoa,FormData,Blob,crypto:require('node:crypto').webcrypto,KiCadReviewComments:comments,KiCadGitHubReviewApi:require('../github-review-api.js'),chrome:{storage:{local:area(maps.local),session:area(maps.session)}},fetch:async(url,init)=>{
   calls.push({url,init});assert.equal(init.redirect,'error');assert.equal(init.credentials,'omit');
   let data=await override(url,init);
   if(data===undefined&&provider==='github'){
@@ -37,7 +37,7 @@ async function harness(provider,override=()=>undefined){
  const api=context[provider==='github'?'KiCadGitHubReviewApi':'KiCadGitLabReviewApi'];
  await (provider==='github'?api.setToken(token):api.setToken('https://gitlab.com',token));
  const request={...scope,provider,...(provider==='gitlab'?{host:'https://gitlab.com'}:{}),thread:{kind:'issue',number:42},action:'create',body:'New message',clientMutationId:'mutation_0123456789'};
- return{api,calls,maps,request,write:extra=>api.chatMessageWrite({...request,...extra})};
+ return{api,calls,maps,request,advance:ms=>{clock+=ms;},write:extra=>api.chatMessageWrite({...request,...extra})};
 }
 const mutations=calls=>calls.filter(c=>['POST','PATCH','PUT'].includes(c.init.method)&&(!c.url.endsWith('/graphql')||JSON.parse(c.init.body).query.startsWith('mutation')));
 for(const provider of ['github','gitlab']){
@@ -45,6 +45,34 @@ for(const provider of ['github','gitlab']){
   const h=await harness(provider),result=await h.write();assert.equal(result.messageId,'12');assert.equal((await h.write()).duplicate,true);assert.equal(mutations(h.calls).length,1);
   await assert.rejects(h.write({body:'Changed'}),/already belongs/);assert.equal(mutations(h.calls).length,1);
   const read=await h.api.readThread({...h.request,kind:'issue',number:42,includeCapabilities:true});assert.equal(read.capabilities.create,true);assert.equal(read.capabilities.reactions,false);assert.equal(read.comments[0].canEdit,true);assert.equal(JSON.stringify(result).includes(token),false);
+ });
+ test(provider+' confirmed remote post survives local receipt storage failure without another POST',async()=>{
+  const h=await harness(provider,()=>undefined,rows=>{if(Object.entries(rows).some(([key,value])=>key.includes('-chat:')&&value.status==='done'))throw Error('Storage full');});
+  const result=await h.write();assert.equal(result.messageId,'12');assert.match(result.receiptWarning,/Message sent/);
+  assert.equal((await h.write()).duplicate,true);assert.equal(mutations(h.calls).length,1);
+ });
+ test(provider+' conversation reads revalidate unchanged Issue bodies with account-bound ETags',async()=>{
+  let conditional=0;
+  const h=await harness(provider,(url,init)=>{
+   if(!url.endsWith('/issues/42')||init.method!=='GET')return;
+   if(init.headers['If-None-Match']==='"issue-v1"'){conditional++;return new Response(null,{status:304});}
+   const issue=provider==='github'?{...ghComment(1),number:42,title:'Issue',state:'open',comments:1}:{id:1,iid:42,project_id:9,title:'Issue',state:'opened',description:'Description',created_at:stamp,updated_at:stamp,author:{username:'reviewer'}};
+   return new Response(JSON.stringify(issue),{headers:{etag:'"issue-v1"'}});
+  });
+  const args={...h.request,kind:'issue',number:42};const first=await h.api.readThread(args),second=await h.api.readThread(args);assert.equal(second.body,first.body);assert.equal(conditional,1);
+ });
+ test(provider+' confirmed annotation publication survives local receipt storage failure',async()=>{
+  const h=await harness(provider,()=>undefined,rows=>{if(Object.entries(rows).some(([key,value])=>key.includes('-publish:')&&value.status==='done'))throw Error('Storage full');});
+  const annotation={id:'published-note',text:'Inspect drawing',createdAt:stamp,threadType:'issue',anchor:{...scope,...(provider==='gitlab'?{provider,host:'https://gitlab.com'}:{})}};
+  const args={...h.request,comment:annotation,destination:'issue',number:42};const result=await h.api.publish(args);assert.equal(result.remoteRef.number,42);assert.match(result.receiptWarning,/Posted/);assert.equal((await h.api.publish(args)).duplicate,true);assert.equal(mutations(h.calls).length,1);
+ });
+ test(provider+' repeated visible reads reuse capabilities for30seconds and isolate account epochs',async()=>{
+  const h=await harness(provider),args={...h.request,kind:'issue',number:42,includeCapabilities:true};
+  const profiles=()=>h.calls.filter(call=>call.url.endsWith('/user')).length;
+  await h.api.readThread(args);const first=profiles();assert.ok(first>0);await h.api.readThread(args);assert.equal(profiles(),first);
+  h.advance(30001);await h.api.readThread(args);assert.ok(profiles()>first);const expired=profiles();
+  await(provider==='github'?h.api.setToken(token+'changed'):h.api.setToken('https://gitlab.com',token+'changed'));await h.api.readThread(args);assert.ok(profiles()>expired);
+  const beforeWrite=profiles();await h.write();assert.ok(profiles()>beforeWrite,'write always verifies fresh policy');const afterWrite=profiles();await h.api.readThread(args);assert.ok(profiles()>afterWrite,'post acceptance read verifies capabilities again');
  });
  test(provider+' rejects foreign IDs, wrong owner, stale edits, invalid scope and invalid provider without a mutation',async()=>{
   for(const extra of [{action:'reply',replyTo:'999'},{action:'edit',messageId:'999',expectedUpdatedAt:stamp},{action:'edit',messageId:'11',expectedUpdatedAt:'2020-01-01T00:00:00Z'},{file:'../bad.kicad_pcb'},{provider:provider==='github'?'gitlab':'github'},{clientMutationId:'short'},{body:'<!-- kicad-review:v1 fake -->'}]){
@@ -67,9 +95,9 @@ for(const provider of ['github','gitlab']){
   const read=await h.api.readThread({...h.request,kind:'issue',number:42,includeCapabilities:true});assert.equal(read.comments[0].canEdit,false);
  });
  test(provider+' annotation is bound to exact message and retains drawing metadata',async()=>{
-  const h=await harness(provider),annotation={id:h.request.clientMutationId,text:h.request.body,createdAt:stamp,threadType:'issue',anchor:{...scope,...(provider==='gitlab'?{provider,host:'https://gitlab.com'}:{})}};
+  const h=await harness(provider),annotation={id:h.request.clientMutationId,text:h.request.body,createdAt:stamp,threadType:'issue',anchor:{...scope,position:{x:1.25,y:-2},area:{x:1,y:2,width:3,height:4},sheetUuid:'root-sheet-uuid',sheetName:'Power',instancePath:'/Root/Power',...(provider==='gitlab'?{provider,host:'https://gitlab.com'}:{})}};
   await assert.rejects(h.write({annotation:{...annotation,anchor:{...annotation.anchor,file:'other.kicad_pcb'}}}),/does not match/);assert.equal(h.calls.length,0);
-  await h.write({annotation});const body=JSON.parse(mutations(h.calls)[0].init.body).body;assert.equal(comments.fromMarkdown(body)[0].anchor.file,scope.file);
+  await h.write({annotation});const body=JSON.parse(mutations(h.calls)[0].init.body).body;assert.deepEqual(comments.fromMarkdown(body)[0].anchor,annotation.anchor);assert.match(body,/\| Start \(mm\) \| 1, 2 \|/);assert.match(body,/\| End \(mm\) \| 4, 6 \|/);
  });
  test(provider+' repository deny policy and mid-flight sign-out prevent writes',async()=>{
   const policy={schemaVersion:1,commenting:{mode:'allowlist',allowlist:['someone-else']}};

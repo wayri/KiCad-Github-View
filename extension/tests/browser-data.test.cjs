@@ -249,3 +249,23 @@ test('repository parent inventory is bounded and unsafe links never authorize re
     null, 'github', async () => ['root.kicad_sch', 'unavailable.kicad_sch']);
   assert.match(unavailable[0].discoveryWarning, /Parent-sheet source unavailable/);
 });
+
+
+test('saved variable metadata is read only when a retained drawing contains a variable token', async () => {
+  const reads=[],root='(kicad_sch (sheet (property "Sheetfile" "child.kicad_sch")))',child='(kicad_sch (text "${PROJECT}"))';
+  const sources={'hw/root.kicad_sch':root,'hw/child.kicad_sch':child,'hw/root.kicad_pro':JSON.stringify({text_variables:{PROJECT:'VNA'}})};
+  const files=await data.loadProject('owner/repo','main','hw/root.kicad_sch',async(_repo,_ref,path)=>{reads.push(path);return sources[path]??null;});
+  assert.deepEqual(reads,['hw/root.kicad_sch','hw/child.kicad_sch','hw/root.kicad_pro']);
+  assert.equal(files[0].textVariables.PROJECT,'VNA');assert.equal(files[1].textVariables.PROJECT,'VNA');assert.equal(files[1].content,child);
+  const plainReads=[],plain=await data.loadProject('owner/repo','main','root.kicad_pcb',async(_repo,_ref,path)=>{plainReads.push(path);if(path.endsWith('.kicad_pro'))throw Error('Unexpected metadata request');return '(kicad_pcb)';});
+  assert.deepEqual(plainReads,['root.kicad_pcb']);assert.equal(plain[0].discoveryWarning,undefined);
+});
+
+test('variable-bearing drawings preserve metadata bounds, failures and cancellation',async()=>{
+  const drawing='(kicad_pcb (gr_text "${PROJECT}"))';
+  const bounded=await data.loadProject('owner/repo','main','root.kicad_pcb',async(_repo,_ref,path)=>path.endsWith('.kicad_pro')?JSON.stringify({text_variables:{PROJECT:'x'.repeat(16385)}}):drawing);
+  assert.equal(bounded[0].textVariables,undefined);assert.match(bounded[0].discoveryWarning,/text variables unavailable/);
+  const failed=await data.loadProject('owner/repo','main','root.kicad_pcb',async(_repo,_ref,path)=>{if(path.endsWith('.kicad_pro'))throw Error('Not accessible');return drawing;});
+  assert.equal(failed[0].content,drawing);assert.match(failed[0].discoveryWarning,/Not accessible/);
+  await assert.rejects(data.loadProject('owner/repo','main','root.kicad_pcb',async(_repo,_ref,path)=>{if(path.endsWith('.kicad_pro'))throw Error('Project loading cancelled.');return drawing;}),/cancelled/);
+});

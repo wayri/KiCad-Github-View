@@ -2,6 +2,14 @@
 
 KiCad Visual Review stores comments alongside the design context they refer to: repository, revision, KiCad file, optional object identity or reference, and a point or rectangular area in drawing coordinates. Each note can also carry severity (`info`, `level-1`, `minor`, `major`, or `critical`), tags, mentions, text, timestamps, and a local state (`open`, `closed`, `skipped`, `resolved`, or `wont-fix`). Area captures can include a PNG. These annotations help reviewers discuss saved design data; they do not modify the schematic or board.
 
+## Version 0.12.77 workflow
+
+The first remote send asks for destination and Terms acceptance. Acceptance remains in installation storage until removed/uninstalled or the Terms version changes. Later sends to a valid selected destination go directly; use **Destination…** under composer options to change it. New Discussion creation is explicit. Browse existing Issues/Discussions in the panel and reply there; opening by number remains available.
+
+Visible annotation/thread readers normally refresh every 3 seconds, with backoff on failures; hidden panels do not poll. Conditional responses and account-bound read-only permission snapshots reduce repeated requests. This is polling rather than server push: provider limits, permissions and connectivity can delay updates. Remote writes still check fresh authority. A confirmed post with a subsequent local-save/readback failure is identified as posted with a local recovery warning, avoiding a misleading failed-publication message.
+
+Point and rectangular comments carry canonical file, sheet label, optional saved sheet/instance identity, and drawing coordinates in millimetres. Rectangles preserve start/end coordinates in both human-readable text and the validated `kicad-review:v1` marker. Locate prefers saved identity, then explicit coordinates on the matching file; it never guesses another object. Ordinary provider comments without a marker appear in conversation threads, not as invented drawing locations.
+
 ## Where notes are stored
 
 In the browser extension, notes use browser-local storage by default. To share them through Git, open the extension's **Options**, choose **Connect existing file** or **Create review file**, and select `.kicad-review.json` in your checkout. The extension validates the file and its permission, then reads and writes it as the shared annotation store. Stage and commit the file with your normal Git workflow; the extension does not create commits. Chrome may ask you to renew file access after a restart. Disconnecting the file returns the viewer to browser-local drafts; it does not migrate those drafts automatically. Use the review JSON export/import controls when you want to move drafts explicitly.

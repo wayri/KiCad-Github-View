@@ -7,3 +7,8 @@ test('missing or excessive overview relationships are omitted explicitly, never 
  const p=[{path:'a',x:0,y:0,w:10,h:10},{path:'b',x:50,y:0,w:10,h:10}];assert.equal(route(p,[{fromPath:'a',toPath:'missing'}]).omitted,1);assert.equal(route(Array.from({length:129},(_,i)=>({...p[0],path:String(i)})),[{fromPath:'0',toPath:'1'}]).omitted,1);
  const result=route(p,Array.from({length:260},()=>({fromPath:'a',toPath:'b'})));assert.equal(result.links.length,256);assert.equal(result.omitted,4);assert.ok(result.shared>0);
 });
+
+test('net routes preserve exact saved connection endpoints',()=>{
+ const pages=[{path:'a',x:0,y:0,w:100,h:100},{path:'b',x:160,y:0,w:100,h:100}],fromAnchor={x:90,y:35},toAnchor={x:170,y:60};
+ const result=route(pages,[{fromPath:'a',toPath:'b',fromAnchor,toAnchor,name:'POWER'}]);assert.equal(result.links.length,1);assert.deepEqual(result.links[0].points[0],fromAnchor);assert.deepEqual(result.links[0].points.at(-1),toAnchor);assert.notEqual(result.links[0].points[0],fromAnchor);
+});

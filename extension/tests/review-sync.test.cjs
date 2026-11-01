@@ -11,7 +11,7 @@ test('hidden and disposed views never apply late results or keep polling',async(
  let done;const f=fixture(()=>new Promise(resolve=>done=resolve));f.sync.start('a');f.visible(false);f.sync.visibilityChanged();done({});await tick();assert.equal(f.updates.length,0);assert.equal(f.timers.size,0);f.sync.dispose();await f.sync.refresh();assert.equal(f.sync.snapshot().status,'stopped');
 });
 test('offline pauses requests and failures back off within the limit',async()=>{
- let calls=0;const f=fixture(async()=>{calls++;throw Error('network');});f.online(false);f.sync.start('a');await tick();assert.equal(calls,0);assert.equal([...f.timers.values()][0].ms,120000);f.online(true);await f.sync.refresh();assert.equal(calls,1);assert.equal([...f.timers.values()][0].ms,20000);await f.sync.refresh();assert.equal([...f.timers.values()][0].ms,40000);f.sync.dispose();
+ let calls=0;const f=fixture(async()=>{calls++;throw Error('network');});f.online(false);f.sync.start('a');await tick();assert.equal(calls,0);assert.equal([...f.timers.values()][0].ms,120000);f.online(true);await f.sync.refresh();assert.equal(calls,1);assert.equal([...f.timers.values()][0].ms,6000);await f.sync.refresh();assert.equal([...f.timers.values()][0].ms,12000);f.sync.dispose();
 });
 test('participants are bounded deduplicated observed authors, never inferred presence',()=>{
  assert.deepEqual(participants({comments:[{author:{login:'Alice',name:'A'}},{user:{username:'alice',name:'Alice'}},{author:'bob'},{author:{login:'<bad>'}}]}),[{login:'alice',name:'Alice'},{login:'bob',name:'bob'}]);

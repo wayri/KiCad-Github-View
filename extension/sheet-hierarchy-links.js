@@ -67,7 +67,7 @@
     if(root.KiCadOverviewRouting){const routed=root.KiCadOverviewRouting.route(pages,result.links);result.links=routed.links;result.omitted+=routed.omitted;result.routing=routed;}return result;
   }
 
-  function draw(view, graph, dark = false) {
+  function draw(view, graph, dark = false, style = {}) {
     const ctx = view?.ctx, camera = view?.viewport?.camera;
     if (!ctx || !camera || !graph?.links?.length) return;
     ctx.save();
@@ -77,15 +77,16 @@
       if (length < 12) continue;
       const ux = (b.x - tail.x) / length, uy = (b.y - tail.y) / length;
       const tip = {x: b.x - ux * 4, y: b.y - uy * 4};
-      ctx.beginPath(); ctx.moveTo(a.x, a.y);for(const p of path.slice(1,-1))ctx.lineTo(p.x,p.y);ctx.lineTo(tip.x, tip.y);
-      ctx.setLineDash([]); ctx.strokeStyle = dark ? '#10212b' : '#ffffff'; ctx.lineWidth = 6; ctx.stroke();
-      ctx.strokeStyle = dark ? '#69e2cf' : '#087b70'; ctx.lineWidth = 2.5; ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(a.x, a.y);
+      for(let i=1;i<path.length-1;i++){const prev=path[i-1],p=path[i],next=path[i+1],before=Math.hypot(p.x-prev.x,p.y-prev.y),after=Math.hypot(next.x-p.x,next.y-p.y),radius=Math.min(12,before/3,after/3);if(!before||!after)continue;ctx.lineTo(p.x-(p.x-prev.x)/before*radius,p.y-(p.y-prev.y)/before*radius);if(ctx.quadraticCurveTo)ctx.quadraticCurveTo(p.x,p.y,p.x+(next.x-p.x)/after*radius,p.y+(next.y-p.y)/after*radius);else ctx.lineTo(p.x,p.y);}
+      ctx.lineTo(tip.x, tip.y);
+      ctx.setLineDash(style.dashed?[4,4]:[]); ctx.strokeStyle = style.color||(dark ? '#69c4ba99' : '#398d8499'); ctx.lineWidth = 1.25; ctx.stroke();
       ctx.beginPath(); ctx.moveTo(tip.x, tip.y);
-      ctx.lineTo(tip.x - ux * 11 - uy * 5, tip.y - uy * 11 + ux * 5);
-      ctx.lineTo(tip.x - ux * 11 + uy * 5, tip.y - uy * 11 - ux * 5);
-      ctx.closePath(); ctx.fillStyle = dark ? '#69e2cf' : '#087b70'; ctx.fill();
-      const segment=path.slice(1).map((p,i)=>({a:path[i],b:p,length:Math.hypot(p.x-path[i].x,p.y-path[i].y)})).sort((a,b)=>b.length-a.length)[0];const text=link.label.slice(0,96),x=(segment.a.x+segment.b.x)/2,y=(segment.a.y+segment.b.y)/2-12;
-      ctx.font = '600 12px sans-serif';
+      ctx.lineTo(tip.x - ux * 7 - uy * 3, tip.y - uy * 7 + ux * 3);
+      ctx.lineTo(tip.x - ux * 7 + uy * 3, tip.y - uy * 7 - ux * 3);
+      ctx.closePath(); ctx.fillStyle = style.color||(dark ? '#69c4ba99' : '#398d8499'); ctx.fill();
+      const segment=path.slice(1).map((p,i)=>({a:path[i],b:p,length:Math.hypot(p.x-path[i].x,p.y-path[i].y)})).sort((a,b)=>b.length-a.length)[0];const text=String(link.label||'').slice(0,96),x=(segment.a.x+segment.b.x)/2,y=(segment.a.y+segment.b.y)/2-12;
+      ctx.font = '500 10px sans-serif';
       const width = Math.min(250, ctx.measureText(text).width + 12);
       ctx.fillStyle = dark ? '#10212b' : '#ffffff'; ctx.fillRect(x - width / 2, y - 10, width, 20);
       ctx.fillStyle = dark ? '#d9fff7' : '#07584f'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';

@@ -12,6 +12,10 @@
       if(type==='repo-model-index'&&!SHA.test(ref))throw Error('Model discovery requires an immutable revision.');
       if(type==='repository-history'&&message.page!==undefined&&(!Number.isInteger(message.page)||message.page<1||message.page>100))throw Error('Invalid repository page.');
       if(['project','project-file','project-inventory','drawing-files','project-search-files','revision-resolve','revision-commits','revision-branches'].includes(type)&&!paths.filePath(file))throw Error('Invalid GitHub project file.');
+      if(type==='repository-history'||type==='revision-commits'){
+        if(message.page!==undefined&&message.page!==1)throw Error('The GitHub website feed does not expose verified pagination. Enter a commit SHA to open older history.');
+        const result=await buffer.history(repository,ref,signal);return {...result,...(type==='revision-commits'?{file,snapshotRef:SHA.test(ref)?ref.toLowerCase():result.commits[0]?.sha}: {})};
+      }
       const snapshot=SHA.test(ref)?{sha:ref.toLowerCase()}:await buffer.resolve(repository,ref,signal);
       const sha=snapshot.sha;
       if(type==='revision-resolve')return {repository,ref,sha};
@@ -30,13 +34,12 @@
         const extension=path.split('.').pop().toLowerCase();return {...asset,mediaType:pdf?'application/pdf':extension==='glb'?'model/gltf-binary':['step','stp'].includes(extension)?'model/step':'model/vrml'};
       }
       if(type==='repository-branches'||type==='revision-branches')return {repository,branches:[],warnings:['API-free viewing: select a branch on GitHub or enter its name directly.']};
-      if(type==='repository-history'||type==='revision-commits')return {repository,ref,sha,snapshotRef:sha,commits:[],hasMore:false,nextPage:null,warnings:['API-free viewing: use GitHub commit history, then enter the selected commit SHA to compare.']};
       const inventory=await buffer.inventory(repository,sha,signal),warnings=[...(inventory.warnings||[])];
       const files=inventory.files.filter(item=>paths.filePath(item.path));
       if(type==='project-inventory')return {files,snapshotRef:sha,warnings};
       const incomplete=warnings.some(warning=>/incomplete|limited|limit reached/i.test(warning));
       if(type==='repo-model-index')return {paths:incomplete?[]:inventory.files.map(item=>item.path).filter(path=>/\.(step|stp|wrl|vrml|glb)$/i.test(path)),snapshotRef:sha,warnings:incomplete?[...warnings,'Library model matching is disabled for an incomplete inventory; explicit saved paths remain available.']:warnings};
-      if(type==='drawing-files')return {files:files.map(item=>item.path).filter(path=>/\.kicad_(sch|pcb)$/i.test(path)&&path.split('/').slice(0,-1).join('/')===file.split('/').slice(0,-1).join('/')).sort(),warnings};
+      if(type==='drawing-files')return {files:files.map(item=>item.path).filter(path=>/(?:\.kicad_(?:sch|pcb)|\.(?:sch|brd))$/i.test(path)&&path.split('/').slice(0,-1).join('/')===file.split('/').slice(0,-1).join('/')).sort(),warnings};
       if(type==='repository-tree'){
         const directory=message.directory;
         if(directory!==undefined&&!root.KiCadGitHubSessionReader.safePath(directory,true))throw Error('Invalid repository directory.');
@@ -49,7 +52,7 @@
         return {repository,ref,sha,snapshotRef:sha,directory:directory||'',entries,truncated:incomplete,hasMore,nextPage:hasMore?page+1:null,warnings};
       }
       if(type==='project'){
-        const sources=await data.loadProject(repository,sha,file,(_repo,_sha,path)=>get(path),null,'github',async()=>{if(incomplete)throw Error('Repository inventory is incomplete');return files.map(item=>item.path).filter(path=>/\.kicad_sch$/i.test(path));});
+        const sources=await data.loadProject(repository,sha,file,(_repo,_sha,path)=>get(path),null,'github',async()=>{if(incomplete)throw Error('Repository inventory is incomplete');return files.map(item=>item.path).filter(path=>/(?:\.kicad_sch|\.sch)$/i.test(path));});
         Object.defineProperty(sources,'recentSnapshotRef',{value:sha});return sources;
       }
       const sources=[],settings=[];let bytes=0;

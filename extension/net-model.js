@@ -371,7 +371,7 @@
       if(!Array.isArray(files)||files.length>(diff.MAX_FILES||128))throw new Error("Too many KiCad files to compare.");
       const paths=new Set(), inputs=[];let sourceBytes=0;
       for(const file of files) {
-        if(!file||typeof file.path!=="string"||typeof file.content!=="string"||!/\.kicad_(?:sch|pcb)$/i.test(file.path)||paths.has(file.path))throw new Error("Invalid or duplicate KiCad file entry.");
+        if(!file||typeof file.path!=="string"||typeof file.content!=="string"||!/(?:\.kicad_(?:sch|pcb)|\.(?:sch|brd))$/i.test(file.path)||paths.has(file.path))throw new Error("Invalid or duplicate KiCad file entry.");
         paths.add(file.path);
         const previous=cache.get(file.path),size=previous?.content===file.content?previous.sourceBytes:encoder.encode(file.content).length;
         sourceBytes+=size;

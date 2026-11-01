@@ -33,6 +33,7 @@ import { qualityName, qualityViewport, graphicsProfile, boardOcclusion, boardCli
 import { createResultOverlay } from "./result3d.js";
 import { sourceZoneGeometry,drillLoopInsideBoard } from "./sourceGeometry.mjs";
 import { nativePadOutline,padSourceDetails,nativeDrillOutline } from "./padGeometry.mjs";
+import {sourceSelectionRecords} from './sourceSelection.mjs';
 import { MeasurementSession,distanceLabel,snapProjectedEdges } from "./measurement3d.mjs";
 import { boardViewPresets,boardViewPreset } from "./viewPresets.mjs";
 export { mountResultScene } from "./result3d.js";
@@ -126,7 +127,8 @@ export function mountBoard3D(container, source, options = {}) {
   const initialDark = mechanical ? options.dark === true : options.dark !== false;
   const board = parseKicadBoard(source);
   const sourceAST=globalThis.KiCadDesignDiff.parse(source),savedZones=sourceZoneGeometry(sourceAST);
-  const padDetails=padSourceDetails(sourceAST),nativePads=board.pads.map(pad=>({...pad,...padDetails.get(pad.id)}));
+  const sourceRecords=sourceSelectionRecords(sourceAST,board);board.components=sourceRecords.components;
+  const padDetails=padSourceDetails(sourceAST),nativePads=sourceRecords.pads.map(pad=>({...pad,...padDetails.get(pad.uuid||pad.id)}));board.pads=nativePads;
   const geometryDiagnostics=[];
   if (!board?.bounds || !Number.isFinite(board.width) || !Number.isFinite(board.height)) {
     throw new Error("SPIKE could not parse this PCB layout.");

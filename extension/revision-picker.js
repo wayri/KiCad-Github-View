@@ -13,19 +13,39 @@
   function mount(options){
     const doc=options.holder.ownerDocument,request={...options.request};let epoch=0,disposed=false;
     const make=(tag,text)=>{const n=doc.createElement(tag);if(text!==undefined)n.textContent=text;return n;};
-    const detail=make('details');detail.className='revision-picker';const summary=make('summary','Compare commits');detail.append(summary);
+    const detail=make('details');detail.className='revision-picker';const summary=make('summary','History / compare');detail.append(summary);
     const panel=make('div');panel.className='revision-picker-panel';detail.append(panel);
-    const note=make('p','Browse branches and commits touching this drawing. Selecting refs does not change source files.');panel.append(note);
+    const note=make('p','Browse repository history, load a commit, or compare it with the displayed revision. Source files stay unchanged.');panel.append(note);
+    const advanced=make('details');advanced.append(make('summary','Manual revision comparison'));panel.append(advanced);
     const rows={};
     for(const side of ['base','head']){
       const repository=side==='base'?request.repository:request.headRepository,file=side==='base'?(request.oldFile||request.file):request.file;
-      const row=make('label',`${side==='base'?'Base':'Head'} · ${repository}`),select=make('select'),input=make('input');select.setAttribute('aria-label',`${side} branches and file commits`);input.setAttribute('aria-label',`${side} branch, tag or commit`);input.placeholder='Branch, tag or commit SHA';input.value=side==='base'?request.base||'':request.head;input.maxLength=200;select.append(make('option','Choose listed revision'));select.firstChild.value='';select.addEventListener('change',()=>{if(select.value)input.value=select.value;});row.append(select,input);panel.append(row);rows[side]={select,input,repository,file};
+      const row=make('label',`${side==='base'?'Base':'Head'} · ${repository}`),select=make('select'),input=make('input');select.setAttribute('aria-label',`${side} branches and file commits`);input.setAttribute('aria-label',`${side} branch, tag or commit`);input.placeholder='Branch, tag or commit SHA';input.value=side==='base'?request.base||'':request.head;input.maxLength=200;select.append(make('option','Choose listed revision'));select.firstChild.value='';select.addEventListener('change',()=>{if(select.value)input.value=select.value;});row.append(select,input);advanced.append(row);rows[side]={select,input,repository,file};
     }
-    const actions=make('div'),load=make('button','Load branches + history'),compare=make('button','Compare revisions'),view=make('button','View head');for(const button of [load,compare,view])button.type='button';actions.append(load,compare,view);panel.append(actions);
+    const actions=make('div'),load=make('button','Load branches + history'),compare=make('button','Compare revisions'),view=make('button','View head');for(const button of [load,compare,view])button.type='button';actions.append(load,compare,view);advanced.append(actions);
     const status=make('p');status.setAttribute('role','status');panel.append(status);options.holder.append(detail);
     const tell=text=>{status.textContent=text;};
     const busy=value=>{load.disabled=compare.disabled=view.disabled=value;};
     const send=async(type,row,ref)=>{const response=await options.send({type,...(request.provider==='gitlab'?{provider:'gitlab'}:{}),repository:row.repository,ref,file:row.file});if(!response?.ok)throw new Error(response?.error||'Repository history unavailable.');const result=response.result;if(result?.repository!==row.repository)throw new Error('Revision response repository does not match.');return result;};
+    const historyLoad=make('button','Browse commit history'),historyList=make('ol');historyLoad.type='button';historyList.className='commit-history-list';historyList.setAttribute('aria-label','Commit history');panel.insertBefore?.(historyLoad,advanced);if(panel.insertBefore)panel.insertBefore(historyList,advanced);else panel.append(historyList);
+    // Test/lightweight hosts without insertBefore still receive the real action.
+    if(!panel.insertBefore)panel.append(historyLoad);
+    async function openCommit(sha,compareCurrent=false){
+      if(!SHA.test(sha))return;const ticket=++epoch;busy(true);
+      try{let current=options.getCurrentRef?.()||request.head;if(compareCurrent&&!SHA.test(current))throw Error('Wait for the displayed revision to finish loading before comparing.');
+        if(disposed||ticket!==epoch)return;
+        if(compareCurrent){if(!SHA.test(current))throw Error('Current revision could not be resolved.');options.navigate(comparisonQuery({...request,repository:request.headRepository,oldFile:request.file},sha,current));}
+        else options.navigate(comparisonQuery(request,null,sha));
+      }catch(error){if(!disposed&&ticket===epoch)tell(error.message);}finally{if(ticket===epoch)busy(false);}
+    }
+    async function loadHistory(){
+      const ticket=++epoch;historyLoad.disabled=true;tell('Loading commit history…');
+      try{const result=await send('revision-commits',rows.head,options.getCurrentRef?.()||request.head);if(disposed||ticket!==epoch)return;if(result.file!==request.file||!SHA.test(result.snapshotRef||'')||!Array.isArray(result.commits)||result.commits.length>50||result.commits.some(c=>!SHA.test(c.sha)))throw Error('Invalid bounded commit history.');
+        historyList.replaceChildren();for(const commit of result.commits){const row=make('li'),title=make('strong',String(commit.message||'Commit').split('\n')[0].slice(0,240)),meta=make('small',[commit.sha.slice(0,10),commit.author,commit.date].filter(Boolean).join(' · ')),actions=make('div'),open=make('button','Load commit'),compare=make('button','Compare with current');for(const b of [open,compare])b.type='button';open.addEventListener('click',()=>openCommit(commit.sha));compare.addEventListener('click',()=>openCommit(commit.sha,true));actions.append(open,compare);row.append(title,meta,actions);historyList.append(row);}
+        tell(`${result.commits.length} commits shown. ${[...(result.warnings||[]),...(result.hasMore?['More history is available on the repository website.']:[])].join(' ')}`);
+      }catch(error){if(!disposed&&ticket===epoch)tell(error.message);}finally{if(!disposed)historyLoad.disabled=false;}
+    }
+    historyLoad.addEventListener('click',loadHistory);
     async function populate(){
       const ticket=++epoch;busy(true);tell('Loading bounded branch lists and file history…');
       try{
@@ -50,7 +70,7 @@
       }catch(error){if(!disposed&&ticket===epoch)tell(error.message);}finally{if(ticket===epoch)busy(false);}
     }
     load.addEventListener('click',populate);compare.addEventListener('click',()=>openComparison(true));view.addEventListener('click',()=>openComparison(false));
-    return {populate,openComparison,dispose(){disposed=true;epoch++;detail.remove();}};
+    return {populate,openComparison,loadHistory,openCommit,dispose(){disposed=true;epoch++;detail.remove();}};
   }
   const api={comparisonQuery,mount};root.KiCadRevisionPicker=api;if(typeof module==='object'&&module.exports)module.exports=api;
 })(typeof globalThis==='object'?globalThis:this);

@@ -4,7 +4,7 @@ Firefox and Firefox derivatives have a separate [installation, signing and Mozil
 
 Open saved KiCad projects, inspect schematics and layouts, and record review or assembly findings without a KiCad installation. Design sources are read-only during ordinary viewing. Review notes, assembly progress and variants are separate data; the VS Code conflict resolver is an explicit exception that can write a resolved drawing after confirmation.
 
-This guide covers browser extension **0.12.76**, VS Code **0.12.76**, and Android **1.76**. Draftsman refinements marked **0.12.70** require that build (Android 1.72); a store may still offer an earlier version. This guide distinguishes shared drawing tools from host-specific pages and account features.
+This guide describes the **0.12.77** development source (Android **1.77**); store and installed versions can lag. Draftsman refinements marked **0.12.70** require that build (Android 1.72); a store may still offer an earlier version. This guide distinguishes shared drawing tools from host-specific pages and account features.
 
 Start with the [installation guide](docs/INSTALL.md) for Android, Windows, Linux and macOS. Check the [KiCad compatibility matrix](docs/KICAD-COMPATIBILITY.md) before reviewing a new file format. Recognized KiCad 8, 9 and 10 constructs use the shared viewer; coverage is narrower for 8/9, and newer constructs may display warnings or incomplete previews.
 
@@ -467,3 +467,12 @@ move through results, Enter opens a selected result, and Escape or an outside
 click closes the list. The search displays partial-index and size limits. It
 reads saved results and does not run simulation source or repository HTML.
 Draftsman documents must still match their original source fingerprints.
+
+
+### Variant and history shortcuts (0.12.77)
+
+Use **Variant** beside the selection filter to switch saved assembly overlays. **Manage variants** remains in View options. No source geometry is changed by the selection.
+
+Open **History / compare → Browse commit history** to see the available website feed. **Load commit** opens that immutable revision; **Compare with current** compares it with the current saved revision, rather than whichever branch happens to be latest. Feed history is bounded to its available initial window. Use an exact SHA for older revisions.
+
+Highlight a net, then choose **Net instances** for the list of loaded occurrences. Open up to four mini views, drag their headers, rotate clockwise/counterclockwise, fit or Locate. These windows reuse loaded saved geometry; they do not download the repository again.

@@ -1,7 +1,7 @@
 /* Shared, side-effect-free Git host route parsing. */
 ((root) => {
   "use strict";
-  const filePattern = /(?:\.kicad_(?:sch|pcb|pro|prl|dru|wks)|\.(?:gbr|ger|gerber|gtl|gbl|gts|gbs|gto|gbo|gtp|gbp|gko|gm\d+|g\d+|drl|xln|html?|json|csv|tsv|txt|wbk|raw|pdf)|(?:^|\/)(?:fp|sym)-lib-table)$/i;
+  const filePattern = /(?:\.kicad_(?:sch|pcb|pro|prl|dru|wks)|\.(?:sch|brd|pro|lib|gbr|ger|gerber|gtl|gbl|gts|gbs|gto|gbo|gtp|gbp|gko|gm\d+|g\d+|drl|xln|html?|json|csv|tsv|txt|wbk|raw|pdf)|(?:^|\/)(?:fp|sym)-lib-table)$/i;
   const ownerPattern = /^[A-Za-z0-9_.-]+$/;
   const repoPattern = /^[A-Za-z0-9_.-]+$/;
 
@@ -27,26 +27,29 @@
   function repositoryRef(parsedRoute,scripts=[],gitlabData=null){
     if(!parsedRoute||parsedRoute.kind!=='repository')return null;
     if(!parsedRoute.tail)return 'HEAD';
-    const tail=parsedRoute.tail.join('/'),matches=[];
+    const tail=parsedRoute.tail.join('/'),matches=[],authoritative=[];
     const add=ref=>{if(typeof ref==='string'&&ref.length<=500&&ref.split('/').every(p=>p&&p!=='.'&&p!=='..')&&!/[\\\x00-\x20\x7f]/.test(ref)&&(tail===ref||tail.startsWith(ref+'/')))matches.push(ref);};
     if(gitlabData?.projectPath===parsedRoute.repository)add(gitlabData.originalBranch||gitlabData.ref);
     for(const text of scripts){
       if(typeof text!=='string'||text.length>5_000_000)continue;
       let data;try{data=JSON.parse(text);}catch{continue;}
-      const visit=(value,depth)=>{if(!value||typeof value!=='object'||depth>14)return;add(value.refInfo?.name);for(const child of Object.values(value))if(child&&typeof child==='object')visit(child,depth+1);};visit(data,0);
+      const visit=(value,depth)=>{if(!value||typeof value!=='object'||depth>14)return;
+      for(const key of ['codeViewTreeRoute','codeViewRepoRoute']){const route=value[key],ref=route?.refInfo?.name,path=route?.path==='/'?'':route?.path;if(typeof ref==='string'&&typeof path==='string'&&tail===ref+(path?'/'+path:'')){const count=matches.length;add(ref);if(matches.length>count)authoritative.push(ref);}}
+      add(value.refInfo?.name);for(const child of Object.values(value))if(child&&typeof child==='object')visit(child,depth+1);};visit(data,0);
     }
+    if(authoritative.length){const refs=[...new Set(authoritative)];return refs.length===1?refs[0]:null;}
     // Slash refs and directory paths require authoritative branch metadata.
     matches.sort((a,b)=>b.length-a.length);
     return matches[0]||(parsedRoute.tail.length===1?parsedRoute.tail[0]:null);
   }
 
   function detectedProjects(entries){
-    const files=[...new Set((Array.isArray(entries)?entries:[]).filter(item=>item?.type==='blob'&&item.mode!=='120000'&&/\.kicad_(pro|sch|pcb)$/i.test(item.path||'')&&filePath(item.path)).map(item=>item.path))];
-    const projects=files.filter(file=>/\.kicad_pro$/i.test(file));
+    const files=[...new Set((Array.isArray(entries)?entries:[]).filter(item=>item?.type==='blob'&&item.mode!=='120000'&&/(?:\.kicad_(?:pro|sch|pcb)|\.(?:sch|brd|pro))$/i.test(item.path||'')&&filePath(item.path)).map(item=>item.path))];
+    const projects=files.filter(file=>/(?:\.kicad_pro|\.pro)$/i.test(file));
     // Offer standalone drawings only in directories without a saved project.
     const directory=file=>file.includes('/')?file.slice(0,file.lastIndexOf('/')):'';
     const projectDirs=new Set(projects.map(directory));
-    return [...projects,...files.filter(file=>!/^.*\.kicad_pro$/i.test(file)&&!projectDirs.has(directory(file)))].sort((a,b)=>Number(/\.kicad_pro$/i.test(b))-Number(/\.kicad_pro$/i.test(a))||a.split('/').length-b.split('/').length||a.localeCompare(b)).slice(0,100);
+    return [...projects,...files.filter(file=>!/(?:\.kicad_pro|\.pro)$/i.test(file)&&!projectDirs.has(directory(file)))].sort((a,b)=>Number(/(?:\.kicad_pro|\.pro)$/i.test(b))-Number(/(?:\.kicad_pro|\.pro)$/i.test(a))||a.split('/').length-b.split('/').length||a.localeCompare(b)).slice(0,100);
   }
 
   function route(url, {gitlabHosts = []} = {}) {

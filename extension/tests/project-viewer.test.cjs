@@ -4,7 +4,7 @@ function runtime(fetchFile,inventoryFiles=null,inventoryError=null,options={}){
  class Element extends EventTarget{get ownerDocument(){return context.document;}get firstChild(){return this.children[0];}constructor(){super();this.children=[];this.value='';this.hidden=false;this.style={};this.dataset={};this.attributes={};this.text='';}append(...items){this.children.push(...items);}replaceChildren(...items){this.children=items;this.text='';}setAttribute(k,v){this.attributes[k]=String(v);}set textContent(v){this.text=String(v);this.children=[];}get textContent(){return this.text+this.children.map(n=>n.textContent).join(' ');}getBoundingClientRect(){return{left:0,top:0,width:800,height:600};}getContext(){return new Proxy({},{get:(o,k)=>o[k]||(()=>{}),set:(o,k,v)=>(o[k]=v,true)});}}
  const elements=new Map(),get=id=>{if(!elements.has(id))elements.set(id,new Element());return elements.get(id);},requests=[],handlers={};let mounted=null;
  const bodyClasses=new Set();const classList={add:(...names)=>names.forEach(n=>bodyClasses.add(n)),remove:(...names)=>names.forEach(n=>bodyClasses.delete(n)),toggle:(n,force)=>{const enabled=typeof force==='boolean'?force:!bodyClasses.has(n);if(enabled)bodyClasses.add(n);else bodyClasses.delete(n);return enabled;},contains:n=>bodyClasses.has(n)};
- const parentMessages=[];const context={setTimeout:(fn,ms)=>{const timer=setTimeout(fn,ms);timer.unref();return timer;},clearTimeout,parent:{postMessage:(message,origin)=>parentMessages.push({message,origin})},AbortController,KiCadLoading:options.loading,URLSearchParams,TextEncoder,TextDecoder,Map,Set,console,location:{origin:'https://viewer.test',search:'?repository=wayri/review&ref=main&file=board.kicad_pro'+(options.projectOnly?'&projectOnly=1':'')},document:{getElementById:get,createElement:()=>new Element(),createElementNS:()=>new Element(),body:{dataset:{},classList},documentElement:{style:{}}},addEventListener:(type,fn)=>handlers[type]=fn,
+ const parentMessages=[];const context={setTimeout:(fn,ms)=>{const timer=setTimeout(fn,ms);timer.unref();return timer;},clearTimeout,parent:{postMessage:(message,origin)=>parentMessages.push({message,origin})},AbortController,KiCadLoading:options.loading,URLSearchParams,TextEncoder,TextDecoder,Map,Set,console,location:{origin:'https://viewer.test',search:'?repository=wayri/review&ref=main&file=board.kicad_pro'+(options.projectOnly?'&projectOnly=1':'')},document:{querySelector:()=>null,getElementById:get,createElement:()=>new Element(),createElementNS:()=>new Element(),body:{dataset:{},classList},documentElement:{style:{}}},addEventListener:(type,fn)=>handlers[type]=fn,
  KiCadReviewWorkspace:require('../review-workspace.js'),KiCadGitHub:require('../parsing.js'),KiCadProjectSettings:require('../project-settings.js'),KiCadProjectSettingsUI:require('../project-settings-ui.js'),KiCadBoardSetupUI:require('../board-setup-ui.js'),KiCadGerberRenderer:require('../gerber-renderer.js'),KiCadUIIcons:{decorate(){}},
  KiCadOwnedCanvas:{mount(host){mounted=new EventTarget();Object.assign(mounted,{canvas:new Element(),viewport:{camera:new(require('../owned-canvas.js').Camera)(800,600)},resize(){},zoom_to_board(){},draw(){this.renderPrimitives?.(this.canvas.getContext(),this.viewport.camera,this);},dispose(){}});mounted.canvas.width=800;mounted.canvas.height=600;return mounted;}},
  chrome:{runtime:{getURL:name=>name,sendMessage:async request=>{requests.push(request);if(request.type==='project-inventory'&&inventoryError)return{ok:false,error:inventoryError};if(request.type==='project-inventory')return{ok:true,result:{snapshotRef:'a'.repeat(40),warnings:[],files:inventoryFiles||[{path:'board.kicad_pro'},{path:'top.gbr'},{path:'bottom.gbr'}]}};try{return{ok:true,result:{path:request.file,content:await fetchFile(request.file)}};}catch(e){return{ok:false,error:e.message};}}}}};
@@ -14,13 +14,13 @@ function runtime(fetchFile,inventoryFiles=null,inventoryError=null,options={}){
 }
 const gerber='%FSLAX24Y24*%%MOMM*%%ADD10C,1*%D10*X010000Y020000D03*M02*';
 test('Board Setup is an independent page and Back restores settings without reloading source',async()=>{
- const view=runtime(async()=>JSON.stringify({board:{design_settings:{rules:{min_clearance:0.2}}}}));await tick();const requests=view.requests.length;
+ const view=runtime(async()=>JSON.stringify({board:{design_settings:{rules:{min_clearance:0.2}}}}));await tick();view.get('settingsTab').onclick();const requests=view.requests.length;
  view.get('constraintsTab').onclick();assert.equal(view.bodyClasses.has('board-setup-active'),true);assert.equal(view.get('constraintsPanel').hidden,false);
  view.get('boardSetupSearch').value='clearance';view.get('boardSetupSearch').oninput();assert.match(view.get('constraintSections').textContent,/Minimum clearance/);
  view.get('boardSetupBack').onclick();assert.equal(view.bodyClasses.has('board-setup-active'),false);assert.equal(view.get('settingsPanel').hidden,false);assert.equal(view.requests.length,requests);
 });
 test('project GUI exposes saved settings and mounts the public canvas API for multiple Gerber layers',async()=>{
- const view=runtime(async file=>file.endsWith('.gbr')?gerber:'{"board":{"design_settings":{"rules":{"min_clearance":0.2}}}}');await tick();assert.match(view.get('settingSections').textContent,/Board constraints/);
+ const view=runtime(async file=>file.endsWith('.gbr')?gerber:'{"board":{"design_settings":{"rules":{"min_clearance":0.2}}}}');await tick();view.get('settingsTab').onclick();assert.match(view.get('settingSections').textContent,/Board constraints/);
  // File tree buttons use the original requested identities after SHA pinning.
  const buttons=view.get('fileTree').children;await buttons.find(n=>n.textContent==='top.gbr').onclick();await buttons.find(n=>n.textContent==='bottom.gbr').onclick();assert.equal(view.get('gerberLayers').children.length,2);assert.equal(view.canvas().primitives.length,2);assert.ok(view.requests.filter(r=>r.type==='project-file').every(r=>r.ref==='a'.repeat(40)));
  view.get('gerberClear').onclick();assert.equal(view.canvas().primitives.length,0);assert.equal(view.get('gerberLayers').children.length,0);
@@ -31,7 +31,7 @@ test('late failed source reads cannot overwrite the latest project selection',as
 });
 test('setup controls are copyable read-only fields with source inspection and boolean state',async()=>{
  const view=runtime(async()=>JSON.stringify({board:{design_settings:{rules:{min_clearance:.2,allow_blind_buried_vias:true}}},net_settings:{classes:[null,{name:'Power',clearance:.4,track_width:.6,future_setting:'kept'}]}}));await tick();
- const flatten=element=>[element,...element.children.flatMap(flatten)],all=flatten(view.get('constraintSections'));
+ view.get('settingsTab').onclick();const flatten=element=>[element,...element.children.flatMap(flatten)],all=flatten(view.get('constraintSections'));
  assert.ok(all.some(e=>e.readOnly&&e.value==='0.2'));assert.ok(all.some(e=>e.type==='checkbox'&&e.checked&&e.disabled&&e.attributes['aria-label']));
  const info=all.find(e=>e.attributes['aria-label']==='Inspect saved source for Minimum clearance');assert.ok(info);info.onclick();assert.equal(view.get('settingSourceDetail').open,true);assert.match(view.get('settingValue').textContent,/\/board\/design_settings\/rules\/min_clearance/);
  const category=flatten(view.get('settingSections')).find(e=>e.textContent==='Net classes and assignments'&&e.onclick);category.onclick();
@@ -53,8 +53,8 @@ test('PCB selection opens one drawing preview; explicit setup retains saved laye
  view.handlers.message({source:{},origin:'https://viewer.test',data:showProject});assert.equal(view.bodyClasses.has('focus-drawing'),true,'unrelated windows cannot open project controls');
  view.handlers.message({source:previewFrame.contentWindow,origin:'https://evil.test',data:showProject});assert.equal(view.bodyClasses.has('focus-drawing'),true,'wrong origins cannot open project controls');
  view.handlers.message({source:previewFrame.contentWindow,origin:'https://viewer.test',data:showProject});
- assert.equal(view.bodyClasses.has('focus-drawing'),false);assert.equal(view.get('settingsPanel').hidden,false);
- view.get('overviewTab').onclick();assert.equal(view.bodyClasses.has('focus-drawing'),true);
+ assert.equal(view.bodyClasses.has('focus-drawing'),false);assert.equal(view.get('overviewPanel').hidden,false);assert.equal(view.get('drawingPreview').hidden,true);
+ const launch=view.get('overviewContent').children.flatMap(n=>n.children).find(n=>n.textContent==='Open Layout');assert.ok(launch);launch.onclick();assert.equal(view.bodyClasses.has('focus-drawing'),true);assert.equal(view.get('drawingPreview').hidden,false);
  assert.equal(view.get('drawingPreview').children.find(n=>n.src),previewFrame,'returning to drawing preserves the iframe and drafts');
  const focusControl=view.get('drawingPreview').children[0].children[0];
  focusControl.onclick();assert.equal(view.bodyClasses.has('focus-drawing'),false);
@@ -75,7 +75,7 @@ test('project folders start collapsed outside the active path and expand for sea
 
 test('failed project metadata still opens the requested file and discloses unpinned incomplete structure',async()=>{
  const view=runtime(async()=>'{"board":{"design_settings":{"rules":{"min_clearance":0.2}}}}',null,'GitHub API rate limit reached.');await tick();
- assert.equal(view.get('projectFile').textContent,'board.kicad_pro');assert.match(view.get('settingSections').textContent,/Board constraints/);assert.match(view.get('inventoryNote').textContent,/rate limit.*not been pinned/);assert.equal(view.requests.find(r=>r.type==='project-file').ref,'main');assert.equal(view.get('loadBoardSetup').disabled,true);
+ view.get('settingsTab').onclick();assert.equal(view.get('projectFile').textContent,'board.kicad_pro');assert.match(view.get('settingSections').textContent,/Board constraints/);assert.match(view.get('inventoryNote').textContent,/rate limit.*not been pinned/);assert.equal(view.requests.find(r=>r.type==='project-file').ref,'main');assert.equal(view.get('loadBoardSetup').disabled,true);
 });
 test('failed metadata and source reads end loading with an actionable error and filename',async()=>{
  const view=runtime(async()=>{throw Error('GitHub authentication failed (HTTP 401). Reconnect your account.');},null,'GitHub denied this request.');await tick();assert.equal(view.get('projectFile').textContent,'board.kicad_pro');assert.match(view.get('projectStatus').textContent,/Unable to load board.kicad_pro.*Reconnect/);assert.doesNotMatch(view.get('projectFile').textContent,/Loading/);
@@ -93,7 +93,7 @@ test('main tree accepts only current isolated viewer hierarchy, reuses sheet ord
 
 test('settings preparation is reused only for identical revision and source',async()=>{
  let parses=0,content='{"future":1}';const loading={indicator:()=>({show(){},hide(){},dispose(){}}),paint:async()=>{},run:async(job,payload,fallback)=>{parses++;return fallback();}};
- const view=runtime(async()=>content,null,null,{loading});await tick();assert.equal(parses,1);await view.get('refreshProject').onclick();assert.equal(parses,1);assert.ok(view.get('settingSections').children.length,'cached settings must render after the previous DOM was cleared');content='{"future":42}';await view.get('refreshProject').onclick();assert.equal(parses,2);assert.match(view.get('projectSource').textContent,/42/);
+ const view=runtime(async()=>content,null,null,{loading});await tick();assert.equal(parses,1);await view.get('refreshProject').onclick();assert.equal(parses,1);view.get('settingsTab').onclick();assert.ok(view.get('settingSections').children.length,'cached settings must render after the previous DOM was cleared');content='{"future":42}';await view.get('refreshProject').onclick();assert.equal(parses,2);assert.match(view.get('projectSource').textContent,/42/);
 });
 test('superseded preparation is cancelled and its result cannot replace the new selection',async()=>{
  let finishOld,oldSignal,hideCount=0;const stages=[];
@@ -131,4 +131,10 @@ test('VS Code analysis launches an explicit native Results view without embeddin
 test('project Stop cancels the scoped read and rejects late source activation',async()=>{
  let stop,resolveFile;const loading={indicator:(host,options)=>{stop=options.onStop;return{show(){},hide(){},dispose(){}};}};
  const view=runtime(path=>new Promise(resolve=>{resolveFile=resolve;}),null,null,{loading});await tick();const pending=view.requests.find(r=>r.type==='project-file');assert.ok(pending.loadId);stop();assert.match(view.get('projectStatus').textContent,/Loading stopped/);assert.equal(view.requests.find(r=>r.type==='load-cancel').loadId,pending.loadId);resolveFile('{}');await tick();assert.doesNotMatch(view.get('projectStatus').textContent,/Viewing saved source/);
+});
+
+
+test('project starts at the file launch page and builds settings controls only on request',async()=>{
+ const view=runtime(async file=>file.endsWith('.kicad_pcb')?'(kicad_pcb)':'{}',[{path:'board.kicad_pro'},{path:'board.kicad_sch'},{path:'board.kicad_pcb'},{path:'alternate.kicad_pcb'}]);await tick();assert.equal(view.get('overviewPanel').hidden,false);assert.equal(view.get('settingSections').children.length,0);assert.match(view.get('overviewContent').textContent,/Open Schematic.*Open Layout.*Calculator.*Gerber viewer/);
+ const all=n=>[n,...n.children.flatMap(all)],open=all(view.get('overviewContent')).find(n=>n.textContent==='Open Layout'&&n.onclick);await open.onclick();assert.equal(view.requests.filter(m=>m.type==='project-file').at(-1).file,'board.kicad_pcb');
 });

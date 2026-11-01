@@ -1,0 +1,22 @@
+CHROME WEB STORE UPDATE — 0.12.77
+
+UPLOAD FILE
+kicad-visual-review-chrome-edge-brave-opera-vivaldi-chromium-0.12.77.zip
+Use the audited release-0.12.77 file and SHA256SUMS.txt.
+
+WHAT'S NEW
+- Fixed post-success errors and repeated destination prompts; faster visible-thread refresh with request caching and failure backoff.
+- Durable point/area comment anchors, direct existing-conversation replies and native field/value properties.
+- Simple file/tool project home, lazy settings preparation, restricted legacy preview and saved text variables.
+- Direct assembly variant selection and browsable website commit history: load an exact revision or compare it with current.
+- Visible cross-selection, Unsplit and theme controls; improved saved hierarchy and pin identities between 2D/3D and detached views.
+- Movable net occurrence mini-viewports with rotation and loaded-sheet highlight indicators.
+- Faster mechanical Draftsman through reused scenes and cached preview images.
+- Experimental browser Fast PI: named nets, reviewed saved stackup, explicit inputs, validated copper contacts and DC voltage/current/density/loss overlays.
+- Readable pin/pad numbers in 2D and 3D; distinct tool icons and milder curved hierarchy links.
+
+LIMITS
+History shows the website feed's initial window (up to 30 commits). Net quick views use loaded drawings. Fast PI is experimental fixed-temperature DC copper screening; no AC, return-network, thermal or qualification claims. Saved files and supported 3D assets are required. This independent viewer is not affiliated with KiCad, GitHub, GitLab or Mozilla.
+
+PERMISSION AND DATA PRACTICES
+No new permissions are introduced. Project/history reads use GitHub website/raw resources and bounded client-side buffering. Account and review actions remain explicit and can use provider APIs. Existing privacy policy and downloads/nativeMessaging justifications continue to apply.

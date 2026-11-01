@@ -21,7 +21,7 @@
   append(heading,title);append(header,back,heading,threadBadge,optionsToggle);
   const find=make('input','chat-search');find.id='chatMessageSearch';find.type='search';find.placeholder='Search messages';find.hidden=true;find.setAttribute('aria-label','Search conversation messages');searchToggle.setAttribute('aria-controls',find.id);searchToggle.setAttribute('aria-expanded','false');
   const autoLabel=make('label','chat-auto-refresh'),autoRefresh=make('input');autoRefresh.id='chatAutoRefresh';autoRefresh.type='checkbox';autoRefresh.checked=options.autoRefresh!==false;append(autoLabel,autoRefresh,make('span','','Refresh automatically'));
-  const participants=make('div','chat-participants'),syncStatus=make('small','chat-sync-status','Auto refresh · every 10 seconds while visible'),providerLink=make('a','chat-provider-link',options.provider==='gitlab'?'Open in GitLab':'Open in GitHub');providerLink.target='_blank';providerLink.rel='noopener noreferrer';providerLink.hidden=true;participants.setAttribute('aria-label','Conversation participants, not online presence');
+  const participants=make('div','chat-participants'),syncStatus=make('small','chat-sync-status','Auto refresh · every 3 seconds while visible'),providerLink=make('a','chat-provider-link',options.provider==='gitlab'?'Open in GitLab':'Open in GitHub');providerLink.target='_blank';providerLink.rel='noopener noreferrer';providerLink.hidden=true;participants.setAttribute('aria-label','Conversation participants, not online presence');
   account.textContent='Settings';account.title='Account and connection settings';
   const list=make('div','chat-messages');list.tabIndex=0;list.setAttribute('role','log');list.setAttribute('aria-label','Conversation messages');list.setAttribute('aria-live','polite');
   const jump=button('Jump to latest',()=>{list.scrollTop=list.scrollHeight;newCount=0;updateJump();},'chat-jump-latest');jump.hidden=true;
@@ -94,7 +94,7 @@
   function suggest(){closeMentions();const token=composeApi.mentionAt(input.value,input.selectionStart),ticket=mentionTicket,scopeKey=key,text=input.value,cursor=input.selectionStart,source=mentionSource.value;
    if(!token||source==='users'&&token.query.length<2)return;
    mentionTimer=timer(async()=>{mentionTimer=null;try{
-    const result=await options.request('comment-mention-users',{...options.getScope(),repository:options.repository,query:token.query.slice(0,64),source});
+    const result=await options.request('comment-mention-users',{...options.getScope(),provider:options.provider||'github',repository:options.repository,query:token.query.slice(0,64),source});
     if(disposed||key!==scopeKey||ticket!==mentionTicket||input.value!==text||input.selectionStart!==cursor)return;
     mentionList.replaceChildren();mentionRows=(result?.users||[]).filter(item=>typeof item.login==='string'&&/^[A-Za-z0-9_][A-Za-z0-9_.-]{0,254}$/.test(item.login)).slice(0,12);mentionActive=-1;
     mentionRows.forEach((user,index)=>{const row=button('@'+user.login+(user.name?' · '+String(user.name).slice(0,80):''),()=>selectMention(index));row.setAttribute('role','option');row.setAttribute('aria-selected','false');row.onpointerdown=event=>event.preventDefault();mentionList.append(row);});
@@ -132,8 +132,8 @@
     const approved=await options.confirmSend({thread:targetThread,action:payload.action,replyTo:state.reply,hasContext:!!payload.annotation,hasCapture:!!state.capture});
     if(!approved||disposed||key!==scopeKey||state.text!==body||state.mutation!==payload.clientMutationId)return;
     const now=options.getScope();if(now.repository!==payload.repository||now.ref!==payload.ref||now.file!==payload.file)throw Error('Source changed during confirmation. Review the destination again before sending.');
-    await options.request('chat-message-write',payload);sent=true;Object.assign(state,blank());if(key===scopeKey){syncComposer();message('Message sent. Refreshing conversation…');}
-    if(key===scopeKey&&conversationVisible()){if(!await readCurrent(true))throw Error('Refresh failed after posting.');message('Message sent.');}
+    const receipt=await options.request('chat-message-write',payload);sent=true;Object.assign(state,blank());if(key===scopeKey){syncComposer();message('Message sent. Refreshing conversation…');}
+    if(key===scopeKey&&conversationVisible()){if(readPromise)await readPromise;if(disposed||key!==scopeKey)return;if(!await readCurrent(true))throw Error('Refresh failed after posting.');message(receipt?.receiptWarning||'Message sent.');}
    }catch(error){if(!disposed&&key===scopeKey)message(sent?'Message sent, but refresh failed. Refresh the conversation to see it.':error.message||'Sending failed. Your draft was kept. Inspect the thread before retrying an uncertain result.',true);}
    finally{sending=false;if(!disposed)syncComposer();}
   }
@@ -152,13 +152,13 @@
     }finally{readPromise=null;readScopeKey=null;if(!disposed&&ticket===readTicket)refresh.disabled=false;}});return readPromise;
   }
   function stopAuto(){if(autoTimer!==null)cancelTimer(autoTimer);autoTimer=null;}
-  function scheduleAuto(delay=10000){stopAuto();if(disposed||!autoRefresh.checked||!thread||d.hidden)return;const epoch=autoEpoch;
+  function scheduleAuto(delay=3000){stopAuto();if(disposed||!autoRefresh.checked||!thread||d.hidden)return;const epoch=autoEpoch;
    autoTimer=timer(async()=>{autoTimer=null;if(disposed||!autoRefresh.checked||epoch!==autoEpoch)return;if(!conversationVisible()||readPromise||sending||saving||stateChanging){scheduleAuto();return;}
     const scopeKey=key,ok=await readCurrent(true);if(disposed||!autoRefresh.checked||epoch!==autoEpoch)return;if(key!==scopeKey){autoFailures=0;scheduleAuto();return;}
-    autoFailures=ok?0:Math.min(autoFailures+1,5);syncStatus.textContent=ok?'Synced · auto refresh every 10 seconds':'Sync interrupted · retrying automatically';scheduleAuto(Math.min(300000,10000*2**autoFailures));
+    autoFailures=ok?0:Math.min(autoFailures+1,7);syncStatus.textContent=ok?'Synced · auto refresh every 3 seconds':'Sync interrupted · retrying automatically';scheduleAuto(Math.min(300000,3000*2**autoFailures));
    },delay);
   }
-  autoRefresh.onchange=()=>{autoEpoch++;autoFailures=0;syncStatus.textContent=autoRefresh.checked?'Auto refresh · every 10 seconds while visible':'Automatic refresh paused';if(autoRefresh.checked)scheduleAuto();else stopAuto();};
+  autoRefresh.onchange=()=>{autoEpoch++;autoFailures=0;syncStatus.textContent=autoRefresh.checked?'Auto refresh · every 3 seconds while visible':'Automatic refresh paused';if(autoRefresh.checked)scheduleAuto();else stopAuto();};
   const visibilityChanged=()=>{if(d.hidden)stopAuto();else scheduleAuto(1000);};d.addEventListener('visibilitychange',visibilityChanged);
   function updateJump(){jump.hidden=!newCount;jump.textContent=(newCount?newCount+' new message'+(newCount===1?'':'s')+' · ':'')+'Jump to latest';}
   const date=value=>typeof value==='string'?Date.parse(value):Number(value);

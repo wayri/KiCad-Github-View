@@ -1,6 +1,6 @@
 "use strict";
 
-importScripts("github-session-reader.js", "github-project-buffer.js", "github-project-view.js", "draftsman-model.js", "draftsman-export.js", "draftsman-repository.js", "managed-policy.js", "parsing.js", "project-launch.js", "browser-data.js", "review-comments.js", "review-file-store.js", "credential-vault.js", "provider-oauth.js", "revision-fork.js", "github-review-api.js", "gitlab-provider.js", "gitlab-review-api.js", "gitlab-hosts.js", "mention-users.js", "environment-diagnostics.js", "project-recents.js", "native-kicad.js");
+importScripts("github-website-history.js", "github-session-reader.js", "github-project-buffer.js", "github-project-view.js", "draftsman-model.js", "draftsman-export.js", "draftsman-repository.js", "managed-policy.js", "parsing.js", "project-launch.js", "browser-data.js", "review-comments.js", "review-file-store.js", "credential-vault.js", "provider-oauth.js", "revision-fork.js", "github-review-api.js", "gitlab-provider.js", "gitlab-review-api.js", "gitlab-hosts.js", "mention-users.js", "environment-diagnostics.js", "project-recents.js", "native-kicad.js");
 globalThis.KiCadManagedPolicy?.installFetch();
 
 let mentionService=null;
@@ -78,7 +78,9 @@ async function githubSessionRead(repository,ref,action,path='',limit=8*1024*1024
     let reply;try{reply=await sessionLoadMessage(tab.id,{type:'github-session-read',repository,ref,action,path,limit:Math.min(limit,32*1024*1024)},signal);}catch{checkLoad(signal);continue;}
     if(!reply?.ok)continue;
     const result=reply.result;
-    if(action==='asset') {
+    if(action==='history') {
+      if(result?.ref!==ref||typeof result.content!=='string'||new TextEncoder().encode(result.content).byteLength>4*1024*1024)throw Error('Invalid GitHub website history response.');
+    }else if(action==='asset') {
       if(result===null)return null;
       if(result?.sha?.toLowerCase()!==ref.toLowerCase()||typeof result.base64!=='string'||result.base64.length>Math.ceil(limit*4/3)+4||!/^[A-Za-z0-9+/]*={0,2}$/.test(result.base64))throw Error('Invalid GitHub session asset response.');
     } else if(action==='file') {

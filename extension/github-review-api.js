@@ -389,17 +389,21 @@ const KiCadGitHubReviewApi = (() => {
     await check();
     return { token, epoch, check };
   }
+  const readbackCache = new Map();
   async function readbackJson(url, session, body) {
     await session.check();
+    const cacheKey=JSON.stringify([session.epoch,!!session.token,url]),cached=body===undefined?readbackCache.get(cacheKey):null;
     const controller = new AbortController(), timeout = setTimeout(() => controller.abort(), 30000);
     try {
       const response = await fetch(url, { method: body === undefined ? "GET" : "POST",
         headers: { Accept: "application/vnd.github+json", "X-GitHub-Api-Version": "2022-11-28",
           ...(body === undefined ? {} : { "Content-Type": "application/json" }),
-          ...(session.token ? { Authorization: `Bearer ${session.token}` } : {}) },
+          ...(session.token ? { Authorization: `Bearer ${session.token}` } : {}),
+          ...(cached ? { "If-None-Match": cached.etag } : {}) },
         ...(body === undefined ? {} : { body: JSON.stringify(body) }),
         credentials: "omit", cache: "no-store", redirect: "error", signal: controller.signal });
       await session.check();
+      if(response.status===304&&cached)return JSON.parse(cached.text);
       if (response.status === 429 || response.status === 403 && response.headers.get('x-ratelimit-remaining') === '0') throw fail("GitHub API rate limit reached. Wait before refreshing review comments.", true);
       if (!response.ok) throw fail(`GitHub review readback returned HTTP ${response.status}. Check repository and account access.`, true);
       if (Number(response.headers.get("content-length")) > 4 * 1024 * 1024) throw fail("GitHub review response exceeds the 4 MiB limit.", true);
@@ -417,9 +421,11 @@ const KiCadGitHubReviewApi = (() => {
       } catch (error) { await reader.cancel().catch(() => {}); throw error; }
       const bytes = new Uint8Array(length); let offset = 0;
       for (const chunk of chunks) { bytes.set(chunk, offset); offset += chunk.byteLength; }
-      const result = JSON.parse(new TextDecoder().decode(bytes));
+      const text = new TextDecoder().decode(bytes), result = JSON.parse(text);
       await session.check();
       if (Array.isArray(result?.errors) && result.errors.length) throw fail("GitHub denied or could not complete Discussion readback.", true);
+      const etag=response.headers.get('etag');
+      if(body===undefined&&typeof etag==='string'&&etag.length<=1024&&bytes.length<=262144){readbackCache.delete(cacheKey);readbackCache.set(cacheKey,{etag,text});if(readbackCache.size>16)readbackCache.delete(readbackCache.keys().next().value);}
       return result;
     } catch (error) {
       if (error.definitive) throw error;
@@ -442,6 +448,8 @@ const KiCadGitHubReviewApi = (() => {
   }
 
   // Conversation source identifiers are retained for server-verified chat mutations.
+  const readCapabilityCache=new Map();let capabilityGeneration=0;
+  function invalidateReadCapabilities(){capabilityGeneration++;readCapabilityCache.clear();}
   async function readThread({repository,ref,file,kind,number,provider,includeCapabilities=false}={}) {
     const scope=KiCadReviewComments.normalizeScope({repository,ref,file,provider});
     if(scope.provider==='gitlab'||!['issue','discussion'].includes(kind)||!NUMBER(number))throw fail('Invalid GitHub thread request.',true);
@@ -505,13 +513,15 @@ const KiCadGitHubReviewApi = (() => {
       }while(task.cursor);if(stopped)break;}
     }
     if(stopped)warn('Thread readback was truncated at 200 comments, 10 requests or the text limit. Open the remote thread for the complete conversation.');
-    let allowed=false,login=null;
-    if(includeCapabilities&&session.token){try{const policy=await commentPolicyStatus(repository);allowed=policy.allowed===true;login=policy.login||null;}catch{warn('Chat permissions could not be verified.');}}
+    const capabilityKey=JSON.stringify([session.epoch,capabilityGeneration,repository.toLowerCase(),kind,number,thread.updatedAt,thread.state,thread.locked,thread.isPullRequest]),cached=includeCapabilities&&session.token?readCapabilityCache.get(capabilityKey):null;
+    const reused=cached&&Date.now()-cached.at<30000;
+    let allowed=reused?cached.allowed:false,login=reused?cached.login:null;
+    if(includeCapabilities&&session.token&&!reused){try{const policy=await commentPolicyStatus(repository);allowed=policy.allowed===true;login=policy.login||null;}catch{warn('Chat permissions could not be verified.');}}
     allowed=allowed&&LOGIN.test(login||'')&&!thread.locked&&!thread.isPullRequest;
     for(const comment of comments)comment.canEdit=allowed&&!!login&&comment.author?.toLowerCase()===login.toLowerCase()&&(kind==='issue'||comment.viewerCanUpdate&&comment.viewerDidAuthor)&&!comment.bodyTruncated&&!comment.body.includes('kicad-review:');
-    let canClose=false,canReopen=false;
-    if(allowed&&includeCapabilities){try{await globalThis.KiCadManagedPolicy?.assertWrites();const state=await threadStateSnapshot(repository,kind,number,session.token,authEpoch);if(state.updatedAt===thread.updatedAt&&state.closed===(thread.state==='closed')){canClose=!state.closed&&state.viewerCanClose;canReopen=state.closed&&state.viewerCanReopen;}}catch{warn('Conversation state permissions could not be verified.');}}
-    await session.check();return {...thread,comments,warnings,capabilities:{canClose,canReopen,create:allowed,reply:allowed,edit:allowed,reactions:false,replyMode:kind==='issue'?'quoted':'native'}};
+    let canClose=reused?cached.canClose:false,canReopen=reused?cached.canReopen:false;
+    if(allowed&&includeCapabilities&&!reused){try{await globalThis.KiCadManagedPolicy?.assertWrites();const state=await threadStateSnapshot(repository,kind,number,session.token,authEpoch);if(state.updatedAt===thread.updatedAt&&state.closed===(thread.state==='closed')){canClose=!state.closed&&state.viewerCanClose;canReopen=state.closed&&state.viewerCanReopen;}}catch{warn('Conversation state permissions could not be verified.');}}
+    await session.check();if(includeCapabilities&&session.token&&!reused){readCapabilityCache.set(capabilityKey,{at:Date.now(),allowed,login,canClose,canReopen});if(readCapabilityCache.size>32)readCapabilityCache.delete(readCapabilityCache.keys().next().value);}return {...thread,comments,warnings,capabilities:{canClose,canReopen,create:allowed,reply:allowed,edit:allowed,reactions:false,replyMode:kind==='issue'?'quoted':'native'}};
   }
 
   const threadStateGraphql=async(token,query,variables,current)=>(await request('/graphql',token,{query,variables},current,undefined,{stateChange:true})).data;
@@ -523,6 +533,7 @@ const KiCadGitHubReviewApi = (() => {
     return value;
   }
   async function chatThreadState(message) {
+    invalidateReadCapabilities();
     await globalThis.KiCadManagedPolicy?.assertWrites();
     if(message?.provider!==undefined&&message.provider!=='github'||message?.host!==undefined&&message.host!=='https://github.com')throw fail('Invalid GitHub chat provider.',true);
     const {repository,ref,file}=KiCadReviewComments.normalizeScope(message||{}),{kind,number}=message.thread||{},state=message.state,expected=message.expectedUpdatedAt;
@@ -553,7 +564,9 @@ const KiCadGitHubReviewApi = (() => {
     })();locks.set(lock,work);try{return await work;}finally{locks.delete(lock);}
   }
 
+  const confirmedChat = new Map();
   async function chatMessageWrite(message) {
+    invalidateReadCapabilities();
     await globalThis.KiCadManagedPolicy?.assertWrites();
     if(message?.provider!==undefined&&message.provider!=='github'||message?.host!==undefined&&message.host!=='https://github.com')throw fail('Invalid GitHub chat provider.',true);
     const {repository,ref,file}=KiCadReviewComments.normalizeScope(message||{}),{kind,number}=message.thread||{};
@@ -569,7 +582,7 @@ const KiCadGitHubReviewApi = (() => {
       const current=authEpoch,token=await getToken(),policy=await commentPolicyStatus(repository);
       if(!policy.allowed||!LOGIN.test(policy.login||''))throw fail('Repository policy or account verification blocked this chat message.',true);
       await assertCurrentToken(token,current);
-      const saved=(await chrome.storage.local.get(key))[key];
+      const saved=confirmedChat.get(key)||(await chrome.storage.local.get(key))[key];
       const fingerprint=JSON.stringify([action,ref,file,message.messageId||null,message.replyTo||null,message.expectedUpdatedAt||null,message.body,note,policy.login.toLowerCase()]);
       const digest=Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(fingerprint))),b=>b.toString(16).padStart(2,'0')).join('');
       if(saved){if(saved.digest!==digest)throw fail('This chat request ID already belongs to another message.',true);if(saved.status==='done')return {...saved.result,duplicate:true};throw fail('Previous chat message has an unconfirmed outcome. Inspect GitHub before retrying.');}
@@ -604,7 +617,12 @@ const KiCadGitHubReviewApi = (() => {
         const updatedAt=kind==='issue'?result.updated_at:result.updatedAt;
         if(typeof updatedAt!=='string'||!/^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d(?:\.\d{1,3})?Z$/.test(updatedAt)||!Number.isFinite(Date.parse(updatedAt)))throw fail('GitHub did not confirm the message revision. Inspect the thread before retrying.');
         const response={provider:'github',kind,number,messageId:String(id),url:thread.url+(kind==='issue'?`#issuecomment-${id}`:`#discussioncomment-${id}`),updatedAt,replyTo};
-        await chrome.storage.local.set({[key]:{status:'done',digest,result:response}});return response;
+        invalidateReadCapabilities();
+        // Remote acceptance is authoritative even if local receipt storage is full.
+        const receipt={status:'done',digest,result:response};
+        try{await chrome.storage.local.set({[key]:receipt});}
+        catch{response.receiptWarning='Message sent; its local receipt could not be saved. Open the provider conversation to verify it.';confirmedChat.set(key,receipt);if(confirmedChat.size>100)confirmedChat.delete(confirmedChat.keys().next().value);}
+        return response;
       }catch(error){if(error.definitive)await chrome.storage.local.remove(key);throw error;}
     })();
     locks.set(key,work);try{return await work;}finally{locks.delete(key);}
@@ -1098,6 +1116,7 @@ const KiCadGitHubReviewApi = (() => {
     return {...confirmed,recovered:true};
   }
   async function publish(message) {
+    invalidateReadCapabilities();
     await globalThis.KiCadManagedPolicy?.assertWrites();
     const args = publishArgs(message), key = operationKey(args);
     if (locks.has(key)) return locks.get(key);
@@ -1105,9 +1124,10 @@ const KiCadGitHubReviewApi = (() => {
     locks.set(key, work);
     try { return await work; } finally { if (locks.get(key) === work) locks.delete(key); }
   }
+  const confirmedPublications = new Map();
   async function publishLocked(args, key) {
     const publicationEpoch = authEpoch;
-    const saved = (await chrome.storage.local.get(key))[key];
+    const saved = confirmedPublications.get(key)||(await chrome.storage.local.get(key))[key];
     if (saved?.status === "done" && saved.remoteRef) return { remoteRef: saved.remoteRef, ...(saved.attachments ? { attachments: saved.attachments } : {}), duplicate: true };
     if (saved?.status === "pending") {
       throw fail("A previous publication has an unconfirmed outcome. Inspect GitHub before creating another note; this extension will not retry it automatically.");
@@ -1165,8 +1185,11 @@ const KiCadGitHubReviewApi = (() => {
           url: `https://github.com/${repository}/discussions/${number}${NUMBER(result.databaseId) ? `#discussioncomment-${result.databaseId}` : ""}`,
           publishedAt: new Date().toISOString() };
       }
-      await chrome.storage.local.set({ [key]: { status: "done", remoteRef, ...(attachments ? { attachments } : {}) } });
-      return { remoteRef, ...(attachments ? { attachments } : {}) };
+      invalidateReadCapabilities();
+      const receipt={status:'done',remoteRef,...(attachments?{attachments}:{})};
+      try{await chrome.storage.local.set({[key]:receipt});}
+      catch{confirmedPublications.set(key,receipt);if(confirmedPublications.size>100)confirmedPublications.delete(confirmedPublications.keys().next().value);return {remoteRef,...(attachments?{attachments}:{}),receiptWarning:'Posted to GitHub; the local publication receipt could not be saved.'};}
+      return {remoteRef,...(attachments?{attachments}:{})};
     } catch (error) {
       if (error.definitive) await chrome.storage.local.remove(key);
       throw error;

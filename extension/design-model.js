@@ -16,7 +16,7 @@
   const RESERVED = new Set(["reference", "uuid", "path", "dnp", "exclude from bom",
     "exclude from board", "unit", "source fingerprint"]);
   const validPath = (path) => typeof path === "string" && path.length <= 500 &&
-    /\.kicad_(?:sch|pcb)$/i.test(path) && !path.startsWith("/") &&
+    /(?:\.kicad_(?:sch|pcb)|\.(?:sch|brd))$/i.test(path) && !path.startsWith("/") &&
     path.split("/").every((part) => part && part !== "." && part !== ".." && !/[\\\x00-\x1f]/.test(part));
   // Variant rules also identify parts in inert imported BoM sources. Drawing
   // traversal continues to use validPath and accepts native KiCad files only.
@@ -51,7 +51,7 @@
     return { populated: !dnp, populationReason, excludeFromBom, excludeFromBoard };
   }
   function childPath(parent, name) {
-    if (typeof name !== "string" || !/\.kicad_sch$/i.test(name) || name.startsWith("/") || name.includes("\\")) return null;
+    if (typeof name !== "string" || !/(?:\.kicad_sch|\.sch)$/i.test(name) || name.startsWith("/") || name.includes("\\")) return null;
     const parts = parent.split("/").slice(0, -1);
     for (const part of name.split("/")) {
       if (part === "..") { if (!parts.length) return null; parts.pop(); }

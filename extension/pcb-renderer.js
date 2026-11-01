@@ -36,7 +36,7 @@
     A: [279.4, 215.9], B: [431.8, 279.4], C: [558.8, 431.8], D: [863.6, 558.8], E: [1117.6, 863.6],
     USLetter: [279.4, 215.9], USLegal: [355.6, 215.9], USLedger: [431.8, 279.4] };
   function pageOf(ast, warnings) {
-    const paper = child(ast, "paper");
+    const paper = child(ast, "paper") || child(ast, "page");
     const name = String(value(paper?.[1]) || "A4");
     let size = paperSizes[name];
     if (name === "User") size = [num(paper?.[2]), num(paper?.[3])];
@@ -79,11 +79,12 @@
     }
     return oval(height, width).map((p) => ({x:p.y,y:p.x}));
   }
-  function build(ast, path = "") {
+  function build(ast, path = "", options = {}) {
     const warnings = [], primitives = [];
     if (kind(ast) !== "kicad_pcb") throw new Error("Expected a KiCad PCB AST.");
     const compatibility=Compatibility?.inspect(ast);
     warnings.push(...(compatibility?.warnings||[]));
+    const variableText=Compatibility?.textResolver(ast,{...options,path},message=>{if(!warnings.includes(message))warnings.push(message);}),variableFields=new Map();
     const page = pageOf(ast, warnings);
     const layerNames = (child(ast, "layers") || []).slice(1).filter(Array.isArray).map((part) => String(value(part[1])));
     const push = (primitive) => {
@@ -122,7 +123,13 @@
       };
       if (["gr_line", "fp_line"].includes(type)) withPoints("line", [point(node,"start"),point(node,"end")]);
       else if (["gr_arc", "fp_arc", "arc"].includes(type)) {
-        const start = point(node,"start"), mid = point(node,"mid"), end = point(node,"end");
+        let start = point(node,"start"), mid = point(node,"mid"), end = point(node,"end");
+        if(start && end && !mid && child(node,"angle")){
+          // KiCad 4/5 arcs store a centre and start point, with a signed sweep.
+          const center=start,sweep=num(field(node,"angle"))*Math.PI/180,dx=end.x-center.x,dy=end.y-center.y;
+          const at=theta=>({x:center.x+dx*Math.cos(theta)-dy*Math.sin(theta),y:center.y+dx*Math.sin(theta)+dy*Math.cos(theta)});
+          start=end;mid=at(sweep/2);end=at(sweep);
+        }
         if (start && mid && end) push({ type:"arc", start:transform(start), mid:transform(mid), end:transform(end), width, ...meta });
         else warn(type, node);
       } else if (["gr_rect", "fp_rect"].includes(type)) {
@@ -145,7 +152,7 @@
         const effects = child(node,"effects"), font = child(effects,"font");
         const fontSize = child(font,"size"), justify = child(effects,"justify");
         const justification = justify?.slice(1).map((part) => String(value(part))) || [];
-        if (at && content != null) push({ type:"text", text:String(content), ...transform(at),
+        if (at && content != null) push({ type:"text", text:variableText?.resolve(content,variableFields.get(owner.uuid)||{})??String(content), ...transform(at),
           size:num(fontSize?.[2],1), angle:-rotation(node), width:.15,
           property:type==="property"?String(value(node[1])):type==="fp_text"&&value(node[1])==="reference"?"Reference":type==="fp_text"&&value(node[1])==="value"?"Value":undefined,
           bold:hasAtom(font,"bold") || !!child(font,"bold"),
@@ -246,7 +253,7 @@
           if (drill > 0) push({ type:"circle", ...at, r:drill/2, layer:copper, color:"#111b25", fill:true,
             hole:true, uuid:uuid(node) || undefined, kind:"drill", objectCategory:"vias" });
         }
-      } else if (type === "footprint") {
+      } else if (["footprint","module"].includes(type)) {
         const origin = point(node,"at");
         if (!origin) { warn("Footprint without placement",node); continue; }
         const angle = rotation(node);
@@ -254,7 +261,11 @@
         // flip. Applying another mirror places pads on the wrong side.
         const transform = transformed(origin,angle);
         const properties = children(node,"property");
-        const reference = String(value(properties.find((part) => String(value(part[1])) === "Reference")?.[2]) || "");
+        const local=variableText?.fields(node)||{};
+        for(const sub of children(node,"fp_text")){const name=String(value(sub[1]));if(name==='reference')local.Reference=String(value(sub[2])??'');if(name==='value')local.Value=String(value(sub[2])??'');}
+        if(local.Reference!==undefined)local.REFERENCE=local.Reference;if(local.Value!==undefined)local.VALUE=local.Value;
+        if(uuid(node))variableFields.set(uuid(node),local);
+        const reference = local.Reference||"";
         const owner = { uuid:uuid(node), reference };
         const firstPrimitive = primitives.length;
         for (const sub of node.slice(1)) {
@@ -262,7 +273,7 @@
           const subType = kind(sub), subLayer = String(field(sub,"layer") || layer);
           if (subType === "pad") pad(sub,owner,transform);
           else if (["fp_line","fp_arc","fp_rect","fp_circle","fp_poly","fp_text"].includes(subType)) drawShape(sub,subLayer,transform,owner);
-          else if (subType === "property" && ["Reference","Value"].includes(String(value(sub[1])))) drawShape(sub,subLayer,transform,owner);
+          else if (subType === "property") drawShape(sub,subLayer,transform,owner);
         }
         const padPrimitives = primitives.slice(firstPrimitive).filter((part) => part.type === "pad");
         const coordinates = padPrimitives.flatMap((part) => part.points || (part.r ? [

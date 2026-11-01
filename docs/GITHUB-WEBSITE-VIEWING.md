@@ -20,8 +20,10 @@ Linked files named explicitly by the saved drawing can still be fetched directly
 Missing model libraries on the author's computer cannot be inferred or downloaded
 from unrelated sources.
 
-API-based branch lists and commit graphs are not fetched automatically. Select
-the branch or commit on GitHub and enter its name/SHA in the viewer to compare.
+API-based branch lists and commit graphs are not fetched. History / compare can
+load GitHub’s website Atom feed on request (up to its initial 30 commits), then
+open an immutable commit or compare it with the displayed revision. Older SHAs
+can be entered explicitly; verified website-feed pagination is unavailable.
 Explicit issue, discussion, publishing and account actions remain separate and
 may use the provider API. Merely loading a drawing does not check comment policy
 or start automatic GitHub comment polling.

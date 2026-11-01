@@ -112,7 +112,7 @@ const KiCadReviewComments = (() => {
   }
   function normalizeAnchor(anchor) {
     const result = normalizeScope(anchor);
-    for (const [name, limit] of [["uuid", 200], ["objectId", 200], ["reference", 100], ["netName", 500], ["kind", 80], ["variant", 100]]) {
+    for (const [name, limit] of [["uuid", 200], ["objectId", 200], ["reference", 100], ["netName", 500], ["kind", 80], ["variant", 100], ["sheetUuid", 200], ["sheetName", 500], ["instancePath", 2000]]) {
       const value = optional(anchor[name], name, limit);
       if (value !== undefined) result[name] = value;
     }
@@ -244,9 +244,13 @@ const KiCadReviewComments = (() => {
       [targetLabel, targetValue],
       ...(anchor.position ? [["Position (mm)", `${anchor.position.x}, ${anchor.position.y}`]] : []),
       ...(anchor.area ? [["Area (mm)", `${anchor.area.x}, ${anchor.area.y}; ${anchor.area.width} × ${anchor.area.height}`]] : []),
+      ...(anchor.area ? [["Start (mm)", `${anchor.area.x}, ${anchor.area.y}`], ["End (mm)", `${anchor.area.x + anchor.area.width}, ${anchor.area.y + anchor.area.height}`]] : []),
       ["Repository", anchor.repository],
       ["Revision", anchor.ref],
       ["Design file", fileValue, true],
+      ...(anchor.sheetName ? [["Sheet", anchor.sheetName]] : []),
+      ...(anchor.sheetUuid ? [["Sheet UUID", anchor.sheetUuid]] : []),
+      ...(anchor.instancePath ? [["Sheet instance path", anchor.instancePath]] : []),
       ...(anchor.variant ? [["Variant", anchor.variant]] : []),
       ...(anchor.uuid ? [["KiCad UUID", anchor.uuid]] : []),
       ...(anchor.objectId ? [["Object ID", anchor.objectId]] : []),

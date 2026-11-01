@@ -8,12 +8,13 @@
   const options={gitlabHosts:[url.origin]},repo=parse.repositoryRoute(url.href,options),blob=parse.route(url.href,options);
   if(blob?.kind==='blob'){
    const info=parse.blobRequest(blob,hint);
-   if(info&&/\.kicad_(pro|sch|pcb)$/i.test(info.file))return{kind:'drawing',...info};
+   if(info&&/(?:\.kicad_(?:pro|sch|pcb)|\.(?:sch|brd|pro))$/i.test(info.file))return{kind:'drawing',...info};
   }
   if(repo){
    const ref=repo.tail?hint?.ref||parse.repositoryRef(repo):'HEAD';
    if(!ref||repo.tail&&!(repo.tail.join('/')===ref||repo.tail.join('/').startsWith(ref+'/')))throw Error('The branch is ambiguous. Open the repository root or a KiCad file, then click the extension again.');
-   return{kind:'repository',source:url.origin+url.pathname,repository:repo.repository,ref,...(repo.provider?{provider:repo.provider,host:repo.host}:{})};
+   if(repo.tail?.some(part=>!part||part==='.'||part==='..'||/[\\:\x00-\x1f\x7f]/.test(part)))throw Error('Invalid repository directory.');
+   return{kind:'repository',source:url.origin+url.pathname,repository:repo.repository,ref,...(repo.tail?{directory:repo.tail.join('/').slice(ref.length).replace(/^\//,'')}:{}),...(repo.provider?{provider:repo.provider,host:repo.host}:{})};
   }
   // Issue, pull-request and unsupported file pages still belong to a repository.
   const parts=url.pathname.split('/').filter(Boolean),split=url.origin==='https://github.com'?2:parts.indexOf('-');
@@ -22,10 +23,10 @@
   const repository=names.join('/');return{kind:'repository',source:url.origin+'/'+repository,repository,ref:'HEAD',...(url.origin!=='https://github.com'?{provider:'gitlab',host:url.origin}:{})};
  }
  function viewerURL(info,file,getURL){
-  if(typeof file!=='string'||!root.KiCadGitHub?.filePath(file)||!/\.kicad_(pro|sch|pcb)$/i.test(file))throw Error('Invalid KiCad project path.');
+  if(typeof file!=='string'||!root.KiCadGitHub?.filePath(file)||!/(?:\.kicad_(?:pro|sch|pcb)|\.(?:sch|brd|pro))$/i.test(file))throw Error('Invalid KiCad project path.');
   const head=info.sha||info.head,params=new URLSearchParams({repository:info.repository,ref:head,head,file});
   if(info.provider==='gitlab'){params.set('provider','gitlab');params.set('host',info.host||'https://gitlab.com');}
-  return getURL(/\.kicad_pro$/i.test(file)?'project-viewer.html':'browser-viewer.html')+'?'+params;
+  return getURL(/(?:\.kicad_pro|\.pro)$/i.test(file)?'project-viewer.html':'browser-viewer.html')+'?'+params;
  }
  const api={context,viewerURL};root.KiCadProjectLaunch=api;if(typeof module==='object'&&module.exports)module.exports=api;
 })(globalThis);

@@ -2,6 +2,13 @@
 ((root)=>{
   'use strict';
   const paths={
+    'net-instances':'M2 3h8v7H2z M14 3h8v7h-8z M8 15h8v7H8z M6 10v2h12v-2 M12 12v3',
+    'native-kicad':'M4 3h8v4H8v10h4v4H4z M14 8l7 4-7 4z',
+    dashboard:'M3 3h7v7H3z M14 3h7v7h-7z M3 14h7v7H3z M14 14h7v7h-7z',
+    draftsman:'M3 3h14l4 4v14H3z M17 3v5h4 M6 16h12 M8 13v6m8-6v6 M7 7h6',
+    'fast-pi':'M13 2 5 13h6l-1 9 9-13h-6z',
+    download:'M4 16v5h16v-5 M12 3v12m-5-5 5 5 5-5',
+    history:'M3 4v6h6 M4 9a8 8 0 1 1 0 7 M12 7v6l4 2',
     analytics:'M3 3v18h18 M7 17v-5h3v5 M12 17V7h3v10 M17 17v-8h3v8',
     star:'m12 3 3 6 7 1-5 5 1 7-6-3-6 3 1-7-5-5 7-1z',
     bookmark:'M6 3h12v19l-6-4-6 4z',
@@ -41,9 +48,6 @@
     flip:'M3 5h7v14H3z M15 5h6v14h-6 M12 2v20 M16 9l3 3-3 3',
     cube:'m12 2 9 5v10l-9 5-9-5V7z M3 7l9 5 9-5M12 12v10',
     theme:'M12 3a9 9 0 1 0 9 9c-6 2-11-3-9-9z',
-    settings:'M4 6h16M4 12h16M4 18h16M8 3v6m8 0v6M10 15v6',
-    area:'M3 9V3h6m6 0h6v6M3 15v6h6m6 0h6v-6 M8 11h8m-4-4v8',
-    camera:'M3 7h5l2-3h4l2 3h5v13H3z M16 13a4 4 0 1 1-8 0 4 4 0 0 1 8 0z',
     settings:'M4 6h16M4 12h16M4 18h16M8 3v6m8 0v6M10 15v6',
     area:'M3 9V3h6m6 0h6v6M3 15v6h6m6 0h6v-6 M8 11h8m-4-4v8',
     camera:'M3 7h5l2-3h4l2 3h5v13H3z M16 13a4 4 0 1 1-8 0 4 4 0 0 1 8 0z',

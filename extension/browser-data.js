@@ -2,7 +2,7 @@
 ((root) => {
   "use strict";
   const repositoryPattern = /^[A-Za-z0-9_.-]+(?:\/[A-Za-z0-9_.-]+)+$/;
-  const filePattern = /\.kicad_(?:sch|pcb)$/i;
+  const filePattern = /(?:\.kicad_(?:sch|pcb)|\.(?:sch|brd))$/i;
   const PROJECT_MAX_BYTES = 96 * 1024 * 1024;
   const PROJECT_MAX_FILES = 128, PARENT_MAX_CANDIDATES = 128, READ_CONCURRENCY = 4;
   const fileByteLimit = (path) => /\.(wbk|raw|csv|tsv|json|html?|txt)$/i.test(path) ? 64 * 1024 * 1024 : (/\.kicad_pcb$/i.test(path) ? 64 : 8) * 1024 * 1024;
@@ -22,7 +22,7 @@
   }
 
   function childPath(parent, name) {
-    if (typeof name !== "string" || !/\.kicad_sch$/i.test(name) ||
+    if (typeof name !== "string" || !/(?:\.kicad_sch|\.sch)$/i.test(name) ||
         name.startsWith("/") || /[\\\0:]/.test(name)) return null;
     const parts = parent.split("/").slice(0, -1);
     for (const part of name.split("/")) {
@@ -36,6 +36,10 @@
   function sheetFiles(source) {
   // Bounded S-expression context; only properties of top-level sheet objects
   // authorize child reads. Comments, text, and library properties are ignored.
+  if (/^\s*EESchema Schematic File Version [24]\b/.test(source)) {
+    const legacy=root.KiCadLegacy||(typeof module==='object'&&module.exports?require('./legacy-kicad.js'):null);
+    if(!legacy)throw Error('Legacy schematic adapter is unavailable.');return legacy.sheetFiles(source);
+  }
   const names=[],stack=[];let i=0,nodes=0,roots=0;
   while(i<source.length) {
     const c=source[i];if(/\s/.test(c)){i++;continue;}
@@ -71,7 +75,7 @@
   // must be acyclic and all parent branches must converge on one root.
   function rootSheetPath(files, start) {
     if (files.length > PROJECT_MAX_FILES) return null;
-    const sources = new Map(files.filter(file => /\.kicad_sch$/i.test(file.path)).map(file => [file.path, file.content]));
+    const sources = new Map(files.filter(file => /(?:\.kicad_sch|\.sch)$/i.test(file.path)).map(file => [file.path, file.content]));
     if (!sources.has(start)) return null;
     const parents = new Map([...sources.keys()].map(path => [path, new Set()]));
     for (const [path, content] of sources) for (const name of sheetFiles(content)) {
@@ -121,7 +125,7 @@
       try { return await work; } finally { inFlight.delete(path); }
     }
     function descendants(path, content) {
-      if (!sheetCache.has(path)) sheetCache.set(path, content === null || !/\.kicad_sch$/i.test(path) ? [] :
+      if (!sheetCache.has(path)) sheetCache.set(path, content === null || !/(?:\.kicad_sch|\.sch)$/i.test(path) ? [] :
         sheetFiles(content).map(name => childPath(path, name)).filter(Boolean));
       return sheetCache.get(path);
     }
@@ -143,7 +147,7 @@
     if (await read(file) === null) throw new Error(`KiCad file was not returned by ${provider === "gitlab" ? "GitLab" : "GitHub"} (HTTP 404): ${repository}, revision ${ref}, path ${file}. The file may be missing or repository access may be unavailable. ${provider === "gitlab" ? "Sign in to the matching GitLab server in extension settings and check your project access." : "Keep this repository open in a signed-in GitHub tab, or use Sign in with GitHub with private repository access in extension settings. Advanced tokens require this repository's Contents read permission."}`);
     let roots = [file];
     let discoveryWarning = null;
-    if (/\.kicad_sch$/i.test(file) && (listDirectory || listSchematics)) {
+    if (/(?:\.kicad_sch|\.sch)$/i.test(file) && (listDirectory || listSchematics)) {
       try {
       const candidates = new Set([file]);
       if (listSchematics) {
@@ -151,7 +155,7 @@
         if (!Array.isArray(listing)) throw new Error("Provider returned an incomplete schematic repository listing.");
         if (listing.length > PARENT_MAX_CANDIDATES) throw new Error("More than 128 parent-sheet candidates; open the project root directly.");
         for (const path of listing) {
-          if (!validPath(path) || !/\.kicad_sch$/i.test(path)) throw new Error("Provider returned an unsafe schematic repository listing.");
+          if (!validPath(path) || !/(?:\.kicad_sch|\.sch)$/i.test(path)) throw new Error("Provider returned an unsafe schematic repository listing.");
           candidates.add(path);
           if (candidates.size > PARENT_MAX_CANDIDATES) throw new Error("More than 128 parent-sheet candidates; open the project root directly.");
         }
@@ -166,7 +170,7 @@
           throw new Error("GitHub returned an incomplete schematic directory listing.");
         }
         for (const path of listing) {
-          if (!validPath(path) || !/\.kicad_sch$/i.test(path) ||
+          if (!validPath(path) || !/(?:\.kicad_sch|\.sch)$/i.test(path) ||
               path.split("/").slice(0, -1).join("/") !== directory) {
             throw new Error("GitHub returned an unsafe schematic directory listing.");
           }
@@ -225,6 +229,28 @@
         files.push({ path, content });
         for (const child of descendants(path, content)) if (!seen.has(child)) queue.push(child);
       }
+    }
+    if (/\.sch$/i.test(file)) {
+      const libraryPaths=[...new Set(roots.filter(path=>/\.sch$/i.test(path)).map(path=>path.replace(/\.sch$/i,'-cache.lib')))].slice(0,8),legacyLibraries=[];
+      for(const path of libraryPaths){try{const content=await read(path);if(content!==null)legacyLibraries.push({path,content});}catch(error){if(error?.name==='AbortError'||/cancelled/i.test(error.message||''))throw error;discoveryWarning=[discoveryWarning,'Legacy cache library unavailable: '+path+' ('+error.message+').'].filter(Boolean).join(' ');}}
+      for(const entry of files)if(/\.sch$/i.test(entry.path))entry.legacyLibraries=legacyLibraries;
+    }
+    if (/\.kicad_(?:sch|pcb)$/i.test(file) && files.some(entry=>entry.content.includes('${'))) {
+      const projectPath=roots[0].replace(/\.kicad_(?:sch|pcb)$/i,'.kicad_pro');
+      try {
+        const content=await read(projectPath);
+        if(content!==null){
+          if(encoder.encode(content).length>1024*1024)throw Error('Project settings exceed the text-variable metadata limit.');
+          const variables=JSON.parse(content)?.text_variables;
+          if(variables&&typeof variables==='object'&&!Array.isArray(variables)){
+            const entries=Object.entries(variables);let chars=0;
+            if(entries.length>256)throw Error('Too many saved project text variables.');
+            const textVariables=Object.create(null);
+            for(const [name,text] of entries){if(name.length>200||typeof text!=='string'||text.length>16384||(chars+=name.length+text.length)>65536)throw Error('Saved project text variables exceed their metadata limits.');textVariables[name]=text;}
+            for(const entry of files)entry.textVariables=textVariables;
+          }
+        }
+      } catch(error){if(error?.name==='AbortError'||/cancelled/i.test(error.message||''))throw error;discoveryWarning=[discoveryWarning,'Saved project text variables unavailable ('+error.message+').'].filter(Boolean).join(' ');}
     }
     if (discoveryWarning && files.length) files[0].discoveryWarning = discoveryWarning;
     return files;

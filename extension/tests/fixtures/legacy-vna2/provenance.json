@@ -1,0 +1,25 @@
+{
+  "repository": "Ttl/vna2",
+  "sha": "2cf0efb22da56a168a7f07bf5e2c30631343997b",
+  "sources": [
+    {
+      "path": "hw/vna2.kicad_pcb",
+      "url": "https://raw.githubusercontent.com/Ttl/vna2/2cf0efb22da56a168a7f07bf5e2c30631343997b/hw/vna2.kicad_pcb",
+      "sha256": "4c083a70b2a6b317e5727761e71da3d9cbf6cdfc82b3629a9460a5a358ea5243",
+      "bytes": 2643199
+    },
+    {
+      "path": "hw/vna2.sch",
+      "url": "https://raw.githubusercontent.com/Ttl/vna2/2cf0efb22da56a168a7f07bf5e2c30631343997b/hw/vna2.sch",
+      "sha256": "be5598c249d8275e62b724ef3ec1edec65266c7b8183042df846876592fdf987",
+      "bytes": 27600
+    },
+    {
+      "path": "hw/vna2-cache.lib",
+      "url": "https://raw.githubusercontent.com/Ttl/vna2/2cf0efb22da56a168a7f07bf5e2c30631343997b/hw/vna2-cache.lib",
+      "sha256": "9174987d90fc1d40b672380bed43244a24553608562e49ef107cff151cb1ee2f",
+      "bytes": 34703
+    }
+  ],
+  "retained": "board-excerpt contains the saved header, layers and two modules including 584E6390. Schematic retained byte-for-byte; cache contains only definitions referenced by its root sheet."
+}

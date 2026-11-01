@@ -9,7 +9,7 @@
   const SCHEMATIC = new Set(["symbol", "sheet", "wire", "bus", "bus_entry", "label",
     "global_label", "hierarchical_label", "junction", "no_connect", "text", "text_box",
     "polyline", "rectangle", "circle", "arc", "image"]);
-  const BOARD = new Set(["footprint", "segment", "arc", "via", "zone", "gr_line",
+  const BOARD = new Set(["module", "footprint", "segment", "arc", "via", "zone", "gr_line",
     "gr_rect", "gr_circle", "gr_arc", "gr_poly", "gr_curve", "gr_text", "gr_text_box",
     "gr_bitmap", "dimension", "target"]);
   const OMIT = new Set(["uuid", "tstamp", "filled_polygon", "fill_segments"]);
@@ -18,8 +18,14 @@
   // KiCad files are overwhelmingly ASCII. Keep the same ECMAScript whitespace
   // grammar without constructing/testing a regular expression for every byte.
   const spaceCode=code=>code===32||(code>=9&&code<=13)||(code>127&&/\s/.test(String.fromCharCode(code)));
-  function parse(source) {
+  function parse(source, options = {}) {
     if (typeof source !== "string") throw new TypeError("KiCad source must be a string.");
+    if (/^\s*PCBNEW-BOARD/.test(source))throw Error('Legacy .brd boards are detected but this drawing format is not yet rendered. Open and save a separate .kicad_pcb copy in KiCad.');
+    if (/^\s*EESchema Schematic File Version [24]\b/.test(source)) {
+      const legacy=root.KiCadLegacy||(typeof module==='object'&&module.exports?require('./legacy-kicad.js'):null);
+      if(!legacy)throw Error('Legacy schematic adapter is unavailable; reload the extension.');
+      return legacy.parse(source,options);
+    }
     const board = /^\s*\(kicad_pcb(?:\s|\))/.test(source);
     if (new TextEncoder().encode(source).length > (board ? 64 * 1024 * 1024 : MAX_FILE)) throw new Error("KiCad file exceeds browser parser size limits.");
     const nodeLimit = board ? 6000000 : MAX_NODES;
@@ -64,7 +70,14 @@
       while (i < source.length) { const code=source.charCodeAt(i);if(code===40||code===41||code===59||code===34||spaceCode(code))break;i++; }
       if (start === i) throw new Error("Unexpected KiCad source character.");
       const token = source.slice(start, i);
-      if (NUMBER.test(token)) {
+      // Legacy hexadecimal timestamps and unquoted names may look like
+      // decimal exponents (e.g. 59E99999). Keep identity fields lexical.
+      const parent = stack[stack.length - 1], tag = parent?.[0];
+      const lexical = ["uuid", "tstamp", "tedit", "path", "lib_id", "host", "generator", "generator_version"].includes(tag) ||
+        (["module", "footprint", "symbol"].includes(tag) && parent.length === 1) ||
+        (tag === "net" && parent.length === 2) || (tag === "fp_text" && parent.length === 2) ||
+        (tag === "gr_text" && parent.length === 1) || (tag === "pad" && parent.length === 1);
+      if (NUMBER.test(token) && !lexical) {
         const number = Number(token);
         if (!Number.isFinite(number)) throw new Error("Invalid numeric KiCad value.");
         append(number);
@@ -76,7 +89,7 @@
     return roots[0];
   }
   const value = (item) => item && typeof item === "object" && !Array.isArray(item) ? item.quoted : item;
-  const kindOf = (form) => Array.isArray(form) ? String(value(form[0])) : "";
+  const kindOf = (form) => Array.isArray(form) ? (value(form[0]) === "module" ? "footprint" : String(value(form[0]))) : "";
   const children = (form, kind) => form.filter((item) => Array.isArray(item) && kindOf(item) === kind);
   const child = (form, kind) => children(form, kind)[0];
   const second = (form, kind) => value(child(form, kind)?.[1]);
@@ -172,8 +185,8 @@
     return { key, scope: key, signature, metadata: {
       uuid: identityValue.uuid, position, properties: props }, path, kind, label, form };
   }
-  function collect(path, content, onParsed = null) {
-    const rootForm = parse(content);
+  function collect(path, content, onParsed = null, options = {}) {
+    const rootForm = parse(content, options);
     onParsed?.(rootForm);
     const rootKind = kindOf(rootForm);
     if (rootKind !== "kicad_sch" && rootKind !== "kicad_pcb") throw new Error("Expected a KiCad schematic or board.");
@@ -192,7 +205,7 @@
       const definition = kindOf(form) === "symbol" ? definitions.get(String(second(form, "lib_id"))) : null;
       const record = objectRecord(path, form, null, definition);
       objects.push(record);
-      if (rootKind === "kicad_pcb" && record.kind === "footprint") {
+      if (rootKind === "kicad_pcb" && ["footprint","module"].includes(record.kind)) {
         for (const pad of children(form, "pad")) objects.push(objectRecord(path, pad,
           { form, position: record.metadata.position, scope: record.scope, label: record.label }));
       }
@@ -204,7 +217,7 @@
   function prepareProject(files) {
     const parsed = new Map(), records = projectObjects(files, (file, ast) => parsed.set(file.path, ast));
     const snapshot = Object.freeze({});
-    preparedProjects.set(snapshot, {files: files.map(file => ({path: file.path, content: file.content})), parsed, records});
+    preparedProjects.set(snapshot, {files: files.map(file => ({path: file.path, content: file.content, libraries:JSON.stringify(file.legacyLibraries||[])})), parsed, records});
     return snapshot;
   }
   function preparedFile(snapshot, path) {
@@ -216,7 +229,7 @@
     if (snapshot) {
       const state = preparedProjects.get(snapshot);
       if (!state || !Array.isArray(files) || files.length !== state.files.length ||
-          files.some((file, index) => file?.path !== state.files[index].path || file?.content !== state.files[index].content)) {
+          files.some((file, index) => file?.path !== state.files[index].path || file?.content !== state.files[index].content || JSON.stringify(file.legacyLibraries||[]) !== state.files[index].libraries)) {
         throw new Error('Prepared KiCad project differs from source.');
       }
       for (const file of files) onParsed?.(file, state.parsed.get(file.path));
@@ -228,14 +241,14 @@
     let total = 0;
     for (const file of files) {
       if (!file || typeof file.path !== "string" || typeof file.content !== "string" ||
-        !/\.kicad_(?:sch|pcb)$/i.test(file.path) || paths.has(file.path)) {
+        !/(?:\.kicad_(?:sch|pcb)|\.(?:sch|brd))$/i.test(file.path) || paths.has(file.path)) {
         throw new Error("Invalid or duplicate KiCad file entry.");
       }
       paths.add(file.path);
       const size = new TextEncoder().encode(file.content).length;
       total += size;
       if (size > (/\.kicad_pcb$/i.test(file.path) ? 64 * 1024 * 1024 : MAX_FILE) || total > MAX_PROJECT) throw new Error("KiCad project exceeds browser comparison size limits.");
-      for (const object of collect(file.path, file.content, ast => onParsed?.(file, ast))) objects.push(object);
+      for (const object of collect(file.path, file.content, ast => onParsed?.(file, ast), {libraries:file.legacyLibraries})) objects.push(object);
     }
     return objects;
   }
