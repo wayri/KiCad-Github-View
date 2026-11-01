@@ -1,6 +1,8 @@
 # Distribution status
 
-Snapshot checked **30 October 2026**. This page records observed publication state; it does not update automatically.
+**Release package update: 0.12.78 / Android 1.78 (1 November 2026).** [GitHub release](https://github.com/wayri/KiCad-Github-View/releases/tag/v0.12.78) includes the browser ZIPs, VSIX and development-signed Android APK. This release has not been submitted to stores or installed on a phone in this release task. Android hardware acceptance and the intermittent optional 3D postprocessing fallback remain disclosed in the [release notes](releases/v0.12.78.md).
+
+The historical store snapshot below was checked **30 October 2026**. It is not a current store-status check and does not update automatically.
 
 | Channel | Current state | What to use |
 | --- | --- | --- |
