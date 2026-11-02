@@ -12,9 +12,9 @@
   }
   if(repo){
    const ref=repo.tail?hint?.ref||parse.repositoryRef(repo):'HEAD';
-   if(!ref||repo.tail&&!(repo.tail.join('/')===ref||repo.tail.join('/').startsWith(ref+'/')))throw Error('The branch is ambiguous. Open the repository root or a KiCad file, then click the extension again.');
+   if((!ref||repo.tail&&!(repo.tail.join('/')===ref||repo.tail.join('/').startsWith(ref+'/')))&&!(hint?.allowUnresolved===true&&!repo.provider&&!ref))throw Error('The branch is ambiguous. Open the repository root or a KiCad file, then click the extension again.');
    if(repo.tail?.some(part=>!part||part==='.'||part==='..'||/[\\:\x00-\x1f\x7f]/.test(part)))throw Error('Invalid repository directory.');
-   return{kind:'repository',source:url.origin+url.pathname,repository:repo.repository,ref,...(repo.tail?{directory:repo.tail.join('/').slice(ref.length).replace(/^\//,'')}:{}),...(repo.provider?{provider:repo.provider,host:repo.host}:{})};
+   return{kind:'repository',source:url.origin+url.pathname,repository:repo.repository,ref,...(repo.tail&&ref?{directory:repo.tail.join('/').slice(ref.length).replace(/^\//,'')}:{}),...(repo.provider?{provider:repo.provider,host:repo.host}:{})};
   }
   // Issue, pull-request and unsupported file pages still belong to a repository.
   const parts=url.pathname.split('/').filter(Boolean),split=url.origin==='https://github.com'?2:parts.indexOf('-');

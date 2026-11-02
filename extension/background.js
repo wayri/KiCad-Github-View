@@ -1,6 +1,6 @@
 "use strict";
 
-importScripts("github-website-history.js", "github-session-reader.js", "github-project-buffer.js", "github-project-view.js", "draftsman-model.js", "draftsman-export.js", "draftsman-repository.js", "managed-policy.js", "parsing.js", "project-launch.js", "browser-data.js", "review-comments.js", "review-file-store.js", "credential-vault.js", "provider-oauth.js", "revision-fork.js", "github-review-api.js", "gitlab-provider.js", "gitlab-review-api.js", "gitlab-hosts.js", "mention-users.js", "environment-diagnostics.js", "project-recents.js", "native-kicad.js");
+importScripts("github-website-history.js", "github-session-reader.js", "github-project-buffer.js", "github-project-view.js", "draftsman-model.js", "draftsman-export.js", "draftsman-repository.js", "managed-policy.js", "parsing.js", "project-launch.js", "legacy-kicad.js", "browser-data.js", "review-comments.js", "review-file-store.js", "credential-vault.js", "provider-oauth.js", "revision-fork.js", "github-review-api.js", "gitlab-provider.js", "gitlab-review-api.js", "gitlab-hosts.js", "mention-users.js", "environment-diagnostics.js", "project-recents.js", "native-kicad.js");
 globalThis.KiCadManagedPolicy?.installFetch();
 
 let mentionService=null;
@@ -27,8 +27,13 @@ async function dashboardDispatch(message,sender){
  if(message.type==='project-recents-remove')return{entries:await recents().remove(message.id)};
  if(message.type==='project-recents-clear'){if(message.confirmed!==true)throw Error('Confirm clearing local project history.');await recents().clear();return{cleared:true};}
  if(message.type==='dashboard-open-project'){
+  let entered;try{entered=new URL(message.url);}catch{throw Error('Enter a complete HTTPS repository URL.');}if(typeof message.url!=='string'||message.url.length>1000||entered.search||entered.hash)throw Error('Use a repository or folder URL without query parameters.');
   await globalThis.KiCadManagedPolicy?.assertNetwork();
-  const api=globalThis.KiCadProjectRecents||(typeof require==='function'?require('./project-recents.js'):null),entry=api.parseURL(message.url);await recentHostAllowed(entry);await chrome.tabs.create({url:entry.url});return{opened:true};
+  let context;try{context=KiCadProjectLaunch.context(message.url,{allowUnresolved:true});}catch{context=null;}
+  if(!context){const api=globalThis.KiCadProjectRecents||(typeof require==='function'?require('./project-recents.js'):null),entry=api.parseURL(message.url);context={kind:'repository',provider:entry.provider,host:entry.host,repository:entry.repository,source:entry.url,ref:'HEAD'};}
+  await recentHostAllowed(context);
+  const url=context.kind==='drawing'?KiCadProjectLaunch.viewerURL(context,context.file,p=>chrome.runtime.getURL(p)):chrome.runtime.getURL('project-launcher.html')+'?'+new URLSearchParams({source:context.source,...(context.ref?{ref:context.ref}:{})});
+  await chrome.tabs.create({url});return{opened:true,workspace:true};
  }
  if(message.type==='dashboard-open-recent'){
   const entry=(await recents().list()).find(item=>item.id===message.id);if(!entry)throw Error('This recent project is no longer in local history.');
@@ -72,11 +77,12 @@ async function githubSessionRead(repository,ref,action,path='',limit=8*1024*1024
   checkLoad(signal);if(!validRepository(repository)||!KiCadBrowserData.validRef(ref))throw Error('Invalid GitHub session location.');
   if(!chrome.tabs?.query)return null;
   const tabs=await chrome.tabs.query({url:[`https://github.com/${repository}`,`https://github.com/${repository}/*`]});
+  let accessError=null;
   for(const tab of tabs.slice(0,8)) {
     let url;try{url=new URL(tab.url);}catch{continue;}
     if(url.origin!=='https://github.com'||url.pathname.split('/').slice(1,3).join('/').toLowerCase()!==repository.toLowerCase())continue;
     let reply;try{reply=await sessionLoadMessage(tab.id,{type:'github-session-read',repository,ref,action,path,limit:Math.min(limit,32*1024*1024)},signal);}catch{checkLoad(signal);continue;}
-    if(!reply?.ok)continue;
+    if(!reply?.ok){if(typeof reply?.error==='string')accessError=Error(reply.error.slice(0,1000));continue;}
     const result=reply.result;
     if(action==='history') {
       if(result?.ref!==ref||typeof result.content!=='string'||new TextEncoder().encode(result.content).byteLength>4*1024*1024)throw Error('Invalid GitHub website history response.');
@@ -89,7 +95,7 @@ async function githubSessionRead(repository,ref,action,path='',limit=8*1024*1024
     } else if(!SHA.test(result?.sha||'')||SHA.test(ref)&&result.sha.toLowerCase()!==ref.toLowerCase()||!Array.isArray(result.items)||result.items.length>1000)throw Error('Invalid GitHub session revision response.');
     return result;
   }
-  return null;
+  if(accessError)throw accessError;return null;
 }
 async function githubSessionProject(repository,ref,file,originalError,signal) {
   const snapshot=await githubSessionRead(repository,ref,'resolve','',8*1024*1024,signal);
@@ -972,10 +978,10 @@ async function openFromAction(tab) {
   if(page.protocol!=='https:'||page.origin!=='https://github.com'&&!(await globalThis.KiCadGitLabHosts?.allowed(page.origin)))return open({});
   let hint;try{hint=await chrome.tabs.sendMessage(tab.id,{type:'projectLaunchContext'},{frameId:0});}catch{}
   try{
-    const context=KiCadProjectLaunch.context(tab.url,hint);
+    const context=KiCadProjectLaunch.context(tab.url,{...hint,allowUnresolved:true});
     if(!context)return open({});
     if(context.kind==='drawing')return chrome.tabs.create({url:KiCadProjectLaunch.viewerURL(context,context.file,p=>chrome.runtime.getURL(p))});
-    return open({source:context.source,ref:context.ref});
+    return open({source:context.source,...(context.ref?{ref:context.ref}:{})});
   }catch(error){return open({error:error.message});}
 }
 
@@ -1150,7 +1156,8 @@ async function repositoryDetection(message,sender){
   const host=message.provider==='gitlab'?(message.host||'https://gitlab.com'):'https://github.com';
   const route=KiCadGitHub.repositoryRoute(launcher?message.source:sender.url,{gitlabHosts:message.provider==='gitlab'?[host]:[]});
   if(!route||route.repository!==message.repository||(route.provider||'github')!==(message.provider||'github')||(route.host||'https://github.com')!==host)throw Error('Repository discovery does not match the host page.');
-  let ref=message.ref;
+  let ref=message.ref,contextSnapshot=null;
+  if(!ref&&route.tail&&(!message.provider||message.provider==='github')){const context=await projectBuffer().context(launcher?message.source:sender.url);ref=context.ref;contextSnapshot=context.sha;}
   if(!KiCadBrowserData.validRef(ref)||(!route.tail&&ref!=='HEAD')||route.tail&&!(route.tail.join('/')===ref||route.tail.join('/').startsWith(ref+'/')))throw Error('Repository branch does not match the host page.');
   let listing;
   if(message.provider==='gitlab'){
@@ -1169,7 +1176,8 @@ async function repositoryDetection(message,sender){
     }
     listing.truncated=Boolean(listing.hasMore||listing.warnings.length);
   }else{
-    const snapshot=await projectBuffer().inventory(message.repository,ref);
+    const directory=route.tail?route.tail.join('/').slice(ref.length).replace(/^\//,''):'';
+    const snapshot=await projectBuffer().inventory(message.repository,contextSnapshot||ref,undefined,{directory,refresh:message.refresh===true});
     listing={sha:snapshot.snapshotRef,entries:snapshot.files.map(item=>({path:item.path,type:'blob'})),warnings:snapshot.warnings,truncated:snapshot.warnings.some(warning=>/incomplete|limited|limit reached/i.test(warning))};
   }
   const projects=KiCadGitHub.detectedProjects(listing.entries);
@@ -1419,8 +1427,8 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
                sendResponse({ ok: true, result });
              },
              (error) => {
-               const accessIssue=globalThis.KiCadEnvironmentDiagnostics?.classifyAccessError?.(error);
-               sendResponse({ ok: false, error: error.message || String(error),...(accessIssue?{accessIssue}:{}) });
+               const accessIssue=error?.accessIssue||globalThis.KiCadEnvironmentDiagnostics?.classifyAccessError?.(error);
+               sendResponse({ ok: false, error: error.message || String(error),...(error?.code==='MANAGED_POLICY'?{code:'MANAGED_POLICY'}:{}),...(accessIssue?{accessIssue}:{}) });
              });
   return true;
 });

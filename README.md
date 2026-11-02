@@ -104,6 +104,37 @@ Inspect plots and probe saved values. Supported spatial exports provide **2D/3D 
 
 ## Screenshots
 
+### New in 0.12.80 · independent probes and managed-browser diagnostics
+
+[Probe walkthrough and controls](docs/PROBE-WALKTHROUGH-0.12.80.md) · [Office-managed browser help](docs/MANAGED-BROWSERS.md) · [Security review scope](docs/SECURITY-REVIEW-0.12.80.md)
+
+[![Olimex R1 cross-probing across schematic, layout and 3D](docs/images/0.12.80/02-r1-schematic-layout-3d-probes.jpg)](docs/PROBE-WALKTHROUGH-0.12.80.md)
+
+The R1 root-association limitation is fixed. Schematic probes navigate highlighted occurrences and sheets independently; main and popup views flip/rotate. The existing gallery below remains a historical0.12.79 demonstration.
+
+### Latest real-board gallery · 0.12.79 · 2 November 2026
+
+Fresh captures from the **0.12.79 packaged viewer**, using pinned public **Olimex ESP32-PoE**, **BerkeleyLab Marble** and **hforsten FMCW3** sources. These show actual interactions with saved design data, not UI mockups. The viewer ran locally against the downloaded public snapshots; this does not establish installed-store, live-provider or Android hardware acceptance.
+
+**[Open the full screenshot and interaction walkthrough](docs/SCREENSHOT-GALLERY-0.12.79.md)** for search, pin/pad selection, miniature probes, layer controls, measurements, BoM columns and assembly tracking, local reviews, Draftsman/PDF export, Gerber analysis, sheet navigation, themes and phone-width previews. Each example includes its source and limits.
+
+| Real models and cross-selection | Independent probes and mechanical drawings |
+| --- | --- |
+| [![Olimex ESP32-PoE with 126 of 143 linked component models](docs/images/0.12.79/02-olimex-3d-real-models.jpg)](docs/images/0.12.79/02-olimex-3d-real-models.jpg)<br>Olimex: **126/143 linked models**; missing models and rendering omissions remain identified. | [![Independently rotated layout probe and movable 3D probe with connection guides](docs/images/0.12.79/07-independent-probe-views.jpg)](docs/images/0.12.79/07-independent-probe-views.jpg)<br>Rotate a layout probe, open a sibling 3D probe and move it by its header. |
+| [![The same plus-five-volt net highlighted in the real PCB and schematic](docs/images/0.12.79/10-paired-net-highlight.jpg)](docs/images/0.12.79/10-paired-net-highlight.jpg)<br>Select **+5V** in layout and inspect its matching schematic connections. | [![KiCad-style Draftsman sheet with top and isometric mechanical views and automatic board dimensions](docs/images/0.12.79/20-draftsman-multiple-views.jpg)](docs/images/0.12.79/20-draftsman-multiple-views.jpg)<br>Mechanical views, saved outline dimensions and a KiCad-style worksheet; copper is hidden. |
+| [![Grouped real-board BoM with configurable columns and local assembly progress](docs/images/0.12.79/13-bom-assembly-tracker.jpg)](docs/images/0.12.79/13-bom-assembly-tracker.jpg)<br>Configure BoM columns and advance a **local demonstration checklist**; this is not a physical assembly record. | [![Marble overview filtered to four sheets containing FPGA MISO](docs/images/0.12.79/27-marble-linked-sheets.jpg)](docs/images/0.12.79/27-marble-linked-sheets.jpg)<br>Marble: selecting **FPGA_MISO** retains four matching sheets with optional relation guides. |
+
+The walkthrough also records unsupported cases: Olimex Fast PI rejects slotted drilled pads; its Gerber screening has partial coverage; no successful ERC/DRC or saved-simulation result is fabricated for these examples. FMCW3 schematic viewing is restricted legacy support; its PCB failed to load in this capture run.
+
+**Fast PI follow-up:** [real-board setup, solved overlays and measured browser speed](docs/FAST-PI-WALKTHROUGH-0.12.79.md) — 99.8 ms median for five fresh-worker solves on the PIC programmer example; includes mesh sensitivity and explicit timing limits.
+
+**Mixed cross-probes:** [schematic, layout and 3D as origins, with all three popup types](docs/CROSS-PROBE-WALKTHROUGH-0.12.79.md). Includes popup-from-popup creation, curved guides, independent zoom/pan/rotation and the historical R1 root-association limitation, fixed in 0.12.80.
+
+[![3D-origin mixed schematic, layout and 3D cross-probe popups](docs/images/0.12.79/cross-probes/03-3d-origin-three-views.jpg)](docs/CROSS-PROBE-WALKTHROUGH-0.12.79.md)
+
+<details>
+<summary>Earlier release screenshots and platform previews</summary>
+
 ### Project dashboard | 0.12.65
 
 [![Project dashboard with locally stored recent project locations](docs/images/current/dashboard-0.12.65.png)](docs/images/current/dashboard-0.12.65.png)
@@ -407,6 +438,8 @@ These local fixture captures demonstrate controls and saved data. The collaborat
 [![BoM reset warning with affected parts and explicit acknowledgement](docs/images/tools/bom-reset-warning.jpg)](docs/images/tools/bom-reset-warning.jpg)
 
 [BoM reset behavior](docs/bom-field-table.md#reset-saved-management-fields) | [Review and transfer guide](docs/USER-GUIDE.md#6-record-share-and-transfer-a-review).
+
+</details>
 
 </details>
 

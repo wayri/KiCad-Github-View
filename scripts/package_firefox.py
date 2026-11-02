@@ -68,7 +68,9 @@ def payload(root: Path = ROOT) -> dict[str, bytes]:
     manifest = json.loads((source / 'manifest.json').read_text(encoding='utf-8'))
     worker = manifest['background']['service_worker']
     background, dependencies = adapt_background((source / worker).read_bytes())
-    files = set(chrome_builder().FILES) | {worker, SHIM}
+    builder = chrome_builder()
+    metadata = builder.version_metadata(root, 'firefox')
+    files = set(builder.FILES) | {worker, SHIM}
     files.update(manifest.get('icons', {}).values())
     for content in manifest['content_scripts']:
         files.update(content['js'])
@@ -93,7 +95,9 @@ def payload(root: Path = ROOT) -> dict[str, bytes]:
         if not path.is_file() or path.is_symlink() or not path.resolve().is_relative_to(source.resolve()):
             raise ValueError(f'Unsafe or missing Firefox asset: {name}')
         content = path.read_bytes()
-        if name == 'manifest.json':
+        if name == 'product-version.js':
+            content = builder.version_script(content, metadata)
+        elif name == 'manifest.json':
             content = (json.dumps(manifest, indent=2) + '\n').encode()
         elif name == worker:
             content = background
@@ -112,6 +116,7 @@ def payload(root: Path = ROOT) -> dict[str, bytes]:
             content = content.replace(b'Connect .kicad-review.json inside your local Git checkout.', b'Firefox cannot write a selected local review file automatically. Export review JSON from the viewer and save .kicad-review.json in your Git checkout.')
             content = content.replace(b'File access requires a supported Chrome extension page.', b'Firefox does not support this file picker. Export review JSON from the viewer and save it in your checkout.')
         data[name] = content
+    data['VERSION.txt'] = builder.version_text(metadata)
     return data
 
 

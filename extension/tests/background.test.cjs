@@ -1211,3 +1211,33 @@ test('Draftsman repository writes require owned viewers and explicitly allowed G
 test('owned launcher discovery is read-only, source-bound and distinct from website injection',async t=>{
  const launcher={id:'test-id',frameId:0,tab:{id:7},url:extensionOrigin+'project-launcher.html'},request={type:'repository-detect',source:'https://github.com/owner/board',repository:'owner/board',ref:'HEAD'};const fixture=withWebsite(t,'owner/board',{'board.kicad_pro':'{}'});const reply=await message(request,launcher);assert.equal(reply.ok,true,reply.error);assert.deepEqual(reply.result.projects,['board.kicad_pro']);const before=fixture.session.length;for(const change of [{source:'https://evil.example/owner/board'},{repository:'owner/other'},{ref:'other'}])assert.equal((await message({...request,...change},launcher)).ok,false);assert.equal(fixture.session.length,before);assert.equal((await message({type:'github-thread-read'},launcher)).ok,false);assert.equal((await message(request,{...launcher,frameId:1})).ignored,true);
 });
+
+
+test('dashboard and icon open owned project workspaces even before a repository content script is ready',async t=>{
+ const previous=calls.response;calls.response=undefined;t.after(()=>{calls.response=previous;});const start=calls.created.length,dashboard={id:'test-id',url:extensionOrigin+'dashboard.html'};
+ for(const source of ['https://github.com/BerkeleyLab/Marble','https://github.com/BerkeleyLab/Marble/tree/main/design','https://github.com/Ttl/vna2/tree/master/hw']){
+  const reply=await message({type:'dashboard-open-project',url:source},dashboard);assert.equal(reply.ok,true,reply.error);const opened=new URL(calls.created.at(-1).url);assert.equal(opened.pathname,'/project-launcher.html');assert.equal(opened.searchParams.get('source'),source);
+ }
+ await background.openFromAction({id:42,url:'https://github.com/BerkeleyLab/Marble/tree/main/design'});const action=new URL(calls.created.at(-1).url);assert.equal(action.pathname,'/project-launcher.html');assert.equal(action.searchParams.get('source'),'https://github.com/BerkeleyLab/Marble/tree/main/design');assert.equal(action.searchParams.has('error'),false);assert.equal(calls.created.length,start+4);
+});
+
+test('owned launcher discovers retained public Marble and VNA pages without any open GitHub tab',async t=>{
+ const previousFetch=global.fetch,previousQuery=chrome.tabs.query;t.after(()=>{global.fetch=previousFetch;chrome.tabs.query=previousQuery;});chrome.tabs.query=async()=>[];const fs=require('node:fs'),path=require('node:path'),base=path.join(__dirname,'fixtures/github-public-discovery'),requests=[];
+ const cases=[{repo:'BerkeleyLab/Marble',ref:'main',sha:'a426777d92c0f22a546d4740b419a3937e0c1f90',directory:'design',root:'marble-root',tree:'marble-design',project:'design/Marble.kicad_pro'},{repo:'Ttl/vna2',ref:'master',sha:'2cf0efb22da56a168a7f07bf5e2c30631343997b',directory:'hw',root:'vna2-root',tree:'vna2-hw',project:'hw/vna2.pro'}];
+ global.fetch=async(url,init)=>{requests.push(url);assert.equal(new URL(url).hostname,'github.com');assert.equal(init.credentials,'omit');let body='<html><title>Blocked by your organization policy</title></html>',status=403;
+  for(const c of cases){if([`https://github.com/${c.repo}`,`https://github.com/${c.repo}/tree/${c.ref}`,`https://github.com/${c.repo}/tree/${c.sha}`].includes(url)){body=fs.readFileSync(path.join(base,c.root+'.html'),'utf8');status=200;break;}if([`https://github.com/${c.repo}/tree/${c.ref}/${c.directory}`,`https://github.com/${c.repo}/tree/${c.sha}/${c.directory}`].includes(url)){body=fs.readFileSync(path.join(base,c.tree+'.html'),'utf8');status=200;break;}}
+  const response=new Response(body,{status,headers:{'content-type':'text/html'}});Object.defineProperty(response,'url',{value:url});return response;};
+ const sender={id:'test-id',url:extensionOrigin+'project-launcher.html'};
+ for(const c of cases)for(const source of [`https://github.com/${c.repo}`,`https://github.com/${c.repo}/tree/${c.ref}/${c.directory}`]){const reply=await message({type:'repository-detect',source,repository:c.repo,ref:source.endsWith(c.directory)?null:'HEAD'},sender);assert.equal(reply.ok,true,reply.error);assert.equal(reply.result.sha,c.sha);assert.ok(reply.result.projects.includes(c.project));assert.equal(reply.result.truncated,true);assert.ok(reply.result.warnings.some(w=>/organization policy/.test(w)));}
+ assert.ok(requests.length>0);assert.ok(requests.every(url=>!url.includes('api.github.com')));
+});
+
+
+test('administrator failures retain only the recognized safe policy code across the message boundary',async t=>{
+ const original=global.KiCadManagedPolicy;t.after(()=>global.KiCadManagedPolicy=original);
+ global.KiCadManagedPolicy={authorize:async()=>{throw Object.assign(Error('Network access is disabled by administrator policy.'),{code:'MANAGED_POLICY',token:'SECRET'});}};
+ const blocked=await message({type:'repository-detect',source:'https://github.com/owner/repo',repository:'owner/repo'},viewer);
+ assert.equal(blocked.ok,false);assert.equal(blocked.code,'MANAGED_POLICY');assert.doesNotMatch(JSON.stringify(blocked),/SECRET/);
+ global.KiCadManagedPolicy={authorize:async()=>{throw Object.assign(Error('Request rejected.'),{code:'PRIVATE_DETAIL_SECRET'});}};
+ const rejected=await message({type:'repository-detect',source:'https://github.com/owner/repo',repository:'owner/repo'},viewer);assert.equal(rejected.code,undefined);assert.doesNotMatch(JSON.stringify(rejected),/PRIVATE_DETAIL/);
+});

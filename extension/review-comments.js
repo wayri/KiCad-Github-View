@@ -110,6 +110,10 @@ const KiCadReviewComments = (() => {
     }
     return { repository, ref, file,...(provider==='gitlab'?{provider,host:gitlabHost(value.host)}: {}) };
   }
+  function sourceSheetUuid(source){
+    if(typeof source!=='string'||!/^\s*\(kicad_sch(?:\s|\))/.test(source))return null;
+    try{const parser=globalThis.KiCadDesignDiff?.parse||(typeof module==='object'&&module.exports?require('./design-diff.js').parse:null);if(!parser)return null;const tree=parser(source),field=tree.find(value=>Array.isArray(value)&&value[0]==='uuid'),value=field?.[1],uuid=typeof value==='string'?value:value?.quoted;return typeof uuid==='string'&&/^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i.test(uuid)?uuid:null;}catch{return null;}
+  }
   function normalizeAnchor(anchor) {
     const result = normalizeScope(anchor);
     for (const [name, limit] of [["uuid", 200], ["objectId", 200], ["reference", 100], ["netName", 500], ["kind", 80], ["variant", 100], ["sheetUuid", 200], ["sheetName", 500], ["instancePath", 2000]]) {
@@ -281,6 +285,22 @@ const KiCadReviewComments = (() => {
     }
     return notes;
   }
+  function threadAnnotations(thread,value,{repository}={}){
+    const scope=normalizeScope(value),provider=scope.provider||'github',host=scope.host||'https://github.com',targetRepository=repository||scope.repository;
+    normalizeScope({...scope,repository:targetRepository});
+    if(!thread||!['issue','discussion'].includes(thread.kind)||!Number.isSafeInteger(thread.number)||thread.number<1||!['open','closed'].includes(thread.state))return [];
+    const base=host+'/'+targetRepository+(provider==='gitlab'?'/-/issues/':thread.kind==='discussion'?'/discussions/':'/issues/')+thread.number;
+    if(thread.url!==base)return [];const notes=[],seen=new Set();
+    for(const [index,row]of [thread,...(Array.isArray(thread.comments)?thread.comments.slice(-200):[])].entries()){
+      if(typeof row.body!=='string'||typeof row.url!=='string'||row.url!==base&&!row.url.startsWith(base+'#'))continue;
+      let parsed;try{const content=globalThis.KiCadChatContent||(typeof module==='object'&&module.exports?require('./chat-content.js'):null);parsed=content?.content?content.content(row.body,{comments:{fromMarkdown,toMarkdown}}).annotations:fromMarkdown(row.body);}catch{continue;}
+      for(const note of parsed){const a=note.anchor;if((a.provider||'github')!==provider||(a.host||'https://github.com')!==host||a.repository!==scope.repository||a.ref!==scope.ref||a.file!==scope.file)continue;
+        const key=row.url+':'+note.id;if(seen.has(key)||notes.length>=500)continue;seen.add(key);
+        const author=typeof row.author==='string'&&/^[A-Za-z0-9_][A-Za-z0-9_.-]{0,254}$/.test(row.author)?row.author:'unknown';
+        notes.push({...note,github:{provider,...(provider==='gitlab'?{host}:{}),url:row.url,number:thread.number,state:thread.state,source:thread.kind+(index?(row.replyTo?'-reply':'-comment'):''),author,...(typeof row.createdAt==='string'?{createdAt:row.createdAt}:{}),...(typeof row.updatedAt==='string'?{updatedAt:row.updatedAt}:{})}});
+      }
+    }return notes;
+  }
   function exportComments(notes) {
     if (!Array.isArray(notes) || notes.length > 100) throw new Error("Too many review comments to export.");
     const text=JSON.stringify({ format: FORMAT, version: 1, comments: notes.map(validateComment) }, null, 2);
@@ -393,7 +413,7 @@ const KiCadReviewComments = (() => {
     publicationReservations.set(key,work);
     try { await work; } finally { if (publicationReservations.get(key) === work) publicationReservations.delete(key); }
   }
-  return { stateOptions, stateInfo, isState, issueState, effectiveState, stateMatches, threadLinks, createThreadStateCache, mergeAnnotations, severityOptions, severityInfo, isSeverity, forWorkspace, normalizeScope, normalizeAnchor, validateComment, validateAttachment, toMarkdown, fromMarkdown, parseSidecar, serializeSidecar,
+  return { stateOptions, stateInfo, isState, issueState, effectiveState, stateMatches, threadLinks, createThreadStateCache, mergeAnnotations, severityOptions, severityInfo, isSeverity, forWorkspace, sourceSheetUuid, threadAnnotations, normalizeScope, normalizeAnchor, validateComment, validateAttachment, toMarkdown, fromMarkdown, parseSidecar, serializeSidecar,
     reservePublication, exportComments, parseComments, receiptKey, isUnread, commentType, createdDateRange, sortAndFilter };
   }
   return create();

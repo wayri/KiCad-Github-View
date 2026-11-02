@@ -4,16 +4,21 @@
   function valid(view) {
     return Boolean(view && Number.isFinite(view.x) && Number.isFinite(view.y) &&
       Math.abs(view.x) <= 1000000 && Math.abs(view.y) <= 1000000 &&
-      Number.isFinite(view.zoom) && view.zoom >= .001 && view.zoom <= 10000);
+      Number.isFinite(view.zoom) && view.zoom >= .001 && view.zoom <= 10000 && (view.flipped===undefined||typeof view.flipped==='boolean') &&
+      (view.quarterTurns===undefined||Number.isInteger(view.quarterTurns)&&view.quarterTurns>=0&&view.quarterTurns<=3));
   }
   function read(camera) {
     const view = { x: camera?.center?.x, y: camera?.center?.y, zoom: camera?.zoom };
+    if(camera?.flipped!==undefined)view.flipped=camera.flipped;
+    if(camera?.quarterTurns!==undefined)view.quarterTurns=camera.quarterTurns;
     return valid(view) ? view : null;
   }
   function apply(camera, view) {
     if (!valid(view) || typeof camera?.center?.set !== "function") return false;
     camera.center.set(view.x, view.y);
     camera.zoom = view.zoom;
+    if(view.flipped!==undefined)camera.flipped=view.flipped;
+    if(view.quarterTurns!==undefined)camera.quarterTurns=view.quarterTurns;
     return true;
   }
   function watch(canvas, changed) {

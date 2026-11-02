@@ -1,0 +1,95 @@
+{
+  "environment": {
+    "runtime": "v24.14.0",
+    "platform": "win32",
+    "arch": "x64",
+    "cpu": "Intel(R) Core(TM) Ultra 7 255H"
+  },
+  "scope": "Solver only in Node.js; original real-board bytes, center-of-pad contacts. Excludes loading, parsing, worker startup, rendering, UI and network. Browser manual picks differ slightly from pad-center benchmark.",
+  "sourceSha256": "b9d90e6184a1e4873d50be65da1faefaf7d003638ed16cef8e0212f247e64da7",
+  "options": {
+    "net": 18,
+    "layers": [
+      {
+        "name": "F.Cu",
+        "zMm": 0,
+        "thicknessMm": 0.035
+      },
+      {
+        "name": "B.Cu",
+        "zMm": 1.545,
+        "thicknessMm": 0.035
+      }
+    ],
+    "conductivitySm": 58000000,
+    "cellSizeMm": 0.2,
+    "currentA": 0.1,
+    "sourceVoltageV": 12,
+    "viaPlatingMm": 0.025,
+    "source": {
+      "x": 143.002,
+      "y": 49.784,
+      "layer": "B.Cu"
+    },
+    "sink": {
+      "x": 128.27,
+      "y": 75.184,
+      "layer": "B.Cu"
+    }
+  },
+  "runsMs": [
+    70.4685,
+    74.042,
+    55.90880000000004,
+    54.50229999999999,
+    49.4504,
+    48.44259999999997,
+    47.91059999999993,
+    57.33730000000003,
+    52.03660000000002,
+    54.44780000000003,
+    50.55439999999999,
+    47.32439999999997,
+    49.288099999999986,
+    49.4443,
+    48.13829999999996
+  ],
+  "firstRunMs": 70.4685,
+  "medianMs": 50.55439999999999,
+  "minMs": 47.32439999999997,
+  "maxMs": 74.042,
+  "refinement": [
+    {
+      "cellSizeMm": 0.19,
+      "elapsedMs": 55.77260000000001,
+      "dropV": 0.003859124896788351,
+      "resistanceOhm": 0.038591248967883504,
+      "nodes": 976,
+      "iterations": 476
+    },
+    {
+      "cellSizeMm": 0.2,
+      "elapsedMs": 46.49609999999984,
+      "dropV": 0.00436808084839403,
+      "resistanceOhm": 0.0436808084839403,
+      "nodes": 857,
+      "iterations": 443
+    },
+    {
+      "cellSizeMm": 0.22,
+      "elapsedMs": 35.79179999999997,
+      "dropV": 0.004535170949115853,
+      "resistanceOhm": 0.04535170949115852,
+      "nodes": 688,
+      "iterations": 407
+    },
+    {
+      "cellSizeMm": 0.25,
+      "elapsedMs": 26.591900000000123,
+      "dropV": 0.004040549976054974,
+      "resistanceOhm": 0.04040549976054974,
+      "nodes": 578,
+      "iterations": 334
+    }
+  ]
+}

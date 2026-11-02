@@ -39,3 +39,14 @@ test('dedicated schematic detached load and cancellable inventory share pinned s
  const count=fixture.fetches.length;assert.equal((await message({...input,loadId:'second-project-load'},viewer())).ok,true);assert.equal(fixture.fetches.length,count);
  const inventory=await message({...scope,type:'project-inventory',loadId:'detached-inventory'},sender);assert.equal(inventory.ok,true,inventory.error);assert.equal(inventory.result.snapshotRef,SHA);
 });
+
+
+test('pinned actual VNA legacy root follows saved child links and shares its cache library across detached loads',async()=>{
+ const fs=require('node:fs'),path=require('node:path'),base=path.join(__dirname,'fixtures/legacy-vna2'),root=fs.readFileSync(path.join(base,'vna2.sch'),'utf8'),library=fs.readFileSync(path.join(base,'vna2-cache.lib'),'utf8');
+ const children=KiCadBrowserData.sheetFiles(root);assert.deepEqual(children,['transmitter.sch','receiver.sch','filter_bank.sch','power.sch','tx_amp.sch','port_switch.sch','fpga.sch']);
+ // The root is byte-for-byte public evidence. Leaf fixtures intentionally contain no further placements.
+ const sources={'hw/vna2.sch':root,'hw/vna2-cache.lib':library};for(const child of children)sources['hw/'+child]='EESchema Schematic File Version 2\n$EndSCHEMATC\n';
+ const scope=setup('buffer/legacy-vna',sources),opened=await message({...scope,file:'hw/vna2.sch',type:'project'});assert.equal(opened.ok,true,opened.error);assert.equal(opened.result.length,8);assert.equal(KiCadBrowserData.rootSheetPath(opened.result,'hw/transmitter.sch'),'hw/vna2.sch');
+ for(const file of opened.result){assert.equal(file.legacyLibraries.length,1);assert.equal(file.legacyLibraries[0].path,'hw/vna2-cache.lib');assert.equal(file.legacyLibraries[0].content,library);assert.equal(file.discoveryWarning,undefined);}
+ const count=fixture.fetches.length,child=await message({...scope,file:'hw/transmitter.sch',type:'project'},viewer('schematic-viewer.html?detached=1'));assert.equal(child.ok,true,child.error);assert.deepEqual(child.result.map(f=>f.path),opened.result.map(f=>f.path));assert.equal(fixture.fetches.length,count);assert.equal(fixture.fetches.some(r=>r.url.includes('api.github.com')),false);
+});

@@ -53,3 +53,7 @@ test('transport byte bounds, HTTP errors and GraphQL errors reject thread data',
 test('aggregate text limit stops reads and clips incomplete UTF-8 without replacement inflation',async()=>{
  let id=10;const h=await harness(url=>url.includes('/comments?')?Array.from({length:20},()=>entry(id++,{body:'€'.repeat(30000)})):issue({comments:20,body:'€'.repeat(30000)}));const result=await read(h);const bytes=[result,...result.comments].reduce((n,v)=>n+new TextEncoder().encode(v.body).length,0);assert.ok(bytes<=1024*1024);assert.ok(result.comments.length<20);assert.ok(result.warnings.some(s=>s.includes('truncated')));assert.ok(!result.body.includes('\uFFFD'));
 });
+
+test('large Issue reads the latest comment pages so reverse sync includes newly posted messages',async()=>{
+ const h=await harness(url=>{if(!url.includes('/comments?'))return issue({comments:1000});const page=Number(new URL(url).searchParams.get('page'));return Array.from({length:50},(_,i)=>entry((page-1)*50+i+1));});const result=await read(h);assert.equal(result.comments[0].id,'801');assert.equal(result.comments.at(-1).id,'1000');assert.equal(h.calls.length,5);assert.ok(h.calls.some(call=>call.url.includes('page=20')));
+});

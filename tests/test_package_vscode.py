@@ -33,7 +33,7 @@ class PackageVSCodeTests(unittest.TestCase):
             with zipfile.ZipFile(builder.package(root)) as archive:
                 expected = ({f'extension/{name}' for name in builder.HOST_FILES} |
                             {f'extension/media/{name}' for name in builder.ASSETS} |
-                            {'extension/media/github-review-host-api.js','extension/media/gitlab-review-host-api.js','extension/media/shared-assets.json', '[Content_Types].xml', 'extension.vsixmanifest'})
+                            {'extension/media/github-review-host-api.js','extension/media/gitlab-review-host-api.js','extension/media/shared-assets.json', 'VERSION.txt', 'extension/media/VERSION.txt', '[Content_Types].xml', 'extension.vsixmanifest'})
                 self.assertEqual(set(archive.namelist()), expected)
                 manifest = json.loads(archive.read('extension/package.json'))
                 self.assertEqual(manifest['main'], manifest['browser'])
@@ -65,7 +65,7 @@ class PackageVSCodeTests(unittest.TestCase):
                     source, packaged = (ROOT / 'extension' / name).read_bytes(), archive.read(f'extension/media/{name}')
                     self.assertEqual(inventory['assets'][name]['sourceSha256'], hashlib.sha256(source).hexdigest())
                     self.assertEqual(inventory['assets'][name]['packagedSha256'], hashlib.sha256(packaged).hexdigest())
-                    if name != 'revision-viewer.js':
+                    if name not in {'revision-viewer.js', 'product-version.js'}:
                         self.assertEqual(source, packaged)
                 entry = archive.read('extension/media/revision-viewer.js').decode()
                 self.assertIn('KiCadVSCodeContext?.search ?? location.search', entry)

@@ -74,3 +74,7 @@ test('signed-out stale response is rejected before returning private membership'
   const h = harness(() => { signedIn = false; return [{ login: 'private-user' }]; }, { authorizationHeaders: async () => signedIn ? { Authorization: 'Bearer secret' } : {} });
   await assert.rejects(h.service.lookup(github), /connection changed/);
 });
+
+test('repository mention reads reuse bounded account-isolated responses while locally filtering each prefix',async()=>{
+ let time=0,token='first';const h=harness(url=>url.includes('/contributors')?[{login:'alice'},{login:'alex'},{login:'bob'}]:[],{now:()=>time,authorizationHeaders:async()=>({Authorization:'Bearer '+token})});assert.equal((await h.service.lookup({...github,query:'al'})).users.length,2);assert.equal((await h.service.lookup({...github,query:'ali'})).users.length,1);assert.equal(h.calls.length,2);time=30001;await h.service.lookup({...github,query:'al'});assert.equal(h.calls.length,4);token='second';await h.service.lookup({...github,query:'al'});assert.equal(h.calls.length,6);
+});

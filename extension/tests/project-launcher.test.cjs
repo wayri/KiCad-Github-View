@@ -24,3 +24,14 @@ test('empty, denied and malformed discovery have distinct visible feedback',asyn
  const unsafe=await ui({ok:true,result:{sha:'a'.repeat(40),projects:['../bad.kicad_pro']}});assert.equal(unsafe.replaced.length,0);assert.equal(unsafe.nodes.get('launchProjects').children.length,0);assert.equal(unsafe.nodes.get('launchStatus').className,'error');
  const elsewhere=await ui(null,'');assert.equal(elsewhere.requests.length,0);assert.equal(elsewhere.nodes.get('launchTitle').textContent,'No KiCad project detected');
 });
+
+
+test('nested folder without an injected content-script hint asks the worker to resolve metadata',async()=>{
+ const search='?source='+encodeURIComponent('https://github.com/BerkeleyLab/Marble/tree/main/design'),view=await ui({ok:true,result:{sha:'a'.repeat(40),projects:['design/Marble.kicad_pro']}},search);
+ assert.equal(view.requests[0].repository,'BerkeleyLab/Marble');assert.equal(view.requests[0].ref,null);assert.equal(view.replaced.length,1);assert.equal(new URL(view.replaced[0]).searchParams.get('file'),'design/Marble.kicad_pro');
+});
+
+
+test('partial empty inventory is distinct from no project and offers a cache-refresh retry',async()=>{
+ const view=await ui({ok:true,result:{sha:'a'.repeat(40),projects:[],truncated:true,warnings:['Organization policy blocked an ancillary directory.']}});assert.equal(view.nodes.get('launchTitle').textContent,'Project discovery incomplete');assert.equal(view.nodes.get('launchRetry').hidden,false);assert.match(view.nodes.get('launchDetails').textContent,/Organization policy/);assert.equal(view.requests[0].refresh,false);await view.nodes.get('launchRetry').click();assert.equal(view.requests[1].refresh,true);
+});

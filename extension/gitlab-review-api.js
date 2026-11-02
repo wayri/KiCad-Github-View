@@ -465,7 +465,7 @@ const KiCadGitLabReviewApi = (() => {
         const value=await request(host,path,{...options,method:action==='edit'?'PUT':'POST',body:{body}}),result=action==='create'?value.notes?.[0]:value;
         if(!Number.isSafeInteger(result?.id)||result.id<1||action==='edit'&&String(result.id)!==target.id)throw fail('GitLab did not confirm the chat message. Inspect the thread before retrying.');
         if(typeof result.updated_at!=='string'||!/^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d(?:\.\d{1,9})?Z$/.test(result.updated_at)||!Number.isFinite(Date.parse(result.updated_at)))throw fail('GitLab did not confirm the message revision. Inspect the thread before retrying.');
-        const response={provider:'gitlab',kind,number,messageId:String(result.id),url:`${host}/${repository}/-/issues/${number}#note_${result.id}`,updatedAt:result.updated_at,replyTo:action==='reply'?(target.replyTo||target.id):null};
+        const response={provider:'gitlab',kind,number,messageId:String(result.id),author:policy.login,createdAt:action==='edit'?target.createdAt:result.updated_at,url:`${host}/${repository}/-/issues/${number}#note_${result.id}`,updatedAt:result.updated_at,replyTo:action==='reply'?(target.replyTo||target.id):null};
         invalidateReadCapabilities();
         // Remote acceptance is authoritative even if local receipt storage is full.
         const receipt={status:'done',digest,result:response};

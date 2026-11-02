@@ -2,8 +2,11 @@
 ((root)=>{
   'use strict';
   const paths={
+    'rotate-cw':'M20 3v6h-6 M20 9a8 8 0 1 0 0 7 M9 10h5v5H9z',
+    'rotate-ccw':'M4 3v6h6 M4 9a8 8 0 1 1 0 7 M9 10h5v5H9z',
     'net-instances':'M2 3h8v7H2z M14 3h8v7h-8z M8 15h8v7H8z M6 10v2h12v-2 M12 12v3',
     'native-kicad':'M4 3h8v4H8v10h4v4H4z M14 8l7 4-7 4z',
+    repository:'M5 3a2 2 0 1 0 0 4 2 2 0 0 0 0-4z M5 7v10 M5 17a2 2 0 1 0 0 4 2 2 0 0 0 0-4z M19 3a2 2 0 1 0 0 4 2 2 0 0 0 0-4z M19 7v3a5 5 0 0 1-5 5H5',
     dashboard:'M3 3h7v7H3z M14 3h7v7h-7z M3 14h7v7H3z M14 14h7v7h-7z',
     draftsman:'M3 3h14l4 4v14H3z M17 3v5h4 M6 16h12 M8 13v6m8-6v6 M7 7h6',
     'fast-pi':'M13 2 5 13h6l-1 9 9-13h-6z',
@@ -28,7 +31,7 @@
     'eye-off':'M3 3l18 18 M9 5.5A11 11 0 0 1 12 5c6 0 10 7 10 7a20 20 0 0 1-4 4 M6 7a20 20 0 0 0-4 5s4 7 10 7a11 11 0 0 0 4-1 M10 10a3 3 0 0 0 4 4',
     calculator:'M5 2h14v20H5z M8 5h8v4H8z M8 13h1m3 0h1m3 0h1M8 17h1m3 0h1m3 0h1',
     pdf:'M5 2h10l4 4v16H5z M15 2v5h4 M8 17l2-7 3 7m-4-2h7',
-    tools:'M14 3a6 6 0 0 0-6 8l-5 5a3 3 0 0 0 5 5l5-5a6 6 0 0 0 8-7l-4 4-4-4 4-4a6 6 0 0 0-3-2z',
+    tools:'M14 3a6 6 0 0 0-5 8L3 17a2.8 2.8 0 0 0 4 4l6-6a6 6 0 0 0 8-5l-4 3-4-4 3-5-2-1z',
     copy:'M8 8h13v13H8z M16 8V3H3v13h5',
     text:'M3 5h18M12 5v15m-4 0h8',
     save:'M3 3h15l3 3v15H3z M7 3v6h10V3 M7 21v-8h10v8',

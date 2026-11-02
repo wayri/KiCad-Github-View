@@ -1,0 +1,85 @@
+{
+  "schemaVersion": 1,
+  "release": "0.12.79",
+  "capturedOn": "2026-11-02",
+  "packageSha256": "02fdbb2e7387c6a151950b4ac856a2c329eeccb35b4ff3d86e1e5324b75e8789",
+  "repository": "OLIMEX/ESP32-POE",
+  "revision": "deb38a377d50eadb04ddc7118a17a5ae58b1ee53",
+  "sourceScope": "Original public schematic, PCB and repository model assets from the existing gallery corpus. No design edits.",
+  "net": "+5V",
+  "verifiedOriginMatrix": [
+    {
+      "origin": "schematic",
+      "popupModes": [
+        "Schematic",
+        "Layout",
+        "3D"
+      ],
+      "capture": "01-schematic-origin-three-views.jpg"
+    },
+    {
+      "origin": "layout",
+      "popupModes": [
+        "Layout",
+        "Schematic",
+        "3D"
+      ],
+      "capture": "02-layout-origin-three-views.jpg"
+    },
+    {
+      "origin": "3D",
+      "popupModes": [
+        "3D",
+        "Layout",
+        "Schematic"
+      ],
+      "capture": "03-3d-origin-three-views.jpg",
+      "selection": "Direct click on +5V copper in main Top 3D view with Nets filter; selectedName and properties confirmed +5V before opening popups."
+    }
+  ],
+  "interactions": [
+    "Drag popup headers to reposition",
+    "Open sibling from a popup using Probe options > Open probe",
+    "Switch popup view modes without changing main viewport",
+    "Layout popup rotated 90 degrees",
+    "Schematic popup independently wheel-zoomed and dragged to pan",
+    "3D popup independently dragged to orbit",
+    "Three curved guide paths observed after interactions"
+  ],
+  "captures": [
+    {
+      "file": "01-schematic-origin-three-views.jpg",
+      "sha256": "4e4cc31e08d3a30d77dc2e05a84185b1b864f8119e936d8de22c477bf62059a4",
+      "bytes": 137124,
+      "width": 1707,
+      "height": 1067
+    },
+    {
+      "file": "02-layout-origin-three-views.jpg",
+      "sha256": "90864bbd2b5fdef11478242724d280410b987ec762d69f93ee0a1fd37a66d40b",
+      "bytes": 133739,
+      "width": 1707,
+      "height": 1067
+    },
+    {
+      "file": "03-3d-origin-three-views.jpg",
+      "sha256": "e8fd598523b24d1316747f71c59b0267834a3936d75610032469ebf8cbf91afb",
+      "bytes": 120884,
+      "width": 1707,
+      "height": 1067
+    },
+    {
+      "file": "04-independent-popup-interactions.jpg",
+      "sha256": "6b0f96eb4ee15e0bd85a5b1638f97e5081a0e62ceed557b7c4727387be301a54",
+      "bytes": 119242,
+      "width": 1707,
+      "height": 1067
+    }
+  ],
+  "limitations": [
+    "Net-based mapping on this one saved project; not all parts, pins, repeated-sheet instances or arbitrary projects verified.",
+    "R1 component schematic-to-layout switch rejected its mismatched saved schematic instance; no forced reference-only fallback was used.",
+    "This uses packaged UI with a loopback public-project bridge, not installed-extension, VS Code, detached-window transport or physical-phone acceptance.",
+    "Existing render omissions/model counts remain disclosed by the renderer and earlier gallery provenance."
+  ]
+}

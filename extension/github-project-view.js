@@ -9,6 +9,11 @@
     async function read(message,signal) {
       const {type,repository,ref='HEAD',file}=message;
       if(!TYPES.has(type)||!data.validRepository(repository)||!data.validRef(ref))throw Error('Invalid GitHub project read.');
+      if(type==='repository-tree'){
+        const directory=message.directory,page=message.page??1;
+        if(directory!==undefined&&!root.KiCadGitHubSessionReader.safePath(directory,true))throw Error('Invalid repository directory.');
+        if(!Number.isInteger(page)||page<1||page>100||directory===undefined&&page!==1)throw Error('Invalid repository page.');
+      }
       if(type==='repo-model-index'&&!SHA.test(ref))throw Error('Model discovery requires an immutable revision.');
       if(type==='repository-history'&&message.page!==undefined&&(!Number.isInteger(message.page)||message.page<1||message.page>100))throw Error('Invalid repository page.');
       if(['project','project-file','project-inventory','drawing-files','project-search-files','revision-resolve','revision-commits','revision-branches'].includes(type)&&!paths.filePath(file))throw Error('Invalid GitHub project file.');
@@ -34,7 +39,7 @@
         const extension=path.split('.').pop().toLowerCase();return {...asset,mediaType:pdf?'application/pdf':extension==='glb'?'model/gltf-binary':['step','stp'].includes(extension)?'model/step':'model/vrml'};
       }
       if(type==='repository-branches'||type==='revision-branches')return {repository,branches:[],warnings:['API-free viewing: select a branch on GitHub or enter its name directly.']};
-      const inventory=await buffer.inventory(repository,sha,signal),warnings=[...(inventory.warnings||[])];
+      const rawInventory=await buffer.inventory(repository,sha,signal),normalize=root.KiCadGitHubProjectBuffer?.normalizeInventory||(typeof require==='function'?require('./github-project-buffer.js').normalizeInventory:null),inventory=normalize?normalize(rawInventory,sha):rawInventory,warnings=[...(inventory.warnings||[])];
       const files=inventory.files.filter(item=>paths.filePath(item.path));
       if(type==='project-inventory')return {files,snapshotRef:sha,warnings};
       const incomplete=warnings.some(warning=>/incomplete|limited|limit reached/i.test(warning));

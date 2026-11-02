@@ -483,12 +483,13 @@ const KiCadGitHubReviewApi = (() => {
       const value=await readbackJson(endpoint,session);requests++;
       if(value?.number!==number||!['open','closed'].includes(value.state)||typeof value.title!=='string'||!Number.isSafeInteger(value.comments)||value.comments<0)throw fail('GitHub returned an invalid Issue response.',true);
       thread={kind,number,title:value.title.slice(0,1024),state:value.state,isPullRequest:!!value.pull_request,locked:value.locked===true,...record(value,true)};
-      for(let page=1;comments.length<200&&!stopped&&(page-1)*50<value.comments;page++){
+      const firstPage=Math.max(1,Math.ceil(value.comments/50)-3);if(firstPage>1)warn('Issue history was truncated; showing the most recent available comment pages.');
+      for(let page=firstPage;comments.length<200&&!stopped&&(page-1)*50<value.comments;page++){
         const values=await readbackJson(`${endpoint}/comments?per_page=50&page=${page}`,session);requests++;
         if(!Array.isArray(values)||values.length>50)throw fail('GitHub returned an invalid Issue comment response.',true);
         for(const v of values)add(v);
         if(values.length<50){if(page*50<value.comments)warn('Issue pagination ended early; some comments may be missing.');break;}
-        if(page>=4){if(value.comments>page*50)stopped=true;break;}
+        if(page-firstPage>=3){if(value.comments>page*50)stopped=true;break;}
       }
     }else{
       const fields='id databaseId body createdAt updatedAt author{login} viewerCanUpdate viewerDidAuthor';
@@ -616,7 +617,7 @@ const KiCadGitHubReviewApi = (() => {
         if(!NUMBER(id)||action==='edit'&&String(id)!==target.id)throw fail('GitHub did not confirm the chat message. Inspect the thread before retrying.');
         const updatedAt=kind==='issue'?result.updated_at:result.updatedAt;
         if(typeof updatedAt!=='string'||!/^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d(?:\.\d{1,3})?Z$/.test(updatedAt)||!Number.isFinite(Date.parse(updatedAt)))throw fail('GitHub did not confirm the message revision. Inspect the thread before retrying.');
-        const response={provider:'github',kind,number,messageId:String(id),url:thread.url+(kind==='issue'?`#issuecomment-${id}`:`#discussioncomment-${id}`),updatedAt,replyTo};
+        const response={provider:'github',kind,number,messageId:String(id),author:policy.login,createdAt:action==='edit'?target.createdAt:updatedAt,url:thread.url+(kind==='issue'?`#issuecomment-${id}`:`#discussioncomment-${id}`),updatedAt,replyTo};
         invalidateReadCapabilities();
         // Remote acceptance is authoritative even if local receipt storage is full.
         const receipt={status:'done',digest,result:response};

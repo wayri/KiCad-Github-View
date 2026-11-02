@@ -152,10 +152,11 @@
         add('Filled copper','Toggle saved filled copper zones',()=>canvas.setZoneVisibility({filled:canvas.showFilledCopper===false}));
         add('Zone outlines','Toggle saved zone boundary outlines',()=>canvas.setZoneVisibility({outlines:canvas.showZoneOutlines===false}));
         add('Worksheet','Show or hide the saved KiCad page and title block',()=>{preferences.worksheet=!canvas.paperVisible;canvas.setWorksheetVisible(preferences.worksheet);savePreferences();});
-        add('Net names','Show saved pad numbers and copper net names in 2D and 3D',()=>{preferences.showNetNames=!canvas.showNetNames;applyTheme();savePreferences();});
+        add('Numbers','Show saved pin and pad numbers, including BGA ball identifiers',()=>{preferences.showTerminalNumbers=canvas.showTerminalNumbers===false;applyTheme();savePreferences();});
+        add('Net names','Show copper net names in 2D and 3D',()=>{preferences.showNetNames=!canvas.showNetNames;applyTheme();savePreferences();});
       }
       for(const [name,button] of floatingButtons){
-        const selected=name==='Worksheet'?canvas.paperVisible:name==='Net names'?canvas.showNetNames===true:name==='Filled copper'?canvas.showFilledCopper!==false:name==='Zone outlines'?canvas.showZoneOutlines!==false:name==='All'?!canvas.focusedLayer&&(canvas.design.layers||[]).every(layer=>canvas.visibleLayers.has(layer)):name==='Overview'?!canvas.focusedLayer&&!canvas.layerSnapshot:canvas.focusedLayer===name;
+        const selected=name==='Worksheet'?canvas.paperVisible:name==='Numbers'?canvas.showTerminalNumbers!==false:name==='Net names'?canvas.showNetNames===true:name==='Filled copper'?canvas.showFilledCopper!==false:name==='Zone outlines'?canvas.showZoneOutlines!==false:name==='All'?!canvas.focusedLayer&&(canvas.design.layers||[]).every(layer=>canvas.visibleLayers.has(layer)):name==='Overview'?!canvas.focusedLayer&&!canvas.layerSnapshot:canvas.focusedLayer===name;
         if(button.getAttribute('aria-pressed')!==String(selected))button.setAttribute('aria-pressed',String(selected));
       }
       if(floatingToggle&&floatingToggle.textContent!==(canvas.focusedLayer||'Layers'))floatingToggle.textContent=canvas.focusedLayer||'Layers';
@@ -207,8 +208,8 @@
       if(!designs.has(path)){
         const file=files.find(source=>source.path===path);
         if(!file)throw new Error('The referenced sheet is absent.');
-        const sheets=files.filter(source=>/\.kicad_sch$/i.test(source.path));
-        designs.set(path,(pcb?KiCadPCBRenderer:KiCadSchematicRenderer).build(KiCadDesignDiff.parse(file.content,{libraries:file.legacyLibraries}),path,{textVariables:file.textVariables,sheetNumber:sheets.findIndex(source=>source.path===path)+1,sheetCount:sheets.length,sheetName:path===rootFile?'/':'/'+path.split('/').at(-1).replace(/\.kicad_sch$/i,'')+'/'}));
+        const sheets=files.filter(source=>/\.(?:kicad_sch|sch)$/i.test(source.path));
+        designs.set(path,(pcb?KiCadPCBRenderer:KiCadSchematicRenderer).build(KiCadDesignDiff.parse(file.content,{libraries:file.legacyLibraries}),path,{textVariables:file.textVariables,sheetNumber:sheets.findIndex(source=>source.path===path)+1,sheetCount:sheets.length,sheetName:path===rootFile?'/':'/'+path.split('/').at(-1).replace(/\.(?:kicad_sch|sch)$/i,'')+'/'}));
       }
       return designs.get(path);
     }
@@ -250,6 +251,43 @@
       })().catch(error=>{probeProjects.delete(kind);throw error;}));
       return probeProjects.get(kind);
     }
+    function probeDesign(source,path,targetBoard){
+      if(designs.has(path))return designs.get(path);
+      if(!probeDesigns.has(path)){
+        const file=source.find(f=>f.path===path);if(!file)throw Error('Saved probe source unavailable.');
+        probeDesigns.set(path,(targetBoard?KiCadPCBRenderer:KiCadSchematicRenderer).build(KiCadDesignDiff.parse(file.content,{libraries:file.legacyLibraries}),path,{textVariables:file.textVariables}));
+      }
+      return probeDesigns.get(path);
+    }
+    const schematicProbeContexts=new WeakMap();
+    async function getSchematicProbeRows(row,selection){
+      const source=await probeFiles('schematic');if(disposed)throw Error('Workspace closed.');
+      if(!schematicProbeContexts.has(source)){
+        if(!probeModels.has(source))probeModels.set(source,KiCadDesignModel.buildProject(source));
+        const model=probeModels.get(source),rendered=new Map(source.filter(f=>/\.(kicad_sch|sch)$/i.test(f.path)).map(f=>[f.path,probeDesign(source,f.path,false)]));
+        const nets=KiCadNetModel.build(source,rendered).nets,placements=KiCadReviewWorkspace.sheetOverviewEntries(model.sheets.filter(s=>s.kind==='schematic'),model.objects.filter(o=>o.kind==='sheet')).flatMap(e=>e.placements||[]);
+        const byInstance=new Map(placements.map(p=>[p.id,p]));
+        for(const p of placements){const ids=[],seen=new Set();let parent=p;while(parent?.parentId&&!seen.has(parent.id)){seen.add(parent.id);ids.unshift(parent.sheetId);parent=byInstance.get(parent.parentId);}const rootUuid=model.sheets.find(s=>s.path===parent?.path)?.rootUuid;if(rootUuid&&ids.every(Boolean))p.nativePath='/'+[rootUuid,...ids].join('/');}
+        schematicProbeContexts.set(source,{model,rendered,nets,placements});
+      }
+      const {model,rendered,nets,placements}=schematicProbeContexts.get(source),canonical=selection?.canonical||row?.selection?.canonical||row?.group?.canonical;
+      const valid=KiCadPairedReview.validSelection(canonical),matching=new Map();
+      if(valid&&canonical.kind==='net'){
+        const schematic=/\.kicad_sch$/i.test(canonical.path),seeds=schematic?nets.filter(n=>n.path===canonical.path&&(n.name===canonical.netName||n.names?.includes(canonical.netName))):nets.filter(n=>n.globalNames?.includes(canonical.netName)||KiCadPairedReview.qualifiedNetName(n,model.objects)===canonical.netName);
+        const selected=[];
+        for(const net of seeds){const instances=placements.filter(p=>p.path===net.path),active=row?.entry?.path===net.path?row.entry.instanceId:null;if(active&&instances.some(p=>p.id===active))selected.push({netId:net.id,instanceId:active});else if(!schematic||instances.length===1)for(const p of instances)selected.push({netId:net.id,instanceId:p.id});}
+        const graph=globalThis.KiCadOverviewConnectivity?.resolve(nets,selected,placements);
+        for(const hit of graph?.matches||[]){if(!matching.has(hit.instanceId))matching.set(hit.instanceId,[]);matching.get(hit.instanceId).push(hit.net);}
+      }else if(valid){
+        try{const resolved=await resolveProbeViews(row,selection,'schematic'),targets=placements.filter(p=>p.path===resolved.entry.path),identity=resolved.selection?.canonical;for(const p of targets)if(targets.length===1||identity?.tstampPath===p.nativePath+'/'+(identity.ownerUuid||identity.uuid))matching.set(p.id,[resolved.group]);}catch{ /* Manual sheet browsing remains available when a part has no safe mapping. */ }
+      }
+      const sheets=placements.map(p=>{
+        const design=rendered.get(p.path),local=nets.filter(n=>n.path===p.path),groups=matching.get(p.id)||[],primitives=[...new Set(groups.flatMap(g=>g.primitives||[]))],name=canonical?.netName||canonical?.reference||row?.name||'Sheet',label=p.label||p.path;
+        const picked={...(selection||{}),primitives,...(valid?{canonical}:{})},group={id:'probe-sheet:'+p.id,kind:canonical?.kind||'net',name,primitives,...(valid?{canonical}:{})};
+        return {id:JSON.stringify([p.path,p.id]),name,label,group,selection:picked,entry:{path:p.path,kind:'schematic',label,instanceId:p.id,instanceLabel:label,design,groups:local,nets:local,objects:model.objects,model,sourceFiles:source}};
+      }).filter(r=>r.entry.design);
+      return {sheets,occurrences:sheets.filter(r=>r.group.primitives.length)};
+    }
     async function resolveProbeViews(row,selection,mode){
       if(disposed)throw Error('Workspace closed.');
       const kind=mode==='3d'?'layout':mode,source=await probeFiles(kind);
@@ -258,18 +296,12 @@
       const model=probeModels.get(source),canonical=selection?.canonical;
       if(!KiCadPairedReview.validSelection(canonical))throw Error('Select a saved part, net or pin before switching probe views.');
       const targetBoard=kind==='layout',sameKind=/\.kicad_pcb$/i.test(canonical.path)===targetBoard;
-      const getDesign=path=>{
-        if(designs.has(path))return designs.get(path);
-        if(!probeDesigns.has(path)){
-          const file=source.find(f=>f.path===path);if(!file)throw Error('Saved probe source unavailable.');
-          probeDesigns.set(path,(targetBoard?KiCadPCBRenderer:KiCadSchematicRenderer).build(KiCadDesignDiff.parse(file.content,{libraries:file.legacyLibraries}),path,{textVariables:file.textVariables}));
-        }return probeDesigns.get(path);
-      };
+      const getDesign=path=>probeDesign(source,path,targetBoard);
       const paths=source.filter(f=>targetBoard?/\.kicad_pcb$/i.test(f.path):/\.(kicad_sch|sch)$/i.test(f.path)).map(f=>f.path);
       let object,group,path;
       if(canonical.kind==='part'||canonical.kind==='pin'){
         if(sameKind){const matches=model.objects.filter(o=>o.path===canonical.path&&o.kind===(targetBoard?'footprint':'symbol')&&(canonical.ownerUuid||canonical.uuid?o.uuid===(canonical.ownerUuid||canonical.uuid):o.reference===canonical.reference));if(matches.length===1)object=matches[0];}
-        else {const part={kind:'part',reference:canonical.reference,path:canonical.path};for(const key of ['symbolUuid','tstampPath'])if(canonical[key])part[key]=canonical[key];if(canonical.ownerUuid||canonical.uuid)part.uuid=canonical.ownerUuid||canonical.uuid;const result=KiCadPairedReview.relatedPart(model.objects,part);object=result.object;if(!object)throw Error(result.error);}
+        else {const part={kind:'part',reference:canonical.reference,path:canonical.path};for(const key of ['symbolUuid','tstampPath','rootUuid'])if(canonical[key])part[key]=canonical[key];if(canonical.ownerUuid||canonical.uuid)part.uuid=canonical.ownerUuid||canonical.uuid;const result=KiCadPairedReview.relatedPart(model.objects,part);object=result.object;if(!object)throw Error(result.error);}
         if(!object)throw Error('No unambiguous saved component for this probe.');path=object.path;
         const design=getDesign(path),primitives=design.primitives.filter(p=>!p.frame&&(p.ownerUuid===object.uuid||p.uuid===object.uuid||!p.ownerUuid&&p.reference===object.reference)&&
           (canonical.kind!=='pin'||String(p.pinNumber??p.name??'')===canonical.pinNumber&&['pad','pin','pin-marker','pin-number','pin-name'].includes(p.kind)));
@@ -281,7 +313,7 @@
         if(!result.net)throw Error(result.error||'No unambiguous saved net.');group=result.net;path=group.path;
       }
       const design=getDesign(path);if(!probeNets.has(design))probeNets.set(design,KiCadNetModel.build(source.filter(f=>f.path===path),new Map([[path,design]])).nets);const nets=probeNets.get(design);
-      let targetSelection;if(object){const part=KiCadPairedReview.partSelection(object);targetSelection={kind:canonical.kind,reference:object.reference,object,primitives:group.primitives,primitive:group.primitives[0],...(canonical.kind==='pin'?{pinNumber:canonical.pinNumber}:{}),canonical:canonical.kind==='pin'?{...part,kind:'pin',ownerUuid:object.uuid,pinNumber:canonical.pinNumber}:part};}
+      let targetSelection;if(object){const nativeInstance=!targetBoard&&canonical.tstampPath?.split('/').length>2?canonical.tstampPath.split('/').slice(0,-1).join('/'):undefined,part=KiCadPairedReview.partSelection(object,{instancePath:nativeInstance});targetSelection={kind:canonical.kind,reference:object.reference,object,primitives:group.primitives,primitive:group.primitives[0],...(canonical.kind==='pin'?{pinNumber:canonical.pinNumber}:{}),canonical:canonical.kind==='pin'?{...part,kind:'pin',ownerUuid:object.uuid,pinNumber:canonical.pinNumber}:part};}
       else {const qualified=KiCadPairedReview.qualifiedNetName(group,model.objects);targetSelection={kind:'net',netName:group.name,group,primitives:group.primitives,canonical:{kind:'net',path,netName:group.name,...(qualified?{qualifiedNetName:qualified}:{})}};}
       return {id:JSON.stringify([path,group.id,mode]),name:group.name,label:path,group,selection:targetSelection,entry:{path,kind,design,groups:nets,nets,objects:model.objects,model,sourceFiles:source}};
     }
@@ -289,7 +321,7 @@
       if(globalThis.SpikeBoard3D?.mountBoard3D)return resolve(SpikeBoard3D);
       const script=document.createElement('script');script.src='vendor/spike-board3d.bundle.js';script.onload=()=>globalThis.SpikeBoard3D?resolve(SpikeBoard3D):reject(Error('3D engine unavailable.'));script.onerror=()=>{probeEngine=null;reject(Error('3D engine could not load.'));};document.head.append(script);
     });
-    async function mountProbe3D(holder,{entry,group,onSelect}){
+    async function mountProbe3D(holder,{entry,group,onSelect,onViewChange}){
       if(disposed)throw Error('Workspace closed.');
       let parentScene=scene&&entry.path===rootFile?scene:probeMaster;
       if(parentScene&&probeMasterPath&&probeMasterPath!==entry.path)throw Error('Close the current 3D probe before probing another board.');
@@ -305,12 +337,12 @@
       }
       if(!parentScene.createProbeViewport)throw Error('Update the 3D renderer to enable interactive probes.');
       const appearance=value=>value?.kind==='net'?{netNames:[value.netName||value.group?.name]}:value?.kind==='part'?{references:[value.reference]}:{uuids:(value?.primitives||group.primitives||[]).map(p=>p.uuid).filter(Boolean)};
-      const viewport=parentScene.createProbeViewport(holder,{selection:group.kind==='net'||group.code!==undefined?{netNames:[group.name]}:group.kind==='part'?{references:[group.name]}:{uuids:(group.primitives||[]).map(p=>p.uuid).filter(Boolean)},onSelect:record=>onSelect({...record,probeRecord:true}),dark});
+      const viewport=parentScene.createProbeViewport(holder,{selection:group.kind==='net'||group.code!==undefined?{netNames:[group.name]}:group.kind==='part'?{references:[group.name]}:{uuids:(group.primitives||[]).map(p=>p.uuid).filter(Boolean)},onSelect:record=>onSelect({...record,probeRecord:true}),onViewChange,dark});
       const setSelection=viewport.setSelection?.bind(viewport);if(setSelection)viewport.setSelection=value=>setSelection(appearance(value));return viewport;
     }
     workspace=KiCadReviewWorkspace.mount({initialModel:prepared.model,initialDesign:prepared.design,initialNetModel:prepared.nets,files,repository,provider,host:providerContext.host,ref,rootFile,pcb,pairedFile:params.get('pairedFile')||undefined,getCanvas:()=>canvas,currentFile,focus,openSheet,getRulerUnits:()=>preferences.rulerUnits,
 
-      getDesigns:()=>designs,resolveProbeViews,mountProbe3D,updateDiagnostics,onOverviewHighlights:()=>sheetOverview?.refresh(),
+      getDesigns:()=>designs,resolveProbeViews,getSchematicProbeRows,mountProbe3D,updateDiagnostics,onOverviewHighlights:()=>sheetOverview?.refresh(),
       onHierarchy(hierarchy){if(!disposed)parent.postMessage({type:'kicad-review:hierarchy',repository,ref,hierarchy},ownOrigin);},
       onSelection(selection){if(crossApplying||!globalThis.KiCadPairedReview?.validSelection(selection))return;windowLink?.publish(selection);if(globalThis.KiCadVSCodeBridge?.selection)globalThis.KiCadVSCodeBridge.selection(selection);else parent.postMessage({type:'kicad-review:selection',selection},ownOrigin);},
       onCommentsChanged(){if(globalThis.KiCadVSCodeBridge?.onCommentsChanged)globalThis.KiCadVSCodeBridge.onCommentsChanged();else parent.postMessage({type:'kicad-review:comments-changed'},ownOrigin);},pullNumber:Number(params.get('pullNumber'))||null,pullRepository:params.get('pullRepository')||repository});
@@ -353,7 +385,7 @@
           (hierarchyGraph?.unresolved?` · ${hierarchyGraph.unresolved} unresolved placement${hierarchyGraph.unresolved===1?'':'s'} omitted.`:'')+
           (hierarchyGraph?.omitted?` · ${hierarchyGraph.omitted} hierarchy links omitted by routing/display limits.`:'')+(composition.routing?.omitted?` · ${composition.routing.omitted} net links omitted by routing limits.`:'');
         if(!overviewView){
-          overviewView=KiCadOwnedCanvas.mount(surface,{dark,pcb:false,acceleration:'off'});overviewView.canvas.addEventListener('wheel',()=>{overviewFitted=false;},{passive:true});overviewView.canvas.addEventListener('pointerdown',event=>{if(event.button===1||event.button===2)overviewFitted=false;});
+          overviewView=KiCadOwnedCanvas.mount(surface,{dark,pcb:false,acceleration:'off',showTerminalNumbers:canvas.showTerminalNumbers});overviewView.canvas.addEventListener('wheel',()=>{overviewFitted=false;},{passive:true});overviewView.canvas.addEventListener('pointerdown',event=>{if(event.button===1||event.button===2)overviewFitted=false;});
           const baseDraw=overviewView.draw.bind(overviewView);overviewView.draw=()=>{
             baseDraw();if(!composition)return;const ctx=overviewView.ctx;if(!ctx)return;
             ctx.save();ctx.setLineDash([6,4]);if(netLinksToggle.getAttribute('aria-pressed')==='true'){if(globalThis.KiCadSheetHierarchyLinks)KiCadSheetHierarchyLinks.draw(overviewView,{links:composition.airwires},dark,{color:dark?'#d4b565a0':'#9e7b29a0',dashed:true});else for(const wire of composition.airwires)overviewView.paint(wire);}ctx.restore();
@@ -365,7 +397,7 @@
             const page=composition.pages.find(p=>at.x>=p.x&&at.x<=p.x+p.w&&at.y>=p.y&&at.y<=p.y+p.h);if(page){close();workspace.followSheet(page.path);}
           });
         }
-        overviewView.dark=dark;overviewView.setDocument(composition.design,'all-sheets');overviewView.paperVisible=false;
+        overviewView.dark=dark;overviewView.showTerminalNumbers=canvas.showTerminalNumbers;overviewView.setDocument(composition.design,'all-sheets');overviewView.paperVisible=false;
         overviewView.setNetHighlights(composition.highlighted.length?[{primitives:composition.highlighted}]:[],{mode:'bright'});fitOverview();
       };
       const close=()=>{if(!opened)return;opened=false;ticket++;gallery.hidden=true;canvas.canvas.hidden=false;overviewView?.dispose();overviewView=null;composition=null;hierarchyGraph=null;toggle.setAttribute('aria-pressed','false');canvas.resize();canvas.draw();};
@@ -373,7 +405,7 @@
       const toggle=document.createElement('button');toggle.id='allSheetPagesButton';toggle.type='button';toggle.textContent='All sheets';toggle.title='See every loaded schematic page on one canvas';toggle.setAttribute('aria-pressed','false');toggle.onclick=()=>opened?close():open();
       ($('sheetHome')?.parentElement||$('frameControls')).append(toggle);back.onclick=close;fitAll.onclick=fitOverview;
       const resizeOverview=()=>{if(opened&&overviewFitted)requestAnimationFrame(()=>{if(opened&&overviewFitted)fitOverview();});};globalThis.addEventListener?.('resize',resizeOverview);
-      sheetOverview={open,close,isOpen:()=>opened,toggle:()=>opened?close():open(),refresh(){if(opened)return rebuild();},dispose(){globalThis.removeEventListener?.('resize',resizeOverview);close();$('unselect').removeEventListener('click',clearOverviewSelection);$('clearHighlights').removeEventListener('click',clearOverviewSelection);gallery.remove();toggle.remove();}};globalThis.KiCadSheetOverview=sheetOverview;
+      sheetOverview={setTerminalNumbers(visible){if(overviewView){overviewView.showTerminalNumbers=Boolean(visible);overviewView.draw();}},open,close,isOpen:()=>opened,toggle:()=>opened?close():open(),refresh(){if(opened)return rebuild();},dispose(){globalThis.removeEventListener?.('resize',resizeOverview);close();$('unselect').removeEventListener('click',clearOverviewSelection);$('clearHighlights').removeEventListener('click',clearOverviewSelection);gallery.remove();toggle.remove();}};globalThis.KiCadSheetOverview=sheetOverview;
       addEventListener('keydown',event=>{if(event.key==='Escape'&&opened){event.preventDefault();close();}});
     }
 
@@ -385,12 +417,15 @@
 
     $('fitDrawing').onclick=()=>fit('drawing');$('fitPage').onclick=()=>fit('page');$('zoomIn').onclick=()=>zoom(1.25);$('zoomOut').onclick=()=>zoom(1/1.25);
 
-    $('themeButton').title=pcb?'Toggle board theme (D)':'Toggle paper theme (D)';$('themeButton').setAttribute('aria-pressed',String(dark));
+    $('themeButton').title=pcb?'Toggle board theme (T)':'Toggle paper theme (T)';$('themeButton').setAttribute('aria-pressed',String(dark));
 
     const savePreferences=()=>chrome.storage?.local?.set({[preferenceKey]:preferences}).catch(error=>{$('pageSetupStatus').textContent=error.message;});
 
+    const terminalNumberButton=document.createElement('button');terminalNumberButton.id='terminalNumbersButton';terminalNumberButton.type='button';terminalNumberButton.className='icon-only';terminalNumberButton.setAttribute('data-icon','pin');terminalNumberButton.setAttribute('aria-label','Pin / pad numbers');terminalNumberButton.textContent='Numbers';terminalNumberButton.title=pcb?'Toggle pad numbers / BGA ball identifiers; 3D labels are annotations visible through component bodies. Zoom in for readable labels.':'Toggle saved visible schematic pin numbers';$('frameControls').append(terminalNumberButton);globalThis.KiCadUIIcons?.decorate?.(terminalNumberButton);
+    const toggleNumbers=()=>{preferences.showTerminalNumbers=canvas.showTerminalNumbers===false;applyTheme();savePreferences();};terminalNumberButton.onclick=toggleNumbers;
+    $('showTerminalNumbers').onchange=()=>{preferences.showTerminalNumbers=$('showTerminalNumbers').checked;applyTheme();savePreferences();};
     $('netNamesSetting').hidden=!pcb;$('showNetNames').onchange=()=>{preferences.showNetNames=$('showNetNames').checked;applyTheme();savePreferences();};
-    const applyTheme=()=>{canvas.showNetNames=preferences.showNetNames===true;$('showNetNames').checked=canvas.showNetNames;dark=preferences.drawingTheme==='dark';canvas.dark=dark;canvas.acceleration=preferences.acceleration==='off'?'off':'auto';scene?.setTheme(dark);scene?.setTerminalLabels?.(canvas.showNetNames);document.body.dataset.uiTheme=preferences.uiTheme;$('uiTheme').value=preferences.uiTheme;$('drawingTheme').value=preferences.drawingTheme;$('rulerUnits').value=preferences.rulerUnits;if($('acceleration'))$('acceleration').value=canvas.acceleration;$('themeButton').setAttribute('aria-pressed',String(dark));if($('displayPreset'))$('displayPreset').value=preferences.uiTheme==='light'&&preferences.drawingTheme===(pcb?'dark':'light')?'kicad':preferences.uiTheme===preferences.drawingTheme?preferences.uiTheme:'custom';if(!scene)canvas.draw();};
+    const applyTheme=()=>{canvas.showTerminalNumbers=preferences.showTerminalNumbers!==false;$('showTerminalNumbers').checked=canvas.showTerminalNumbers;terminalNumberButton.setAttribute('aria-pressed',String(canvas.showTerminalNumbers));canvas.showNetNames=preferences.showNetNames===true;$('showNetNames').checked=canvas.showNetNames;dark=preferences.drawingTheme==='dark';canvas.dark=dark;canvas.acceleration=preferences.acceleration==='off'?'off':'auto';scene?.setTheme(dark);scene?.setTerminalLabels?.(canvas.showNetNames);scene?.setTerminalNumbers?.(canvas.showTerminalNumbers);sheetOverview?.setTerminalNumbers?.(canvas.showTerminalNumbers);workspace?.syncTerminalVisibility?.();document.body.dataset.uiTheme=preferences.uiTheme;$('uiTheme').value=preferences.uiTheme;$('drawingTheme').value=preferences.drawingTheme;$('rulerUnits').value=preferences.rulerUnits;if($('acceleration'))$('acceleration').value=canvas.acceleration;$('themeButton').setAttribute('aria-pressed',String(dark));if($('displayPreset'))$('displayPreset').value=preferences.uiTheme==='light'&&preferences.drawingTheme===(pcb?'dark':'light')?'kicad':preferences.uiTheme===preferences.drawingTheme?preferences.uiTheme:'custom';if(!scene)canvas.draw();};
 
     $('themeButton').onclick=()=>{preferences.drawingTheme=dark?'light':'dark';applyTheme();savePreferences();};
 
@@ -415,7 +450,7 @@
 
     $('gridButton').onclick=()=>{canvas.grid=!canvas.grid;$('gridButton').setAttribute('aria-pressed',String(canvas.grid));canvas.draw();};
 
-    $('flipButton').hidden=!pcb;$('flipButton').onclick=()=>{canvas.viewport.camera.flipped=!canvas.viewport.camera.flipped;$('flipButton').setAttribute('aria-pressed',String(canvas.viewport.camera.flipped));canvas.draw();};
+    $('flipButton').hidden=false;$('flipButton').title=pcb?'Flip board (F)':'Flip view (F)';$('flipButton').setAttribute('aria-label',pcb?'Flip board':'Flip view');$('flipButton').onclick=()=>{canvas.viewport.camera.flipped=!canvas.viewport.camera.flipped;$('flipButton').setAttribute('aria-pressed',String(canvas.viewport.camera.flipped));canvas.draw();};
 
     if(pcb){
 
@@ -445,7 +480,7 @@
 
           if(probeMasterLoading)throw Error('Wait for the 3D probe to finish loading.');
           if(probeMaster&&probeMasterPath===rootFile){scene=probeMaster;probeMaster=null;if(probeMasterHost){Object.assign(probeMasterHost.style,{position:'absolute',left:'0',top:'0',width:'100%',height:'100%',visibility:'visible'});pane.append(probeMasterHost);}}
-          else scene=engine.mountBoard3D(pane,files.find(file=>file.path===rootFile).content,{dark,showNetNames:canvas.showNetNames,onTerminalLabelsChange:visible=>{preferences.showNetNames=visible;applyTheme();savePreferences();},boardPath:rootFile,assetPaths:modelPaths,assetWarnings,loadAsset:modelAssetCache.load,externalInspector:true,onViewChange:()=>workspace?.sceneViewChanged(),onAnchor:({point})=>workspace?.positionSimulation(point),onMeasurementMode:active=>{$("measureButton").setAttribute("aria-pressed",String(active));$("measurementStatus").textContent=active?"3D measurement: select two model surface points.":"";},onSelect:record=>workspace?.select3D(record),onInspect:record=>workspace?.inspect3D(record),onComment:record=>workspace?.comment3D(record)});
+          else scene=engine.mountBoard3D(pane,files.find(file=>file.path===rootFile).content,{dark,showNetNames:canvas.showNetNames,showTerminalNumbers:canvas.showTerminalNumbers,onTerminalNumbersChange:visible=>{preferences.showTerminalNumbers=visible;applyTheme();savePreferences();},onTerminalLabelsChange:visible=>{preferences.showNetNames=visible;applyTheme();savePreferences();},boardPath:rootFile,assetPaths:modelPaths,assetWarnings,loadAsset:modelAssetCache.load,externalInspector:true,onViewChange:()=>workspace?.sceneViewChanged(),onAnchor:({point})=>workspace?.positionSimulation(point),onMeasurementMode:active=>{$("measureButton").setAttribute("aria-pressed",String(active));$("measurementStatus").textContent=active?"3D measurement: select two model surface points.":"";},onSelect:record=>workspace?.select3D(record),onInspect:record=>workspace?.inspect3D(record),onComment:record=>workspace?.comment3D(record)});
 
           workspace.setScene(scene);syncFloatingLayers();$('drawingLegend').hidden=true;lock(true);mode.setAttribute('aria-pressed','true');if($('renderMode'))$('renderMode').textContent='3D';
 
@@ -501,7 +536,7 @@
       if(scene){if(event.key.toLowerCase()==='f'||event.key==='Home'){event.preventDefault();scene.fit?.(event.key==='Home');}else if(['+','='].includes(event.key)){event.preventDefault();scene.zoom?.(1.25);}else if(['-','_'].includes(event.key)){event.preventDefault();scene.zoom?.(.8);}return;}
 
       if(event.key==='Escape'&&!$('viewerSettings').hidden){event.preventDefault();closeSettings();return;}
-      if(event.key==='Escape'&&canvas.focusedLayer){canvas.restoreLayers();layers();canvas.draw();}else if(['[',']'].includes(event.key)&&pcb){const choices=canvas.design.layers||[],index=choices.indexOf(canvas.focusedLayer||canvas.activeLayer);if(choices.length){event.preventDefault();canvas.focusLayer(choices[(index+(event.key===']'?1:-1)+choices.length)%choices.length],$('layerFocusMode').value||'dim');layers();canvas.draw();}}else if(event.shiftKey&&event.key.toLowerCase()==='f'&&canvas.focusedLayer){event.preventDefault();$('fitLayer').click();}else if(['+','='].includes(event.key)){event.preventDefault();zoom(1.25);}else if(['-','_'].includes(event.key)){event.preventDefault();zoom(1/1.25);}else if(event.key.toLowerCase()==='f'){event.preventDefault();fit('drawing');}else if(event.key==='Home'){event.preventDefault();fit('page');}else if(event.key.toLowerCase()==='d'){event.preventDefault();$('themeButton').click();}
+      if(event.key==='Escape'&&canvas.focusedLayer){canvas.restoreLayers();layers();canvas.draw();}else if(['[',']'].includes(event.key)&&pcb){const choices=canvas.design.layers||[],index=choices.indexOf(canvas.focusedLayer||canvas.activeLayer);if(choices.length){event.preventDefault();canvas.focusLayer(choices[(index+(event.key===']'?1:-1)+choices.length)%choices.length],$('layerFocusMode').value||'dim');layers();canvas.draw();}}else if(event.shiftKey&&event.key.toLowerCase()==='f'&&canvas.focusedLayer){event.preventDefault();$('fitLayer').click();}else if(['+','='].includes(event.key)){event.preventDefault();zoom(1.25);}else if(['-','_'].includes(event.key)){event.preventDefault();zoom(1/1.25);}else if(event.key.toLowerCase()==='f'){event.preventDefault();fit('drawing');}else if(event.key==='Home'){event.preventDefault();fit('page');}else if(event.key.toLowerCase()==='t'){event.preventDefault();$('themeButton').click();}
 
     });
 

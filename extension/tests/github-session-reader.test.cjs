@@ -73,3 +73,13 @@ test('session Stop aborts its raw fetch and cancels a stalled response body',asy
  const api=create({location:{href:'https://github.com/owner/private'},signal:controller.signal,fetch:async(url,init)=>{transportSignal=init.signal;const r=new Response(new ReadableStream({start(){},cancel(){cancelled++;}}));Object.defineProperty(r,'url',{value:'https://raw.githubusercontent.com/owner/private/'+sha+'/board.kicad_pcb'});return r;}});
  const pending=api.read({repository:repo,ref:sha,action:'file',path:'board.kicad_pcb',limit:1024});await new Promise(r=>setImmediate(r));controller.abort();await assert.rejects(pending,/cancelled/);assert.equal(cancelled,1);assert.equal(transportSignal.aborted,true);
 });
+
+
+test('live Ttl/vna2 compact directory metadata retains explicit safe navigation identity',()=>{
+ // Anonymous GitHub HTML metadata observed2026-11-01; noAPI or repository files.
+ // https://github.com/Ttl/vna2/tree/2cf0efb22da56a168a7f07bf5e2c30631343997b/fpga/vna/vna.srcs
+ const directory='fpga/vna/vna.srcs',items=[{name:'constrs_1/new',path:directory+'/constrs_1/new',contentType:'directory',hasSimplifiedPath:true},{name:'sim_1/new',path:directory+'/sim_1/new',contentType:'directory',hasSimplifiedPath:true},{name:'sources_1',path:directory+'/sources_1',contentType:'directory'}],result=treeData(tree(directory,items),sha,directory);
+ assert.deepEqual(result.items,[{path:directory+'/constrs_1/new',type:'directory',hasSimplifiedPath:true},{path:directory+'/sim_1/new',type:'directory',hasSimplifiedPath:true},{path:directory+'/sources_1',type:'directory'}]);
+ for(const patch of [{hasSimplifiedPath:false},{hasSimplifiedPath:1},{contentType:'file'},{name:'other/new'},{name:'../new'},{path:'elsewhere/constrs_1/new'},{path:directory+'/constrs_1/../new'},{name:'constrs_1\\new'}])assert.throws(()=>treeData(tree(directory,[{...items[0],...patch}]),sha,directory),/unsafe/);
+ assert.deepEqual(treeData(tree('',[{name:'design/board',path:'design/board',contentType:'directory',hasSimplifiedPath:true}]),sha,'').items,[{path:'design/board',type:'directory',hasSimplifiedPath:true}]);
+});

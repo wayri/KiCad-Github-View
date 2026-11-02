@@ -125,6 +125,23 @@
       return !match || Number(match[1]) === 0 || Number(match[1]) === selected;
     });
   }
+  // Keep bounded electrical identity independent of the display snapshot budget.
+  function sourceAssociation(form, rootUuid) {
+    const instances = [], paths = children(form, "path");
+    let complete = paths.length <= 1;
+    const path = paths.length === 1 ? textValue(paths[0][1]) : null;
+    if (path !== null && !safeText(path, 2000)) complete = false;
+    for (const project of children(child(form, "instances"), "project")) {
+      for (const placement of children(project, "path")) {
+        if (instances.length >= 64) { complete = false; break; }
+        const prefix = textValue(placement[1]), reference = field(placement, "reference");
+        if (!safeText(prefix, 1800) || !safeText(reference)) { complete = false; continue; }
+        instances.push({ prefix, reference });
+      }
+    }
+    return frozenTree({ rootUuid: safeText(rootUuid) ? rootUuid : null,
+      path: safeText(path, 2000) ? path : null, instances, complete });
+  }
   function savedSettings(item, definitions, total, libraryCache) {
     const source = snapshotTree(item.form, total);
     const properties = sourceProperties(item.form, source.tree);
@@ -313,11 +330,12 @@
     const config = normalizeConfig(variantConfig);
     const warnings = [...config.warnings];
     const sheets = [], labels = new Map(), paths = new Set(files.map((file) => file.path));
-    const definitionsByPath = new Map();
+    const definitionsByPath = new Map(), rootUuids = new Map();
     const raw = diff.projectObjects(files, (file, parsed) => {
       const kind = kindOf(parsed) === "kicad_sch" ? "schematic" : "board";
-      sheets.push({ path: file.path, label: file.path.split("/").at(-1), kind });
+      sheets.push({ path: file.path, label: file.path.split("/").at(-1), kind, ...(kind === "schematic" && safeText(field(parsed, "uuid")) ? { rootUuid: field(parsed, "uuid") } : {}) });
       if (kind === "schematic") {
+        rootUuids.set(file.path, field(parsed, "uuid"));
         const definitions = new Map();
         for (const definition of children(child(parsed, "lib_symbols"), "symbol")) {
           const id = textValue(definition[1]);
@@ -361,6 +379,7 @@
         populated: part ? flags.populated : parent ? parent.populated : null,
         populationReason: part ? flags.populationReason : parent?.populationReason || null,
         excludeFromBom: part ? flags.excludeFromBom : parent ? parent.excludeFromBom : null };
+      if (part) record.association = sourceAssociation(item.form, rootUuids.get(item.path));
       objects.push(record);
       if (!byRawKey.has(item.key)) byRawKey.set(item.key, record);
     }

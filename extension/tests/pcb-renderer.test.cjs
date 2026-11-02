@@ -187,3 +187,22 @@ test('pads retain saved terminal names, net labels and source-centered label dim
  assert.deepEqual([pad.pinNumber,pad.pinName,pad.netName,pad.ownerUuid],['2','OUT','SIGNAL','fp']);
  assert.deepEqual(pad.padCenter,{x:10,y:17});assert.deepEqual([pad.padWidth,pad.padHeight,pad.padAngle],[1,2,-45]);
 });
+
+
+test('UUID-less KiCad 10 saved copper keeps typed net identity for isolation and selection',()=>{
+ const fs=require('node:fs'),path=require('node:path'),ast=parse(fs.readFileSync(path.join(__dirname,'fixtures/fast-pi/dc-strip.kicad_pcb'),'utf8')),result=build(ast,'dc-strip.kicad_pcb'),copper=result.primitives.filter(p=>['zone','zone-outline'].includes(p.kind));
+ assert.ok(copper.some(p=>p.kind==='zone'));assert.ok(copper.some(p=>p.kind==='zone-outline'));for(const p of copper){assert.equal(p.uuid,undefined);assert.equal(p.netId,'VCC');assert.equal(p.netCode,'name:VCC');assert.equal(p.netName,'VCC');}
+ assert.ok(result.primitives.filter(p=>p.layer==='Edge.Cuts'||p.frame).every(p=>p.netId===undefined));
+});
+
+test('saved net metadata covers pads, drill, tracks, arcs, vias and filled zones with legacy and named identities',()=>{
+ for(const [version,declaration,net,id,code,name]of [[20241229,'(net 12 "POWER")','(net 12)',12,'12','POWER'],[20260206,'(net 12 "LEGACY")','(net "12")','12','name:12','12']]){
+  const ast=parse(`(kicad_pcb (version ${version}) (layers (0 "F.Cu" signal) (31 "B.Cu" signal)) ${declaration}
+   (footprint "test" (at 2 3) (uuid "part") (pad "A1" thru_hole circle (at 0 0) (size 2 2) (drill 1) (layers "*.Cu") ${net}) (pad "A2" smd custom (at 3 0) (size 1 1) (layers "F.Cu") ${net} (options (anchor rect)) (primitives (gr_circle (center 0 0) (end 1 0) (width .1) (fill yes)))))
+   (segment (start 0 0) (end 1 0) (width .2) (layer "F.Cu") ${net})
+   (arc (start 0 0) (mid 1 1) (end 2 0) (width .2) (layer "F.Cu") ${net})
+   (via (at 2 0) (size 1) (drill .4) (layers "F.Cu" "B.Cu") ${net})
+   (zone (layer "F.Cu") ${net} (polygon (pts (xy 0 0) (xy 1 0) (xy 1 1))) (filled_polygon (layer "F.Cu") (pts (xy 0 0) (xy 1 0) (xy 1 1)))))`),result=build(ast,'identity.kicad_pcb');
+  const parts=result.primitives.filter(p=>['pad','track','arc','via','drill','zone','zone-outline'].includes(p.kind));for(const kind of ['pad','track','arc','via','drill','zone','zone-outline'])assert.ok(parts.some(p=>p.kind===kind),kind);for(const p of parts){assert.equal(p.netId,id,p.kind);assert.equal(p.netCode,code,p.kind);assert.equal(p.netName,name,p.kind);}
+ }
+});

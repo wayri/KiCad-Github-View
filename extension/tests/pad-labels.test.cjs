@@ -41,14 +41,10 @@ test('browser UMD entrypoint exports the same layout contract',()=>{
  const env={};vm.runInNewContext(fs.readFileSync(path.join(__dirname,'../pad-labels.js'),'utf8'),env);
  assert.equal(env.KiCadPadLabels.layout(pad()).text,'12\nGND');
 });
-test('3D label setter synchronizes checkbox, exclusions and invalidation',()=>{
- const source=fs.readFileSync(path.join(__dirname,'../spike/board3d.js'),'utf8');
- const setter=source.match(/function setTerminalLabels\(visible\)\{([^\n]+)\}/)?.[1];assert.ok(setter);
- const factory=new Function('mechanical','measuring',`let showTerminalLabels=false,invalidations=0;const terminalLabelsToggle={checked:false},terminalLabels={visible:false},invalidate=()=>invalidations++;return {setTerminalLabels(visible){${setter}},state:()=>({showTerminalLabels,checked:terminalLabelsToggle.checked,visible:terminalLabels.visible,invalidations})};`);
- for(const [mechanical,measuring]of [[false,false],[true,false],[false,true]]){
-  const scene=factory(mechanical,measuring);assert.equal(scene.setTerminalLabels(true),true);assert.deepEqual(scene.state(),{showTerminalLabels:true,checked:true,visible:!mechanical&&!measuring,invalidations:1});
-  assert.equal(scene.setTerminalLabels(false),false);assert.deepEqual(scene.state(),{showTerminalLabels:false,checked:false,visible:false,invalidations:2});
+test('BGA identifiers remain exact with independent number and net visibility',()=>{
+ for(const number of ['A1','AA32','1048','EP']){
+  const input=pad({number,net:'VCC',widthPx:80,heightPx:50});assert.equal(layout({...input,showNetNames:false}).text,number);
+  assert.equal(layout({...input,showNumbers:false}).text,'VCC');assert.equal(layout({...input,showNumbers:false,showNetNames:false}),null);
  }
- assert.match(source,/let showTerminalLabels=options\.showNetNames===true/);
- assert.match(source,/setMeasurementMode,clearMeasurements,setTerminalLabels/);
+ assert.equal(layout(pad({showNumbers:false,net:''})),null);
 });

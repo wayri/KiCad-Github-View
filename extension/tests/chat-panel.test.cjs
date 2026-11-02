@@ -19,7 +19,7 @@ function harness(overrides={}){
  doc={body:new Node('body'),createElement:tag=>new Node(tag),createTextNode:text=>new Node(undefined,text),addEventListener:(name,fn)=>events.set(name,fn),removeEventListener:name=>events.delete(name)};
  const container=new Node('main');doc.body.append(container);const requests=[],confirmations=[],reads=[],saved=[],savedText=[],timers=[];let sequence=0;
  let scope={repository:'owner/board',ref:'a'.repeat(40),file:'board.kicad_pcb'};
- const host={crypto:{randomUUID:()=> 'mutation_'+String(++sequence).padStart(16,'0')},setTimeout:(fn,delay)=>{fn.delay=delay;timers.push(fn);return timers.length;},clearTimeout:id=>{timers[id-1]=null;},confirm:()=>true};
+ const host={addEventListener:(name,fn)=>events.set('host:'+name,fn),removeEventListener:name=>events.delete('host:'+name),crypto:{randomUUID:()=> 'mutation_'+String(++sequence).padStart(16,'0')},setTimeout:(fn,delay)=>{fn.delay=delay;timers.push(fn);return timers.length;},clearTimeout:id=>{timers[id-1]=null;},confirm:()=>true};
  const options={document:doc,host,container,provider:'github',repository:'owner/board',comments,getScope:()=>scope,
   request:async(type,payload)=>{requests.push({type,payload});return type==='comment-mention-users'?{users:[]}:{};},
   confirmSend:async value=>{confirmations.push(value);return true;},onRead:async(kind,number)=>reads.push({kind,number}),
@@ -266,4 +266,22 @@ test('posting during an old read waits for a fresh post-acceptance readback',asy
 });
 test('mention lookup carries the collaboration provider and repository',async()=>{
  const h=harness({provider:'gitlab',repository:'group/subgroup/repo'});h.api.render(thread());h.type('Hi @ali');await h.timers.at(-1)();assert.equal(h.requests[0].payload.provider,'gitlab');assert.equal(h.requests[0].payload.repository,'group/subgroup/repo');
+});
+
+test('provider-confirmed message stays visible and accepted when post readback fails or returns stale content',async()=>{
+ const h=harness({onRead:async()=>false});h.api.render(thread());let posts=0;h.setRequest(async(type)=>{assert.equal(type,'chat-message-write');posts++;return {provider:'github',kind:'issue',number:1,messageId:String(90+posts),author:'me',updatedAt:'2026-11-01T00:00:00Z',url:'https://github.com/owner/board/issues/1#issuecomment-'+(90+posts)};});
+ h.type('Accepted first message');await h.find('chat-send').onclick();assert.match(h.container.textContent,/Accepted first message/);assert.match(h.container.textContent,/Sent · awaiting readback/);assert.equal(h.find('chat-status').className,'chat-status');assert.equal(h.api.hasDraft(),false);await tick(h);assert.equal(h.find('chat-status').className,'chat-status','background failure must not repaint an accepted post as an error');assert.equal(posts,1);
+ h.type('Accepted second message');await h.find('chat-send').onclick();h.api.render(thread());assert.match(h.container.textContent,/Accepted first message/);assert.match(h.container.textContent,/Accepted second message/);assert.equal(posts,2);
+ h.api.render(thread(1,{comments:[{id:'91',author:'me',body:'Accepted first message',createdAt:'2026-11-01T00:00:00Z',updatedAt:'2026-11-01T00:00:00Z'}]}));assert.match(h.container.textContent,/Accepted second message/);assert.equal(walk(h.container).filter(n=>n.className==='chat-readback-pending').length,1);assert.equal(posts,2);
+});
+test('host changes during send confirmation reject writes and source changes discard pending read success',async()=>{
+ const before={provider:'gitlab',host:'https://gitlab.example.com',repository:'owner/board',ref:'main',file:'board.kicad_pcb'};let approve;const h=harness({provider:'gitlab',confirmSend:()=>new Promise(resolve=>approve=resolve)});h.setScope(before);h.api.render(thread());h.type('Keep draft');const send=h.find('chat-send').onclick();h.setScope({...before,host:'https://other.example.com'});approve(true);await send;assert.equal(h.requests.length,0);assert.equal(h.api.hasDraft(),true);
+ let finish;h.options.onRead=()=>new Promise(resolve=>finish=resolve);const reading=h.find('chat-refresh').onclick();await new Promise(setImmediate);h.setScope({...before,ref:'newer'});finish(true);assert.equal(await reading,false);
+});
+test('observed conversation participants suggest mentions immediately when provider lookup is unavailable',async()=>{
+ const h=harness();h.api.render(thread());h.setRequest(async()=>{throw Error('Provider unavailable');});h.type('Ask @rev');const list=h.find('chat-mention-suggestions');assert.equal(list.hidden,false);assert.equal(list.children[0].textContent,'@reviewer');await h.timers.at(-1)();assert.equal(list.hidden,false);list.children[0].onclick();assert.equal(h.byId('chatMessageText').value,'Ask @reviewer ');
+});
+
+test('offline visible conversations do not issue reads and reconnect immediately resumes bounded polling',async()=>{
+ const h=harness();h.api.render(thread());h.host.navigator={onLine:false};await tick(h);assert.equal(h.reads.length,0);assert.equal(latestTimer(h).delay,30000);h.host.navigator.onLine=true;h.events.get('host:online')();assert.equal(latestTimer(h).delay,0);await tick(h);assert.equal(h.reads.length,1);assert.equal(latestTimer(h).delay,3000);h.api.dispose();assert.equal(h.events.has('host:online'),false);
 });

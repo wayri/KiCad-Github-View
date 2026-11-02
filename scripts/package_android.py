@@ -19,12 +19,15 @@ def source_files(root=ROOT):
 def payload(root=ROOT):
     spec = importlib.util.spec_from_file_location('extension_builder', root / 'scripts/package_extension.py')
     module = importlib.util.module_from_spec(spec); spec.loader.exec_module(module)
+    metadata = module.version_metadata(root, 'android')
     excluded = {'managed-policy.js', 'managed-policy-schema.json', 'managed-policy-options.js', 'merge-conflicts.js', 'conflict-viewer.html', 'conflict-viewer.js', 'conflict-viewer.css', 'conflict-properties.js', 'manifest.json', 'options.html', 'options.js', 'gitlab-options.js', 'gitlab-hosts.js', 'gitlab-provider.js', 'gitlab-review-api.js', 'github-review-api.js', 'mention-users.js', 'review-file-store.js', 'review-file-settings.js', 'html-sandbox.html', 'html-sandbox.js', 'credential-vault.js', 'credential-vault-host.html', 'credential-vault-host.js', 'credential-vault-worker.js'}
     excluded.update({'dashboard.html','dashboard.css','dashboard.js','project-recents.js','native-kicad.js'})
     names = ((module.FILES | module.LEGAL_FILES) - excluded) | {'parsing.js'}
     result = {}
     for name in sorted(names):
         content = (root / 'extension' / name).read_bytes()
+        if name == 'product-version.js':
+            content = module.version_script(content, metadata)
         if name == 'provider-oauth.json':
             config_spec = importlib.util.spec_from_file_location('publisher_oauth', root / 'scripts/provider_oauth.py')
             config = importlib.util.module_from_spec(config_spec); config_spec.loader.exec_module(config)
@@ -62,10 +65,10 @@ def payload(root=ROOT):
         if source.is_file():
             content=(root/'extension/local-project.js').read_bytes() if source.name=='local-project.js' else source.read_bytes()
             if source.name=='about.html':
-                version=re.search(r"versionName '([^']+)'",(root/'android-app/app/build.gradle').read_text()).group(1)
-                content=content.replace(b'__APP_VERSION__',version.encode('utf-8'))
+                content=content.replace(b'__APP_VERSION__',metadata['appVersion'].encode('utf-8')).replace(b'__RELEASE_VERSION__',metadata['release'].encode('utf-8'))
             result[source.name]=content
     result['app-logo.png']=(root/'android-app/app/src/main/res/drawable/app_icon.png').read_bytes()
+    result['VERSION.txt'] = module.version_text(metadata)
     result['shared-assets.json'] = (json.dumps({'assets': {name: hashlib.sha256(data).hexdigest() for name, data in sorted(result.items())}}, indent=2)+'\n').encode()
     return result
 
@@ -76,6 +79,8 @@ def package(root=ROOT):
     output = root / 'dist/pocket-kivi-android-source.zip'; output.parent.mkdir(parents=True, exist_ok=True)
     sources = source_files(root)
     with zipfile.ZipFile(output, 'w', zipfile.ZIP_DEFLATED) as archive:
+        info = zipfile.ZipInfo('VERSION.txt', (2020,1,1,0,0,0)); info.compress_type=zipfile.ZIP_DEFLATED; info.external_attr=0o100644 << 16
+        archive.writestr(info, (assets / 'VERSION.txt').read_bytes())
         for path in sources:
             info = zipfile.ZipInfo(str(path.relative_to(root)).replace('\\','/'), (2020,1,1,0,0,0)); info.compress_type=zipfile.ZIP_DEFLATED; info.external_attr=0o100644 << 16; archive.writestr(info,path.read_bytes())
     return output

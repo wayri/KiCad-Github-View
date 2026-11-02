@@ -4,9 +4,11 @@
  const text=v=>v&&typeof v==='object'?v.quoted:v;
  const nativePath=value=>typeof value==='string'&&value.length<=2000&&value.startsWith('/')&&value.split('/').slice(1).every(p=>p&&p!=='.'&&p!=='..'&&!/[\\:\x00-\x1f\x7f]/.test(p))&&value.split('/').length<=65;
  function tstampPath(object){
+  if(object?.association){const value=object.association.path;return nativePath(value)?value:null;}
   const value=text(object?.saved?.tree?.find?.(v=>Array.isArray(v)&&v[0]==='path')?.[1]);return nativePath(value)?value:null;
  }
  function symbolPaths(object){
+  if(object?.association){const a=object.association;if(!a.complete)return [];return a.instances.filter(p=>nativePath(p.prefix)&&object.uuid&&typeof p.reference==='string').map(p=>({path:p.prefix+'/'+object.uuid,reference:p.reference}));}
   const instances=object?.saved?.tree?.find?.(v=>Array.isArray(v)&&v[0]==='instances'),result=[];
   for(const project of instances||[])if(Array.isArray(project)&&project[0]==='project')for(const path of project)if(Array.isArray(path)&&path[0]==='path'){
    const prefix=text(path[1]),reference=text(path.find(v=>Array.isArray(v)&&v[0]==='reference')?.[1]);
@@ -14,14 +16,23 @@
   }
   return result;
  }
+ function rootId(object){const id=object?.association?.rootUuid;return typeof id==='string'&&id.length>0&&id.length<=200&&!/[\\/:\x00-\x1f\x7f]/.test(id)?id:null;}
+ // Only the known root UUID may be absent in an older converted PCB path.
+ function sameInstancePath(a,b,rootUuid){
+  if(a===b)return true;
+  if(!nativePath(a)||!nativePath(b)||!rootUuid)return false;
+  const short=a.split('/').length<b.split('/').length?a:b,long=short===a?b:a;
+  return short.split('/').length===2&&long==='/'+rootUuid+short;
+ }
  function partSelection(object,{instancePath}={}){
   if(!object||!['symbol','footprint'].includes(object.kind)||!object.reference)return null;
   let path=tstampPath(object);
   if(object.kind==='symbol'){const paths=symbolPaths(object).filter(p=>instancePath?p.path===instancePath+'/'+object.uuid:p.reference===object.reference);if(paths.length===1)path=paths[0].path;}
-  const linked=symbolUuid(object),selection={kind:'part',reference:object.reference,path:object.path,...(object.uuid?{uuid:object.uuid}:{}),...(linked?{symbolUuid:linked}:{}),...(path?{tstampPath:path}:{})};
+  const linked=symbolUuid(object),selection={kind:'part',reference:object.reference,path:object.path,...(object.uuid?{uuid:object.uuid}:{}),...(linked?{symbolUuid:linked}:{}),...(path?{tstampPath:path}:{}),...(object.kind==='symbol'&&rootId(object)?{rootUuid:rootId(object)}:{})};
   return validSelection(selection)?selection:null;
  }
  function symbolUuid(object){
+  if(object?.association)return tstampPath(object)?.split('/').at(-1)||null;
   const form=object?.saved?.tree;if(!Array.isArray(form))return null;
   const path=form.find(v=>Array.isArray(v)&&v[0]==='path');
   const value=text(path?.[1]);return typeof value==='string'&&value.length<=2000?value.split('/').filter(Boolean).at(-1)||null:null;
@@ -35,7 +46,8 @@
   if(!value||typeof value!=='object'||!['part','net','pin'].includes(value.kind))return false;
   const bounded=(v,n)=>typeof v==='string'&&v.length>0&&v.length<=n&&!/[\x00-\x1f\x7f]/.test(v);
   if(!bounded(value.path,1000)||!/^.+\.kicad_(?:sch|pcb)$/i.test(value.path)||value.path.startsWith('/')||value.path.split('/').some(p=>!p||p==='.'||p==='..'||/[\\:]/.test(p)))return false;
-  const keys=value.kind==='pin'?['kind','reference','path','uuid','ownerUuid','symbolUuid','pinNumber','tstampPath']:value.kind==='part'?['kind','reference','path','uuid','symbolUuid','tstampPath']:['kind','netName','qualifiedNetName','path'];if(Object.keys(value).some(k=>!keys.includes(k)))return false;
+  const keys=value.kind==='pin'?['kind','reference','path','uuid','ownerUuid','symbolUuid','pinNumber','tstampPath','rootUuid']:value.kind==='part'?['kind','reference','path','uuid','symbolUuid','tstampPath','rootUuid']:['kind','netName','qualifiedNetName','path'];if(Object.keys(value).some(k=>!keys.includes(k)))return false;
+  if(value.rootUuid!==undefined&&(typeof value.rootUuid!=='string'||value.rootUuid.length<1||value.rootUuid.length>200||/[\\/:\x00-\x1f\x7f]/.test(value.rootUuid)))return false;
   if(value.tstampPath!==undefined&&(!nativePath(value.tstampPath)||value.symbolUuid&&value.tstampPath.split('/').at(-1)!==value.symbolUuid||/\.kicad_sch$/i.test(value.path)&&value.kind==='part'&&value.uuid&&value.tstampPath.split('/').at(-1)!==value.uuid))return false;
   if(value.kind==='net')return bounded(value.netName,500)&&(value.qualifiedNetName===undefined||bounded(value.qualifiedNetName,500));
   if(value.kind==='pin'&&(!bounded(value.pinNumber,200)||(value.ownerUuid!==undefined&&!bounded(value.ownerUuid,200))))return false;
@@ -45,11 +57,13 @@
   if(!validSelection(selection)||selection.kind!=='part')return {error:'Invalid cross-highlight selection.'};
   const board=/\.kicad_sch$/i.test(selection.path),kind=board?'footprint':'symbol';
   const parts=objects.filter(o=>o.kind===kind);
+  if(parts.some(o=>o.association?.complete===false&&(o.uuid===selection.symbolUuid||o.reference===selection.reference)))return {error:'Saved component association exceeds its identity budget; select the target explicitly.'};
   const sourceId=board?selection.uuid:selection.symbolUuid;
   let linked=sourceId?parts.filter(o=>(board?symbolUuid(o):o.uuid)===sourceId):[];
   if(selection.tstampPath){
-   linked=parts.filter(o=>board?tstampPath(o)===selection.tstampPath:o.uuid===selection.tstampPath.split('/').at(-1)&&(symbolPaths(o).some(p=>p.path===selection.tstampPath)||!symbolPaths(o).length&&!reusedSheet(o.path,objects)));
-   if(!board&&linked.length===1){const placements=symbolPaths(linked[0]).filter(p=>p.path===selection.tstampPath);if(placements.length>1||placements[0]?.reference&&placements[0].reference!==linked[0].reference)return {error:'This saved sheet instance has a different reference. Select the target sheet explicitly.'};}
+   linked=parts.filter(o=>board?sameInstancePath(tstampPath(o),selection.tstampPath,selection.rootUuid):o.uuid===selection.tstampPath.split('/').at(-1)&&(symbolPaths(o).some(p=>sameInstancePath(p.path,selection.tstampPath,rootId(o)))||!symbolPaths(o).length&&!reusedSheet(o.path,objects)&&(!rootId(o)||selection.tstampPath==='/'+o.uuid||selection.tstampPath==='/'+rootId(o)+'/'+o.uuid)));
+   if(!board&&linked.some(o=>symbolPaths(o).length>1&&selection.tstampPath.split('/').length===2))return {error:'Multiple saved instances match this source identity. Select the target sheet explicitly.'};
+   if(!board&&linked.length===1){const placements=symbolPaths(linked[0]).filter(p=>sameInstancePath(p.path,selection.tstampPath,rootId(linked[0])));if(placements.length>1||placements[0]?.reference&&placements[0].reference!==linked[0].reference)return {error:'This saved sheet instance has a different reference. Select the target sheet explicitly.'};}
    if(!linked.length)return {error:'Saved schematic instance does not match this drawing; select the target sheet explicitly.'};
   }else if(!board&&linked.length===1&&(symbolPaths(linked[0]).length>1||reusedSheet(linked[0].path,objects)))return {error:'Multiple saved instances match this source identity. Select the target sheet explicitly.'};
   if(linked.length===1)return {object:linked[0]};
@@ -67,7 +81,7 @@
   const fromSchematic=/\.kicad_sch$/i.test(selection.path);
   const match=relatedPart(objects,{kind:'part',reference:selection.reference,path:selection.path,
    ...(fromSchematic&&(selection.ownerUuid||selection.uuid)?{uuid:selection.ownerUuid||selection.uuid}:{}),
-   ...(!fromSchematic&&selection.symbolUuid?{symbolUuid:selection.symbolUuid}:{}),...(selection.tstampPath?{tstampPath:selection.tstampPath}:{})});
+   ...(!fromSchematic&&selection.symbolUuid?{symbolUuid:selection.symbolUuid}:{}),...(selection.tstampPath?{tstampPath:selection.tstampPath}:{}),...(selection.rootUuid?{rootUuid:selection.rootUuid}:{})});
   if(!match.object)return match;
   const object=match.object;
   const design=designs instanceof Map?designs.get(object.path):Array.isArray(designs)?designs.find(d=>d.path===object.path):designs?.[object.path];

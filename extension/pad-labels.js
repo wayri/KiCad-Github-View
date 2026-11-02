@@ -13,10 +13,17 @@
   }
   return '';
  }
- function layout({number,pinName='',net='',widthPx,heightPx,maxSize=18,minPadPx=13}={}){
-  number=safe(number);pinName=safe(pinName);net=safe(net);
+ function layout({number,pinName='',net='',widthPx,heightPx,maxSize=18,minPadPx=13,showNumbers=true,showNetNames=true}={}){
+  number=safe(number);pinName=showNumbers?safe(pinName):'';net=showNetNames?safe(net):'';
   if(!number||!Number.isFinite(widthPx)||!Number.isFinite(heightPx)||!Number.isFinite(minPadPx)||Math.min(widthPx,heightPx)<Math.max(0,minPadPx))return null;
   const max=Number.isFinite(maxSize)?Math.max(9,Math.min(18,maxSize)):18,usableWidth=Math.floor(widthPx)-4,usableHeight=Math.floor(heightPx)-2;
+  if(!showNumbers){
+   if(!net)return null;
+   const size=Math.floor(Math.min(max,usableHeight/1.2,usableWidth/Math.min(units(net),4)));
+   if(size<9)return null;
+   const label=middleEllipsis(net,usableWidth/size);if(!label)return null;
+   return {text:label,lines:[label],size,width:Math.ceil(units(label)*size+4),height:Math.ceil(size*1.2+2)};
+  }
   const fitSize=lines=>Math.floor(Math.min(max,usableWidth/units(number),usableHeight/(lines*1.2)));
   let size=net?fitSize(2):fitSize(1),hasNet=Boolean(net&&size>=9);
   if(!hasNet)size=fitSize(1);

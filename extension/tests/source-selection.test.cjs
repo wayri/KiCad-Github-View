@@ -17,6 +17,17 @@ test('duplicate legacy references and pad keys never acquire another native iden
  const result=sourceSelectionRecords(ast,{components:[{id:'component-R1',ref:'R1'}],pads:[{id:'pad-R1-1',name:'1'}]});
  assert.equal(result.components[0].uuid,undefined);assert.equal(result.pads[0].uuid,undefined);
 });
+
+test('UUID-less pad names come only from saved pinfunction, never pad technology',async()=>{
+ const {sourceSelectionRecords}=await import('../spike/sourceSelection.mjs');
+ const ast=diff.parse('(kicad_pcb (footprint "LED" (property "Reference" "D1") (pad "A12" smd rect) (pad "B12" smd rect (pinfunction "K"))))');
+ const board={components:[],pads:[{id:'pad-D1-A12',name:'A12',pinName:'smd'},{id:'pad-D1-B12',name:'B12',pinName:'smd'},{id:'unmatched-unnumbered-pad',name:'np_thru_hole',pinName:'smd'}]};
+ const result=sourceSelectionRecords(ast,board);
+ assert.equal(result.pads[0].pinNumber,'A12');assert.equal(result.pads[0].pinName,'');
+ assert.equal(result.pads[1].pinNumber,'B12');assert.equal(result.pads[1].pinName,'K');
+ assert.equal(result.pads[2].pinNumber,'');assert.equal(result.pads[2].pinName,'');
+ assert.equal(board.pads[0].pinName,'smd');
+});
 test('full schematic instance path separates identical symbol UUIDs in different files',()=>{
  const symbol=(path,context)=>({kind:'symbol',reference:'R1',uuid:'symbol',path,saved:{tree:['symbol',['instances',['project','project',['path',{quoted:context},['reference','R1']]]]]}});
  const a=symbol('a.kicad_sch','/root/a'),b=symbol('b.kicad_sch','/root/b');

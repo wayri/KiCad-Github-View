@@ -2,6 +2,7 @@
 
 from pathlib import Path
 import shutil
+import importlib.util
 import sys
 import zipfile
 
@@ -20,6 +21,9 @@ RENDERERS = RENDERER_ASSETS
 
 
 def package() -> None:
+    spec = importlib.util.spec_from_file_location('version_builder', Path(__file__).with_name('package_extension.py'))
+    builder = importlib.util.module_from_spec(spec); spec.loader.exec_module(builder)
+    metadata = builder.version_metadata(ROOT, 'web')
     for name in PAGES:
         if not (SOURCE / name).is_file():
             raise SystemExit(f"Missing hosted viewer source: {name}")
@@ -44,8 +48,10 @@ def package() -> None:
         shutil.copy2(VENDOR / name, destination)
     for name in RENDERERS:
         shutil.copy2(RENDERER / name, OUTPUT / name)
+    (OUTPUT / 'product-version.js').write_bytes(builder.version_script((RENDERER / 'product-version.js').read_bytes(), metadata))
+    (OUTPUT / 'VERSION.txt').write_bytes(builder.version_text(metadata))
     with zipfile.ZipFile(ARCHIVE, "w", compression=zipfile.ZIP_DEFLATED) as archive:
-        for name in PAGES + RENDERERS + tuple('vendor/'+name for name in ASSETS):
+        for name in PAGES + RENDERERS + tuple('vendor/'+name for name in ASSETS) + ('VERSION.txt',):
             archive.write(OUTPUT / name, name)
     print(OUTPUT)
     print(ARCHIVE)

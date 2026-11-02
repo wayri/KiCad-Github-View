@@ -84,11 +84,18 @@
     <p id="gitlabStatus" role="status" aria-live="polite"></p>
     <p>Reset deletes credentials and the public Application ID for this server. Removing a server also removes its preview registration and browser permission. Review notes are retained. Revoke credentials separately in GitLab account settings.</p>
   </section>
-  <section aria-label="Connection and browser checks"><h2>Connection and browser checks</h2><p>Viewer controls load but nothing opens? Run these read-only checks. They contact public GitHub endpoints without sending project files or account credentials.</p><button id="runViewerDiagnostics" type="button">Check viewer connection</button><pre id="viewerDiagnostics" role="status" style="white-space:pre-wrap;overflow-wrap:anywhere"></pre><p>Managed Chrome or Edge: ask your administrator to inspect <code>chrome://policy</code> or <code>edge://policy</code>, especially ExtensionSettings and runtime blocked hosts. Required GitHub hosts: github.com, api.github.com and raw.githubusercontent.com. The app cannot override organizational policy.</p></section>
+  <section aria-label="Connection and browser checks"><h2>Connection and browser checks</h2>
+    <p>Project viewing needs access to github.com and raw.githubusercontent.com. Account and review actions can also need api.github.com; an API-only block does not mean that project viewing is blocked.</p>
+    <p>Run these read-only checks explicitly. They first inspect extension administrator controls, then contact public endpoints without project files, account credentials or cookies. They do not change site access or administrator policy.</p>
+    <button id="runViewerDiagnostics" type="button">Check viewer connection</button><pre id="viewerDiagnostics" role="status" style="white-space:pre-wrap;overflow-wrap:anywhere"></pre>
+    <p><a id="viewerDiagnosticsLocal" href="local-viewer.html" target="_blank" rel="noopener">Open local files</a> — inspect a saved project folder without repository requests, if your organization permits local review. If the extension or file picker itself is blocked, ask your administrator for an approved workflow.</p>
+    <p>For managed Chrome or Edge, ask your administrator to inspect <code>chrome://policy</code> or <code>edge://policy</code>, ExtensionSettings, runtime blocked hosts, proxy and firewall rules. Granted site access does not prove network access. A generic fetch error or HTTP 403 does not identify the blocking rule. The extension cannot override organizational policy.</p>
+  </section>
+  <section aria-label="About Pocket KiView"><h2>About Pocket KiView</h2><p data-product-version>Development checkout</p><button type="button" data-product-about>About &amp; release notes</button></section>
   <section aria-label="Software license"><h2>Software license</h2><p>Copyright (c) 2026 Yawar B (wayri). <a href="LICENSE.txt" target="_blank" rel="noopener">Source-available license</a> · <a href="terms.html" target="_blank" rel="noopener">Terms</a>. Paid software distribution or monetized hosting requires written permission. Third-party licenses remain applicable.</p></section>
-  <script src="startup-health.js"></script><script src="ui-icons.js"></script><script src="responsive-controls.js"></script><script src="section-pages.js"></script><script src="review-comments.js"></script>
+  <script src="startup-health.js"></script><script src="product-version.js"></script><script src="product-info.js"></script><script src="ui-icons.js"></script><script src="responsive-controls.js"></script><script src="section-pages.js"></script><script src="review-comments.js"></script>
   <script src="review-file-store.js"></script>
-  <script src="options.js"></script><script src="environment-options.js"></script><script src="managed-policy-options.js"></script>
+  <script src="options.js"></script><script src="environment-diagnostics.js"></script><script src="environment-options.js"></script><script src="managed-policy-options.js"></script>
   <script src="gitlab-options.js"></script>
   <script src="review-file-settings.js"></script>
 <script src="compact-surfaces.js"></script></body>

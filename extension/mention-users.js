@@ -26,8 +26,9 @@ const KiCadMentionUsers = (() => {
   }
   function create({ authorizationHeaders, fetcher = fetch, now = () => Date.now() }) {
     if (typeof authorizationHeaders !== 'function') throw new Error('Mention lookup requires a privileged credential provider.');
-    const budgets = new Map();
+    const budgets = new Map(),responses = new Map();
     async function read(url, headers, checkConnection) {
+      await checkConnection();const identity=JSON.stringify(Object.entries(headers).sort()),cached=responses.get(url);if(cached&&cached.identity===identity&&now()-cached.at<30000)return cached.result;
       const controller = new AbortController(), timer = setTimeout(() => controller.abort(), 15000);
       try {
         await checkConnection();
@@ -41,7 +42,7 @@ const KiCadMentionUsers = (() => {
         const bytes = new Uint8Array(length); let offset = 0;
         for (const chunk of chunks) { bytes.set(chunk, offset); offset += chunk.length; }
         await checkConnection();
-        return { value: JSON.parse(new TextDecoder().decode(bytes)), more: Boolean(response.headers.get('x-next-page')) || /rel="next"/.test(response.headers.get('link') || '') };
+        const result={ value: JSON.parse(new TextDecoder().decode(bytes)), more: Boolean(response.headers.get('x-next-page')) || /rel="next"/.test(response.headers.get('link') || '') };responses.delete(url);responses.set(url,{identity,at:now(),result});if(responses.size>16)responses.delete(responses.keys().next().value);return result;
       } catch (error) { if (error.name === 'AbortError') throw new Error('Mention lookup timed out.'); throw error; }
       finally { clearTimeout(timer); controller.abort(); }
     }

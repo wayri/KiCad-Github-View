@@ -24,6 +24,9 @@ def payload(root=ROOT):
     excluded.update({'dashboard.html','dashboard.css','dashboard.js','project-recents.js','native-kicad.js','provider-oauth.js','provider-oauth.json'})
     names = sorted((names - excluded) | {'parsing.js'})
     result = {'web/' + name: (root / 'extension' / name).read_bytes() for name in names}
+    metadata = builder.version_metadata(root, 'local')
+    result['web/product-version.js'] = builder.version_script(result['web/product-version.js'], metadata)
+    result['VERSION.txt'] = builder.version_text(metadata)
     result['web/local-assets.json'] = (json.dumps({'files': [name for name in names if name != 'LICENSE.txt']}, indent=2) + '\n').encode()
     for name in PYTHON:
         result[name] = (root / name).read_bytes()

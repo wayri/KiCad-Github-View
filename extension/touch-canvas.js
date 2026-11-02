@@ -25,13 +25,15 @@
   const down=e=>{if(e.pointerType!=='touch'||tool())return;e.preventDefault();e.stopImmediatePropagation();view.dismissTouchPicker?.();points.set(e.pointerId,{x:e.clientX,y:e.clientY});node.setPointerCapture?.(e.pointerId);previous=state();cancelHold();if(points.size===1){moved=false;travel=0;held=false;const x=e.clientX,y=e.clientY;hold=root.setTimeout(()=>{hold=null;if(!moved&&points.size===1){held=true;lastTap=null;node.dispatchEvent(new MouseEvent('contextmenu',{bubbles:true,clientX:x,clientY:y,button:2}));}},550);}else moved=true;view.prepareMotion?.();};
   const move=e=>{if(!points.has(e.pointerId))return;e.preventDefault();e.stopImmediatePropagation();points.set(e.pointerId,{x:e.clientX,y:e.clientY});const next=state(),dx=next.x-previous.x,dy=next.y-previous.y;
    travel+=Math.abs(dx)+Math.abs(dy);if(travel>6){moved=true;cancelHold();}
-   const rect=node.getBoundingClientRect(),screen={x:next.x-rect.left,y:next.y-rect.top};camera.center.x-=dx/camera.zoom*(camera.flipped?-1:1);camera.center.y-=dy/camera.zoom;
+   const rect=node.getBoundingClientRect(),screen={x:next.x-rect.left,y:next.y-rect.top};const origin=camera.screen_to_world({x:0,y:0}),shift=camera.screen_to_world({x:dx,y:dy});camera.center.x-=shift.x-origin.x;camera.center.y-=shift.y-origin.y;
    if(next.d&&previous.d){const before=camera.screen_to_world(screen);camera.zoom=Math.max(.001,Math.min(10000,camera.zoom*next.d/previous.d));const after=camera.screen_to_world(screen);camera.center.x+=before.x-after.x;camera.center.y+=before.y-after.y;}
    previous=next;view.requestDraw();
   };
   const up=e=>{if(!points.has(e.pointerId))return;e.preventDefault();e.stopImmediatePropagation();cancelHold();points.delete(e.pointerId);node.releasePointerCapture?.(e.pointerId);if(points.size){previous=state();moved=true;return;}view.finishMotion?.();previous=null;if(!moved&&!held&&e.type!=='pointercancel'){const init={bubbles:true,clientX:e.clientX,clientY:e.clientY,button:0},now=e.timeStamp||Date.now();if(view.touchNetPick?.(init)){lastTap=null;return;}node.dispatchEvent(new MouseEvent('click',init));if(lastTap&&now-lastTap.time<350&&Math.hypot(e.clientX-lastTap.x,e.clientY-lastTap.y)<20){node.dispatchEvent(new MouseEvent('dblclick',init));lastTap=null;}else lastTap={time:now,x:e.clientX,y:e.clientY};}else lastTap=null;};
+  const rotated=()=>{cancelHold();for(const id of points.keys())if(node.hasPointerCapture?.(id))node.releasePointerCapture?.(id);points.clear();previous=null;moved=true;travel=0;lastTap=null;held=false;};
+  view.addEventListener?.('kicad:viewrotation',rotated);
   for(const [name,fn]of [['pointerdown',down],['pointermove',move],['pointerup',up],['pointercancel',up]])node.addEventListener(name,fn,true);
-  return()=>{for(const [name,fn]of [['pointerdown',down],['pointermove',move],['pointerup',up],['pointercancel',up]])node.removeEventListener(name,fn,true);cancelHold();points.clear();};
+  return()=>{for(const [name,fn]of [['pointerdown',down],['pointermove',move],['pointerup',up],['pointercancel',up]])node.removeEventListener(name,fn,true);view.removeEventListener?.('kicad:viewrotation',rotated);cancelHold();points.clear();};
  }
  root.KiCadTouchCanvas={attach,magnifier};root.KiCadAndroidTouch=root.KiCadTouchCanvas;if(typeof module==='object'&&module.exports)module.exports=root.KiCadAndroidTouch;
  if(root.KiCadOwnedCanvas){const mount=root.KiCadOwnedCanvas.mount;root.KiCadOwnedCanvas.mount=(...args)=>{const view=mount(...args),detach=attach(view),dispose=view.dispose.bind(view);view.dispose=()=>{detach();dispose();};return view;};}

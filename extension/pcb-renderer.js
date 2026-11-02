@@ -87,6 +87,8 @@
     const variableText=Compatibility?.textResolver(ast,{...options,path},message=>{if(!warnings.includes(message))warnings.push(message);}),variableFields=new Map();
     const page = pageOf(ast, warnings);
     const layerNames = (child(ast, "layers") || []).slice(1).filter(Array.isArray).map((part) => String(value(part[1])));
+    const netNames=new Map(children(ast,'net').filter(n=>typeof value(n[1])==='number'&&typeof value(n[2])==='string').map(n=>[value(n[1]),value(n[2])]));
+    function netMeta(node){const declaration=child(node,'net'),id=value(declaration?.[1]);if(typeof id==='number'&&Number.isSafeInteger(id)&&id>=0)return{netId:id,netCode:String(id),netName:String(value(declaration?.[2])??netNames.get(id)??'')};if(Number(field(ast,'version'))>=20260206&&declaration?.length===2&&typeof id==='string'&&id)return{netId:id,netCode:'name:'+id,netName:id};return{};}
     const push = (primitive) => {
       if (primitives.length >= 250000) throw new Error("PCB has too many render primitives.");
       primitives.push(primitive);
@@ -103,9 +105,9 @@
     function base(node, layer, owner = {}) {
       return { layer, color: colorFor(layer), uuid: uuid(node) || owner.uuid || undefined,
         ownerUuid: owner.ownerUuid || owner.uuid || undefined,
-        reference: owner.reference || undefined, kind: owner.kind || kind(node),
-        ...(owner.kind==='pad'?{name:owner.name,pinNumber:owner.pinNumber,pinName:owner.pinName,netName:owner.netName,
-          padCenter:owner.padCenter,padWidth:owner.padWidth,padHeight:owner.padHeight,padAngle:owner.padAngle}:{}) };
+        reference: owner.reference || undefined, kind: owner.kind || kind(node),...netMeta(node),
+        ...(owner.kind==='pad'?{name:owner.name,pinNumber:owner.pinNumber,pinName:owner.pinName,netName:owner.netName,netId:owner.netId,netCode:owner.netCode,
+          padCenter:owner.padCenter,padWidth:owner.padWidth,padHeight:owner.padHeight,padAngle:owner.padAngle,padShape:owner.padShape}:{}) };
     }
     function isFilled(node) {
       const fill = child(node,"fill");
@@ -186,8 +188,8 @@
         const meta = { layer, color:colorFor(layer), uuid:padUUID, ownerUuid:footprint.uuid,
           reference:footprint.reference,
           kind:"pad", name:String(value(node[1]) || ""), pinNumber:String(value(node[1]) || ""),
-          padCenter:{...center}, padWidth:width, padHeight:height, padAngle:-localAngle,
-          pinName:String(field(node,"pinfunction") || ""), netName:String(value(child(node,"net")?.[2]) || ""), padType:String(value(node[2])||""), fill:true };
+          padCenter:{...center}, padWidth:width, padHeight:height, padAngle:-localAngle,padShape:shape,
+          pinName:String(field(node,"pinfunction") || ""), ...netMeta(node), padType:String(value(node[2])||""), fill:true };
         if (shape === "circle") push({ type:"pad", x:center.x, y:center.y, r:width/2, ...meta });
         else if (shape === "custom") {
           const options = child(node,"options"), anchor = String(field(options,"anchor") || "");
@@ -220,7 +222,7 @@
         }
         if (drill > 0 && drillHeight > 0) {
           const holeMeta = { layer, color:"#111b25", fill:true, hole:true,
-            uuid:padUUID, ownerUuid:footprint.uuid, reference:footprint.reference, kind:"drill", objectCategory:"pads" };
+            uuid:padUUID, ownerUuid:footprint.uuid, reference:footprint.reference, kind:"drill", objectCategory:"pads",...netMeta(node) };
           if (ovalDrill && Math.abs(drill-drillHeight) > 1e-9) {
             const holeTransform = transformed(holeCenter,localAngle);
             push({ type:"polygon", points:oval(drill,drillHeight).map(holeTransform), ...holeMeta });
@@ -234,7 +236,7 @@
       if (type === "segment") {
         const a = point(node,"start"), b = point(node,"end");
         if (a && b) push({ type:"line", points:[a,b], layer, color:colorFor(layer),
-          width:num(field(node,"width"),.2), fill:false, uuid:uuid(node) || undefined, kind:"track" });
+          width:num(field(node,"width"),.2), fill:false, uuid:uuid(node) || undefined, kind:"track",...netMeta(node) });
       } else if (type === "arc") {
         drawShape(node,layer);
       } else if (type === "via") {
@@ -249,9 +251,9 @@
         }
         for (const copper of (plated.length ? plated : ["F.Cu","B.Cu"])) {
           push({ type:"circle", ...at, r:diameter/2, layer:copper, color:colorFor(copper), fill:true,
-            uuid:uuid(node) || undefined, kind:"via" });
+            uuid:uuid(node) || undefined, kind:"via",...netMeta(node) });
           if (drill > 0) push({ type:"circle", ...at, r:drill/2, layer:copper, color:"#111b25", fill:true,
-            hole:true, uuid:uuid(node) || undefined, kind:"drill", objectCategory:"vias" });
+            hole:true, uuid:uuid(node) || undefined, kind:"drill", objectCategory:"vias",...netMeta(node) });
         }
       } else if (["footprint","module"].includes(type)) {
         const origin = point(node,"at");
@@ -292,14 +294,14 @@
           for (const region of filled) {
             const regionLayer = String(field(region,"layer") || layer), pts = points(region);
             if (pts.length >= 3) push({ type:"polygon", points:pts, layer:regionLayer, color:colorFor(regionLayer),
-              fill:true, opacity:.22, uuid:uuid(node) || undefined, kind:"zone" });
+              fill:true, opacity:.22, uuid:uuid(node) || undefined, kind:"zone",...netMeta(node) });
           }
         } else {
           warn("Unfilled zone",node);
         }
         const outlineLayers=(child(node,'layers')||[]).slice(1).map(item=>String(value(item)));
         for(const polygon of children(node,'polygon')){const pts=points(polygon);if(pts.length<3)continue;
-          for(const outlineLayer of outlineLayers.length?outlineLayers:[layer])push({type:'polygon',points:pts,layer:outlineLayer,color:colorFor(outlineLayer),fill:false,width:.15,uuid:uuid(node)||undefined,kind:'zone-outline'});
+          for(const outlineLayer of outlineLayers.length?outlineLayers:[layer])push({type:'polygon',points:pts,layer:outlineLayer,color:colorFor(outlineLayer),fill:false,width:.15,uuid:uuid(node)||undefined,kind:'zone-outline',...netMeta(node)});
         }
       } else if (["gr_line","gr_arc","gr_rect","gr_circle","gr_poly","gr_text"].includes(type)) drawShape(node,layer);
       else if (["gr_curve","gr_text_box","gr_bitmap","dimension","target"].includes(type)) warn(type,node);

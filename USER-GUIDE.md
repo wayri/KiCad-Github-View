@@ -1,5 +1,7 @@
 # Pocket KiView illustrated user guide
 
+**Latest visual walkthrough:** the [0.12.79 real-board screenshot gallery](docs/SCREENSHOT-GALLERY-0.12.79.md) captures the packaged browser viewer on 2 November 2026. Follow actual search, cross-selection, probe, BoM, comment, Draftsman and fabrication interactions using pinned public Olimex, Marble and FMCW3 files. Local reviews, responsive previews and unsupported cases are identified explicitly. Older illustrations in this guide remain versioned historical examples.
+
 Firefox and Firefox derivatives have a separate [installation, signing and Mozilla deployment guide](docs/FIREFOX.md), including Zen, LibreWolf and Waterfox compatibility limits. The current unsigned Firefox ZIP is temporary; Firefox Android extension acceptance is pending.
 
 Open saved KiCad projects, inspect schematics and layouts, and record review or assembly findings without a KiCad installation. Design sources are read-only during ordinary viewing. Review notes, assembly progress and variants are separate data; the VS Code conflict resolver is an explicit exception that can write a resolved drawing after confirmation.
@@ -476,3 +478,10 @@ Use **Variant** beside the selection filter to switch saved assembly overlays. *
 Open **History / compare → Browse commit history** to see the available website feed. **Load commit** opens that immutable revision; **Compare with current** compares it with the current saved revision, rather than whichever branch happens to be latest. Feed history is bounded to its available initial window. Use an exact SHA for older revisions.
 
 Highlight a net, then choose **Net instances** for the list of loaded occurrences. Open up to four mini views, drag their headers, rotate clockwise/counterclockwise, fit or Locate. These windows reuse loaded saved geometry; they do not download the repository again.
+
+
+### Probe navigation and keyboard controls (0.12.80)
+
+Select a part, pin or net and press **P** to open a miniature probe (multiple matches show the occurrence list). A schematic probe has its own sheet dropdown plus **Previous / Next occurrence** for the selected net's connected sheets. Manually browsing another sheet leaves the main drawing unchanged. Probe options contain flip and 90-degree rotation; focus a probe and use **F**, **R / Shift+R**, or **[ / ]**. **P** opens a sibling probe from that probe, all owned by the main window.
+
+Main drawing shortcuts: **D** opens the selected component's datasheet (HTTP/HTTPS only), **C** starts a comment at the selected object, **P** opens a probe, **F** flips, **R / Shift+R** rotates clockwise/counterclockwise. **T** toggles drawing theme; **Shift+F** fits the drawing. Editable text fields retain normal typing. Main PCB **[ / ]** still cycles layers.

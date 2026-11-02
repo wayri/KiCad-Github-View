@@ -111,24 +111,35 @@ def audit_packages(chrome: Path, native: Path, root: Path = ROOT):
     manifest = json.loads((root / 'extension/manifest.json').read_text(encoding='utf-8'))
     expected = set(browser_builder.FILES) | set(browser_builder.LEGAL_FILES) | set(manifest['icons'].values())
     expected.add(manifest['background']['service_worker'])
+    expected.add('VERSION.txt')
+    chrome_metadata = browser_builder.version_metadata(root, 'chrome')
+    vscode_metadata = browser_builder.version_metadata(root, 'vscode')
     for entry in manifest['content_scripts']:
         expected.update(entry['js'])
     with zipfile.ZipFile(chrome) as archive:
         if set(archive.namelist()) != expected:
             raise ValueError('Chrome archive inventory differs from audited source inventory.')
         for name in expected:
-            if archive.read(name) != (root / 'extension' / name).read_bytes():
+            source = browser_builder.version_text(chrome_metadata) if name == 'VERSION.txt' else (root / 'extension' / name).read_bytes()
+            if name == 'product-version.js':
+                source = browser_builder.version_script(source, chrome_metadata)
+            if archive.read(name) != source:
                 raise ValueError(f'Chrome package/source mismatch: {name}')
     with zipfile.ZipFile(native) as archive:
         expected_native = ({f'extension/media/{name}' for name in native_builder.ASSETS} |
                            {f'extension/{name}' for name in native_builder.HOST_FILES} |
                            {f'extension/media/{provider}-review-host-api.js' for provider in ('github', 'gitlab')} |
-                           {'extension/media/shared-assets.json', 'extension.vsixmanifest', '[Content_Types].xml'})
+                           {'extension/media/shared-assets.json', 'extension.vsixmanifest', '[Content_Types].xml', 'VERSION.txt', 'extension/media/VERSION.txt'})
         if set(archive.namelist()) != expected_native:
             raise ValueError('VSIX archive inventory differs from audited source inventory.')
+        for name in ('VERSION.txt', 'extension/media/VERSION.txt'):
+            if archive.read(name) != browser_builder.version_text(vscode_metadata):
+                raise ValueError(f'VSIX generated version mismatch: {name}')
         for name in native_builder.ASSETS:
             source = (root / 'extension' / name).read_bytes()
             expected_bytes = native_builder.adapt_entry(source) if name == 'revision-viewer.js' else source
+            if name == 'product-version.js':
+                expected_bytes = browser_builder.version_script(source, vscode_metadata)
             if archive.read(f'extension/media/{name}') != expected_bytes:
                 raise ValueError(f'VSIX package/source mismatch: {name}')
         for name in native_builder.HOST_FILES:
@@ -155,6 +166,29 @@ def package_guides(output: Path, root: Path = ROOT):
                *sorted((root / 'docs/images').rglob('*.png')),
                *sorted((root / 'docs/images/draftsman').glob('*.webm')),
                root / 'docs/chrome-privacy.html']
+    # Only established public evidence names at version/ or version/feature/.
+    # Never collect arbitrary docs configuration, credentials or scratch JSON.
+    evidence_names = {'capture-manifest.json', 'browser-worker-benchmark.json',
+                      'solver-benchmark.json', 'interaction-observation.json'}
+    images = root / 'docs/images'
+    candidates = [*images.glob('*/*.json'), *images.glob('*/*/*.json')]
+    for manifest in sorted(candidates):
+        parts = manifest.relative_to(images).parts
+        version = parts[0]
+        if manifest.name not in evidence_names or not re.fullmatch(r'(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)', version):
+            continue
+        if len(parts) == 3 and not re.fullmatch(r'[a-z0-9][a-z0-9-]*', parts[1]):
+            continue
+        if manifest.is_symlink() or any(parent.is_symlink() for parent in manifest.parents if parent.is_relative_to(root)) or not manifest.resolve().is_relative_to(root.resolve()):
+            raise ValueError('Unsafe guide evidence JSON.')
+        if manifest.stat().st_size > 1024 * 1024:
+            raise ValueError('Guide capture/evidence manifest exceeds 1 MiB.')
+        document = json.loads(manifest.read_text(encoding='utf-8'))
+        if not isinstance(document, dict):
+            raise ValueError('Guide evidence JSON must be an object; capture version/schema cannot be inferred.')
+        if manifest.name == 'capture-manifest.json' and (document.get('schemaVersion') != 1 or document.get('release') != version):
+            raise ValueError('Guide capture manifest version/schema differs from its directory.')
+        paths.append(manifest)
     paths.extend(sorted((root / 'docs/play-store/assets').glob('*.png')))
     paths.extend(sorted((root / 'docs/play-store').glob('*.html')))
     with zipfile.ZipFile(output, 'w', compression=zipfile.ZIP_DEFLATED, compresslevel=9) as archive:
@@ -196,6 +230,29 @@ def audit_android_payload(archive_path: Path, expected: dict[str, bytes], prefix
                 raise ValueError(f'Android package/source mismatch: {name}')
 
 
+def audit_android_source(archive_path: Path, root: Path = ROOT):
+    """Audit original source bytes plus the one explicitly generated root entry."""
+    builder = module('package_android')
+    version_builder = module('package_extension')
+    version_content = version_builder.version_text(version_builder.version_metadata(root, 'android'))
+    source_names = {path.relative_to(root).as_posix() for path in builder.source_files(root)}
+    with zipfile.ZipFile(archive_path) as archive:
+        names = archive.namelist()
+        expected_names = source_names | {'VERSION.txt'}
+        if set(names) != expected_names or len(names) != len(expected_names):
+            raise ValueError('Android source archive inventory differs from current source.')
+        if archive.read('VERSION.txt') != version_content:
+            raise ValueError('Android generated VERSION.txt differs from canonical release/app metadata.')
+        embedded = 'android-app/app/src/main/assets/viewer/VERSION.txt'
+        if embedded in source_names and archive.read(embedded) != version_content:
+            raise ValueError('Android embedded VERSION.txt differs from canonical release/app metadata.')
+        for name in sorted(source_names):
+            path = root / name
+            if not path.resolve().is_relative_to((root / 'android-app').resolve()) or not path.is_file() or path.is_symlink() or archive.read(name) != path.read_bytes():
+                raise ValueError(f'Android source archive mismatch: {name}')
+    return len(expected_names)
+
+
 def package_android(output: Path, root: Path = ROOT):
     """Accept only locally built binaries whose embedded viewer matches this checkout."""
     version = android_version(root)
@@ -230,14 +287,7 @@ def package_android(output: Path, root: Path = ROOT):
         if any(re.fullmatch(r'META-INF/[^/]+\.(?:RSA|DSA|EC|SF)', name, re.IGNORECASE) for name in archive.namelist()):
             raise ValueError('Expected an unsigned Android bundle.')
     source = builder.package(root)
-    with zipfile.ZipFile(source) as archive:
-        source_names = {path.relative_to(root).as_posix() for path in builder.source_files(root)}
-        if set(archive.namelist()) != source_names or len(archive.namelist()) != len(source_names):
-            raise ValueError('Android source archive inventory differs from current source.')
-        for name in archive.namelist():
-            path = root / name
-            if not path.resolve().is_relative_to((root / 'android-app').resolve()) or not path.is_file() or path.is_symlink() or archive.read(name) != path.read_bytes():
-                raise ValueError(f'Android source archive mismatch: {name}')
+    audit_android_source(source, root)
     for source_path, name in ((apk, f'pocket-kivi-android-phone-tablet-{version}-development.apk'),
                               (bundle, f'pocket-kivi-android-{version}-unsigned.aab'),
                               (source, f'pocket-kivi-android-source-{version}.zip')):

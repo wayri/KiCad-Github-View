@@ -1,7 +1,9 @@
+import {createSelectionGeometry} from './selectionGeometry.mjs';
 import * as THREE from "three";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 import { VRMLLoader } from "three/addons/loaders/VRMLLoader.js";
+import {prepareVRMLSource,restoreVRMLNames} from "./vrmlSource.mjs";
 import {createBoardLighting,lightingName} from './lighting.mjs';
 import { RoomEnvironment } from "three/addons/environments/RoomEnvironment.js";
 import { RoundedBoxGeometry } from "three/addons/geometries/RoundedBoxGeometry.js";
@@ -37,6 +39,7 @@ import { padSourceDetails } from "./padGeometry.mjs";
 import {sourceSelectionRecords} from './sourceSelection.mjs';
 import {drillWallGeometry,copperStrokeBatches,smoothPadOutline,smoothDrillOutline,outerCopperPlacement,substrateEnvelope,refineCopperTracks} from './copperGeometry.mjs';
 import {createProbeRegistry,createSharedProbeViewport} from './probeViewport.mjs';
+import {createTerminalAnnotations,createTerminalLabelController} from './terminalLabels.mjs';
 import { MeasurementSession,distanceLabel,snapProjectedEdges } from "./measurement3d.mjs";
 import { boardViewPresets,boardViewPreset } from "./viewPresets.mjs";
 export { mountResultScene } from "./result3d.js";
@@ -460,10 +463,8 @@ export function mountBoard3D(container, source, options = {}) {
       return (await new GLTFLoader().parseAsync(bytes.buffer, "")).scene;
     }
     const text = new TextDecoder("utf-8", { fatal: true }).decode(bytes);
-    if (/\b(?:Inline|ImageTexture|MovieTexture|AudioClip)\b|\burl\s*(?:\[|\")/i.test(text)) {
-      throw new Error("VRML has an external resource reference");
-    }
-    return new VRMLLoader().parse(text);
+    const prepared = prepareVRMLSource(text);
+    return restoreVRMLNames(new VRMLLoader().parse(prepared.source), prepared.identifiers);
   }
   async function loadRepositoryModels() {
     if (!options.boardPath) return;
@@ -574,51 +575,25 @@ export function mountBoard3D(container, source, options = {}) {
   toggle("Back copper", true, (visible) => { groupFor("B.Cu").visible = !mechanical&&visible; });
   toggle("Parts", true, (visible) => { parts.visible = visible; renderer.shadowMap.needsUpdate=true; });
   toggle("Full net 3D", true, (enabled) => { fullNet3D=enabled;setSelection(externalSelection); });
-  // A bounded set of depth-tested terminal labels follows the net-name setting. The material
-  // preserves board/model occlusion; labels do not participate in picking or fit.
+  // Saved terminal annotations are deliberately visible through component
+  // bodies, but only on the facing outer copper side. No geometry is modified.
   let showTerminalLabels=options.showNetNames===true;
-  const terminalLabels=new THREE.Group(),terminalLabelCache=new Map();scene.add(terminalLabels);
-  const labelGeometry=new THREE.PlaneGeometry(1,1);
-  const labelRecords=nativePads.filter(p=>typeof p.name==='string'&&p.name.length>0&&p.name.length<=160).slice(0,10000);
-  const labelPool=[],frameTextures=new Set();
-  function labelTexture(label){
-    const key=JSON.stringify([label.lines,label.size,label.width,label.height]);if(terminalLabelCache.has(key)){const texture=terminalLabelCache.get(key);terminalLabelCache.delete(key);terminalLabelCache.set(key,texture);frameTextures.add(texture);return texture;}
-    if(terminalLabelCache.size>=150){const unused=[...terminalLabelCache].find(([,texture])=>!frameTextures.has(texture));if(!unused)return null;terminalLabelCache.delete(unused[0]);unused[1].dispose();}
-    const canvas=document.createElement('canvas');canvas.width=label.width*2;canvas.height=label.height*2;
-    const ctx=canvas.getContext('2d');ctx.scale(2,2);ctx.font=`600 ${label.size}px monospace`;ctx.textAlign='center';ctx.textBaseline='middle';ctx.lineJoin='round';ctx.lineWidth=2;ctx.strokeStyle='#101820';ctx.fillStyle='#f3f8fa';
-    label.lines.forEach((text,index)=>{const y=label.height/2+(index-(label.lines.length-1)/2)*label.size*1.2;ctx.strokeText(text,label.width/2,y);ctx.fillText(text,label.width/2,y);});
-    const texture=new THREE.CanvasTexture(canvas);texture.colorSpace=THREE.SRGBColorSpace;terminalLabelCache.set(key,texture);frameTextures.add(texture);return texture;
-  }
-  const projectedLabel=new THREE.Vector3();
-  function updateTerminalLabels(){
-    let count=0;frameTextures.clear();terminalLabels.visible=!mechanical&&showTerminalLabels&&!measuring;
-    if(!terminalLabels.visible)return;
-    if(!objectVisibility.visible('pads'))return void labelPool.forEach(mesh=>mesh.visible=false);
-    const canvasHeight=Math.max(1,canvasHost.clientHeight),canvasWidth=Math.max(1,canvasHost.clientWidth),boxes=[];
-    // Label the facing saved copper surface only; no inferred internal geometry.
-    const layer=camera.position.z>=controls.target.z?'F.Cu':'B.Cu';
-    if(!groupFor(layer).visible||!objectVisibility.visible('pads',layer))return void labelPool.forEach(mesh=>mesh.visible=false);
-    for(const pad of labelRecords){
-      if(count>=150)break;
-      if(!(pad.layers?.includes(layer)||pad.layers?.includes('*.Cu')||pad.layer===layer))continue;
-      const [x,y]=world(pad.at),z=layer==='F.Cu'?top+.055:bottom-.055;
-      const distance=camera.position.distanceTo(new THREE.Vector3(x,y,z));
-      const pxPerMm=canvasHeight/(2*Math.tan(camera.fov*Math.PI/360)*distance);
-      const label=padLabels.layout({number:pad.name,pinName:pad.pinName,net:pad.net,widthPx:pad.width*pxPerMm,heightPx:pad.height*pxPerMm,minPadPx:24});
-      if(!label)continue;
-      projectedLabel.set(x,y,z).project(camera);if(projectedLabel.z< -1||projectedLabel.z>1)continue;
-      const {width:w,height:h}=label;
-      const sx=(projectedLabel.x+1)*canvasWidth/2,sy=(1-projectedLabel.y)*canvasHeight/2,box={x:sx-w/2,y:sy-h/2,w,h};
-      if(box.x<0||box.y<0||box.x+w>canvasWidth||box.y+h>canvasHeight||boxes.some(b=>box.x<b.x+b.w&&box.x+w>b.x&&box.y<b.y+b.h&&box.y+h>b.y))continue;
-      const texture=labelTexture(label);if(!texture)continue;
-      let mesh=labelPool[count];if(!mesh){mesh=new THREE.Mesh(labelGeometry,new THREE.MeshBasicMaterial({transparent:true,depthTest:true,depthWrite:false,side:THREE.DoubleSide}));mesh.renderOrder=5;terminalLabels.add(mesh);labelPool.push(mesh);}
-      if(mesh.material.map!==texture){mesh.material.map=texture;mesh.material.needsUpdate=true;}mesh.position.set(x,y,z);mesh.quaternion.copy(camera.quaternion);
-      mesh.scale.set(w/pxPerMm,h/pxPerMm,1);mesh.visible=true;boxes.push(box);count++;
-    }
-    for(let i=count;i<labelPool.length;i++)labelPool[i].visible=false;
-  }
-  const terminalLabelsToggle=toggle('Pad and net names (close zoom)',showTerminalLabels,visible=>{setTerminalLabels(visible);options.onTerminalLabelsChange?.(visible);});
-  function setTerminalLabels(visible){showTerminalLabels=Boolean(visible);terminalLabelsToggle.checked=showTerminalLabels;terminalLabels.visible=!mechanical&&showTerminalLabels&&!measuring;invalidate();return showTerminalLabels;}
+  const terminalLabelStatus=document.createElement('p');terminalLabelStatus.className='quality-help';terminalLabelStatus.setAttribute('role','status');terminalLabelStatus.hidden=true;layerOptions.append(terminalLabelStatus);
+  const terminalSurfaceZ=layer=>{const saved=copperPlan.byLayer.get(layer),sign=layer==='F.Cu'?1:-1;return (saved?.z??sign*(thickness/2-(saved?.thickness||.035)/2))+sign*((saved?.thickness||.035)/2+.0015);};
+  const terminalSource={records:nativePads,world,top,bottom,surfaceZ:terminalSurfaceZ,layout:padLabels.layout,layerVisible:layer=>groupFor(layer).visible&&objectVisibility.visible('pads',layer)};
+  const terminalAnnotations=createTerminalAnnotations(THREE,{scene,camera,host:canvasHost,...terminalSource,showNetNames:showTerminalLabels,showTerminalNumbers:options.showTerminalNumbers,onStatus:state=>{
+    terminalLabelStatus.hidden=!(state.numbers||state.nets)||state.shown>0&&!state.overlap&&!state.budget&&!state.sourceOmitted;
+    terminalLabelStatus.textContent=state.shown?`${state.shown} pad annotations shown${state.overlap?`; ${state.overlap} overlapping labels omitted`:''}${state.budget?`; ${state.budget} omitted by the label/texture budget`:''}${state.sourceOmitted?`; ${state.sourceOmitted} beyond the source-record limit`:''}.`:'Zoom in on the facing copper surface for readable saved pad annotations.';
+  }});
+  const terminalLabels=terminalAnnotations.group,terminalLabelController=createTerminalLabelController(terminalAnnotations,{enabled:()=>!mechanical&&!measuring,onNumbersChange:options.onTerminalNumbersChange,onNetNamesChange:options.onTerminalLabelsChange,onChange:syncTerminalToggles});
+  function updateTerminalLabels(){terminalLabelController.update();}
+  const terminalNumbersToggle=toggle('Pad numbers (close zoom)',terminalAnnotations.getState().numbers,visible=>terminalLabelController.setNumbers(visible,{notify:true}));
+  const terminalLabelsToggle=toggle('Net names (close zoom)',showTerminalLabels,visible=>terminalLabelController.setNets(visible,{notify:true}));
+  terminalNumbersToggle.title='Saved pad numbers, including BGA names such as A1, are annotations visible through component bodies. Up to 1024 readable, nonoverlapping labels are shown within a bounded texture budget.';
+  terminalLabelsToggle.title='Saved net names are annotations visible through component bodies on the facing copper side. Zoom in for readable labels.';
+  function syncTerminalToggles(state=terminalAnnotations.getState()){showTerminalLabels=state.nets;terminalNumbersToggle.checked=state.numbers;terminalLabelsToggle.checked=state.nets;terminalLabels.visible=!mechanical&&!measuring&&(state.numbers||state.nets);probeRegistry.forEach(probe=>{probe.setTerminalNumbers?.(state.numbers);probe.setTerminalLabels?.(state.nets);});invalidate();}
+  function setTerminalLabels(visible){return terminalLabelController.setNets(visible);}
+  function setTerminalNumbers(visible){return terminalLabelController.setNumbers(visible);}
 
   fit();
 
@@ -705,24 +680,12 @@ export function mountBoard3D(container, source, options = {}) {
   rememberProbeResources(boardGroup);
   const selectionAppearance=createSelectionAppearance(THREE,()=>{const objects=[];boardGroup.traverse(object=>{if(object.material)objects.push(object);});return objects;});
   selectionAppearanceReady=true;
-  const selectionLimit = 2000;
-  // Draw only the twelve box edges, never the triangles of a solid cube.
-  const outlineGeometry = new THREE.EdgesGeometry(new THREE.BoxGeometry(1, 1, 1));
-  const unitEdges = outlineGeometry.getAttribute('position');
-  const groupGeometry = new THREE.BufferGeometry();
-  const groupPositions = new THREE.BufferAttribute(new Float32Array(selectionLimit * unitEdges.count * 3), 3);
-  groupPositions.setUsage(THREE.DynamicDrawUsage); groupGeometry.setAttribute('position', groupPositions);
-  groupGeometry.setDrawRange(0, 0);
-  const outlineMaterial = () => new THREE.LineBasicMaterial({ color: initialDark ? 0xffdf7d : 0x9b5500,
-    depthTest: true, depthWrite: false, toneMapped: false });
-  const groupHighlight = new THREE.LineSegments(groupGeometry, outlineMaterial());
-  groupHighlight.frustumCulled = false; groupHighlight.renderOrder = 101;
-  scene.add(groupHighlight);
+  const selectionGeometry=createSelectionGeometry(THREE,{scene,objects:()=>pickables,limit:2000,dark:initialDark});
   let externalSelection = {};
   const selectionNotice = document.createElement('div'); selectionNotice.className = 'hint'; selectionNotice.style.bottom = '42px'; selectionNotice.hidden = true; stage.append(selectionNotice);
   function setSelection(selection = {}) {
     invalidate();
-    if(mechanical){externalSelection={};netInspection.update({},false);netInspection.group.visible=false;selectionAppearance.restore();groupGeometry.setDrawRange(0,0);highlight.visible=false;selectionNotice.hidden=true;return {highlighted:0,matched:0,limited:false,mechanical:true};}
+    if(mechanical){externalSelection={};netInspection.update({},false);netInspection.group.visible=false;selectionAppearance.restore();selectionGeometry.clear();selectionNotice.hidden=true;return {highlighted:0,matched:0,limited:false,mechanical:true};}
     externalSelection = selection || {};
     const matches = selectionMatcher(externalSelection, board);
     const netState=netInspection.update(externalSelection,fullNet3D);
@@ -731,82 +694,20 @@ export function mountBoard3D(container, source, options = {}) {
     netInspectionHelp.title=netState.warnings.join('\n');
     hint.textContent=netState.active?'Full net 3D · '+netState.nets.join(', ')+' · '+netState.tracks+' track segments · '+netState.vias+' vias'+(netState.omitted?' · '+netState.omitted+' omitted (see Display)':''):'Drag to orbit · right-drag to pan · wheel to zoom · click to inspect';
     if(netState.active){
-      groupGeometry.setDrawRange(0,0);highlight.visible=false;
+      selectionGeometry.clear();
       selectionNotice.hidden=!netState.omitted;selectionNotice.style.display=netState.omitted?'block':'none';
       selectionNotice.textContent=netState.omitted+' selected primitives omitted; see Display for geometry notes.';
       selectionAppearance.update(matches,true,{translucent:true});
       const visible=netState.tracks+netState.pads+netState.vias+netState.platedPads+netState.fills+netState.boundaries;
       return {highlighted:visible,matched:visible,limited:netState.omitted>0||netState.sourceLimited,fullNet3D:true};
     }
-    const matrix = new THREE.Matrix4(), local = new THREE.Matrix4(), box = new THREE.Box3();
-    const center = new THREE.Vector3(), size = new THREE.Vector3();
-    let count = 0, total = 0;
-    const selectedBounds = new Map();
-    const append = (object, instanceId, record) => {
-      if (Number.isInteger(instanceId)) {
-        object.getMatrixAt(instanceId, local);
-        if (local.determinant() === 0) return;
-      }
-
-      object.updateWorldMatrix(true, false);
-      if (Number.isInteger(instanceId)) {
-        if (!object.geometry.boundingBox) object.geometry.computeBoundingBox(); box.copy(object.geometry.boundingBox);
-        matrix.multiplyMatrices(object.matrixWorld, local); box.applyMatrix4(matrix);
-      } else box.setFromObject(object);
-      if (box.isEmpty()) return;
-      const key = record?.ref ? 'part:' + record.ref : record?.uuid || record?.id || object.uuid + ':' + instanceId;
-      if (selectedBounds.has(key)) selectedBounds.get(key).union(box);
-      else if (selectedBounds.size < selectionLimit) selectedBounds.set(key, box.clone());
-      else total++;
-
-    };
-    for (const object of pickables) {
-      let visible = true; for (let node = object; node; node = node.parent) if (!node.visible) visible = false;
-      if (!visible) continue;
-      const records = object.userData.records;
-      if (records) records.forEach((record, index) => { if (matches(record)) append(object, index, record); });
-      else if (matches(object.userData.record)) append(object, undefined, object.userData.record);
-    }
-    for (const box of selectedBounds.values()) {
-      box.expandByScalar(.035); box.getCenter(center); box.getSize(size);
-      for (let i = 0; i < unitEdges.count; i++) groupPositions.setXYZ(count * unitEdges.count + i,
-        center.x + unitEdges.getX(i) * size.x, center.y + unitEdges.getY(i) * size.y, center.z + unitEdges.getZ(i) * size.z);
-      count++;
-    }
-    total += selectedBounds.size;
-    groupGeometry.setDrawRange(0, count * unitEdges.count); groupPositions.needsUpdate = true;
-    selectionNotice.hidden = total <= selectionLimit;
-    selectionNotice.textContent = `Showing ${count} of ${total} selected 3D objects`;
-    selectionNotice.style.display = total > selectionLimit ? 'block' : 'none';
-    highlight.visible = false;
-    selectionAppearance.update(matches,total>0&&selectionDim||netState.active,{translucent:netState.active});
-    return { highlighted: count, matched: total, limited: total > selectionLimit };
-  }
-  const highlight = new THREE.LineSegments(outlineGeometry, outlineMaterial());
-  highlight.matrixAutoUpdate = false;
-  highlight.renderOrder = 100;
-  highlight.visible = false;
-  scene.add(highlight);
-  const instanceMatrix = new THREE.Matrix4(), bounds = new THREE.Box3();
-  const highlightCenter = new THREE.Vector3(), highlightSize = new THREE.Vector3();
-  function showHighlight(object, instanceId) {
-    if(mechanical)return;
-    invalidate();
-    object.updateWorldMatrix(true, false);
-    if (Number.isInteger(instanceId)) {
-      object.getMatrixAt(instanceId, instanceMatrix);
-      if (!object.geometry.boundingBox) object.geometry.computeBoundingBox();
-      bounds.copy(object.geometry.boundingBox).applyMatrix4(instanceMatrix).applyMatrix4(object.matrixWorld);
-    } else bounds.setFromObject(object);
-    if (bounds.isEmpty()) { highlight.visible = false; return; }
-    bounds.expandByScalar(.035);
-    bounds.getCenter(highlightCenter); bounds.getSize(highlightSize);
-    highlight.matrix.compose(highlightCenter, new THREE.Quaternion(), highlightSize);
-    highlight.matrixWorldNeedsUpdate = true;
-    highlight.visible = true;
+    const state=selectionGeometry.update(matches);
+    selectionNotice.hidden=!state.limited;selectionNotice.textContent=`Showing ${state.highlighted} of ${state.matched} selected source meshes`;selectionNotice.style.display=state.limited?'block':'none';
+    selectionAppearance.update(matches,state.matched>0&&selectionDim);
+    return state;
   }
   function clearSelection() {
-    selected = null; inspector.hidden = true; menu.hidden = true; highlight.visible = false;
+    selected = null; inspector.hidden = true; menu.hidden = true; selectionGeometry.clear();
     setSelection({});
     options.onSelect?.(null);
   }
@@ -815,8 +716,6 @@ export function mountBoard3D(container, source, options = {}) {
     const mode=options.getSelectionMode?.()||selectionMode;
     setSelection(mode==='net'&&record.net?{netNames:[record.net]}:record.type==='Component'||typeof record.library==='string'?{references:[record.ref]}:{uuids:[record.uuid||record.id]});
     selected = { record, point: point.clone() };
-    groupGeometry.setDrawRange(0, 0);
-    if(netInspection.state().active)highlight.visible=false;else showHighlight(object, instanceId);
     options.onSelect?.(record);
     inspector.replaceChildren();
     const heading = document.createElement("h2"); heading.textContent = record.ref || record.name || record.type || "Board object";
@@ -935,7 +834,7 @@ export function mountBoard3D(container, source, options = {}) {
     try{await Promise.race([modelReady,new Promise((resolve,reject)=>{abort=()=>reject(new Error('Mechanical capture cancelled: viewer closed.'));captureAbort.signal.addEventListener('abort',abort,{once:true});timer=setTimeout(()=>reject(new Error('Mechanical model loading timed out; no incomplete capture exported.')),45000);})]);}
     finally{clearTimeout(timer);if(abort)captureAbort.signal.removeEventListener('abort',abort);}
     if(!active||contextLost||captureAbort.signal.aborted)throw new Error('Mechanical graphics are unavailable or closed.');
-    userAdjustedCamera=true;setSelection({});showTerminalLabels=false;terminalLabels.visible=false;measureGroup.visible=false;highlight.visible=false;groupHighlight.visible=false;analysisOverlay?.dispose();analysisOverlay=null;
+    userAdjustedCamera=true;setSelection({});showTerminalLabels=false;terminalLabels.visible=false;measureGroup.visible=false;selectionGeometry.clear();analysisOverlay?.dispose();analysisOverlay=null;
     for(const {mesh}of visibilityRecords)mesh.visible=false;for(const group of copperGroups.values())group.visible=false;
     boardGroup.updateWorldMatrix(true,true);
     const bounds=new THREE.Box3(),temporary=new THREE.Box3();
@@ -964,7 +863,8 @@ export function mountBoard3D(container, source, options = {}) {
       if(!active)throw Error('The parent 3D scene is closed.');
       return probeRegistry.create(()=>createSharedProbeViewport({THREE,OrbitControls,host:probeHost,source:boardGroup,sourceScene:scene,sourceRenderer:renderer,board,
         materialFor:object=>probeMaterials.get(object)||object.material,instanceColorFor:object=>probeInstanceColors.has(object)?probeInstanceColors.get(object):object.instanceColor,
-        dark:host.dataset.theme!=='light',...probeOptions}));
+        netInspectionSource:{board:{...board,tracks:refinedTracks.tracks},plan:copperPlan,zones:savedZones.records,sourceLimited:savedZones.truncated,pads:nativePads,world,colorForLayer:layerThreeColor},
+        dark:host.dataset.theme!=='light',terminalSource,showNetNames:terminalAnnotations.getState().nets,showTerminalNumbers:terminalAnnotations.getState().numbers,...probeOptions}));
     },
     objectVisibilityCapabilities(){return {supportedTypes:[...objectVisibility.supportedTypes],unsupportedTypes:['graphics','texts','regions','dimensions','rooms','footprints']};},
     setObjectVisibility(input={}) {
@@ -976,7 +876,7 @@ export function mountBoard3D(container, source, options = {}) {
       setSelection(externalSelection);
       return {hiddenTypes:[...objectVisibility.hiddenTypes],side:objectVisibility.side,supportedTypes:[...objectVisibility.supportedTypes],unsupportedTypes:[...objectVisibility.unsupportedTypes]};
     },
-    setMeasurementMode,clearMeasurements,setTerminalLabels,
+    setMeasurementMode,clearMeasurements,setTerminalLabels,setTerminalNumbers,getTerminalLabelState:()=>terminalAnnotations.getState(),
     measurementState(){return{mode:measuring,unit:measurementUnit,...measurementSession.snapshot()};},
     setQuality(value){return applyQuality(value);},
     getRenderStats(){const plan=qualityViewport(canvasHost.clientWidth,canvasHost.clientHeight,globalThis.devicePixelRatio,graphics.maxDimension,quality,graphics);return{...plan,graphicsTier:graphics.tier,defaultQuality:graphics.defaultQuality,maxDimension:graphics.maxDimension,antialias:gl.getContextAttributes()?.antialias===true,effectiveAntialias:pipeline?.fxaa?'fxaa':pipeline?'smaa':gl.getContextAttributes()?.antialias?'native-msaa':'none',postprocessSamples:pipeline?.composer.renderTarget1.samples||0,floatTargets:graphics.premium||renderer.extensions.has('EXT_color_buffer_float'),environmentLighting:Boolean(scene.environment),ambientOcclusion:Boolean(pipeline?.passes.some(pass=>pass instanceof GTAOPass&&pass.enabled)),lighting:lightingRig.state(),renderCount,contextLost,gpuTextures:renderer.info.memory.textures,drawCalls:renderer.info.render.calls,loadedModelCount:loadedModelIndexes.size,componentCount:board.components.length};},
@@ -1018,6 +918,7 @@ export function mountBoard3D(container, source, options = {}) {
     },
     fit(topView=false){if(active)fit(topView);},
     netAtPointer,
+    rotate(degrees=90){if(!active||!Number.isFinite(degrees))return false;userAdjustedCamera=true;const offset=camera.position.clone().sub(controls.target).applyAxisAngle(camera.up,degrees*Math.PI/180);camera.position.copy(controls.target).add(offset);controls.update();updateClipping();invalidate();return true;},
     flip(){if(!active)return false;userAdjustedCamera=true;const offset=camera.position.clone().sub(controls.target);camera.position.copy(controls.target).sub(offset);controls.update();updateClipping();invalidate();return true;},
     setView(view){if(!active||!boardViewPresets.some(preset=>preset.id===view))return false;userAdjustedCamera=true;fit(view);return true;},
     zoom(factor){if(!active||!Number.isFinite(factor)||factor<=0)return;const offset=camera.position.clone().sub(controls.target);const distance=Math.max(controls.minDistance,Math.min(controls.maxDistance,offset.length()/factor));if(offset.length()>0)camera.position.copy(controls.target).add(offset.setLength(distance));controls.update();},
@@ -1025,8 +926,7 @@ export function mountBoard3D(container, source, options = {}) {
       if (!active) return;
       host.dataset.theme = dark ? "dark" : "light";
       scene.background.setHex(dark ? 0x151820 : mechanical ? 0xffffff : 0xe7ebf1);
-      highlight.material.color.setHex(dark ? 0xffdf7d : 0x9b5500);
-      groupHighlight.material.color.setHex(dark ? 0xffdf7d : 0x9b5500);
+      selectionGeometry.setTheme(dark);
       resize();
       invalidate();
     },
@@ -1059,8 +959,8 @@ export function mountBoard3D(container, source, options = {}) {
         if (index != null && !population[index]) clearSelection();
       }
     },
-    dispose() { probeRegistry.dispose();if(measuring)options.onMeasurementMode?.(false);active = false;captureAbort.abort(); analysisOverlay?.dispose(); stepClient?.dispose(); cancelAnimationFrame(frame); cancelAnimationFrame(layoutFrame); observer.disconnect();controls.removeEventListener('change',invalidate); controls.removeEventListener("change", updateClipping); controls.removeEventListener("start", cameraInteraction); controls.dispose();disposePipeline();lightingRig.dispose();environment?.dispose();renderer.domElement.removeEventListener('webglcontextlost',onContextLost);renderer.domElement.removeEventListener('webglcontextrestored',onContextRestored);document.removeEventListener('pointerdown',closeVisibility);shadow.removeEventListener('keydown',escapeVisibility,true);shadow.removeEventListener('keydown',escapeMeasurement);
-    renderer.domElement.removeEventListener('pointerdown',measurementTouchCapture,true);netInspection.dispose();selectionAppearance.dispose();const resources = new Set(); scene.traverse((object) => {object.shadow?.dispose?.(); if (object.geometry) resources.add(object.geometry);
+    dispose() { probeRegistry.dispose();terminalAnnotations.dispose();if(measuring)options.onMeasurementMode?.(false);active = false;captureAbort.abort(); analysisOverlay?.dispose(); stepClient?.dispose(); cancelAnimationFrame(frame); cancelAnimationFrame(layoutFrame); observer.disconnect();controls.removeEventListener('change',invalidate); controls.removeEventListener("change", updateClipping); controls.removeEventListener("start", cameraInteraction); controls.dispose();disposePipeline();lightingRig.dispose();environment?.dispose();renderer.domElement.removeEventListener('webglcontextlost',onContextLost);renderer.domElement.removeEventListener('webglcontextrestored',onContextRestored);document.removeEventListener('pointerdown',closeVisibility);shadow.removeEventListener('keydown',escapeVisibility,true);shadow.removeEventListener('keydown',escapeMeasurement);
+    renderer.domElement.removeEventListener('pointerdown',measurementTouchCapture,true);netInspection.dispose();selectionGeometry.dispose();selectionAppearance.dispose();const resources = new Set(); scene.traverse((object) => {object.shadow?.dispose?.(); if (object.geometry) resources.add(object.geometry);
       const materials = Array.isArray(object.material) ? object.material : object.material ? [object.material] : [];
-      materials.forEach((item) => resources.add(item)); }); resources.forEach((item) => item.dispose());terminalLabelCache.forEach(texture=>texture.dispose()); labelGeometry.dispose(); hold.dispose(); renderer.dispose(); host.remove(); } };
+      materials.forEach((item) => resources.add(item)); }); resources.forEach((item) => item.dispose());hold.dispose(); renderer.dispose(); host.remove(); } };
 }

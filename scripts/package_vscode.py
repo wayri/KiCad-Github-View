@@ -28,6 +28,7 @@ ASSETS += ('engineering-launcher.js', 'review-handoff.js', 'local-runtime.js')
 ASSETS += ('net-quick-view.js',)
 ASSETS += ('window-link.js','detached-view.js')
 ASSETS += ('fast-pi.js','fast-pi-worker.js','fast-pi-worker-vscode.js','fast-pi-workspace.js','fast-pi-workspace.css')
+ASSETS += ('product-version.js', 'product-info.js')
 BUILD_INPUTS = ('github-review-api.js', 'gitlab-review-api.js', 'step-decoder.js', 'step-worker.js', 'vendor/occt/occt-import-js.js')
 ASSETS += ('variant-manager.js', 'bom-import.js', 'bom-viewer.html', 'bom-viewer.js','bom-workspace.js', 'bom-field-table.js', 'bom-viewer.css', 'calculator-tools.js', 'calculator-viewer.html', 'calculator-viewer.js', 'calculator-viewer.css', 'analysis-spatial.js', 'analysis-overlay.js', 'analysis-bom-link.js')
 ASSETS += ('calculator-catalog.js','calculator-visuals.js')
@@ -87,6 +88,9 @@ def prepare_media(root: Path = ROOT) -> dict[str, bytes]:
     fast_spec.loader.exec_module(fast_builder)
     if (root / 'extension/fast-pi-worker-vscode.js').read_bytes() != fast_builder.bundle(root):
         raise ValueError('Fast PI worker bundle is stale; run scripts/build_fast_pi_worker.py.')
+    version_spec = importlib.util.spec_from_file_location('version_builder', Path(__file__).with_name('package_extension.py'))
+    version_builder = importlib.util.module_from_spec(version_spec); version_spec.loader.exec_module(version_builder)
+    metadata = version_builder.version_metadata(root, 'vscode')
     payload, hashes = {}, {}
     destination = root / 'vscode-extension' / 'media'
     for name in ASSETS:
@@ -95,6 +99,8 @@ def prepare_media(root: Path = ROOT) -> dict[str, bytes]:
             raise ValueError(f'Missing shared viewer asset: {name}')
         source = path.read_bytes()
         content = adapt_entry(source) if name == 'revision-viewer.js' else source
+        if name == 'product-version.js':
+            content = version_builder.version_script(source, metadata)
         target = destination / name
         target.parent.mkdir(parents=True, exist_ok=True)
         target.write_bytes(content)
@@ -108,6 +114,11 @@ def prepare_media(root: Path = ROOT) -> dict[str, bytes]:
         (destination / name).write_bytes(content)
         payload[f'extension/media/{name}'] = content
         hashes[name] = {'sourceSha256': hashlib.sha256(source).hexdigest(), 'packagedSha256': hashlib.sha256(content).hexdigest()}
+    version_content = version_builder.version_text(metadata)
+    (destination / 'VERSION.txt').write_bytes(version_content)
+    payload['VERSION.txt'] = version_content
+    payload['extension/media/VERSION.txt'] = version_content
+    hashes['VERSION.txt'] = {'packagedSha256': hashlib.sha256(version_content).hexdigest()}
     inventory = (json.dumps({'format': 1, 'assets': hashes}, indent=2, sort_keys=True) + '\n').encode()
     (destination / 'shared-assets.json').write_bytes(inventory)
     payload['extension/media/shared-assets.json'] = inventory

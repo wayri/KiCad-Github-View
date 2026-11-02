@@ -17,7 +17,7 @@ body[data-workspace-chrome] #selectionMode{width:120px;min-width:100px;flex:0 0 
 body[data-workspace-chrome] #frameControls .frame-actions{width:auto;gap:5px;flex:0 0 auto}
 body[data-workspace-chrome] #frameControls .tool-group{padding-right:6px;gap:2px;border-color:var(--line)}
 body[data-workspace-chrome] #frameControls .tool-group button:has(.ui-icon){width:30px;min-width:30px;height:30px;min-height:30px;border:0;background:transparent;padding:6px}
-body[data-workspace-chrome] #frameControls :is(#focusView,.workspace-view-options){height:30px;min-height:30px;width:30px;min-width:30px;padding:6px;flex:0 0 30px;border-color:transparent;background:transparent}
+body[data-workspace-chrome] #frameControls :is(#focusView,#terminalNumbersButton,.workspace-view-options){height:30px;min-height:30px;width:30px;min-width:30px;padding:6px;flex:0 0 30px;border-color:transparent;background:transparent}
 body[data-workspace-chrome] #frameControls .workspace-view-options{margin-left:auto}
 body[data-workspace-chrome] #frameControls .workspace-view-options .button-label{display:none}
 body[data-workspace-chrome] #frameControls .ui-icon{width:18px;height:18px;flex-basis:18px}
@@ -148,6 +148,6 @@ body[data-workspace-chrome] #drawingTools .button-label{display:none}
 @media(pointer:coarse){body[data-workspace-chrome] #drawingTools button{padding:13px}}
 
 @media(pointer:fine){
- body[data-workspace-chrome] #frameControls :is(#focusView,.workspace-view-options,.workspace-mode-switch){width:28px;min-width:28px;flex:0 0 28px;height:28px;min-height:28px;padding:5px}
+ body[data-workspace-chrome] #frameControls :is(#focusView,#terminalNumbersButton,.workspace-view-options,.workspace-mode-switch){width:28px;min-width:28px;flex:0 0 28px;height:28px;min-height:28px;padding:5px}
  body[data-workspace-chrome] #frameControls #netQuickViews{height:28px;min-height:28px;padding:4px 8px;font-size:11px}
 }

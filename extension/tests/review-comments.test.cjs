@@ -228,3 +228,14 @@ test('linked-state cache scopes repositories, hosts and conversation kinds and r
 test('local and remote copies merge by exact source identity without rewriting either annotation',()=>{
  const local={...sample(),text:'New local text',updatedAt:'2026-10-29T02:00:00Z',remoteRefs:[{kind:'issue',number:7}]},remote={...sample(),text:'Older posted text',github:{state:'closed',source:'issue',number:7}},before=JSON.stringify([local,remote]),merged=comments.mergeAnnotations([local],[remote]);assert.equal(merged.length,1);assert.equal(merged[0].text,local.text);assert.equal(merged[0].github.state,'closed');assert.equal(merged[0].remoteRefs.length,1);assert.equal(JSON.stringify([local,remote]),before);assert.equal(comments.mergeAnnotations([local],[{...remote,anchor:{...remote.anchor,ref:'b'.repeat(40)}}]).length,2);
 });
+
+test('thread readback imports only exact-source active anchors with provider provenance and full area/sheet metadata',()=>{
+ for(const provider of ['github','gitlab']){
+  const scope={repository:'owner/board',ref:'main',file:'design/root.kicad_sch',...(provider==='gitlab'?{provider,host:'https://gitlab.example.com'}:{})},base=provider==='gitlab'?'https://gitlab.example.com/owner/board/-/issues/7':'https://github.com/owner/board/discussions/7';
+  const note={...sample(),anchor:{...scope,sheetUuid:'11111111-2222-3333-4444-555555555555',sheetName:'Power',position:{x:3,y:4},area:{x:1,y:2,width:3,height:4}}},body=comments.toMarkdown(note),thread={kind:provider==='github'?'discussion':'issue',number:7,state:'open',url:base,body:'Description',author:'owner',comments:[{id:'8',body,url:base+'#comment-8',author:'alice',createdAt:note.createdAt,updatedAt:note.createdAt},{id:'9',body:'```markdown\n'+body+'\n```',url:base+'#comment-9',author:'bob'},{id:'10',body:comments.toMarkdown({...note,anchor:{...note.anchor,ref:'other'}}),url:base+'#comment-10',author:'bob'}]};
+  const imported=comments.threadAnnotations(thread,scope);assert.equal(imported.length,1);assert.deepEqual(imported[0].anchor,note.anchor);assert.equal(imported[0].github.author,'alice');assert.equal(imported[0].github.number,7);assert.equal(imported[0].github.url,base+'#comment-8');assert.equal(comments.threadAnnotations({...thread,url:'https://evil.example/thread'},scope).length,0);
+ }
+});
+test('source sheet identity uses the saved root UUID rather than a symbol UUID or fabricated board identity',()=>{
+ const root='11111111-2222-3333-4444-555555555555',symbol='aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee';assert.equal(comments.sourceSheetUuid(`(kicad_sch (uuid "${root}") (symbol (uuid "${symbol}")))`),root);assert.equal(comments.sourceSheetUuid(`(kicad_sch (symbol (uuid "${symbol}")))`),null);assert.equal(comments.sourceSheetUuid(`(kicad_pcb (footprint (uuid "${symbol}")))`),null);assert.equal(comments.sourceSheetUuid('(kicad_sch (uuid "invalid"))'),null);
+});

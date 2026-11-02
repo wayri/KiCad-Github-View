@@ -269,3 +269,10 @@ test('variable-bearing drawings preserve metadata bounds, failures and cancellat
   assert.equal(failed[0].content,drawing);assert.match(failed[0].discoveryWarning,/Not accessible/);
   await assert.rejects(data.loadProject('owner/repo','main','root.kicad_pcb',async(_repo,_ref,path)=>{if(path.endsWith('.kicad_pro'))throw Error('Project loading cancelled.');return drawing;}),/cancelled/);
 });
+
+
+test('legacy child entry resolves its saved root before looking up the root cache library',async()=>{
+ const root='EESchema Schematic File Version 2\n$Sheet\nS 100 100 200 200\nU 1234ABCD\nF0 "Power" 60\nF1 "sub/power.sch" 60\n$EndSheet\n$EndSCHEMATC\n',child='EESchema Schematic File Version 2\n$EndSCHEMATC\n',reads=[],sources={'hw/main.sch':root,'hw/sub/power.sch':child,'hw/main-cache.lib':'EESchema-LIBRARY Version 2.4\n#End Library\n'};
+ const files=await data.loadProject('Ttl/vna2','2cf0efb22da56a168a7f07bf5e2c30631343997b','hw/sub/power.sch',async(_r,_s,path)=>{reads.push(path);return sources[path]??null;},null,'github',async()=>['hw/main.sch','hw/sub/power.sch']);
+ assert.deepEqual(files.map(f=>f.path),['hw/main.sch','hw/sub/power.sch']);assert.equal(data.rootSheetPath(files,'hw/sub/power.sch'),'hw/main.sch');assert.equal(reads.filter(p=>p==='hw/main-cache.lib').length,1);assert.ok(!reads.includes('hw/sub/power-cache.lib'));assert.equal(files[0].legacyLibraries,files[1].legacyLibraries);
+});

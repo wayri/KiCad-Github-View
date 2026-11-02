@@ -1,0 +1,78 @@
+[
+  {
+    "name": "marble-root",
+    "url": "https://github.com/BerkeleyLab/Marble",
+    "finalUrl": "https://github.com/BerkeleyLab/Marble",
+    "status": 200,
+    "sourceBytes": 236324,
+    "sourceSha256": "76bdc7c456d8552262d146da10413b312605dcc9c16d73a366242e5e4eda1aba",
+    "retainedHtmlSha256": "54e8cd9759fd60cd51a4dd5f4b66f3e94870ebc536f8fd60e29899f1546aecdc",
+    "ref": {
+      "name": "main",
+      "listCacheKey": "v0:1749071723.0",
+      "canEdit": false,
+      "refType": "branch",
+      "currentOid": "a426777d92c0f22a546d4740b419a3937e0c1f90"
+    },
+    "path": "/",
+    "treeCount": 5,
+    "retention": "Exact public route path/refInfo and complete tree item metadata retained; session/CSRF/layout payloads omitted."
+  },
+  {
+    "name": "marble-design",
+    "url": "https://github.com/BerkeleyLab/Marble/tree/main/design",
+    "finalUrl": "https://github.com/BerkeleyLab/Marble/tree/main/design",
+    "status": 200,
+    "sourceBytes": 257221,
+    "sourceSha256": "f241feeb696b60cb3d4413db9dbb6f34d454d98b0baa1bcde8bf5cedaccc5790",
+    "retainedHtmlSha256": "e57ad6a228f71e2ddc0c3a6e6db9a5e7402a5e8aeda50e924979095854bd9d85",
+    "ref": {
+      "name": "main",
+      "listCacheKey": "v0:1749071723.0",
+      "canEdit": false,
+      "refType": "branch",
+      "currentOid": "a426777d92c0f22a546d4740b419a3937e0c1f90"
+    },
+    "path": "design",
+    "treeCount": 36,
+    "retention": "Exact public route path/refInfo and complete tree item metadata retained; session/CSRF/layout payloads omitted."
+  },
+  {
+    "name": "vna2-root",
+    "url": "https://github.com/Ttl/vna2",
+    "finalUrl": "https://github.com/Ttl/vna2",
+    "status": 200,
+    "sourceBytes": 198560,
+    "sourceSha256": "1e0646cef368a2365d8811bd8c31284700e9bffed946b694e566f66fdc3162b0",
+    "retainedHtmlSha256": "fafd69faf6369fe68f4addb1b053c63494cb5a148de3dd370c2db85508327bc0",
+    "ref": {
+      "name": "master",
+      "listCacheKey": "v0:1489411715.0",
+      "canEdit": false,
+      "refType": "branch",
+      "currentOid": "2cf0efb22da56a168a7f07bf5e2c30631343997b"
+    },
+    "path": "/",
+    "treeCount": 6,
+    "retention": "Exact public route path/refInfo and complete tree item metadata retained; session/CSRF/layout payloads omitted."
+  },
+  {
+    "name": "vna2-hw",
+    "url": "https://github.com/Ttl/vna2/tree/master/hw",
+    "finalUrl": "https://github.com/Ttl/vna2/tree/master/hw",
+    "status": 200,
+    "sourceBytes": 218926,
+    "sourceSha256": "310373cc74a6f38da0a71826c7f50789b172e4d1646409300a1947cff41d7c3c",
+    "retainedHtmlSha256": "2fd0c8e6831064146457cb1020ede851e61574ab694bf107d908ff6fdaf5be09",
+    "ref": {
+      "name": "master",
+      "listCacheKey": "v0:1489411715.0",
+      "canEdit": false,
+      "refType": "branch",
+      "currentOid": "2cf0efb22da56a168a7f07bf5e2c30631343997b"
+    },
+    "path": "hw",
+    "treeCount": 22,
+    "retention": "Exact public route path/refInfo and complete tree item metadata retained; session/CSRF/layout payloads omitted."
+  }
+]

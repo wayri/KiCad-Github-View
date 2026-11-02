@@ -1,0 +1,44 @@
+{
+  "schemaVersion": 1,
+  "release": "0.12.80",
+  "capturedAt": "2026-11-02",
+  "surface": "Packaged extension in integrated browser via localhost public-snapshot bridge; not installed-store or hardware acceptance",
+  "chromePackageSha256": "4e7160165325a970a40865eedd7b1d98f9fb3641ef89149912907445f6b31867",
+  "sources": [
+    {
+      "repository": "BerkeleyLab/Marble",
+      "commit": "a426777d92c0f22a546d4740b419a3937e0c1f90",
+      "scope": "25 schematic files plus project; no full PCB memory test"
+    },
+    {
+      "repository": "OLIMEX/ESP32-POE",
+      "commit": "deb38a377d50eadb04ddc7118a17a5ae58b1ee53",
+      "scope": "ESP32-PoE revision M2 schematic, PCB, saved models"
+    }
+  ],
+  "screenshots": [
+    {
+      "file": "01-marble-independent-sheet-probe.jpg",
+      "sha256": "686673d101487259bc1550bf4c6302b19a4613f7e8ce8e39cee3e87bd293c414"
+    },
+    {
+      "file": "02-r1-schematic-layout-3d-probes.jpg",
+      "sha256": "44e8b61e2b6a27ec6824a46a2039b7e341f09e575e2ca82788c7f81c86b68120"
+    },
+    {
+      "file": "03-independent-3d-flip-rotation.jpg",
+      "sha256": "37005234e485d0ece635f3845df53cfad29e730320d2f10b1581594b2804d7ae"
+    }
+  ],
+  "observations": [
+    "Marble FPGA_MISO has4 connected popup occurrences among26 sheet placements; Next reached4/4; parent stayedFPGA. ManualPMOD navigation and return to occurrences verified.",
+    "OlimexR1 layout\u2192schematic and schematic\u2192layout/3D resolved saved source identity;1/1 popup counter.",
+    "P opened direct probe; nested sibling creation, header drag, independent180-degree2Drotation,3Dflip and90-degreerotation verified.",
+    "Guide endpoints now use component pad/body geometry; no error-level browser console entries at capture."
+  ],
+  "limits": [
+    "Office enterprise policy environment not available.",
+    "Android hardware, installed Chrome/Firefox/VSIX and live provider writes not tested in this run.",
+    "Marble screenshot predates final part-only guide-anchor adjustment; the selectednet path is unchanged."
+  ]
+}

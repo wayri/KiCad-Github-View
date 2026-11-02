@@ -6,15 +6,17 @@ import json
 import zipfile
 
 try:
-    from .package_extension import FILES, ROOT
+    from .package_extension import FILES, ROOT, version_metadata, version_script, version_text
 except ImportError:
     spec = importlib.util.spec_from_file_location('package_extension', Path(__file__).with_name('package_extension.py'))
     builder = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(builder)
     FILES, ROOT = builder.FILES, builder.ROOT
+    version_metadata, version_script, version_text = builder.version_metadata, builder.version_script, builder.version_text
 
 
 def payload(root: Path = ROOT) -> dict[str, bytes]:
+    metadata = version_metadata(root, 'safari')
     source = root / 'extension'
     manifest = json.loads((source / 'manifest.json').read_text(encoding='utf-8'))
     # Do not rely on Chromium's extension sandbox semantics in another browser.
@@ -31,7 +33,9 @@ def payload(root: Path = ROOT) -> dict[str, bytes]:
         path = source / name
         if not path.is_file() or path.is_symlink() or not path.resolve().is_relative_to(source.resolve()):
             raise ValueError(f'Unsafe or missing Safari source: {name}')
-        result['web-extension/' + name] = path.read_bytes()
+        content = path.read_bytes()
+        result['web-extension/' + name] = version_script(content, metadata) if name == 'product-version.js' else content
+    result['VERSION.txt'] = version_text(metadata)
     result['web-extension/manifest.json'] = (json.dumps(manifest, indent=2) + '\n').encode()
     entry = result['web-extension/project-viewer.js'].decode('utf-8')
     marker = "$('previewHTML').onclick=async()=>{"

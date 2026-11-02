@@ -309,3 +309,44 @@ test('opaque consecutive line batches reduce native strokes while preserving ord
  const {canvas,operations}=runtime();const lines=Array.from({length:600},(_,i)=>({type:'line',kind:'track',layer:'F.Cu',color:'#ff0000',width:.2,points:[{x:i/100,y:0},{x:i/100,y:1}]}));canvas.setDocument({layers:['F.Cu'],primitives:lines},'board.kicad_pcb');canvas.viewport.camera.bbox={x:-1,y:-1,w:10,h:5};operations.length=0;canvas.draw();assert.equal(operations.filter(op=>op[0]==='stroke').length,2);assert.equal(operations.filter(op=>op[0]==='moveTo').length,600);assert.equal(operations.filter(op=>op[0]==='lineTo').length,600);
  canvas.primitives=[lines[0],{...lines[1],opacity:.5},lines[2]];operations.length=0;canvas.draw();assert.equal(operations.filter(op=>op[0]==='stroke').length,3,'translucent geometry must remain separately composited');canvas.dispose();
 });
+
+
+test('quarter-turn camera projection round-trips all orientations and fits rotated rectangular bounds',()=>{
+ const c=new core.Camera(900,500);assert.equal(c.quarterTurns,0);
+ for(const flipped of [false,true])for(let turn=0;turn<4;turn++){
+  c.flipped=flipped;c.quarterTurns=turn;c.bbox={x:10,y:20,w:80,h:25};
+  near(c.zoom,Math.min(900/(turn%2?25:80),500/(turn%2?80:25)));
+  for(const p of [{x:10,y:20},{x:90,y:20},{x:90,y:45},{x:10,y:45},{x:-300,y:180}]){const screen=c.world_to_screen(p),back=c.screen_to_world(screen);near(back.x,p.x);near(back.y,p.y);if(p.x>=10&&p.x<=90){assert.ok(screen.x>=-1e-8&&screen.x<=900+1e-8);assert.ok(screen.y>=-1e-8&&screen.y<=500+1e-8);}}
+  for(const screen of [{x:0,y:0},{x:900,y:500}]){const p=c.screen_to_world(screen),b=c.bbox;assert.ok(p.x>=b.x-1e-8&&p.x<=b.x+b.w+1e-8&&p.y>=b.y-1e-8&&p.y<=b.y+b.h+1e-8);}
+ }
+ c.center.set(0,0);c.zoom=1;c.flipped=false;c.quarterTurns=1;assert.deepEqual(c.world_to_screen({x:10,y:0}),{x:450,y:260});c.quarterTurns=-1;assert.equal(c.quarterTurns,3);c.quarterTurns=9;assert.equal(c.quarterTurns,1);
+});
+
+test('rotated and flipped mouse drag, wheel anchoring and picking preserve saved identity',()=>{
+ for(const flipped of [false,true])for(let turn=0;turn<4;turn++){
+  const {canvas,listeners}=runtime(),pad={type:'pad',kind:'pad',x:2,y:3,r:1,fill:true,layer:'F.Cu',uuid:'saved-pad'};canvas.setDocument({primitives:[pad],layers:['F.Cu']},'board');const c=canvas.viewport.camera;c.flipped=flipped;c.quarterTurns=turn;c.center.set(0,0);c.zoom=10;
+  const start={x:320,y:250},before=c.screen_to_world(start);listeners.get('pointerdown')({button:2,clientX:start.x,clientY:start.y,pointerId:1,preventDefault(){}});listeners.get('pointermove')({clientX:350,clientY:270});const after=c.screen_to_world({x:350,y:270});near(after.x,before.x);near(after.y,before.y);listeners.get('pointerup')({pointerId:1});
+  const cursor={x:230,y:180},anchor=c.screen_to_world(cursor);listeners.get('wheel')({clientX:cursor.x,clientY:cursor.y,deltaY:-20,preventDefault(){}});const zoomed=c.screen_to_world(cursor);near(zoomed.x,anchor.x);near(zoomed.y,anchor.y);
+  const screen=c.world_to_screen(pad);listeners.get('click')({clientX:screen.x,clientY:screen.y});assert.equal(canvas.selected,pad);canvas.dispose();
+ }
+});
+
+test('quarter-turn action clears stale GPU gesture state and redraws without changing world geometry',()=>{
+ const {canvas,element}=runtime();let hidden=0;canvas.motion={saved:{quarterTurns:0},hide(){hidden++;},dispose(){}};canvas.motionActive=true;canvas.wheelMotion=true;canvas.drag={x:3,y:4};element.style.opacity='0';const point={x:4,y:7},before=JSON.stringify(point),c=canvas.viewport.camera;const center={x:c.center.x,y:c.center.y},zoom=c.zoom;
+ assert.equal(canvas.rotateQuarterTurn(),1);assert.equal(canvas.drag,null);assert.equal(canvas.motion.saved,null);assert.equal(canvas.motionActive,false);assert.equal(canvas.wheelMotion,false);assert.equal(element.style.opacity,'');assert.ok(hidden>0);assert.equal(canvas.cameraState().quarterTurns,1);near(c.center.x,center.x);near(c.center.y,center.y);near(c.zoom,zoom);assert.equal(JSON.stringify(point),before);assert.equal(canvas.rotateQuarterTurn(-1),0);assert.equal(canvas.rotateQuarterTurn(Infinity),0);canvas.dispose();
+});
+
+test('rotated native paths, arcs, text bounds and worksheet agree with the camera transform',()=>{
+ const paths=[];class Path{constructor(){this.points=[];paths.push(this);}moveTo(x,y){this.points.push({x,y});}lineTo(x,y){this.points.push({x,y});}closePath(){}}
+ const {canvas,operations}=runtime(1,{Path2D:Path}),c=canvas.viewport.camera,poly={type:'polygon',fill:true,points:Array.from({length:8},(_,i)=>({x:i,y:i%3}))},arc={type:'arc',start:{x:1,y:0},mid:{x:0,y:1},end:{x:-1,y:0}},text={type:'text',x:3,y:4,text:'R1',angle:25,size:1};canvas.primitives=[poly];c.center.set(2,3);c.zoom=10;canvas.ctx.measureText=()=>({actualBoundingBoxLeft:8,actualBoundingBoxRight:10,actualBoundingBoxAscent:7,actualBoundingBoxDescent:3});
+ // Interpret actual retained-path Canvas transforms independently and compare vertices.
+ for(const flipped of [false,true])for(let turn=0;turn<4;turn++){
+  c.flipped=flipped;c.quarterTurns=turn;operations.length=0;canvas.paint(poly);let matrix=[1,0,0,1,0,0];const apply=(a,b)=>[a[0]*b[0]+a[2]*b[1],a[1]*b[0]+a[3]*b[1],a[0]*b[2]+a[2]*b[3],a[1]*b[2]+a[3]*b[3],a[0]*b[4]+a[2]*b[5]+a[4],a[1]*b[4]+a[3]*b[5]+a[5]];
+  for(const op of operations){if(op[0]==='translate')matrix=apply(matrix,[1,0,0,1,op[1],op[2]]);if(op[0]==='scale')matrix=apply(matrix,[op[1],0,0,op[2],0,0]);if(op[0]==='rotate'){const a=op[1];matrix=apply(matrix,[Math.cos(a),Math.sin(a),-Math.sin(a),Math.cos(a),0,0]);}}
+  for(const p of paths[0].points){const q=c.world_to_screen(p);near(matrix[0]*p.x+matrix[2]*p.y+matrix[4],q.x);near(matrix[1]*p.x+matrix[3]*p.y+matrix[5],q.y);}
+  operations.length=0;canvas.paint(arc);const op=operations.find(o=>o[0]==='arc'),start=c.world_to_screen(arc.start),end=c.world_to_screen(arc.end);near(op[1]+op[3]*Math.cos(op[4]),start.x);near(op[2]+op[3]*Math.sin(op[4]),start.y);near(op[1]+op[3]*Math.cos(op[5]),end.x);near(op[2]+op[3]*Math.sin(op[5]),end.y);assert.equal(op[6],flipped);
+  operations.length=0;canvas.paint(text);near(operations.find(o=>o[0]==='rotate')[1],(25*(flipped?-1:1)+turn*90)*Math.PI/180);const b=canvas.textBounds(text);assert.ok(b&&b.w>0&&b.h>0);const anchor=c.world_to_screen(text),angle=(25*(flipped?-1:1)+turn*90)*Math.PI/180;for(const [x,y] of [[-8,-7],[10,-7],[10,3],[-8,3]]){const w=c.screen_to_world({x:anchor.x+x*Math.cos(angle)-y*Math.sin(angle),y:anchor.y+x*Math.sin(angle)+y*Math.cos(angle)});assert.ok(w.x>=b.x-1e-8&&w.x<=b.x+b.w+1e-8&&w.y>=b.y-1e-8&&w.y<=b.y+b.h+1e-8);}const projected=core.bounds([{type:'polygon',points:[{x:b.x,y:b.y},{x:b.x+b.w,y:b.y+b.h}]}]);assert.ok(projected);
+  canvas.design={page:{width:20,height:10}};canvas.paperVisible=true;operations.length=0;canvas.drawGeometry();const paper=operations.filter(o=>o[0]==='fillRect')[1],a=c.world_to_screen({x:0,y:0}),z=c.world_to_screen({x:20,y:10});near(paper[1],Math.min(a.x,z.x));near(paper[2],Math.min(a.y,z.y));assert.ok(paper[3]>0&&paper[4]>0);
+ }
+ assert.equal(paths.length,1);canvas.dispose();
+});

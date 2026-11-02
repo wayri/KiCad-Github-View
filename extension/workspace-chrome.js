@@ -40,7 +40,7 @@
   host.addEventListener('kicad-review:simulation-view',openSimulation);
 
   const embeddedHeader=new URLSearchParams(host.location?.search||'').get('headerViews')==='1';
-  for(const [key,label,icon]of [['schematic','Schematic','sheet'],['layout','Layout','board'],['3d','3D','cube'],['draftsman','Draftsman','ruler'],['simulation','Simulation','analytics']]){
+  for(const [key,label,icon]of [['schematic','Schematic','sheet'],['layout','Layout','board'],['3d','3D','cube'],['draftsman','Draftsman','draftsman'],['simulation','Simulation','analytics']]){
    const node=create('button','',label);node.type='button';node.title=label+' view';node.setAttribute('aria-label',label+' view');node.setAttribute('data-icon',icon);viewButtons.set(key,node);viewNavigation.append(node);
    node.onclick=()=>{const mode=doc.getElementById('mode3d'),board=Boolean(mode&&!mode.hidden),in3d=mode?.getAttribute('aria-pressed')==='true';
     if(key==='3d'){if(board&&!in3d&&!mode.disabled)mode.click();return;}
@@ -57,6 +57,7 @@
   const observedMode=doc.getElementById('mode3d');if(observedMode)modeObserver?.observe(observedMode,{attributes:true,attributeFilter:['hidden','disabled','aria-pressed']});
   const menu=create('section','workspace-tools-menu');menu.id='workspaceToolsMenu';menu.hidden=true;menu.setAttribute('aria-label','More tools');
   const heading=create('header','workspace-menu-heading','More tools');menu.append(heading);
+  const about=create('button','','About Pocket KiView');about.type='button';about.setAttribute('data-icon','info');about.onclick=()=>{close();host.KiCadProductInfo?.showAbout();};menu.append(about);
   const trigger=create('button','workspace-more-tools icon-only','More tools');trigger.type='button';trigger.id='workspaceMoreTools';trigger.title='More tools';trigger.setAttribute('aria-label','More tools');trigger.setAttribute('aria-expanded','false');trigger.setAttribute('aria-controls',menu.id);trigger.setAttribute('data-icon','tools');
   const moved=[];
   const quick=create('div','workspace-quick-tools');

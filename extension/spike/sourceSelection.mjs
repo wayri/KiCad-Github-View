@@ -16,8 +16,8 @@ export function sourceSelectionRecords(ast,board){
   for(const [index,pad]of children(fp,'pad').entries()){
    const pinNumber=String(text(pad[1])??''),padUuid=identity(pad);
    const padId=text(child(pad,'uuid')?.[1])||(reference?'pad-'+reference+'-'+(pinNumber||String(index+1)):null);
-   add(pads,padId,{...part,type:'Pad',...(typeof padUuid==='string'?{uuid:padUuid}:{}),...(typeof uuid==='string'?{ownerUuid:uuid}:{}),pinNumber});
+   add(pads,padId,{...part,type:'Pad',...(typeof padUuid==='string'?{uuid:padUuid}:{}),...(typeof uuid==='string'?{ownerUuid:uuid}:{}),pinNumber,pinName:String(text(child(pad,'pinfunction')?.[1])??'')});
   }
  }
- return {components:(board.components||[]).map(record=>({...record,...components.get(record.id)})),pads:(board.pads||[]).map(record=>({...record,...pads.get(record.id)}))};
+ return {components:(board.components||[]).map(record=>({...record,...components.get(record.id)})),pads:(board.pads||[]).map(record=>({...record,pinNumber:'',pinName:'',...pads.get(record.id)}))};
 }

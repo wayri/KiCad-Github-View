@@ -3,6 +3,7 @@ from pathlib import Path
 import json
 import importlib.util
 import zipfile
+import re
 
 ROOT = Path(__file__).resolve().parents[1]
 LEGAL_FILES = {'terms.html', 'LICENSE.txt'}
@@ -41,9 +42,51 @@ PDF_FILES = {'pdf-tools.js','pdf-viewer.html','pdf-viewer.css','pdf-viewer.js','
 FILES.update(PDF_FILES)
 FILES.update({'section-pages.js','section-pages.css','board-setup-ui.js','board-setup-ui.css','mobile-sidebar.js','mobile-sidebar.css','testpoint-tools.css','sheet-hierarchy-links.js','responsive-controls.js','phone-polish.css'})
 
+FILES.update({'product-version.js', 'product-info.js'})
+PLATFORMS = {'chrome': 'Chrome / Chromium', 'firefox': 'Firefox', 'local': 'Local viewer',
+             'web': 'Web viewer', 'vscode': 'VS Code', 'android': 'Android', 'safari': 'Safari development'}
+
+def version_metadata(root: Path, platform: str) -> dict[str, str]:
+    """Read canonical product versions; never infer versions from output filenames."""
+    if platform not in PLATFORMS:
+        raise ValueError('Unknown product version platform')
+    manifest = root / ('vscode-extension/package.json' if platform == 'vscode' else 'extension/manifest.json')
+    release = json.loads(manifest.read_text(encoding='utf-8'))['version']
+    app_version = release
+    if platform == 'android':
+        source = (root / 'android-app/app/build.gradle').read_text(encoding='utf-8')
+        matches = re.findall(r"^\s*versionName\s+['\"]([^'\"]+)['\"]\s*$", source, re.MULTILINE)
+        if len(matches) != 1:
+            raise ValueError('Android requires one literal versionName')
+        app_version = matches[0]
+    for value in (release, app_version):
+        if not isinstance(value, str) or not re.fullmatch(r'[0-9]+(?:\.[0-9]+){1,3}', value):
+            raise ValueError('Invalid canonical product version')
+    return {'release': release, 'appVersion': app_version, 'platform': PLATFORMS[platform]}
+
+
+def version_text(metadata: dict[str, str]) -> bytes:
+    return ('Pocket KiView\nRelease: '+metadata['release']+'\nAppVersion: '+metadata['appVersion']+
+            '\nPlatform: '+metadata['platform']+'\n').encode('utf-8')
+
+
+def version_script(source: bytes, metadata: dict[str, str]) -> bytes:
+    """Replace complete quoted literals, preserving JavaScript escaping deterministically."""
+    text = source.decode('utf-8')
+    for token, key in [('__RELEASE_VERSION__', 'release'), ('__APP_VERSION__', 'appVersion'), ('__PLATFORM__', 'platform')]:
+        pattern = r"(['\"])" + token + r"\1"
+        if len(re.findall(pattern, text)) != 1:
+            raise ValueError('Product version template requires one quoted '+token)
+        text = re.sub(pattern, lambda _match: json.dumps(metadata[key], ensure_ascii=True), text)
+    if re.search(r'__(?:RELEASE_VERSION|APP_VERSION|PLATFORM)__', text):
+        raise ValueError('Unresolved product version template')
+    return text.encode('utf-8')
+
+
 def package(root: Path = ROOT, output: Path | None = None) -> Path:
     source = root / 'extension'
     manifest = json.loads((source / 'manifest.json').read_text(encoding='utf-8'))
+    metadata = version_metadata(root, 'chrome')
     files = set(FILES) | LEGAL_FILES | MODEL_FILES
     files.add(manifest['background']['service_worker'])
     for script in manifest['content_scripts']:
@@ -56,11 +99,13 @@ def package(root: Path = ROOT, output: Path | None = None) -> Path:
     output = output or root / '.vizdiff' / f"kicad-visual-review-chrome-edge-brave-opera-vivaldi-chromium-{manifest['version']}.zip"
     output.parent.mkdir(parents=True, exist_ok=True)
     with zipfile.ZipFile(output, 'w', compression=zipfile.ZIP_DEFLATED, compresslevel=9) as archive:
-        for name in sorted(files):
+        for name in sorted(files | {'VERSION.txt'}):
             info = zipfile.ZipInfo(name, date_time=(2020, 1, 1, 0, 0, 0))
             info.compress_type = zipfile.ZIP_DEFLATED
             info.external_attr = 0o100644 << 16
-            content = (source / name).read_bytes()
+            content = version_text(metadata) if name == 'VERSION.txt' else (source / name).read_bytes()
+            if name == 'product-version.js':
+                content = version_script(content, metadata)
             if name == 'provider-oauth.json':
                 spec = importlib.util.spec_from_file_location('publisher_oauth', root / 'scripts/provider_oauth.py')
                 config = importlib.util.module_from_spec(spec); spec.loader.exec_module(config)

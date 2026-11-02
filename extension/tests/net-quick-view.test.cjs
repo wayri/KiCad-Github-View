@@ -41,7 +41,7 @@ test('renderer failures clean up a partial miniature and show a bounded diagnost
 
 const tick=()=>new Promise(resolve=>setImmediate(resolve));
 test('popup click selects live geometry through authoritative filter mapping but3px drags only pan',()=>{
- const selected=[],calls=[],f=fixture(1,{onSelect:(...args)=>selected.push(args),resolveSelection:(entry,p,filter)=>{calls.push({entry,p,filter});return{kind:'pin',primitive:p,primitives:[p],pinNumber:'1'};}});f.quick.open();f.button('Power 0 · Sheet 0').emit('click');const host=descendants(f.holder).find(n=>n.className==='net-quick-view-canvas'),filter=descendants(f.holder).find(n=>n.tag==='select'),p=f.entries[0].design.primitives[0];f.viewports[0].query=()=>[p];filter.value='pin';filter.emit('change');
+ const selected=[],calls=[],f=fixture(1,{onSelect:(...args)=>selected.push(args),resolveSelection:(entry,p,filter)=>{calls.push({entry,p,filter});return{kind:'pin',primitive:p,primitives:[p],pinNumber:'1'};}});f.quick.open();f.button('Power 0 · Sheet 0').emit('click');const host=descendants(f.holder).find(n=>n.className==='net-quick-view-canvas'),filter=descendants(f.holder).find(n=>n.attributes['aria-label']==='Probe selection filter'),p=f.entries[0].design.primitives[0];f.viewports[0].query=()=>[p];filter.value='pin';filter.emit('change');
  host.emit('pointerdown');host.emit('pointerup');assert.equal(selected.length,1);assert.equal(calls.at(-1).filter,'pin');assert.equal(calls.at(-1).p,p);assert.equal(selected[0][0],f.entries[0]);assert.match(selected[0][2].windowId,/^probe-/);
  host.emit('pointerdown');host.emit('pointermove',{clientX:14});host.emit('pointerup',{clientX:14});assert.equal(selected.length,1);f.quick.dispose();
 });
@@ -64,9 +64,104 @@ test('switching back to current2D while3D ispending prevents latereplacement',as
  let release,disposed=0;const f=fixture(1,{resolveViews:async row=>row,mount3D:()=>new Promise(resolve=>release=resolve)});f.quick.openProbe(occurrences(f.entries)[0]);f.button('3D').emit('click');await tick();f.button('Schematic').emit('click');release({dispose(){disposed++;},fit(){}});await tick();assert.equal(disposed,1);assert.equal(f.viewports[0].disposed,undefined);assert.equal(f.button('Schematic').attributes['aria-pressed'],'true');f.quick.dispose();
 });
 test('links use flat screengeometry, arepointertransparent, toggleandretirescheduledwork',async()=>{
- const f=fixture(1,{getAnchor:()=>({x:700,y:200})}),row=occurrences(f.entries)[0];f.quick.openProbe(row,{selection:{kind:'part'}});await new Promise(resolve=>setTimeout(resolve,22));const svg=descendants(f.holder).find(n=>n.attributes.class==='net-quick-view-links');assert.equal(svg.children.length,1);assert.match(svg.children[0].attributes.d,/^M 700 200 C/);assert.equal(svg.children[0].attributes.stroke,'#a5a0de');assert.match(descendants(f.holder).find(n=>n.tag==='style').textContent,/pointer-events:none/);f.button('Links').emit('click');await new Promise(resolve=>setTimeout(resolve,22));assert.equal(svg.children.length,0);f.quick.dispose();
+ const f=fixture(1,{getAnchor:()=>({x:700,y:200})}),row=occurrences(f.entries)[0];f.quick.openProbe(row,{selection:{kind:'part'}});await new Promise(resolve=>setTimeout(resolve,22));const svg=descendants(f.holder).find(n=>n.attributes.class==='net-quick-view-links');assert.equal(svg.children.length,2);assert.equal(svg.children[1].tag,'circle');assert.match(svg.children[0].attributes.d,/^M 700 200 C/);assert.equal(svg.children[0].attributes.stroke,'#a5a0de');assert.match(descendants(f.holder).find(n=>n.tag==='style').textContent,/pointer-events:none/);f.button('Links').emit('click');await new Promise(resolve=>setTimeout(resolve,22));assert.equal(svg.children.length,0);f.quick.dispose();
 });
 
 test('initial part andpin groupselection reaches resolver without being guessed asnet',async()=>{
  for(const kind of ['part','pin']){const received=[],f=fixture(1,{resolveViews:async(row,selection)=>{received.push(selection);return row;}}),group=f.entries[0].groups[0],canonical={kind,reference:'J1',...(kind==='pin'?{pinNumber:'1'}:{})};group.selection={kind,canonical,primitives:group.primitives};f.quick.open();f.button('Power 0 · Sheet 0').emit('click');f.button('Layout').emit('click');await tick();assert.equal(received[0],group.selection);assert.equal(received[0].canonical,canonical);f.quick.dispose();}
+});
+
+
+test('probe controls keep the drawing primary, with secondary controls behind one options button',()=>{
+ const f=fixture(1);f.quick.openProbe(occurrences(f.entries)[0]);const section=descendants(f.holder).find(n=>n.className==='net-quick-view-window'),tools=descendants(section).find(n=>n.className==='net-quick-view-tools');
+ assert.equal(tools.hidden,true);f.button('Probe options').emit('click');assert.equal(tools.hidden,false);assert.equal(f.button('Probe options').attributes['aria-expanded'],'true');f.button('Probe options').emit('click');assert.equal(tools.hidden,true);f.quick.dispose();
+});
+test('guide curves terminate on the popup perimeter and stay curved in either direction',()=>{
+ const {guideEndpoint,guideCurve}=require('../net-quick-view.js'),rect={left:100,top:80,width:300,height:200};
+ assert.deepEqual(guideEndpoint(rect,{x:700,y:180}),{x:400,y:180});assert.deepEqual(guideEndpoint(rect,{x:250,y:0}),{x:250,y:80});
+ for(const [a,b]of [[{x:0,y:20},{x:300,y:80}],[{x:300,y:80},{x:0,y:20}]]){const curve=guideCurve(a,b);assert.match(curve,/ C /);assert.ok(!/NaN|Infinity/.test(curve));assert.ok(curve.endsWith(`${b.x} ${b.y}`));}
+});
+
+
+test('net guides attach to a saved copper or pin point, not empty bounding-box space',()=>{
+ const {geometryAnchor}=require('../net-quick-view.js'),fallback={x:5,y:5},pad={kind:'pad',padCenter:{x:2,y:3}},wire={type:'line',points:[{x:8,y:9},{x:10,y:9}]};
+ assert.deepEqual(geometryAnchor([wire,pad],'net',fallback),{x:2,y:3});assert.deepEqual(geometryAnchor([wire],'net',fallback),{x:8,y:9});assert.deepEqual(geometryAnchor([pad],'part',fallback),{x:2,y:3});assert.equal(geometryAnchor([{...pad,hidden:true}],'net',fallback),fallback);
+});
+
+
+const control=(fixture,label)=>descendants(fixture.holder).find(element=>element.attributes['aria-label']===label);
+const navigation=fixture=>descendants(fixture.holder).find(element=>element.className==='net-quick-view-nav');
+test('schematic probes step connected occurrences and browse unhighlighted sheets without moving main selection',async()=>{
+ const requests=[],selected=[],f=fixture(3,{onSelect:(...args)=>selected.push(args),getSchematicRows:async(row,selection)=>{requests.push({row,selection});const connected=occurrences([f.entries[0],f.entries[2]]);return{sheets:f.entries.map((entry,index)=>({id:'sheet-'+index,entry,name:'VCC',label:entry.label,selection,group:{primitives:index===1?[]:entry.design.primitives}})),occurrences:connected};}}),rows=occurrences(f.entries),original={kind:'net',canonical:{kind:'net',netName:'VCC',path:f.entries[0].path},primitives:f.entries[0].design.primitives},before=JSON.stringify(f.entries);
+ f.quick.openProbe({...rows[0],selection:original});await tick();assert.equal(navigation(f).hidden,false);assert.equal(control(f,'Probe sheet').children.length,3);assert.equal(control(f,'Highlighted occurrence').children.length,2);assert.equal(navigation(f).children.at(-1).textContent,'1/2');const first=f.viewports.at(-1);first.viewport.camera.center.set(31,41);first.viewport.camera.zoom=7;f.button('Flip view').emit('click');f.button('Rotate clockwise').emit('click');
+ f.button('Next occurrence').emit('click');await tick();assert.equal(f.viewports.at(-1).path,f.entries[2].path);assert.equal(navigation(f).children.at(-1).textContent,'2/2');const sheets=control(f,'Probe sheet');sheets.value='sheet-1';sheets.emit('change');await tick();assert.equal(f.viewports.at(-1).path,f.entries[1].path);assert.deepEqual(f.viewports.at(-1).groups[0].primitives,[]);assert.equal(navigation(f).children.at(-1).textContent,'0/2');assert.equal(requests.at(-1).selection,original,'blank sheet does not replace original navigation identity');assert.equal(requests.at(-1).row.id,rows[0].id);
+ const occurrenceSelect=control(f,'Highlighted occurrence');occurrenceSelect.value=rows[0].id;occurrenceSelect.emit('change');await tick();assert.equal(f.viewports.at(-1).viewport.camera.center.x,31);assert.equal(f.viewports.at(-1).viewport.camera.center.y,41);assert.equal(f.viewports.at(-1).viewport.camera.zoom,7);assert.equal(f.viewports.at(-1).viewport.camera.flipped,true);assert.equal(f.viewports.at(-1).canvas.style.transform,'rotate(90deg)');assert.equal(f.located.length,0);assert.equal(selected.length,0);assert.equal(JSON.stringify(f.entries),before);f.quick.dispose();
+});
+
+test('repeated schematic instances keep distinct occurrence labels and IDs even when sharing one saved file',async()=>{
+ let rows;const f=fixture(1,{getSchematicRows:async()=>({sheets:rows,occurrences:rows})}),base=occurrences(f.entries)[0];rows=['Channel A','Channel B'].map((label,index)=>({...base,id:'repeated-'+index,label,entry:{...base.entry,instanceId:undefined}}));f.quick.openProbe(rows[0]);await tick();assert.deepEqual(control(f,'Highlighted occurrence').children.map(node=>node.textContent),['Channel A · Power 0','Channel B · Power 0']);f.button('Next occurrence').emit('click');await tick();assert.equal(control(f,'Highlighted occurrence').value,'repeated-1');assert.equal(navigation(f).children.at(-1).textContent,'2/2');f.button('Previous occurrence').emit('click');await tick();assert.equal(control(f,'Highlighted occurrence').value,'repeated-0');f.quick.dispose();
+});
+
+test('schematic navigation falls back to loaded rows, handles one or no occurrence and hides in layout',async()=>{
+ const fallback=fixture(2);fallback.quick.openProbe(occurrences(fallback.entries)[0]);await tick();assert.equal(control(fallback,'Probe sheet').children.length,2);assert.equal(control(fallback,'Highlighted occurrence').children.length,2);fallback.quick.dispose();
+ for(const count of [0,1]){let rows;const f=fixture(1,{getSchematicRows:async()=>({sheets:rows,occurrences:count?rows:[]}),resolveViews:async row=>row});rows=occurrences(f.entries);f.quick.openProbe(rows[0]);await tick();assert.equal(f.button('Previous occurrence').disabled,true);assert.equal(f.button('Next occurrence').disabled,true);assert.equal(control(f,'Highlighted occurrence').disabled,!count);assert.equal(navigation(f).children.at(-1).textContent,count?'1/1':'0/0');f.button('Layout').emit('click');await tick();assert.equal(navigation(f).hidden,true);f.quick.dispose();}
+});
+
+test('explicit popup geometry selection resets navigation identity while async stale or closed results cannot replace it',async()=>{
+ const pending=[],picked={kind:'pin',canonical:{kind:'pin',pinNumber:'2'},primitives:[]},f=fixture(2,{resolveSelection:()=>picked,getSchematicRows:(row,selection)=>new Promise(resolve=>pending.push({row,selection,resolve}))}),row=occurrences(f.entries)[0],id=f.quick.openProbe(row);await tick();assert.equal(pending.length,1);const host=descendants(f.holder).find(node=>node.className==='net-quick-view-canvas');f.viewports[0].query=()=>[row.group.primitives[0]];host.emit('pointerdown');host.emit('pointerup');await tick();assert.equal(pending.length,2);assert.equal(pending[1].selection,picked);
+ const fresh={sheets:[{...row,id:'fresh',label:'Fresh'}],occurrences:[]};pending[1].resolve(fresh);await tick();assert.equal(control(f,'Probe sheet').children[0].textContent,'Fresh · Power 0');pending[0].resolve({sheets:[{...row,label:'Stale'}],occurrences:[row]});await tick();assert.equal(control(f,'Probe sheet').children[0].textContent,'Fresh · Power 0');
+ f.button('Schematic').emit('click');await tick();assert.equal(pending.length,3);f.quick.closeProbe(id);pending[2].resolve(fresh);await tick();assert.equal(descendants(f.holder).filter(node=>node.className==='net-quick-view-window').length,0);assert.equal(f.viewports.length,1);f.quick.dispose();
+});
+
+
+test('disposing while sheet navigation resolves cannot create controls or revive its viewport',async()=>{
+ let release;const f=fixture(1,{getSchematicRows:()=>new Promise(resolve=>release=resolve)}),row=occurrences(f.entries)[0];f.quick.openProbe(row);await tick();const viewport=f.viewports[0];f.quick.dispose();release({sheets:[row],occurrences:[row]});await tick();assert.equal(viewport.disposed,true);assert.equal(f.viewports.length,1);assert.equal(descendants(f.holder).some(node=>node.className==='net-quick-view-nav'),false);assert.equal(f.located.length,0);
+});
+
+
+test('2D popup flip preserves precise rotated picking, mirrored pan and cursor-anchored zoom',()=>{
+ const points=[],f=fixture(1,{resolveSelection:(entry,p)=>({kind:'pin',primitive:p,primitives:[p]})});f.quick.openProbe(occurrences(f.entries)[0]);const host=descendants(f.holder).find(node=>node.className==='net-quick-view-canvas'),viewport=f.viewports[0],camera=viewport.viewport.camera,p=f.entries[0].design.primitives[0];camera.center.set(0,0);camera.zoom=2;viewport.query=at=>{points.push(at);return[p];};f.button('Flip view').emit('click');assert.equal(camera.flipped,true);f.button('Rotate clockwise').emit('click');
+ const at=camera.world_to_screen({x:10,y:5}),rotated=rotateVector({x:at.x-140,y:at.y-140},1);host.emit('pointerdown',{clientX:140+rotated.x,clientY:140+rotated.y});host.emit('pointerup',{clientX:140+rotated.x,clientY:140+rotated.y});assert.deepEqual(points[0],{x:10,y:5});
+ host.emit('pointerdown',{clientX:10,clientY:10});host.emit('pointermove',{clientX:10,clientY:30});host.emit('pointerup',{clientX:10,clientY:30});assert.equal(camera.center.x,10);assert.equal(camera.center.y,0);const point=viewportPoint({x:80,y:90},280,280,1),before=camera.screen_to_world(point);host.emit('wheel',{clientX:80,clientY:90,deltaY:-40});const after=camera.screen_to_world(point);assert.ok(Math.abs(before.x-after.x)<1e-10);assert.ok(Math.abs(before.y-after.y)<1e-10);f.quick.dispose();
+});
+
+test('flipped and rotated popup guides anchor to the reflected source geometry',async()=>{
+ const f=fixture(1),row=occurrences(f.entries)[0],selection={kind:'part',primitives:row.group.primitives},parent=f.quick.openProbe(row,{selection});f.quick.openProbe(row,{parentId:parent,selection});const windows=descendants(f.holder).filter(node=>node.className==='net-quick-view-window');windows[1].getBoundingClientRect=()=>({left:500,top:0,width:280,height:280});const camera=f.viewports[0].viewport.camera;camera.center.set(0,0);camera.zoom=2;f.button('Flip view').emit('click');f.button('Rotate clockwise').emit('click');await new Promise(resolve=>setTimeout(resolve,22));const svg=descendants(f.holder).find(node=>node.attributes.class==='net-quick-view-links');assert.equal(svg.children.length,2);assert.match(svg.children[0].attributes.d,/^M 136 137 C/);f.quick.dispose();
+});
+
+test('popup keyboard F and bracket quarter-turns are local and never intercept editable controls or modified shortcuts',()=>{
+ const f=fixture(1);f.quick.openProbe(occurrences(f.entries)[0]);const window=descendants(f.holder).find(node=>node.className==='net-quick-view-window'),camera=f.viewports[0].viewport.camera;let prevented=0,stopped=0;const key=(value,extra={})=>window.emit('keydown',{key:value,preventDefault(){prevented++;},stopPropagation(){stopped++;},...extra});key('f');assert.equal(camera.flipped,true);key(']');assert.equal(f.viewports[0].canvas.style.transform,'rotate(90deg)');key('[');assert.equal(f.viewports[0].canvas.style.transform,'rotate(0deg)');assert.equal(prevented,3);assert.equal(stopped,3);key('f',{target:control(f,'Probe selection filter')});key('f',{ctrlKey:true});key('f',{target:{isContentEditable:true}});key('q');assert.equal(camera.flipped,true);assert.equal(prevented,3);assert.equal(stopped,3);f.quick.dispose();
+});
+
+test('3D popup flip and quarter-turn controls delegate to the independent adapter',async()=>{
+ const calls=[],f=fixture(1,{mount3D:async()=>({dispose(){},fit(){},flip(){calls.push('flip');return true;},rotate(degrees){calls.push(degrees);}})});f.quick.openProbe(occurrences(f.entries)[0],{mode:'3d'});await tick();f.button('Flip view').emit('click');f.button('Rotate clockwise').emit('click');const window=descendants(f.holder).find(node=>node.className==='net-quick-view-window');window.emit('keydown',{key:'[',preventDefault(){},stopPropagation(){}});assert.deepEqual(calls,['flip',90,-90]);assert.equal(f.viewports[0].viewport.camera.flipped,false);assert.equal(f.located.length,0);f.quick.dispose();
+});
+
+
+test('popup R and Shift+R rotate locally while editable inputs retain their keys',()=>{
+ const f=fixture(1);f.quick.openProbe(occurrences(f.entries)[0]);const window=descendants(f.holder).find(node=>node.className==='net-quick-view-window');let handled=0;const key=(value,extra={})=>window.emit('keydown',{key:value,preventDefault(){handled++;},stopPropagation(){handled++;},...extra});key('r');assert.equal(f.viewports[0].canvas.style.transform,'rotate(90deg)');key('R',{shiftKey:true});assert.equal(f.viewports[0].canvas.style.transform,'rotate(0deg)');key('r',{target:control(f,'Probe sheet')});assert.equal(handled,4);assert.equal(f.viewports[0].canvas.style.transform,'rotate(0deg)');f.quick.dispose();
+});
+
+test('popup P spawns from the focused popup and cannot bubble to the main P action',async()=>{
+ const calls=[],f=fixture(1,{resolveViews:async(row,selection,mode)=>{calls.push({row,selection,mode});return row;}}),row=occurrences(f.entries)[0];f.quick.openProbe(row);const window=descendants(f.holder).find(node=>node.className==='net-quick-view-window');let prevented=0,stopped=0;window.emit('keydown',{key:'p',preventDefault(){prevented++;},stopPropagation(){stopped++;}});await tick();assert.equal(prevented,1);assert.equal(stopped,1);assert.equal(calls.length,1);assert.equal(calls[0].row,row);assert.equal(calls[0].mode,'schematic');assert.equal(descendants(f.holder).filter(node=>node.className==='net-quick-view-window').length,2);assert.equal(f.located.length,0);f.quick.dispose();
+});
+
+
+test('layout-to-schematic mapping reconciles a unique saved sheet despite new occurrence IDs and instance metadata',async()=>{
+ let target,sheets;const f=fixture(1,{resolveViews:async()=>target,getSchematicRows:async()=>({sheets,occurrences:sheets})}),original=occurrences(f.entries)[0],selection={kind:'part',canonical:{kind:'part',path:'board.kicad_pcb',reference:'R1'},primitives:original.group.primitives},source={...original,id:'pcb-R1',entry:{...original.entry,path:'board.kicad_pcb'}},mapped={...original,id:'resolved-R1',entry:{...original.entry,instanceId:undefined}};target=mapped;sheets=[{...mapped,id:'sheet-root',entry:{...mapped.entry,instanceId:'saved-root'}}];f.quick.openProbe(source,{selection,mode:'layout'});f.button('Schematic').emit('click');await tick();assert.equal(navigation(f).children.at(-1).textContent,'1/1');assert.equal(control(f,'Probe sheet').value,'sheet-root');assert.equal(control(f,'Highlighted occurrence').value,'sheet-root');assert.equal(f.located.length,0);f.quick.dispose();
+});
+
+test('missing or conflicting instance metadata never guesses among repeated sheets',async()=>{
+ for(const instanceId of [undefined,'explicit-other']){let rows;const f=fixture(1,{getSchematicRows:async()=>({sheets:rows,occurrences:rows})}),original=occurrences(f.entries)[0],source={...original,id:'unresolved',entry:{...original.entry,instanceId}};rows=['saved-A','saved-B'].map(id=>({...original,id,entry:{...original.entry,instanceId:id}}));f.quick.openProbe(source);await tick();assert.equal(control(f,'Probe sheet').value,'');assert.equal(control(f,'Highlighted occurrence').value,'');assert.equal(navigation(f).children.at(-1).textContent,'0/2');f.quick.dispose();}
+});
+
+test('3D popup hides the 2D rotation angle instead of claiming a false zero degrees',async()=>{
+ const f=fixture(1,{mount3D:async()=>({dispose(){},fit(){},rotate(){}})});f.quick.openProbe(occurrences(f.entries)[0],{mode:'3d'});await tick();const angle=control(f,'View rotation');assert.equal(angle.hidden,true);f.button('Rotate clockwise').emit('click');assert.equal(angle.hidden,true);f.button('Schematic').emit('click');await tick();assert.equal(angle.hidden,false);f.quick.dispose();
+});
+
+
+test('part guides anchor to saved pads or body rather than distant field text',()=>{
+ const {geometryAnchor}=require('../net-quick-view.js'),pads=[{type:'polygon',padCenter:{x:10,y:20}},{type:'polygon',padCenter:{x:12,y:20}},{type:'text',text:'long datasheet field',x:1000,y:1000}];
+ assert.deepEqual(geometryAnchor(pads,'part',{x:500,y:500}),{x:11,y:20});
+ assert.deepEqual(geometryAnchor([{type:'polyline',points:[{x:0,y:0},{x:2,y:4}],width:0},{type:'text',text:'far',x:999,y:999}],'part',null),{x:1,y:2});
 });

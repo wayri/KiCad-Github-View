@@ -3,7 +3,7 @@ const {check,classifyAccessError}=require('../environment-diagnostics.js');
 test('explicit diagnostics reveal missing permissions without sending credentials or project context',async()=>{
  const requests=[];const result=await check({version:'0.12.61',permissions:{contains:async({origins})=>!origins[0].includes('raw.')},fetch:async(url,options)=>{requests.push({url,options});return{status:200,body:{cancel:async()=>{}}};}});
  assert.equal(result.siteAccess[2].state,'not granted');assert.equal(result.connectivity.every(v=>v.reachable),true);
- assert.equal(requests.length,2);for(const request of requests){assert.equal(request.options.credentials,'omit');assert.equal(request.options.redirect,'error');assert.equal(request.options.headers.Authorization,undefined);assert.equal(request.options.body,undefined);}
+ assert.equal(requests.length,3);for(const request of requests){assert.equal(request.options.credentials,'omit');assert.equal(request.options.redirect,'error');assert.equal(request.options.headers.Authorization,undefined);assert.equal(request.options.body,undefined);}
 });
 test('blocked requests and unavailable permissions API produce usable, nonconclusive diagnostics',async()=>{
  const result=await check({fetch:async()=>{throw Error('SECRET proxy message');}});
@@ -31,4 +31,22 @@ test('connection checks surface explicit policy blocks and missing permissions a
  assert.equal(permission.accessIssue.kind,'site-access');assert.match(permission.accessIssue.action,/If it is locked/);
  const missing=await check({permissions:{contains:async()=>true},fetch:async()=>({status:404})});assert.equal(missing.accessIssue,null);
  const denied=await check({permissions:{contains:async()=>true},fetch:async()=>({status:403})});assert.equal(denied.connectivity[0].reachable,true);assert.equal(denied.accessIssue.kind,'forbidden');assert.equal(denied.accessIssue.confirmed,false);
+});
+
+
+test('website/raw viewing checks are independent of optional API permissions and API-only policy blocks',async()=>{
+ const requests=[];const result=await check({permissions:{contains:async({origins})=>!origins[0].includes('api.github.com')},fetch:async(url,options)=>{requests.push({url,options});if(url.startsWith('https://api.github.com/'))throw Error('net::ERR_BLOCKED_BY_ADMINISTRATOR');return {status:200};}});
+ assert.equal(result.accessIssue,null);assert.equal(result.accountAccessIssue.kind,'organization-block');assert.equal(result.connectivity.filter(c=>c.requiredForViewing).every(c=>c.reachable),true);assert.ok(requests.some(r=>r.url==='https://github.com/'&&r.options.method==='HEAD'));assert.equal(result.siteAccess.find(s=>s.host.includes('api.github.com')).requiredForViewing,false);
+});
+test('blocked website or raw host is reported for viewing, without mistaking generic network errors for managed policy',async()=>{
+ const result=await check({permissions:{contains:async()=>true},fetch:async(url)=>{if(url==='https://github.com/')throw Error('Failed to fetch SECRET proxy');return {status:200};}});
+ assert.equal(result.accessIssue.kind,'connection');assert.equal(result.accessIssue.confirmed,false);assert.equal(result.accountAccessIssue,null);assert.doesNotMatch(JSON.stringify(result),/SECRET/);assert.equal(result.connectivity.find(c=>c.host==='github.com').requiredForViewing,true);
+});
+test('explicit extension managed-policy failures retain distinct disabled, unavailable and write-only states',()=>{
+ const {classifyManagedPolicy}=require('../environment-diagnostics.js');
+ const disabled=classifyAccessError(Object.assign(Error('Network access is disabled by administrator policy.'),{code:'MANAGED_POLICY'}));assert.equal(disabled.kind,'managed-network-disabled');assert.equal(disabled.confirmed,true);
+ const invalid=classifyAccessError(Object.assign(Error('Administrator policy is unavailable or invalid. Network and provider writes are disabled.'),{code:'MANAGED_POLICY'}));assert.equal(invalid.kind,'managed-policy-unavailable');assert.notEqual(invalid.title,disabled.title);
+ assert.equal(classifyAccessError('Network access is disabled by administrator policy.').kind,'managed-network-disabled');assert.equal(classifyAccessError('Provider writes are disabled by administrator policy.').kind,'managed-writes-disabled');
+ assert.equal(classifyManagedPolicy({valid:true,networkEnabled:true,providerWritesEnabled:false}),null);assert.equal(classifyManagedPolicy({valid:true,networkEnabled:false}).kind,'managed-network-disabled');assert.equal(classifyManagedPolicy({valid:false}).kind,'managed-policy-unavailable');assert.equal(classifyManagedPolicy({valid:true}).kind,'managed-policy-unavailable');
+ const unknown=classifyAccessError({code:'MANAGED_POLICY',message:'SECRET policy payload'});assert.equal(unknown.kind,'managed-policy-unavailable');assert.doesNotMatch(JSON.stringify(unknown),/SECRET/);
 });

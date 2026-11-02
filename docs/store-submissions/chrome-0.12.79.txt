@@ -1,0 +1,20 @@
+CHROME WEB STORE UPDATE — 0.12.79
+
+UPLOAD FILE
+kicad-visual-review-chrome-edge-brave-opera-vivaldi-chromium-0.12.79.zip
+Use the audited release-0.12.79 file and SHA256SUMS.txt.
+
+WHAT'S NEW
+- Improved direct project discovery for nested GitHub folders, legacy sheet navigation and shared client-side source caching.
+- Clearer independent pin/pad-number and net-name controls, including saved alphanumeric BGA pad numbers in layout and supported 3D views.
+- Improved miniature cross-probing views, exact selected geometry and inspection of selected saved copper through translucent board context.
+- Fixed handling of supported static VRML Switch and DEF/USE model constructs, with explicit diagnostics for unsupported content.
+- Improved recovery after accepted comment posts, foreground conversation refresh and saved point/area/sheet location metadata.
+- Refined discussion-category selection, native field/value properties, Fast PI overlay batching and Draftsman dimension/export interactions.
+- Added packaged version information in About and VERSION.txt inside downloadable distributions.
+
+LIMITS
+This independent viewer is not affiliated with KiCad, GitHub or GitLab. Rendering requires supported saved design/model data; bounded geometry and annotations can omit content with diagnostics. Legacy previews have restricted support. Fast PI remains experimental fixed-temperature DC copper screening, not AC, thermal or qualification analysis. Foreground refresh uses polling and backoff, not guaranteed real-time delivery. Model availability and optional enhanced-rendering fallback limits still apply.
+
+PERMISSION AND DATA PRACTICES
+No new permissions are introduced. Project/history reads use website/raw resources and bounded client-side buffering. Account and review actions remain explicit and can use provider APIs. Existing privacy disclosures and optional downloads/nativeMessaging explanations continue to apply.

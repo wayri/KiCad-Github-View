@@ -4,10 +4,13 @@
   'use strict';
   const MAX_PIXELS=16000000;
   function transform(saved,current){
-    if(saved.flipped!==current.flipped)return null;
+    const turn=saved.quarterTurns??0,currentTurn=current.quarterTurns??0;
+    if(!Number.isInteger(turn)||turn<0||turn>3||turn!==currentTurn||saved.flipped!==current.flipped)return null;
     const scale=current.zoom/saved.zoom,sign=current.flipped?-1:1;
-    const x=(saved.x-current.x)*current.zoom*sign+current.width/2-saved.width*scale/2;
-    const y=(saved.y-current.y)*current.zoom+current.height/2-saved.height*scale/2;
+    let dx=(saved.x-current.x)*current.zoom*sign,dy=(saved.y-current.y)*current.zoom;
+    switch(turn){case 1:[dx,dy]=[-dy,dx];break;case 2:[dx,dy]=[-dx,-dy];break;case 3:[dx,dy]=[dy,-dx];break;}
+    const x=dx+current.width/2-saved.width*scale/2;
+    const y=dy+current.height/2-saved.height*scale/2;
     const width=saved.width*scale,height=saved.height*scale;
     if(![x,y,width,height,scale].every(Number.isFinite)||scale<.8||scale>1.5||x>0||y>0||x+width<current.width||y+height<current.height)return null;
     return {x,y,width,height};

@@ -44,3 +44,27 @@ test('unconnected pads show their number without needing a net name',()=>{
  const c=camera(),pad={kind:'pad',type:'pad',uuid:'unconnected',ownerUuid:'J1',layer:'F.Cu',pinNumber:'A12',padCenter:{x:0,y:0},padWidth:2,padHeight:1};
  assert.equal(netLabels([[pad,'']],c)[0].text,'A12');
 });
+
+
+test('dense BGA balls retain all 1024 exact identities within a readable viewport',()=>{
+ const c=new Camera(2200,2200);c.zoom=60;
+ const pads=Array.from({length:1024},(_,i)=>{const row=Math.floor(i/32),col=i%32;return{kind:'pad',type:'pad',uuid:'bga-'+i,ownerUuid:'U1',layer:'F.Cu',pinNumber:String.fromCharCode(65+Math.floor(row/26))+String.fromCharCode(65+row%26)+(col+1),padShape:'circle',padCenter:{x:(col-15.5),y:(row-15.5)},padWidth:.8,padHeight:.8};});
+ for(const flipped of [false,true]){c.flipped=flipped;const labels=netLabels(pads.map(p=>[p,'VCC']),c,1200,{showNumbers:true,showNetNames:false});assert.equal(labels.length,1024);assert.deepEqual(new Set(labels.map(l=>l.text)),new Set(pads.map(p=>p.pinNumber)));}
+ const first=netLabels([[pads[0],'VCC']],c,1200,{showNumbers:false,showNetNames:true});assert.equal(first[0].text,'VCC');assert.equal(netLabels([[pads[0],'VCC']],c,1200,{showNumbers:false,showNetNames:false}).length,0);
+});
+
+test('rotated pad labels follow the saved local axis, while circular BGA labels stay upright',()=>{
+ const c=camera(),p={kind:'pad',type:'pad',uuid:'p',ownerUuid:'U1',layer:'F.Cu',pinNumber:'A12',padCenter:{x:0,y:0},padWidth:3,padHeight:1,padAngle:-45,padShape:'rect'};
+ assert.equal(netLabels([[p,'']],c)[0].angle,-45);c.flipped=true;assert.equal(netLabels([[p,'']],c)[0].angle,45);
+ p.padShape='circle';p.padWidth=2;p.padHeight=2;assert.equal(netLabels([[p,'']],c)[0].angle,0);
+});
+
+
+test('rotated pad, track and zone annotations stay readable on their saved copper axes',()=>{
+ const c=camera(),pad={kind:'pad',type:'pad',layer:'F.Cu',uuid:'terminal',pinNumber:'AA12',padCenter:{x:0,y:0},padWidth:4,padHeight:1,padAngle:20,padShape:'rect'},zone={kind:'zone',type:'polygon',layer:'F.Cu',fill:true,points:[{x:-8,y:-1},{x:8,y:-1},{x:8,y:1},{x:-8,y:1}]};
+ for(const flipped of [false,true])for(let turn=0;turn<4;turn++){
+  c.flipped=flipped;c.quarterTurns=turn;
+  for(const primitive of [pad,track(),zone]){const labels=netLabels([[primitive,'GND']],c);assert.equal(labels.length,1);const label=labels[0];assert.ok(Math.abs(label.angle)<=90);assert.equal(label.x,400);assert.equal(label.y,300);if(primitive!==pad){const direction=c.worldDeltaToScreen({x:1,y:0}),a=label.angle*Math.PI/180;assert.ok(Math.abs(Math.sin(a)*direction.x-Math.cos(a)*direction.y)<1e-8);}}
+  const circle=netLabels([[{...pad,padShape:'circle',padHeight:4},'GND']],c)[0];assert.equal(circle.angle,0);assert.match(circle.text,/AA12/);
+ }
+});

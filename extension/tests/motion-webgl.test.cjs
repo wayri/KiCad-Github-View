@@ -34,3 +34,14 @@ test('shader and texture upload failures fail closed to the CPU renderer',()=>{
  const bad=runtime({compile:false});assert.throws(()=>new bad.Motion({append(){}}),/compilation/);assert.ok(bad.calls.includes('remove'));
  const failed=runtime({uploadError:1285}),motion=new failed.Motion({append(){}});assert.throws(()=>motion.upload({width:100,height:100},{}),/upload failed/);motion.dispose();
 });
+
+
+test('rotated snapshot translation matches the camera and rejects orientation mismatch',()=>{
+ const {Camera}=require('../owned-canvas.js');
+ for(const flipped of [false,true])for(let quarterTurns=0;quarterTurns<4;quarterTurns++)for(const zoom of [3.2,4,5]){
+  const saved={x:12,y:24,zoom:4,width:1200,height:900,flipped,quarterTurns},current={x:15,y:20,zoom,width:800,height:600,flipped,quarterTurns},rect=transform(saved,current);assert.ok(rect);
+  const camera=state=>{const c=new Camera(state.width,state.height);c.center.set(state.x,state.y);c.zoom=state.zoom;c.flipped=state.flipped;c.quarterTurns=state.quarterTurns;return c;},before=camera(saved),after=camera(current);
+  for(const p of [{x:0,y:0},{x:400,y:300},{x:1200,y:900}]){const q=after.world_to_screen(before.screen_to_world(p));assert.ok(Math.abs(rect.x+p.x*rect.width/saved.width-q.x)<1e-8);assert.ok(Math.abs(rect.y+p.y*rect.height/saved.height-q.y)<1e-8);}
+  assert.equal(transform(saved,{...current,quarterTurns:(quarterTurns+1)%4}),null);assert.equal(transform({...saved,quarterTurns:NaN},current),null);
+ }
+});

@@ -1,0 +1,44 @@
+const test=require('node:test'),assert=require('node:assert/strict'),fs=require('node:fs'),path=require('node:path'),{pathToFileURL}=require('node:url'),layout=require('../pad-labels.js').layout;
+const project=path.resolve(__dirname,'../..'),roots=[project],git=path.join(project,'.git');if(fs.existsSync(git)&&fs.statSync(git).isFile()){const value=/^gitdir:\s*(.+)/.exec(fs.readFileSync(git,'utf8'))?.[1];if(value)roots.push(path.resolve(project,value,'../../..'));}
+const threePath=roots.flatMap(root=>[path.join(root,'extension/node_modules/three/build/three.module.js'),path.join(root,'.vizdiff/build-deps/node_modules/three/build/three.module.js')]).find(fs.existsSync),helper=()=>import('../spike/terminalLabels.mjs');
+function canvasFactory(log){return ()=>{const canvas={width:0,height:0},ctx={scale(){},strokeText(){},fillText(text){log.push(text);}};canvas.getContext=()=>ctx;return canvas;};}
+function setup(THREE,records,options={}){const scene=new THREE.Scene(),camera=new THREE.PerspectiveCamera(45,1,.01,10000);camera.up.set(0,1,0);camera.position.set(0,0,10);camera.lookAt(0,0,0);camera.updateMatrixWorld();const host={clientWidth:600,clientHeight:600},text=[];return {scene,camera,host,text,args:{scene,camera,host,records,world:p=>p,top:.8,bottom:-.8,layout,createCanvas:canvasFactory(text),...options}};}
+const pad=(extra={})=>({pinNumber:'A1',name:'wrong fallback',at:[0,0],width:1,height:1,shape:'circle',layers:['F.Cu'],net:'GND',...extra});
+test('saved alphanumeric terminal identities and facing copper guards do not infer numbers',async()=>{
+ const {terminalNumber,terminalOnLayer,facingTerminalLayer}=await helper();for(const number of ['A1','AA12','001','P+1'])assert.equal(terminalNumber(pad({pinNumber:number})),number);
+ assert.equal(terminalNumber(pad({pinNumber:''})), '');assert.equal(terminalNumber(pad({pinNumber:'bad\nnumber'})),'');assert.equal(terminalNumber({name:'B2'}),'B2');
+ assert.equal(terminalOnLayer(pad(),'B.Cu'),false);assert.equal(terminalOnLayer(pad({layers:['F&B.Cu']}),'B.Cu'),true);assert.equal(terminalOnLayer(pad({layers:['*.Cu']}),'F.Cu'),true);
+ assert.equal(facingTerminalLayer(2,.8,-.8),'F.Cu');assert.equal(facingTerminalLayer(-2,.8,-.8),'B.Cu');assert.equal(facingTerminalLayer(.3,.8,-.8),null);
+});
+test('independent terminal controls preserve the legacy combined setting until explicit number control',async()=>{
+ const {createTerminalLabelState}=await helper(),legacy=createTerminalLabelState({showNetNames:false});legacy.setNets(true);assert.deepEqual(legacy.get(),{numbers:true,nets:true,legacyCombined:true});legacy.setNumbers(true);legacy.setNets(false);assert.deepEqual(legacy.get(),{numbers:true,nets:false,legacyCombined:false});
+ const explicit=createTerminalLabelState({showNetNames:true,showTerminalNumbers:false});assert.equal(explicit.get().numbers,false);explicit.setNets(false);assert.equal(explicit.get().numbers,false);
+});
+test('projected rotated footprints constrain upright labels and collision checks remain spatially bounded',async()=>{
+ const {projectedTerminalFit,labelCollisionGrid}=await helper(),center={x:50,y:50,z:0},corners=[{x:50,y:30,z:0},{x:70,y:50,z:0},{x:50,y:70,z:0},{x:30,y:50,z:0}],fit=projectedTerminalFit(center,corners);assert.equal(fit.width,20);assert.equal(fit.height,20);
+ const grid=labelCollisionGrid();for(let i=0;i<1024;i++)grid.add({x:(i%32)*20,y:Math.floor(i/32)*20,w:10,h:10});assert.equal(grid.intersects({x:1,y:1,w:8,h:8}),true);assert.equal(grid.intersects({x:12,y:12,w:6,h:6}),false);assert.throws(()=>labelCollisionGrid(0),/Invalid/);
+});
+test('BGA numbers are visible annotations through models, with independent number/net toggles',{skip:!threePath},async()=>{
+ const THREE=await import(pathToFileURL(threePath).href),{createTerminalAnnotations}=await helper(),front=pad(),back=pad({pinNumber:'B2',layers:['B.Cu']}),h=setup(THREE,[front,back],{showNetNames:false,showTerminalNumbers:true}),annotations=createTerminalAnnotations(THREE,h.args),state=annotations.update();
+ assert.equal(state.shown,1);assert.ok(h.text.includes('A1'));assert.ok(!h.text.includes('B2'));assert.ok(!h.text.includes('GND'));assert.equal(annotations.group.children[0].material.depthTest,false);
+ annotations.setNumbers(false);annotations.setNets(true);annotations.update();assert.ok(h.text.includes('GND'));annotations.setNets(false);assert.equal(annotations.update().shown,0);
+ annotations.setNumbers(true);h.camera.position.set(0,0,-10);h.camera.lookAt(0,0,0);h.camera.updateMatrixWorld();assert.equal(annotations.update().shown,1);assert.ok(h.text.includes('B2'));annotations.dispose();assert.ok(!h.scene.children.includes(annotations.group));
+});
+test('close-zoom, rotation and unconnected multi-character pad numbers preserve their full saved text',{skip:!threePath},async()=>{
+ const THREE=await import(pathToFileURL(threePath).href),{createTerminalAnnotations}=await helper(),h=setup(THREE,[pad({pinNumber:'AA12',net:'',rotation:45})],{showTerminalNumbers:true}),annotations=createTerminalAnnotations(THREE,h.args);
+ h.camera.position.z=200;h.camera.lookAt(0,0,0);assert.equal(annotations.update().shown,0);h.camera.position.z=6;h.camera.lookAt(0,0,0);assert.equal(annotations.update().shown,1);assert.ok(h.text.includes('AA12'));assert.ok(!h.text.some(t=>t.includes('…')));annotations.dispose();
+});
+test('dense 1024-ball BGA annotations fit the main label and texture budgets without the former 150 cap',{skip:!threePath},async()=>{
+ const THREE=await import(pathToFileURL(threePath).href),{createTerminalAnnotations}=await helper(),letters=i=>i<26?String.fromCharCode(65+i):'A'+String.fromCharCode(65+i-26),records=Array.from({length:1024},(_,i)=>pad({pinNumber:letters(Math.floor(i/32))+String(i%32+1),at:[(i%32-15.5)*.8,(Math.floor(i/32)-15.5)*.8],width:.46,height:.46,net:''})),h=setup(THREE,records,{showTerminalNumbers:true});h.host.clientWidth=h.host.clientHeight=2400;h.camera.position.z=35;h.camera.lookAt(0,0,0);const annotations=createTerminalAnnotations(THREE,h.args),state=annotations.update();
+ assert.equal(state.shown,1024);assert.ok(h.text.includes('A1'));assert.ok(h.text.includes('AF32'));assert.equal(state.budget,0);assert.ok(state.texturePixels<=2097152);assert.equal(state.textureEntries,1024);annotations.dispose();
+});
+test('probe-sized annotation budgets and source caps are explicit and never exceed texture memory',{skip:!threePath},async()=>{
+ const THREE=await import(pathToFileURL(threePath).href),{createTerminalAnnotations}=await helper(),records=Array.from({length:100},(_,i)=>pad({pinNumber:'P'+i,at:[(i%10-4.5)*1.5,(Math.floor(i/10)-4.5)*1.5],width:1,height:1,net:''})),h=setup(THREE,records,{showTerminalNumbers:true,maxLabels:20,maxRecords:80,maxTexturePixels:10000});h.host.clientWidth=h.host.clientHeight=1600;h.camera.position.z=15;h.camera.lookAt(0,0,0);const annotations=createTerminalAnnotations(THREE,h.args),state=annotations.update();assert.ok(state.shown<=20);assert.ok(state.texturePixels<=10000);assert.ok(state.budget>0);assert.equal(state.sourceOmitted,20);annotations.dispose();
+});
+
+test('actual 3D annotation controller notifies UI changes once, suppresses mechanical/measurement labels and disposes resources',{skip:!threePath},async()=>{
+ const THREE=await import(pathToFileURL(threePath).href),{createTerminalAnnotations,createTerminalLabelController}=await helper(),h=setup(THREE,[pad()],{showNetNames:true}),annotations=createTerminalAnnotations(THREE,h.args),events=[],sync=[];let mechanical=false,measuring=false;const controller=createTerminalLabelController(annotations,{enabled:()=>!mechanical&&!measuring,onNumbersChange:value=>events.push(['numbers',value]),onNetNamesChange:value=>events.push(['nets',value]),onChange:state=>sync.push(state)});
+ assert.equal(controller.update().shown,1);controller.setNets(false);assert.equal(controller.update().shown,0);assert.deepEqual(events,[]);controller.setNumbers(true,{notify:true});assert.equal(controller.update().shown,1);controller.setNets(true,{notify:true});assert.deepEqual(events,[['numbers',true],['nets',true]]);controller.setNets(false);assert.equal(controller.update().numbers,true,'explicit number setting breaks legacy coupling');
+ mechanical=true;assert.equal(controller.update().shown,0);mechanical=false;measuring=true;assert.equal(controller.update().shown,0);measuring=false;assert.equal(controller.update().shown,1);assert.equal(sync.length,4);
+ let geometryDisposals=0,materialDisposals=0,textureDisposals=0;const mesh=annotations.group.children[0];mesh.geometry.addEventListener('dispose',()=>geometryDisposals++);mesh.material.addEventListener('dispose',()=>materialDisposals++);mesh.material.map.addEventListener('dispose',()=>textureDisposals++);annotations.dispose();annotations.dispose();assert.equal(geometryDisposals,1);assert.equal(materialDisposals,1);assert.equal(textureDisposals,1);assert.equal(annotations.getState().texturePixels,0);
+});

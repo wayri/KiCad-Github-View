@@ -8,17 +8,52 @@
     if(!REPO.test(repository||'')||repository.split('/').some(p=>p==='.'||p==='..')||typeof ref!=='string'||!ref||ref.length>200||ref.split('/').some(p=>!p||p==='.'||p==='..')||/[\\:\x00-\x1f\x7f?#]/.test(ref))throw Error('Invalid GitHub session location.');
   }
   function treeData(objects, ref, directory) {
+    if(!Array.isArray(objects))throw Error('Invalid GitHub website payload.');
     const routes=[...new Set(objects.flatMap(v=>[v?.payload?.codeViewTreeRoute,v?.payload?.codeViewRepoRoute,
       v?.payload?.tree&&v?.payload?.refInfo?v.payload:null]))].filter(v=>v && (v.path??'/')===(directory||'/'));
-    if(routes.length!==1)throw Error('GitHub did not return a readable repository tree. Keep its signed-in tab open, or connect GitHub in settings.');
-    const route=routes[0], sha=route.refInfo?.currentOid, tree=route.tree;
-    if(!SHA.test(sha||'') || (SHA.test(ref)?sha.toLowerCase()!==ref.toLowerCase():ref!=='HEAD'&&route.refInfo?.name!==ref))throw Error('GitHub session returned a different revision.');
-    if(!Array.isArray(tree?.items)||tree.items.length>1000||tree.totalCount!==tree.items.length||tree.truncated)throw Error('GitHub session directory is incomplete. Connect GitHub for larger repositories.');
-    const seen=new Set(),items=tree.items.map(item=>{
-      if(!safePath(item?.path)||item.path.split('/').slice(0,-1).join('/')!==directory||seen.has(item.path)||!['file','directory','symlink','submodule'].includes(item.contentType))throw Error('GitHub session directory contains an unsafe entry.');
-      seen.add(item.path);return {path:item.path,type:item.contentType};
-    });
-    return {sha:sha.toLowerCase(),items};
+    if(!routes.length)throw Error('The GitHub website did not expose a readable repository tree. Check repository website access, then retry.');
+    const items=new Map();let sha=null;
+    for(const route of routes){
+      const oid=route.refInfo?.currentOid,tree=route.tree;
+      if(!SHA.test(oid||'')||(SHA.test(ref)?oid.toLowerCase()!==ref.toLowerCase():ref!=='HEAD'&&route.refInfo?.name!==ref))throw Error('GitHub session returned a different revision.');
+      if(sha&&sha!==oid.toLowerCase())throw Error('GitHub website returned conflicting directory revisions.');sha=oid.toLowerCase();
+      if(!Array.isArray(tree?.items)||tree.items.length>2000||tree.truncated)throw Error('GitHub website directory is incomplete. Open a smaller project folder; additional saved files may exist.');
+      const own=new Map();for(const item of tree.items){
+        if(!safePath(item?.path)||!['file','directory','symlink','submodule'].includes(item.contentType))throw Error('GitHub session directory contains an unsafe entry.');
+        const direct=item.path.split('/').slice(0,-1).join('/')===directory;
+        // GitHub compresses single-child folder chains into one directory row.
+        // Accept only its explicit marker and exact safe relative display path;
+        // files, traversal and entries outside this pinned directory still fail.
+        const simplified=!direct&&item.contentType==='directory'&&item.hasSimplifiedPath===true&&safePath(item.name)&&item.name.includes('/')&&item.path===(directory?directory+'/':'')+item.name;
+        if(!direct&&!simplified)throw Error('GitHub session directory contains an unsafe entry.');
+        for(const previous of [own.get(item.path),items.get(item.path)])if(previous&&previous.type!==item.contentType)throw Error('Conflicting GitHub website entry types: '+item.path);
+        const value={path:item.path,type:item.contentType,...(simplified?{hasSimplifiedPath:true}:{})};own.set(item.path,value);items.set(item.path,value);
+      }
+      if(own.size>1000||tree.totalCount!==own.size)throw Error('GitHub website directory is incomplete. Open a smaller project folder; additional saved files may exist.');
+    }
+    return {sha,items:[...items.values()]};
+  }
+  // Service workers have no DOMParser. Read inert JSON script payloads only.
+  function htmlObjects(html){
+    if(typeof html!=='string'||new TextEncoder().encode(html).length>8*1024*1024)throw Error('GitHub website page exceeds its size limit.');
+    const objects=[];for(const match of html.matchAll(/<script\b([^>]*?)>([\s\S]*?)<\/script\s*>/gi)){
+      if(!/\btype\s*=\s*(?:"application\/json"|'application\/json'|application\/json)(?=\s|$)/i.test(match[1]))continue;
+      if(objects.length>=100)throw Error('GitHub website contains too many JSON payloads.');
+      try{objects.push(JSON.parse(match[2]));}catch{}
+    }
+    return objects;
+  }
+  function websiteError(status,html=''){
+    const text=String(html).slice(0,1024*1024),failure=message=>Object.assign(Error(message),{source:'github-website',status,accessIssue:{kind:status===429?'website-rate-limit':'website-access',confirmed:status===429,title:status===429?'GitHub website temporarily limited':'GitHub website access unavailable',message,action:'Check this repository directly on GitHub and retry. Project discovery reads the website, not the GitHub API.'}});
+    if(status===429||/too many requests|secondary rate limit/i.test(text))return failure('GitHub website requests are temporarily limited. Retry shortly. This project read does not use the GitHub API.');
+    if(/ERR_BLOCKED_BY_ADMINISTRATOR|blocked by (?:your )?(?:organization|administrator)|organization policy|administrator policy/i.test(text))return failure('Browser or organization policy blocked the GitHub website request. Allow this repository website in the browser policy, then retry.');
+    if(status===401||status===403||/SAML|single sign.on|access denied/i.test(text))return failure('GitHub website access was denied'+(status?' (HTTP '+status+')':'')+'. Open this repository on GitHub and complete its sign-in or organization access requirement, then retry.');
+    if(status===404)return failure('The GitHub repository, branch or folder was not found (website HTTP 404). Check the saved repository URL and revision.');
+    return failure('GitHub did not provide a readable repository page'+(status?' (website HTTP '+status+')':'')+'. Open the repository on GitHub to check access, then retry.');
+  }
+  function rawText(content,path){
+    if(/\.(?:kicad_(?:sch|pcb|pro|mod|sym|dru)|sch|pro|brd|lib)$/i.test(path)&&/^\s*(?:<!doctype\s+html\b|<html\b|<head\b|<body\b|<title\b|<form\b)/i.test(content))throw Error('GitHub returned an HTML website page instead of saved KiCad source. Check repository website access; no source was cached.');
+    return content;
   }
   async function bounded(response,limit,signal,binary=false) {
     if(Number(response.headers.get('content-length'))>limit){await response.body?.cancel();throw Error('GitHub session response exceeds its size limit.');}
@@ -56,7 +91,7 @@
             for(let i=0;i<bytes.length;i+=8192)pieces.push(String.fromCharCode(...bytes.subarray(i,i+8192)));
             return {base64:btoa(pieces.join('')),sha:ref.toLowerCase()};
           }
-          return {content:await bounded(response,limit,controller.signal),sha:ref.toLowerCase()};
+          return {content:rawText(await bounded(response,limit,controller.signal),path),sha:ref.toLowerCase()};
         }
         const directory=action==='resolve'?'':path;
         // Reuse the repository page already downloaded by Chrome before fetching
@@ -65,12 +100,12 @@
         if(ref!=='HEAD'||rootPage){try{return treeData(parseDocument(),ref,directory);}catch{}}
         const url=ref==='HEAD'?`https://github.com/${repository}`:`https://github.com/${repository}/tree/${encodeURIComponent(ref)}${directory?'/'+directory.split('/').map(encodeURIComponent).join('/'):''}`;
         const response=await fetcher(url,{credentials:'same-origin',redirect:'error',cache:'no-store',signal:controller.signal});
-        if(!response.ok)throw Error('GitHub session access is unavailable. Open this repository on GitHub or connect GitHub in settings.');
+        if(!response.ok)throw websiteError(response.status,await bounded(response,1024*1024,controller.signal));
         return treeData(parseHTML(await bounded(response,8*1024*1024,controller.signal)),ref,directory);
       } finally {clearTimeout(timer);signal?.removeEventListener('abort',abort);}
     }
     return {read};
   }
-  root.KiCadGitHubSessionReader={create,treeData,safePath};
+  root.KiCadGitHubSessionReader={create,treeData,safePath,htmlObjects,websiteError,rawText};
   if(typeof module==='object'&&module.exports)module.exports=root.KiCadGitHubSessionReader;
 })(typeof globalThis==='object'?globalThis:this);
