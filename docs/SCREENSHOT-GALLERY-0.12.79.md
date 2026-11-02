@@ -8,6 +8,8 @@ This is a workflow gallery, **not installed Chrome, VS Code, physical Android or
 
 **Fast PI follow-up:** [supported real-board setup, solved results and measured speed](FAST-PI-WALKTHROUGH-0.12.79.md). The original Olimex setup remains an unsupported case; the follow-up uses the unmodified public PIC programmer board.
 
+**Cross-probe follow-up:** [all three starting views with mixed schematic/layout/3D popups and interaction steps](CROSS-PROBE-WALKTHROUGH-0.12.79.md).
+
 ## Public sources
 
 | Source | Immutable revision | Retained scope |

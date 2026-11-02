@@ -115,6 +115,10 @@ The walkthrough also records unsupported cases: Olimex Fast PI rejects slotted d
 
 **Fast PI follow-up:** [real-board setup, solved overlays and measured browser speed](docs/FAST-PI-WALKTHROUGH-0.12.79.md) — 99.8 ms median for five fresh-worker solves on the PIC programmer example; includes mesh sensitivity and explicit timing limits.
 
+**Mixed cross-probes:** [schematic, layout and 3D as origins, with all three popup types](docs/CROSS-PROBE-WALKTHROUGH-0.12.79.md). Includes popup-from-popup creation, curved guides, independent zoom/pan/rotation and the saved-association limit found on R1.
+
+[![3D-origin mixed schematic, layout and 3D cross-probe popups](docs/images/0.12.79/cross-probes/03-3d-origin-three-views.jpg)](docs/CROSS-PROBE-WALKTHROUGH-0.12.79.md)
+
 <details>
 <summary>Earlier release screenshots and platform previews</summary>
 

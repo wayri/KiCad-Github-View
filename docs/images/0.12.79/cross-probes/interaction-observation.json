@@ -1,0 +1,56 @@
+{
+  "origin": "3d",
+  "net": "+5V",
+  "popups": [
+    {
+      "id": "probe-4",
+      "mode": "3D",
+      "rect": {
+        "bottom": 448,
+        "height": 350,
+        "left": 76,
+        "right": 376,
+        "top": 98,
+        "width": 300,
+        "x": 76,
+        "y": 98
+      },
+      "status": "Probe opened · select, pan or switch views",
+      "title": "+5V · HARDWARE/ESP32-PoE-hardware-revision-M2/ESP32-PoE_Rev_M2.kicad_pcb"
+    },
+    {
+      "id": "probe-5",
+      "mode": "Layout",
+      "rect": {
+        "bottom": 854,
+        "height": 350,
+        "left": 72,
+        "right": 372,
+        "top": 504,
+        "width": 300,
+        "x": 72,
+        "y": 504
+      },
+      "status": "Probe opened · select, pan or switch views",
+      "title": "+5V · HARDWARE/ESP32-PoE-hardware-revision-M2/ESP32-PoE_Rev_M2.kicad_pcb"
+    },
+    {
+      "id": "probe-6",
+      "mode": "Schematic",
+      "rect": {
+        "bottom": 434,
+        "height": 350,
+        "left": 1248,
+        "right": 1548,
+        "top": 84,
+        "width": 300,
+        "x": 1248,
+        "y": 84
+      },
+      "status": "Click to select · drag to pan · wheel to zoom",
+      "title": "+5V · HARDWARE/ESP32-PoE-hardware-revision-M2/ESP32-PoE_Rev_M2.kicad_sch"
+    }
+  ],
+  "guidePaths": 3,
+  "layoutRotation": "90°"
+}
