@@ -1,5 +1,7 @@
 # Pocket KiView illustrated user guide
 
+**Latest visual walkthrough:** the [0.12.79 real-board screenshot gallery](docs/SCREENSHOT-GALLERY-0.12.79.md) captures the packaged browser viewer on 2 November 2026. Follow actual search, cross-selection, probe, BoM, comment, Draftsman and fabrication interactions using pinned public Olimex, Marble and FMCW3 files. Local reviews, responsive previews and unsupported cases are identified explicitly. Older illustrations in this guide remain versioned historical examples.
+
 Firefox and Firefox derivatives have a separate [installation, signing and Mozilla deployment guide](docs/FIREFOX.md), including Zen, LibreWolf and Waterfox compatibility limits. The current unsigned Firefox ZIP is temporary; Firefox Android extension acceptance is pending.
 
 Open saved KiCad projects, inspect schematics and layouts, and record review or assembly findings without a KiCad installation. Design sources are read-only during ordinary viewing. Review notes, assembly progress and variants are separate data; the VS Code conflict resolver is an explicit exception that can write a resolved drawing after confirmation.

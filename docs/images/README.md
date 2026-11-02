@@ -1,5 +1,13 @@
 # Screenshot provenance
 
+## Latest captures: 0.12.79 · 2 November 2026
+
+See the [real-board interaction gallery](../SCREENSHOT-GALLERY-0.12.79.md) and [versioned image provenance](0.12.79/README.md). These use the exact 0.12.79 Chrome ZIP and immutable public GitHub snapshots through a local project bridge. They are content-only browser screenshots, with no desktop taskbar or Android notification bar. They do not establish installed-store, physical-phone or live-provider acceptance. Per-image captions disclose real-model counts, local demonstration data and unsupported geometry/analysis cases.
+
+## Historical captures
+
+The following dates, renderer capabilities and model limitations describe their original capture versions, not the current renderer.
+
 Captured on 2026-10-04 from the project's actual browser viewer, running through the local preview harness at `127.0.0.1:8773`. Images are JPEG screenshots, not design mockups or AI-generated images. Capture includes the application controls and canvas; unused browser viewport margins were excluded. Browser device scaling determines image pixel dimensions.
 
 The harness replaces extension transport with local files and mocked Git metadata/policy. It does not prove installed-browser integration, live authentication or successful remote publication. Screenshots show the working-tree viewer after the GitHub collaboration and large-board loading changes; they may differ from the already published v0.11.5 package. In particular, the GitHub destination and saved-note screenshots show a local draft with mocked policy; no Issue, Discussion, comment, or account sign-in was performed. The account-settings screenshot contains blank credential fields. GitLab captures also use local fixture content and mocked project metadata; no live GitLab posting occurred.

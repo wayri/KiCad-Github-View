@@ -99,6 +99,24 @@ Inspect plots and probe saved values. Supported spatial exports provide **2D/3D 
 
 ## Screenshots
 
+### Latest real-board gallery · 0.12.79 · 2 November 2026
+
+Fresh captures from the **0.12.79 packaged viewer**, using pinned public **Olimex ESP32-PoE**, **BerkeleyLab Marble** and **hforsten FMCW3** sources. These show actual interactions with saved design data, not UI mockups. The viewer ran locally against the downloaded public snapshots; this does not establish installed-store, live-provider or Android hardware acceptance.
+
+**[Open the full screenshot and interaction walkthrough](docs/SCREENSHOT-GALLERY-0.12.79.md)** for search, pin/pad selection, miniature probes, layer controls, measurements, BoM columns and assembly tracking, local reviews, Draftsman/PDF export, Gerber analysis, sheet navigation, themes and phone-width previews. Each example includes its source and limits.
+
+| Real models and cross-selection | Independent probes and mechanical drawings |
+| --- | --- |
+| [![Olimex ESP32-PoE with 126 of 143 linked component models](docs/images/0.12.79/02-olimex-3d-real-models.jpg)](docs/images/0.12.79/02-olimex-3d-real-models.jpg)<br>Olimex: **126/143 linked models**; missing models and rendering omissions remain identified. | [![Independently rotated layout probe and movable 3D probe with connection guides](docs/images/0.12.79/07-independent-probe-views.jpg)](docs/images/0.12.79/07-independent-probe-views.jpg)<br>Rotate a layout probe, open a sibling 3D probe and move it by its header. |
+| [![The same plus-five-volt net highlighted in the real PCB and schematic](docs/images/0.12.79/10-paired-net-highlight.jpg)](docs/images/0.12.79/10-paired-net-highlight.jpg)<br>Select **+5V** in layout and inspect its matching schematic connections. | [![KiCad-style Draftsman sheet with top and isometric mechanical views and automatic board dimensions](docs/images/0.12.79/20-draftsman-multiple-views.jpg)](docs/images/0.12.79/20-draftsman-multiple-views.jpg)<br>Mechanical views, saved outline dimensions and a KiCad-style worksheet; copper is hidden. |
+| [![Grouped real-board BoM with configurable columns and local assembly progress](docs/images/0.12.79/13-bom-assembly-tracker.jpg)](docs/images/0.12.79/13-bom-assembly-tracker.jpg)<br>Configure BoM columns and advance a **local demonstration checklist**; this is not a physical assembly record. | [![Marble overview filtered to four sheets containing FPGA MISO](docs/images/0.12.79/27-marble-linked-sheets.jpg)](docs/images/0.12.79/27-marble-linked-sheets.jpg)<br>Marble: selecting **FPGA_MISO** retains four matching sheets with optional relation guides. |
+
+The walkthrough also records unsupported cases: Olimex Fast PI rejects slotted drilled pads; its Gerber screening has partial coverage; no successful ERC/DRC or saved-simulation result is fabricated for these examples. FMCW3 schematic viewing is restricted legacy support; its PCB failed to load in this capture run.
+
+<details>
+<summary>Earlier release screenshots and platform previews</summary>
+
+
 ### Project dashboard | 0.12.65
 
 [![Project dashboard with locally stored recent project locations](docs/images/current/dashboard-0.12.65.png)](docs/images/current/dashboard-0.12.65.png)
@@ -402,6 +420,8 @@ These local fixture captures demonstrate controls and saved data. The collaborat
 [![BoM reset warning with affected parts and explicit acknowledgement](docs/images/tools/bom-reset-warning.jpg)](docs/images/tools/bom-reset-warning.jpg)
 
 [BoM reset behavior](docs/bom-field-table.md#reset-saved-management-fields) | [Review and transfer guide](docs/USER-GUIDE.md#6-record-share-and-transfer-a-review).
+
+</details>
 
 </details>
 

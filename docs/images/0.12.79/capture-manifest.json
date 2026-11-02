@@ -1,0 +1,1420 @@
+{
+  "schemaVersion": 1,
+  "capturedOn": "2026-11-02",
+  "release": "0.12.79",
+  "package": {
+    "artifact": "kicad-visual-review-chrome-edge-brave-opera-vivaldi-chromium-0.12.79.zip",
+    "sha256": "02fdbb2e7387c6a151950b4ac856a2c329eeccb35b4ff3d86e1e5324b75e8789"
+  },
+  "captureEnvironment": "Production packaged UI served over loopback with the local-project bridge and authentic pinned public source bytes.",
+  "notAcceptanceOf": [
+    "installed Chrome extension",
+    "VS Code installation/GPU",
+    "physical Android device",
+    "live provider account or write workflow"
+  ],
+  "sources": [
+    {
+      "alias": "olimex",
+      "path": "olimex.json",
+      "entry": "HARDWARE/ESP32-PoE-hardware-revision-M2/ESP32-PoE_Rev_M2.kicad_pcb",
+      "github": {
+        "repository": "OLIMEX/ESP32-POE",
+        "sha": "deb38a377d50eadb04ddc7118a17a5ae58b1ee53"
+      },
+      "fileCount": 16,
+      "assetCount": 34,
+      "sourceBytes": 5037340,
+      "assetBytes": 16282990,
+      "jsonBytes": 26953101,
+      "sha256": "32217727ae33ed46bccf4f71191faf099696941c544d42b5d95297965912dd55",
+      "provenance": "olimex-provenance.json",
+      "validation": "Production KiCadLocalProject.validate passed; all text/asset source hashes verified.",
+      "immutableTreeUrl": "https://github.com/OLIMEX/ESP32-POE/tree/deb38a377d50eadb04ddc7118a17a5ae58b1ee53",
+      "originalSourceFiles": [
+        {
+          "path": "HARDWARE/ESP32-PoE-hardware-revision-M2/ESP32-PoE_Rev_M2.kicad_pcb",
+          "sha256": "7c9f634768ff4e8aee67b8f2f83d0495ab00e2f50209c5dd133a9f39e8bce9fa",
+          "bytes": 2809205,
+          "url": "https://raw.githubusercontent.com/OLIMEX/ESP32-POE/deb38a377d50eadb04ddc7118a17a5ae58b1ee53/HARDWARE/ESP32-PoE-hardware-revision-M2/ESP32-PoE_Rev_M2.kicad_pcb",
+          "origin": "retained public source"
+        },
+        {
+          "path": "HARDWARE/ESP32-PoE-hardware-revision-M2/ESP32-PoE_Rev_M2.kicad_pro",
+          "sha256": "f10ffe6054c2b624ef8b05ff12cd513c6d177b816aa7d46bbdf8ffa5e1ddfb4d",
+          "bytes": 23672,
+          "url": "https://raw.githubusercontent.com/OLIMEX/ESP32-POE/deb38a377d50eadb04ddc7118a17a5ae58b1ee53/HARDWARE/ESP32-PoE-hardware-revision-M2/ESP32-PoE_Rev_M2.kicad_pro",
+          "origin": "immutable public raw source"
+        },
+        {
+          "path": "HARDWARE/ESP32-PoE-hardware-revision-M2/ESP32-PoE_Rev_M2.kicad_sch",
+          "sha256": "d0804d05f8c9162df2ee2a03413409a8446c506aa6336f2967a72dc6525d1f0d",
+          "bytes": 656101,
+          "url": "https://raw.githubusercontent.com/OLIMEX/ESP32-POE/deb38a377d50eadb04ddc7118a17a5ae58b1ee53/HARDWARE/ESP32-PoE-hardware-revision-M2/ESP32-PoE_Rev_M2.kicad_sch",
+          "origin": "immutable public raw source"
+        },
+        {
+          "path": "HARDWARE/ESP32-PoE-hardware-revision-M2/packages3D/GBH254SMT-10(B-V-10-LF)---CviLux_CH8710xM100.step",
+          "sha256": "85f7492c615681e15b446a8c2e9860f40731ecf891bd59efb6d6790a54f2b541",
+          "bytes": 298700,
+          "url": "https://raw.githubusercontent.com/OLIMEX/ESP32-POE/deb38a377d50eadb04ddc7118a17a5ae58b1ee53/HARDWARE/ESP32-PoE-hardware-revision-M2/packages3D/GBH254SMT-10(B-V-10-LF)---CviLux_CH8710xM100.step",
+          "origin": "retained public model bytes"
+        },
+        {
+          "path": "HARDWARE/ESP32-PoE-hardware-revision-M2/packages3D/BAT54.step",
+          "sha256": "a3d52a72022984b74e83342c76d5e58c2acfc3562ba4f924be2a28fc042d97ba",
+          "bytes": 315536,
+          "url": "https://raw.githubusercontent.com/OLIMEX/ESP32-POE/deb38a377d50eadb04ddc7118a17a5ae58b1ee53/HARDWARE/ESP32-PoE-hardware-revision-M2/packages3D/BAT54.step",
+          "origin": "retained public model bytes"
+        },
+        {
+          "path": "HARDWARE/ESP32-PoE-hardware-revision-M2/packages3D/SOT-23.step",
+          "sha256": "fc58593c1101241f0deec3419e333ec09875b0d2550211f77a524ea2df4d72b5",
+          "bytes": 122517,
+          "url": "https://raw.githubusercontent.com/OLIMEX/ESP32-POE/deb38a377d50eadb04ddc7118a17a5ae58b1ee53/HARDWARE/ESP32-PoE-hardware-revision-M2/packages3D/SOT-23.step",
+          "origin": "retained public model bytes"
+        },
+        {
+          "path": "HARDWARE/ESP32-PoE-hardware-revision-M2/packages3D/R_0402_1005Metric.step",
+          "sha256": "91507e5af4251cb4ef38e04889c9b98da29904432bd83786bba13ae9b605eacb",
+          "bytes": 40756,
+          "url": "https://raw.githubusercontent.com/OLIMEX/ESP32-POE/deb38a377d50eadb04ddc7118a17a5ae58b1ee53/HARDWARE/ESP32-PoE-hardware-revision-M2/packages3D/R_0402_1005Metric.step",
+          "origin": "retained public model bytes"
+        },
+        {
+          "path": "HARDWARE/ESP32-PoE-hardware-revision-M2/packages3D/LED_0603_Y.wrl",
+          "sha256": "22c96be0787c565868a6cabc1883111cd4594f337d84b9e247c66815673240f8",
+          "bytes": 328235,
+          "url": "https://raw.githubusercontent.com/OLIMEX/ESP32-POE/deb38a377d50eadb04ddc7118a17a5ae58b1ee53/HARDWARE/ESP32-PoE-hardware-revision-M2/packages3D/LED_0603_Y.wrl",
+          "origin": "retained public model bytes"
+        },
+        {
+          "path": "HARDWARE/ESP32-PoE-hardware-revision-M2/packages3D/Connector_1Port_RJ45_Magjack_10-100Base-T_AutoMDIX_PoE_Wurth_Electronics-7499211002A_DigiKey-732-4976-ND.step",
+          "sha256": "c0345a2c6a013e18366be3558e72292c0a26799c33eed2b894c288d5500a3538",
+          "bytes": 1915263,
+          "url": "https://raw.githubusercontent.com/OLIMEX/ESP32-POE/deb38a377d50eadb04ddc7118a17a5ae58b1ee53/HARDWARE/ESP32-PoE-hardware-revision-M2/packages3D/Connector_1Port_RJ45_Magjack_10-100Base-T_AutoMDIX_PoE_Wurth_Electronics-7499211002A_DigiKey-732-4976-ND.step",
+          "origin": "retained public model bytes"
+        },
+        {
+          "path": "HARDWARE/ESP32-PoE-hardware-revision-M2/packages3D/C_0603_1608Metric.step",
+          "sha256": "4857b3dc717675bf1fb22edda622ac3b3ae03cf44d81eefaf3fa3ba3a86d84c1",
+          "bytes": 43450,
+          "url": "https://raw.githubusercontent.com/OLIMEX/ESP32-POE/deb38a377d50eadb04ddc7118a17a5ae58b1ee53/HARDWARE/ESP32-PoE-hardware-revision-M2/packages3D/C_0603_1608Metric.step",
+          "origin": "retained public model bytes"
+        },
+        {
+          "path": "HARDWARE/ESP32-PoE-hardware-revision-M2/packages3D/SOD123.step",
+          "sha256": "edfd0a868d172ad514ec2d2b083cc58b0b9755c92ef44adcf55140fc66ebe9f3",
+          "bytes": 102650,
+          "url": "https://raw.githubusercontent.com/OLIMEX/ESP32-POE/deb38a377d50eadb04ddc7118a17a5ae58b1ee53/HARDWARE/ESP32-PoE-hardware-revision-M2/packages3D/SOD123.step",
+          "origin": "retained public model bytes"
+        },
+        {
+          "path": "HARDWARE/ESP32-PoE-hardware-revision-M2/packages3D/it1185.step",
+          "sha256": "236472ec2c8ec9fc301ae8cd971835c2d1eb1756f6318c2e8416c07bff34b336",
+          "bytes": 551225,
+          "url": "https://raw.githubusercontent.com/OLIMEX/ESP32-POE/deb38a377d50eadb04ddc7118a17a5ae58b1ee53/HARDWARE/ESP32-PoE-hardware-revision-M2/packages3D/it1185.step",
+          "origin": "retained public model bytes"
+        },
+        {
+          "path": "HARDWARE/ESP32-PoE-hardware-revision-M2/packages3D/C_0402_1005Metric.step",
+          "sha256": "03e44c4b2b727b8d4b6b1fd598cbd12dd5e614f1dfeefa96a92a07e3a3b312a2",
+          "bytes": 43502,
+          "url": "https://raw.githubusercontent.com/OLIMEX/ESP32-POE/deb38a377d50eadb04ddc7118a17a5ae58b1ee53/HARDWARE/ESP32-PoE-hardware-revision-M2/packages3D/C_0402_1005Metric.step",
+          "origin": "retained public model bytes"
+        },
+        {
+          "path": "HARDWARE/ESP32-PoE-hardware-revision-M2/packages3D/L_2016(HM223-201610).step",
+          "sha256": "67f885e3467257b9242ab638a0ee3b827ac635192887ab0292e288d819e8e9a9",
+          "bytes": 21413,
+          "url": "https://raw.githubusercontent.com/OLIMEX/ESP32-POE/deb38a377d50eadb04ddc7118a17a5ae58b1ee53/HARDWARE/ESP32-PoE-hardware-revision-M2/packages3D/L_2016(HM223-201610).step",
+          "origin": "retained public model bytes"
+        },
+        {
+          "path": "HARDWARE/ESP32-PoE-hardware-revision-M2/packages3D/Cap_PTH_6_3x11x2_5mm.step",
+          "sha256": "fcdf8d437c79af9f8cd154b5f07b86ae124e790709c0a9bf18ec8fadabc8f15c",
+          "bytes": 383957,
+          "url": "https://raw.githubusercontent.com/OLIMEX/ESP32-POE/deb38a377d50eadb04ddc7118a17a5ae58b1ee53/HARDWARE/ESP32-PoE-hardware-revision-M2/packages3D/Cap_PTH_6_3x11x2_5mm.step",
+          "origin": "retained public model bytes"
+        },
+        {
+          "path": "HARDWARE/ESP32-PoE-hardware-revision-M2/packages3D/DO-214AB_SMC.step",
+          "sha256": "e20eba81d6eee5276d7596af7e22d7d558a2ba195a422c797d7363b9a7dddaf4",
+          "bytes": 128580,
+          "url": "https://raw.githubusercontent.com/OLIMEX/ESP32-POE/deb38a377d50eadb04ddc7118a17a5ae58b1ee53/HARDWARE/ESP32-PoE-hardware-revision-M2/packages3D/DO-214AB_SMC.step",
+          "origin": "retained public model bytes"
+        },
+        {
+          "path": "HARDWARE/ESP32-PoE-hardware-revision-M2/packages3D/L_AX97-103R3.step",
+          "sha256": "866cceb3b8963fdf7e0236e834706ec45425c4e7f16221ee955c1395edd173c0",
+          "bytes": 1847539,
+          "url": "https://raw.githubusercontent.com/OLIMEX/ESP32-POE/deb38a377d50eadb04ddc7118a17a5ae58b1ee53/HARDWARE/ESP32-PoE-hardware-revision-M2/packages3D/L_AX97-103R3.step",
+          "origin": "retained public model bytes"
+        },
+        {
+          "path": "HARDWARE/ESP32-PoE-hardware-revision-M2/packages3D/DO-214AC_SMA.step",
+          "sha256": "64ce1d89496924dcdfad5531757c6e1155aca9857a08eb600c246eafc1164dd7",
+          "bytes": 126126,
+          "url": "https://raw.githubusercontent.com/OLIMEX/ESP32-POE/deb38a377d50eadb04ddc7118a17a5ae58b1ee53/HARDWARE/ESP32-PoE-hardware-revision-M2/packages3D/DO-214AC_SMA.step",
+          "origin": "retained public model bytes"
+        },
+        {
+          "path": "HARDWARE/ESP32-PoE-hardware-revision-M2/packages3D/usb_micro_4p.stp",
+          "sha256": "fc56c0e9b91d3add959936cb4d096e92b3fc3f6053726a2e313f93b8529a472f",
+          "bytes": 1041438,
+          "url": "https://raw.githubusercontent.com/OLIMEX/ESP32-POE/deb38a377d50eadb04ddc7118a17a5ae58b1ee53/HARDWARE/ESP32-PoE-hardware-revision-M2/packages3D/usb_micro_4p.stp",
+          "origin": "retained public model bytes"
+        },
+        {
+          "path": "HARDWARE/ESP32-PoE-hardware-revision-M2/packages3D/SOT-563.step",
+          "sha256": "76c34aa4905777c0a8abe4718019904a3a9f8343cab7cc056f4516b7ef5165fc",
+          "bytes": 458647,
+          "url": "https://raw.githubusercontent.com/OLIMEX/ESP32-POE/deb38a377d50eadb04ddc7118a17a5ae58b1ee53/HARDWARE/ESP32-PoE-hardware-revision-M2/packages3D/SOT-563.step",
+          "origin": "retained public model bytes"
+        },
+        {
+          "path": "HARDWARE/ESP32-PoE-hardware-revision-M2/packages3D/SL08.step",
+          "sha256": "57c1feb76bef8c189699d8a5317477f4086da616ddbd666b4df536b6eca853db",
+          "bytes": 283099,
+          "url": "https://raw.githubusercontent.com/OLIMEX/ESP32-POE/deb38a377d50eadb04ddc7118a17a5ae58b1ee53/HARDWARE/ESP32-PoE-hardware-revision-M2/packages3D/SL08.step",
+          "origin": "retained public model bytes"
+        },
+        {
+          "path": "HARDWARE/ESP32-PoE-hardware-revision-M2/packages3D/ESP32-WROOM-32D-56544.STEP",
+          "sha256": "9c8b0d58e8c825f786c1753d31a817b72187bdd68ef0cf014ac8a055854f68d8",
+          "bytes": 2223180,
+          "url": "https://raw.githubusercontent.com/OLIMEX/ESP32-POE/deb38a377d50eadb04ddc7118a17a5ae58b1ee53/HARDWARE/ESP32-PoE-hardware-revision-M2/packages3D/ESP32-WROOM-32D-56544.STEP",
+          "origin": "retained public model bytes"
+        },
+        {
+          "path": "HARDWARE/ESP32-PoE-hardware-revision-M2/packages3D/Molex_PicoBlade_530470210.step",
+          "sha256": "27678e5a1dd03eb145790e2d04105111119f93b33ba01320ad172dff27c5470c",
+          "bytes": 348496,
+          "url": "https://raw.githubusercontent.com/OLIMEX/ESP32-POE/deb38a377d50eadb04ddc7118a17a5ae58b1ee53/HARDWARE/ESP32-PoE-hardware-revision-M2/packages3D/Molex_PicoBlade_530470210.step",
+          "origin": "retained public model bytes"
+        },
+        {
+          "path": "HARDWARE/ESP32-PoE-hardware-revision-M2/packages3D/HN1x10-PinHeader_1x10_P2.54mm_Vertical.step",
+          "sha256": "a2f7a9c513c3be0cbd5de8cdd22fdbf1c2e3510c72d682fd089d252fe71b9dc7",
+          "bytes": 356629,
+          "url": "https://raw.githubusercontent.com/OLIMEX/ESP32-POE/deb38a377d50eadb04ddc7118a17a5ae58b1ee53/HARDWARE/ESP32-PoE-hardware-revision-M2/packages3D/HN1x10-PinHeader_1x10_P2.54mm_Vertical.step",
+          "origin": "retained public model bytes"
+        },
+        {
+          "path": "HARDWARE/ESP32-PoE-hardware-revision-M2/packages3D/R_Array_Convex_4x0603.wrl",
+          "sha256": "7874054f23c954c42d4c02cb23ec19ab1f754e6ffd89bb0e93ee21a0074801aa",
+          "bytes": 117527,
+          "url": "https://raw.githubusercontent.com/OLIMEX/ESP32-POE/deb38a377d50eadb04ddc7118a17a5ae58b1ee53/HARDWARE/ESP32-PoE-hardware-revision-M2/packages3D/R_Array_Convex_4x0603.wrl",
+          "origin": "retained public model bytes"
+        },
+        {
+          "path": "HARDWARE/ESP32-PoE-hardware-revision-M2/packages3D/microSD.step",
+          "sha256": "192110a37242b510c1bb8cb2027cdfa15886fe13d9fa005cb0698e316a140715",
+          "bytes": 2358274,
+          "url": "https://raw.githubusercontent.com/OLIMEX/ESP32-POE/deb38a377d50eadb04ddc7118a17a5ae58b1ee53/HARDWARE/ESP32-PoE-hardware-revision-M2/packages3D/microSD.step",
+          "origin": "retained public model bytes"
+        },
+        {
+          "path": "HARDWARE/ESP32-PoE-hardware-revision-M2/packages3D/C_0805_2012Metric.step",
+          "sha256": "9a669c1a2f1ea25b88b401acef6efeaa80a067bd7da9db6993de719a7fbe155c",
+          "bytes": 43618,
+          "url": "https://raw.githubusercontent.com/OLIMEX/ESP32-POE/deb38a377d50eadb04ddc7118a17a5ae58b1ee53/HARDWARE/ESP32-PoE-hardware-revision-M2/packages3D/C_0805_2012Metric.step",
+          "origin": "retained public model bytes"
+        },
+        {
+          "path": "HARDWARE/ESP32-PoE-hardware-revision-M2/packages3D/L_0805_2012Metric.step",
+          "sha256": "751a8ae26d20698bfe8303aa2fc7ec986a8b9a7154699b94bf2a13d4ad401425",
+          "bytes": 43618,
+          "url": "https://raw.githubusercontent.com/OLIMEX/ESP32-POE/deb38a377d50eadb04ddc7118a17a5ae58b1ee53/HARDWARE/ESP32-PoE-hardware-revision-M2/packages3D/L_0805_2012Metric.step",
+          "origin": "retained public model bytes"
+        },
+        {
+          "path": "HARDWARE/ESP32-PoE-hardware-revision-M2/packages3D/C_1206_3216Metric.step",
+          "sha256": "11e948c72c90e2b6322436b72745f40ff4e8ba0da64fb2a0df943dfa61e89c1a",
+          "bytes": 43450,
+          "url": "https://raw.githubusercontent.com/OLIMEX/ESP32-POE/deb38a377d50eadb04ddc7118a17a5ae58b1ee53/HARDWARE/ESP32-PoE-hardware-revision-M2/packages3D/C_1206_3216Metric.step",
+          "origin": "retained public model bytes"
+        },
+        {
+          "path": "HARDWARE/ESP32-PoE-hardware-revision-M2/packages3D/R_0402_1005Metric.wrl",
+          "sha256": "ce89655575a3858f28f001c08aed3f4e4a4b85833d9d3366e0902e44e8d0ebd8",
+          "bytes": 14831,
+          "url": "https://raw.githubusercontent.com/OLIMEX/ESP32-POE/deb38a377d50eadb04ddc7118a17a5ae58b1ee53/HARDWARE/ESP32-PoE-hardware-revision-M2/packages3D/R_0402_1005Metric.wrl",
+          "origin": "retained public model bytes"
+        },
+        {
+          "path": "HARDWARE/ESP32-PoE-hardware-revision-M2/packages3D/SOT-23-5.step",
+          "sha256": "fb4d5778c162afde8297378a1413784fa479fdb9f49acb8ab79aa53d12be2d73",
+          "bytes": 182121,
+          "url": "https://raw.githubusercontent.com/OLIMEX/ESP32-POE/deb38a377d50eadb04ddc7118a17a5ae58b1ee53/HARDWARE/ESP32-PoE-hardware-revision-M2/packages3D/SOT-23-5.step",
+          "origin": "retained public model bytes"
+        },
+        {
+          "path": "HARDWARE/ESP32-PoE-hardware-revision-M2/packages3D/QFN32_5x5.step",
+          "sha256": "ee93c72a52e6ff9dc24cc57307a91b8662d4655937637c3213eb3f4d2d8eb26d",
+          "bytes": 936010,
+          "url": "https://raw.githubusercontent.com/OLIMEX/ESP32-POE/deb38a377d50eadb04ddc7118a17a5ae58b1ee53/HARDWARE/ESP32-PoE-hardware-revision-M2/packages3D/QFN32_5x5.step",
+          "origin": "retained public model bytes"
+        },
+        {
+          "path": "HARDWARE/ESP32-PoE-hardware-revision-M2/packages3D/R_1206_3216Metric.step",
+          "sha256": "f5d1ea5c47935091292bd1c6c698e0df88d3d4bbf92bf66b4c97e49df5be9ebc",
+          "bytes": 40414,
+          "url": "https://raw.githubusercontent.com/OLIMEX/ESP32-POE/deb38a377d50eadb04ddc7118a17a5ae58b1ee53/HARDWARE/ESP32-PoE-hardware-revision-M2/packages3D/R_1206_3216Metric.step",
+          "origin": "retained public model bytes"
+        },
+        {
+          "path": "HARDWARE/ESP32-PoE-hardware-revision-M2/packages3D/R_SMD 2512.STEP",
+          "sha256": "3373f3ebb87277ac5fc2e708b5b687e0db22abe9223c6e4b2867f3b7cfb659f0",
+          "bytes": 474240,
+          "url": "https://raw.githubusercontent.com/OLIMEX/ESP32-POE/deb38a377d50eadb04ddc7118a17a5ae58b1ee53/HARDWARE/ESP32-PoE-hardware-revision-M2/packages3D/R_SMD 2512.STEP",
+          "origin": "retained public model bytes"
+        },
+        {
+          "path": "HARDWARE/ESP32-PoE-hardware-revision-M2/packages3D/R_0603_1608Metric.step",
+          "sha256": "1875571c326d0d9e96f36b4efeb8094068ef7619f0a449c781caf0b49c2e5861",
+          "bytes": 40618,
+          "url": "https://raw.githubusercontent.com/OLIMEX/ESP32-POE/deb38a377d50eadb04ddc7118a17a5ae58b1ee53/HARDWARE/ESP32-PoE-hardware-revision-M2/packages3D/R_0603_1608Metric.step",
+          "origin": "retained public model bytes"
+        },
+        {
+          "path": "HARDWARE/ESP32-PoE-hardware-revision-M2/packages3D/R_0805_2012Metric.step",
+          "sha256": "ded342cdb394fb45395227beaaa75cc390613cf2581b29cd6d22c12abd6103b2",
+          "bytes": 40592,
+          "url": "https://raw.githubusercontent.com/OLIMEX/ESP32-POE/deb38a377d50eadb04ddc7118a17a5ae58b1ee53/HARDWARE/ESP32-PoE-hardware-revision-M2/packages3D/R_0805_2012Metric.step",
+          "origin": "retained public model bytes"
+        },
+        {
+          "path": "HARDWARE/ESP32-PoE-hardware-revision-M2/packages3D/MSOP10-1.step",
+          "sha256": "0bbc1d8c4fd0b0049174763a88d567bd5ad104e14c8b5732d410ddb9a305e62b",
+          "bytes": 966739,
+          "url": "https://raw.githubusercontent.com/OLIMEX/ESP32-POE/deb38a377d50eadb04ddc7118a17a5ae58b1ee53/HARDWARE/ESP32-PoE-hardware-revision-M2/packages3D/MSOP10-1.step",
+          "origin": "retained public model bytes"
+        },
+        {
+          "path": "HARDWARE/ESP32-PoE-hardware-revision-M2/Gerbers/ESP32-PoE_Rev_M-B_Cu.gbr",
+          "sha256": "ba2705f3a5706a0a0647535405a0269ebb7b6e7c63d9c5cacdd35c5fdb74fb7f",
+          "bytes": 374878,
+          "url": "https://raw.githubusercontent.com/OLIMEX/ESP32-POE/deb38a377d50eadb04ddc7118a17a5ae58b1ee53/HARDWARE/ESP32-PoE-hardware-revision-M2/Gerbers/ESP32-PoE_Rev_M-B_Cu.gbr",
+          "origin": "immutable upstream fabrication source"
+        },
+        {
+          "path": "HARDWARE/ESP32-PoE-hardware-revision-M2/Gerbers/ESP32-PoE_Rev_M-B_Mask.gbr",
+          "sha256": "d6247abfd91396f8856a74a4b52443f3afc5cc482a9cfa555e415914e42706c1",
+          "bytes": 15567,
+          "url": "https://raw.githubusercontent.com/OLIMEX/ESP32-POE/deb38a377d50eadb04ddc7118a17a5ae58b1ee53/HARDWARE/ESP32-PoE-hardware-revision-M2/Gerbers/ESP32-PoE_Rev_M-B_Mask.gbr",
+          "origin": "immutable upstream fabrication source"
+        },
+        {
+          "path": "HARDWARE/ESP32-PoE-hardware-revision-M2/Gerbers/ESP32-PoE_Rev_M-B_Paste.gbr",
+          "sha256": "8a7d639a2156f0dbf85f4ee612fc288a2e641ea2bfd4f5d2ed7386512d336ec4",
+          "bytes": 8609,
+          "url": "https://raw.githubusercontent.com/OLIMEX/ESP32-POE/deb38a377d50eadb04ddc7118a17a5ae58b1ee53/HARDWARE/ESP32-PoE-hardware-revision-M2/Gerbers/ESP32-PoE_Rev_M-B_Paste.gbr",
+          "origin": "immutable upstream fabrication source"
+        },
+        {
+          "path": "HARDWARE/ESP32-PoE-hardware-revision-M2/Gerbers/ESP32-PoE_Rev_M-B_Silkscreen.gbr",
+          "sha256": "82d4e9f438657f2c9a4f3b2a1d198e8175b6552372791c761ae3ecc49a1c10c8",
+          "bytes": 170780,
+          "url": "https://raw.githubusercontent.com/OLIMEX/ESP32-POE/deb38a377d50eadb04ddc7118a17a5ae58b1ee53/HARDWARE/ESP32-PoE-hardware-revision-M2/Gerbers/ESP32-PoE_Rev_M-B_Silkscreen.gbr",
+          "origin": "immutable upstream fabrication source"
+        },
+        {
+          "path": "HARDWARE/ESP32-PoE-hardware-revision-M2/Gerbers/ESP32-PoE_Rev_M-Edge_Cuts.gbr",
+          "sha256": "590361a3ddafceb21d20f67e49ab60102ba567da8be44ecc52c0d2e4ebc5bbfc",
+          "bytes": 811,
+          "url": "https://raw.githubusercontent.com/OLIMEX/ESP32-POE/deb38a377d50eadb04ddc7118a17a5ae58b1ee53/HARDWARE/ESP32-PoE-hardware-revision-M2/Gerbers/ESP32-PoE_Rev_M-Edge_Cuts.gbr",
+          "origin": "immutable upstream fabrication source"
+        },
+        {
+          "path": "HARDWARE/ESP32-PoE-hardware-revision-M2/Gerbers/ESP32-PoE_Rev_M-F_Cu.gbr",
+          "sha256": "e99257432c83702105250007cd5e940415b42e44df943d6486c2de2b84593f6d",
+          "bytes": 352850,
+          "url": "https://raw.githubusercontent.com/OLIMEX/ESP32-POE/deb38a377d50eadb04ddc7118a17a5ae58b1ee53/HARDWARE/ESP32-PoE-hardware-revision-M2/Gerbers/ESP32-PoE_Rev_M-F_Cu.gbr",
+          "origin": "immutable upstream fabrication source"
+        },
+        {
+          "path": "HARDWARE/ESP32-PoE-hardware-revision-M2/Gerbers/ESP32-PoE_Rev_M-F_Mask.gbr",
+          "sha256": "75a040e5a2b01735aa07af1753402463019e2118f97f3156cf5c6e19033cdee2",
+          "bytes": 12082,
+          "url": "https://raw.githubusercontent.com/OLIMEX/ESP32-POE/deb38a377d50eadb04ddc7118a17a5ae58b1ee53/HARDWARE/ESP32-PoE-hardware-revision-M2/Gerbers/ESP32-PoE_Rev_M-F_Mask.gbr",
+          "origin": "immutable upstream fabrication source"
+        },
+        {
+          "path": "HARDWARE/ESP32-PoE-hardware-revision-M2/Gerbers/ESP32-PoE_Rev_M-F_Paste.gbr",
+          "sha256": "bb8d1b153404e1577ffd66a487514492b7110a26f6254b44e81a59d0fbac7178",
+          "bytes": 6811,
+          "url": "https://raw.githubusercontent.com/OLIMEX/ESP32-POE/deb38a377d50eadb04ddc7118a17a5ae58b1ee53/HARDWARE/ESP32-PoE-hardware-revision-M2/Gerbers/ESP32-PoE_Rev_M-F_Paste.gbr",
+          "origin": "immutable upstream fabrication source"
+        },
+        {
+          "path": "HARDWARE/ESP32-PoE-hardware-revision-M2/Gerbers/ESP32-PoE_Rev_M-F_Silkscreen.gbr",
+          "sha256": "c5a162a438103bf5bae5f84caafd305c48eb1986f3dd0445ac974a47b1b85d5d",
+          "bytes": 176719,
+          "url": "https://raw.githubusercontent.com/OLIMEX/ESP32-POE/deb38a377d50eadb04ddc7118a17a5ae58b1ee53/HARDWARE/ESP32-PoE-hardware-revision-M2/Gerbers/ESP32-PoE_Rev_M-F_Silkscreen.gbr",
+          "origin": "immutable upstream fabrication source"
+        },
+        {
+          "path": "HARDWARE/ESP32-PoE-hardware-revision-M2/Gerbers/ESP32-PoE_Rev_M-In1_Cu.gbr",
+          "sha256": "ff06ffb37eb72f5a7dfa7ea3d6a7b67600e20227a060eb3ccaf2fa59c12df4e7",
+          "bytes": 204384,
+          "url": "https://raw.githubusercontent.com/OLIMEX/ESP32-POE/deb38a377d50eadb04ddc7118a17a5ae58b1ee53/HARDWARE/ESP32-PoE-hardware-revision-M2/Gerbers/ESP32-PoE_Rev_M-In1_Cu.gbr",
+          "origin": "immutable upstream fabrication source"
+        },
+        {
+          "path": "HARDWARE/ESP32-PoE-hardware-revision-M2/Gerbers/ESP32-PoE_Rev_M-In2_Cu.gbr",
+          "sha256": "a7105957dbff9fbc525952c10d3eaa04c3dc220f99c2f03cffaf1f46875b240b",
+          "bytes": 218837,
+          "url": "https://raw.githubusercontent.com/OLIMEX/ESP32-POE/deb38a377d50eadb04ddc7118a17a5ae58b1ee53/HARDWARE/ESP32-PoE-hardware-revision-M2/Gerbers/ESP32-PoE_Rev_M-In2_Cu.gbr",
+          "origin": "immutable upstream fabrication source"
+        },
+        {
+          "path": "HARDWARE/ESP32-PoE-hardware-revision-M2/Gerbers/ESP32-PoE_Rev_M-NPTH.drl",
+          "sha256": "338e3cb3d9fc54b364e46517ad9f34f668e38679cbcbf7b296129f9251c594c9",
+          "bytes": 814,
+          "url": "https://raw.githubusercontent.com/OLIMEX/ESP32-POE/deb38a377d50eadb04ddc7118a17a5ae58b1ee53/HARDWARE/ESP32-PoE-hardware-revision-M2/Gerbers/ESP32-PoE_Rev_M-NPTH.drl",
+          "origin": "immutable upstream fabrication source"
+        },
+        {
+          "path": "HARDWARE/ESP32-PoE-hardware-revision-M2/Gerbers/ESP32-PoE_Rev_M-PTH.drl",
+          "sha256": "4af3fb0a986a9310a5552cc5a09a3c9aa8a174978bea2b5c402c728452f7a153",
+          "bytes": 5220,
+          "url": "https://raw.githubusercontent.com/OLIMEX/ESP32-POE/deb38a377d50eadb04ddc7118a17a5ae58b1ee53/HARDWARE/ESP32-PoE-hardware-revision-M2/Gerbers/ESP32-PoE_Rev_M-PTH.drl",
+          "origin": "immutable upstream fabrication source"
+        }
+      ],
+      "provenanceFileRetainedSeparately": "olimex-provenance.json"
+    },
+    {
+      "alias": "marble",
+      "path": "marble.json",
+      "entry": "design/Marble.kicad_sch",
+      "github": {
+        "repository": "BerkeleyLab/Marble",
+        "sha": "a426777d92c0f22a546d4740b419a3937e0c1f90"
+      },
+      "fileCount": 26,
+      "assetCount": 0,
+      "sourceBytes": 22806147,
+      "assetBytes": 0,
+      "jsonBytes": 23665583,
+      "sha256": "22e8bf0b81f2558b329ab51dbee0cd42b0b7de341249750f88bbc036cf0ec0cc",
+      "provenance": "marble-provenance.json",
+      "validation": "Production KiCadLocalProject.validate passed; all text/asset source hashes verified.",
+      "immutableTreeUrl": "https://github.com/BerkeleyLab/Marble/tree/a426777d92c0f22a546d4740b419a3937e0c1f90",
+      "originalSourceFiles": [
+        {
+          "path": "design/ETH_PHY.kicad_sch",
+          "sha256": "cf249ad7faddd4b25b0b0f22825dccdc1d073cd9fe273deff95743b2e958d2da",
+          "bytes": 571658,
+          "url": "https://raw.githubusercontent.com/BerkeleyLab/Marble/a426777d92c0f22a546d4740b419a3937e0c1f90/design/ETH_PHY.kicad_sch",
+          "origin": "retained pinned public source"
+        },
+        {
+          "path": "design/FMC_1.kicad_sch",
+          "sha256": "27d2d6334eee8acd1eca8065c74b8aca38d723ec54355076790be565bac07d3d",
+          "bytes": 4143249,
+          "url": "https://raw.githubusercontent.com/BerkeleyLab/Marble/a426777d92c0f22a546d4740b419a3937e0c1f90/design/FMC_1.kicad_sch",
+          "origin": "retained pinned public source"
+        },
+        {
+          "path": "design/FMC_2.kicad_sch",
+          "sha256": "efe36b4a987c3331fa2c4a96c0a0fb2936afeb63ebc37d603a1f007d1ee3686b",
+          "bytes": 4170074,
+          "url": "https://raw.githubusercontent.com/BerkeleyLab/Marble/a426777d92c0f22a546d4740b419a3937e0c1f90/design/FMC_2.kicad_sch",
+          "origin": "retained pinned public source"
+        },
+        {
+          "path": "design/FPGA.kicad_sch",
+          "sha256": "9a036a7c909705ad6758b97f6374fa74d0d21f33e06da7aa691fc92cf1b0da52",
+          "bytes": 282581,
+          "url": "https://raw.githubusercontent.com/BerkeleyLab/Marble/a426777d92c0f22a546d4740b419a3937e0c1f90/design/FPGA.kicad_sch",
+          "origin": "retained pinned public source"
+        },
+        {
+          "path": "design/FPGA_12_13.kicad_sch",
+          "sha256": "f6e35ebb10b4de323aa7704af9c147d2be628a642de52b9f211aa3d5c4e10643",
+          "bytes": 306003,
+          "url": "https://raw.githubusercontent.com/BerkeleyLab/Marble/a426777d92c0f22a546d4740b419a3937e0c1f90/design/FPGA_12_13.kicad_sch",
+          "origin": "retained pinned public source"
+        },
+        {
+          "path": "design/FPGA_14_15.kicad_sch",
+          "sha256": "eba6656053af1a44e338a46722650ce297189e336b5fa87cb283cbbbde8c27fb",
+          "bytes": 515571,
+          "url": "https://raw.githubusercontent.com/BerkeleyLab/Marble/a426777d92c0f22a546d4740b419a3937e0c1f90/design/FPGA_14_15.kicad_sch",
+          "origin": "retained pinned public source"
+        },
+        {
+          "path": "design/FPGA_32_16.kicad_sch",
+          "sha256": "06e86453a80fb810567b529f45428f63dfe0ade8881576338bd109617a055a91",
+          "bytes": 286256,
+          "url": "https://raw.githubusercontent.com/BerkeleyLab/Marble/a426777d92c0f22a546d4740b419a3937e0c1f90/design/FPGA_32_16.kicad_sch",
+          "origin": "retained pinned public source"
+        },
+        {
+          "path": "design/FPGA_33_34.kicad_sch",
+          "sha256": "1b8d9691a00a21cf8a94ff032ffc3dabde18f1a9022cbae749650ee15d2029f9",
+          "bytes": 538873,
+          "url": "https://raw.githubusercontent.com/BerkeleyLab/Marble/a426777d92c0f22a546d4740b419a3937e0c1f90/design/FPGA_33_34.kicad_sch",
+          "origin": "retained pinned public source"
+        },
+        {
+          "path": "design/FPGA_MGT.kicad_sch",
+          "sha256": "d297e08f22977b8f1f2ef4b75d88417351f82b6d6c35ab345c908b851df4e45d",
+          "bytes": 268115,
+          "url": "https://raw.githubusercontent.com/BerkeleyLab/Marble/a426777d92c0f22a546d4740b419a3937e0c1f90/design/FPGA_MGT.kicad_sch",
+          "origin": "retained pinned public source"
+        },
+        {
+          "path": "design/FPGA_PWR&MISC.kicad_sch",
+          "sha256": "58f72e5fa99ddf562ec1daedeac42c0c0cbe91e8279893047f0e6cca1ded1092",
+          "bytes": 1305063,
+          "url": "https://raw.githubusercontent.com/BerkeleyLab/Marble/a426777d92c0f22a546d4740b419a3937e0c1f90/design/FPGA_PWR&MISC.kicad_sch",
+          "origin": "retained pinned public source"
+        },
+        {
+          "path": "design/GBX_MUX.kicad_sch",
+          "sha256": "9407bfc6d9e390178edde3b7be9961557ae04ab3a8cf6e6ce3078f4881560844",
+          "bytes": 296141,
+          "url": "https://raw.githubusercontent.com/BerkeleyLab/Marble/a426777d92c0f22a546d4740b419a3937e0c1f90/design/GBX_MUX.kicad_sch",
+          "origin": "retained pinned public source"
+        },
+        {
+          "path": "design/I2C_MUX.kicad_sch",
+          "sha256": "c217ffc9be452cd244afe7ced055c0fb39081710b45a8e31cd3d1865be7c40eb",
+          "bytes": 353375,
+          "url": "https://raw.githubusercontent.com/BerkeleyLab/Marble/a426777d92c0f22a546d4740b419a3937e0c1f90/design/I2C_MUX.kicad_sch",
+          "origin": "retained pinned public source"
+        },
+        {
+          "path": "design/JTAG.kicad_sch",
+          "sha256": "5595f465df90f5e9833a1b71ec82d0bb6335bb13261a8e6bc5e5b0e5a605daf1",
+          "bytes": 506348,
+          "url": "https://raw.githubusercontent.com/BerkeleyLab/Marble/a426777d92c0f22a546d4740b419a3937e0c1f90/design/JTAG.kicad_sch",
+          "origin": "retained pinned public source"
+        },
+        {
+          "path": "design/LTM4673.kicad_sch",
+          "sha256": "57a38d551fb41c4356c5a9956d519bbb0c93704ee63e9f6349a823240b288b82",
+          "bytes": 1166913,
+          "url": "https://raw.githubusercontent.com/BerkeleyLab/Marble/a426777d92c0f22a546d4740b419a3937e0c1f90/design/LTM4673.kicad_sch",
+          "origin": "retained pinned public source"
+        },
+        {
+          "path": "design/MGT_CLK_Crosspoint.kicad_sch",
+          "sha256": "9b108220419e3be3f1b6f2c85c7fca1dda2227da3dc9b7dc87fa434530b67a08",
+          "bytes": 513104,
+          "url": "https://raw.githubusercontent.com/BerkeleyLab/Marble/a426777d92c0f22a546d4740b419a3937e0c1f90/design/MGT_CLK_Crosspoint.kicad_sch",
+          "origin": "retained pinned public source"
+        },
+        {
+          "path": "design/MMC.kicad_sch",
+          "sha256": "a81c928188af24bfb15bf33c5cacefdb870736368af5d30a2232c497efec6a00",
+          "bytes": 607402,
+          "url": "https://raw.githubusercontent.com/BerkeleyLab/Marble/a426777d92c0f22a546d4740b419a3937e0c1f90/design/MMC.kicad_sch",
+          "origin": "retained pinned public source"
+        },
+        {
+          "path": "design/Marble.kicad_pro",
+          "sha256": "e6f28cc276ea7b2dda702cd2daaf7a2b4fc97e06916971c9b127acbd465bf55c",
+          "bytes": 20089,
+          "url": "https://raw.githubusercontent.com/BerkeleyLab/Marble/a426777d92c0f22a546d4740b419a3937e0c1f90/design/Marble.kicad_pro",
+          "origin": "retained pinned public source"
+        },
+        {
+          "path": "design/Marble.kicad_sch",
+          "sha256": "a77cfce283505f4e371f008014901aaffbe3599ebdfdba5e9b1b4cd485298ab3",
+          "bytes": 3004697,
+          "url": "https://raw.githubusercontent.com/BerkeleyLab/Marble/a426777d92c0f22a546d4740b419a3937e0c1f90/design/Marble.kicad_sch",
+          "origin": "retained pinned public source"
+        },
+        {
+          "path": "design/PMOD.kicad_sch",
+          "sha256": "982e319298439e98b6b12f5b65b3f5cb29c6d7746c6799431bfcf2acdabae09f",
+          "bytes": 150577,
+          "url": "https://raw.githubusercontent.com/BerkeleyLab/Marble/a426777d92c0f22a546d4740b419a3937e0c1f90/design/PMOD.kicad_sch",
+          "origin": "retained pinned public source"
+        },
+        {
+          "path": "design/Power.kicad_sch",
+          "sha256": "47d6893581049e57da91a42701974b17764e46c870b54828bd57ba3a5632baf7",
+          "bytes": 743717,
+          "url": "https://raw.githubusercontent.com/BerkeleyLab/Marble/a426777d92c0f22a546d4740b419a3937e0c1f90/design/Power.kicad_sch",
+          "origin": "retained pinned public source"
+        },
+        {
+          "path": "design/Power_SW.kicad_sch",
+          "sha256": "a04b5d1a0c651bdaece8bbb67fce016130a0962d487e9d20750b7771a4abb76e",
+          "bytes": 810729,
+          "url": "https://raw.githubusercontent.com/BerkeleyLab/Marble/a426777d92c0f22a546d4740b419a3937e0c1f90/design/Power_SW.kicad_sch",
+          "origin": "retained pinned public source"
+        },
+        {
+          "path": "design/QSFP.kicad_sch",
+          "sha256": "1af0d5da5bdba59139c361b1230f43ec8f270388cd435da047331730c23a45fb",
+          "bytes": 231472,
+          "url": "https://raw.githubusercontent.com/BerkeleyLab/Marble/a426777d92c0f22a546d4740b419a3937e0c1f90/design/QSFP.kicad_sch",
+          "origin": "retained pinned public source"
+        },
+        {
+          "path": "design/SDRAM.kicad_sch",
+          "sha256": "2e6103a0fde60e973785375758fe89cca0c5c6d46a4353e7557bce7b07ee3d57",
+          "bytes": 397046,
+          "url": "https://raw.githubusercontent.com/BerkeleyLab/Marble/a426777d92c0f22a546d4740b419a3937e0c1f90/design/SDRAM.kicad_sch",
+          "origin": "retained pinned public source"
+        },
+        {
+          "path": "design/Thermometers.kicad_sch",
+          "sha256": "4e7e6fc3ffb94bf36dde6c8dbd029236c9a029fd1e6b008826cdb48ac32816ef",
+          "bytes": 215689,
+          "url": "https://raw.githubusercontent.com/BerkeleyLab/Marble/a426777d92c0f22a546d4740b419a3937e0c1f90/design/Thermometers.kicad_sch",
+          "origin": "retained pinned public source"
+        },
+        {
+          "path": "design/USB.kicad_sch",
+          "sha256": "f29a9bd2498c910812ab124a9772a0cfddc726a7906590d5929d4aef9f3377d7",
+          "bytes": 834194,
+          "url": "https://raw.githubusercontent.com/BerkeleyLab/Marble/a426777d92c0f22a546d4740b419a3937e0c1f90/design/USB.kicad_sch",
+          "origin": "retained pinned public source"
+        },
+        {
+          "path": "design/WhiteRabbit.kicad_sch",
+          "sha256": "757fc60140876cd17140be570fa044ea15714f94e63628815fa11e4ff916df0b",
+          "bytes": 567211,
+          "url": "https://raw.githubusercontent.com/BerkeleyLab/Marble/a426777d92c0f22a546d4740b419a3937e0c1f90/design/WhiteRabbit.kicad_sch",
+          "origin": "retained pinned public source"
+        }
+      ],
+      "provenanceFileRetainedSeparately": "marble-provenance.json"
+    },
+    {
+      "alias": "fmcw3",
+      "path": "fmcw3.json",
+      "entry": "hardware/fmcw3.sch",
+      "github": {
+        "repository": "Ttl/fmcw3",
+        "sha": "e57ce3bd46c862798b6acc4206564233bcbd5aaf"
+      },
+      "fileCount": 14,
+      "assetCount": 0,
+      "sourceBytes": 2491548,
+      "assetBytes": 0,
+      "jsonBytes": 2551187,
+      "sha256": "aff326c64b65ee74cc943344d44c86e2419011a35ffc8192a8de720c0be7b8cc",
+      "provenance": "fmcw3-provenance.json",
+      "validation": "Production KiCadLocalProject.validate passed; all text/asset source hashes verified.",
+      "immutableTreeUrl": "https://github.com/Ttl/fmcw3/tree/e57ce3bd46c862798b6acc4206564233bcbd5aaf",
+      "originalSourceFiles": [
+        {
+          "path": "hardware/adc.sch",
+          "sha256": "3d26a1cd5ac2b01e824dd2234b3194454cb8cddc12dc62173d89329377e64672",
+          "bytes": 22755,
+          "url": "https://raw.githubusercontent.com/Ttl/fmcw3/e57ce3bd46c862798b6acc4206564233bcbd5aaf/hardware/adc.sch",
+          "origin": "retained pinned public source"
+        },
+        {
+          "path": "hardware/fmcw3-cache.lib",
+          "sha256": "a0eb87f5d35b2293e527f68499ba35a77896899f72e31f511342a81bab5a5ca0",
+          "bytes": 37541,
+          "url": "https://raw.githubusercontent.com/Ttl/fmcw3/e57ce3bd46c862798b6acc4206564233bcbd5aaf/hardware/fmcw3-cache.lib",
+          "origin": "retained pinned public source"
+        },
+        {
+          "path": "hardware/fmcw3.kicad_pcb",
+          "sha256": "6dabb1611cb1ba9335e941e467e622a8b76591b6ddd3c55134f51517c3b69aa6",
+          "bytes": 2094848,
+          "url": "https://raw.githubusercontent.com/Ttl/fmcw3/e57ce3bd46c862798b6acc4206564233bcbd5aaf/hardware/fmcw3.kicad_pcb",
+          "origin": "retained pinned public source"
+        },
+        {
+          "path": "hardware/fmcw3.pro",
+          "sha256": "577979e4ef6aab5a8189be3406093d1d7dfb63c1a2f6691024e37165c89c6cf5",
+          "bytes": 1400,
+          "url": "https://raw.githubusercontent.com/Ttl/fmcw3/e57ce3bd46c862798b6acc4206564233bcbd5aaf/hardware/fmcw3.pro",
+          "origin": "retained pinned public source"
+        },
+        {
+          "path": "hardware/fmcw3.sch",
+          "sha256": "8830633cee73803edd9fffc716c39d2dad4e08922bfe72546e5495a059fd26e0",
+          "bytes": 18372,
+          "url": "https://raw.githubusercontent.com/Ttl/fmcw3/e57ce3bd46c862798b6acc4206564233bcbd5aaf/hardware/fmcw3.sch",
+          "origin": "retained pinned public source"
+        },
+        {
+          "path": "hardware/fpga.sch",
+          "sha256": "bdf2448785a49414a0182b041d7fb56cb362fc2f21948081078594a8d3159047",
+          "bytes": 50669,
+          "url": "https://raw.githubusercontent.com/Ttl/fmcw3/e57ce3bd46c862798b6acc4206564233bcbd5aaf/hardware/fpga.sch",
+          "origin": "retained pinned public source"
+        },
+        {
+          "path": "hardware/if.sch",
+          "sha256": "a2e44febd66e4fd2e27db05e9b8bdfe907c31c1be6f4d18f4e0f83ded740788e",
+          "bytes": 26778,
+          "url": "https://raw.githubusercontent.com/Ttl/fmcw3/e57ce3bd46c862798b6acc4206564233bcbd5aaf/hardware/if.sch",
+          "origin": "retained pinned public source"
+        },
+        {
+          "path": "hardware/imu.sch",
+          "sha256": "43d02dc054c6a56a42b4dfe7bead2c112f208f86bf6118a98886dcd1ecee9e95",
+          "bytes": 3030,
+          "url": "https://raw.githubusercontent.com/Ttl/fmcw3/e57ce3bd46c862798b6acc4206564233bcbd5aaf/hardware/imu.sch",
+          "origin": "retained pinned public source"
+        },
+        {
+          "path": "hardware/libs/fmcw3.lib",
+          "sha256": "9ad9377d9ba2118fc72ecff6a4a622c81da56e1630e749c625d0887f141b8202",
+          "bytes": 98379,
+          "url": "https://raw.githubusercontent.com/Ttl/fmcw3/e57ce3bd46c862798b6acc4206564233bcbd5aaf/hardware/libs/fmcw3.lib",
+          "origin": "retained pinned public source"
+        },
+        {
+          "path": "hardware/mixer.sch",
+          "sha256": "bcb0327b1d5a87d0085936e1c590b8e429ef92c7cb2facf7dad4a433a0ed969f",
+          "bytes": 20086,
+          "url": "https://raw.githubusercontent.com/Ttl/fmcw3/e57ce3bd46c862798b6acc4206564233bcbd5aaf/hardware/mixer.sch",
+          "origin": "retained pinned public source"
+        },
+        {
+          "path": "hardware/power.sch",
+          "sha256": "7185f688e9cfe13b3f48ea966738737d0371a687d2493670a39e661d4efaf626",
+          "bytes": 50554,
+          "url": "https://raw.githubusercontent.com/Ttl/fmcw3/e57ce3bd46c862798b6acc4206564233bcbd5aaf/hardware/power.sch",
+          "origin": "retained pinned public source"
+        },
+        {
+          "path": "hardware/rx.sch",
+          "sha256": "e1e779fc76462d8e288bff7836c72f92d29d5f83bf42892c2c1db6f4954627fe",
+          "bytes": 14648,
+          "url": "https://raw.githubusercontent.com/Ttl/fmcw3/e57ce3bd46c862798b6acc4206564233bcbd5aaf/hardware/rx.sch",
+          "origin": "retained pinned public source"
+        },
+        {
+          "path": "hardware/tx.sch",
+          "sha256": "8faf5b3dffe9044e897cde3cdf69e39692626c7fc8b722dce6ce7d6ff3d605e9",
+          "bytes": 32027,
+          "url": "https://raw.githubusercontent.com/Ttl/fmcw3/e57ce3bd46c862798b6acc4206564233bcbd5aaf/hardware/tx.sch",
+          "origin": "retained pinned public source"
+        },
+        {
+          "path": "hardware/usb.sch",
+          "sha256": "a2f95a2b4ba6c8ada622b9e99516787425c0f5ba1cc33bb5080db8e677cf3e55",
+          "bytes": 20461,
+          "url": "https://raw.githubusercontent.com/Ttl/fmcw3/e57ce3bd46c862798b6acc4206564233bcbd5aaf/hardware/usb.sch",
+          "origin": "retained pinned public source"
+        }
+      ],
+      "provenanceFileRetainedSeparately": "fmcw3-provenance.json"
+    }
+  ],
+  "captures": [
+    {
+      "file": "01-olimex-layout.jpg",
+      "source": "olimex",
+      "workflow": "Open and inspect",
+      "title": "Olimex PCB layout",
+      "interaction": "Open the retained Olimex project and choose Layout. The saved PCB is the drawing source.",
+      "limits": "Saved source shown.",
+      "bytes": 147819,
+      "sha256": "d6da041230e8a78129bd913e821db672ef917c9bdc1e6216d322c8ed6a217a0f",
+      "width": 1707,
+      "height": 1067
+    },
+    {
+      "file": "02-olimex-3d-real-models.jpg",
+      "source": "olimex",
+      "workflow": "Open and inspect",
+      "title": "Real component models in 3D",
+      "interaction": "Switch the same board to 3D. The capture reports 126 of 143 components linked to repository models.",
+      "limits": "Model coverage is partial; unlinked components are not evidence of a complete mechanical assembly.",
+      "bytes": 78521,
+      "sha256": "a831c89a7f60d46c4f9653a2eec6ad41acb9735500c0b541fce0ef74207ad68d",
+      "width": 1707,
+      "height": 1067
+    },
+    {
+      "file": "03-project-search.jpg",
+      "source": "olimex",
+      "workflow": "Open and inspect",
+      "title": "Project-wide search",
+      "interaction": "Search the loaded real project and inspect the matching saved objects and paths.",
+      "limits": "Search evidence is limited to the loaded project.",
+      "bytes": 105430,
+      "sha256": "fefac724df11c794062b39881f847593073b854f33b20c45caf506e1fd5a8cb9",
+      "width": 1707,
+      "height": 1067
+    },
+    {
+      "file": "04-3d-selection-properties.jpg",
+      "source": "olimex",
+      "workflow": "Open and inspect",
+      "title": "3D selection and native properties",
+      "interaction": "Select a real component in 3D and inspect its saved field/value properties.",
+      "limits": "Selection and properties are viewing operations, not design edits.",
+      "bytes": 102161,
+      "sha256": "16effca1e958319dc180be92a63875925e5047122723ffcce477b06870a1faae",
+      "width": 1707,
+      "height": 1067
+    },
+    {
+      "file": "05-3d-net-highlight.jpg",
+      "source": "olimex",
+      "workflow": "Probe and cross-select",
+      "title": "Selected +5V copper",
+      "interaction": "Select the saved +5V net. The inspected selection contains 64 track segments and four vias.",
+      "limits": "Saved-net inspection is not electrical or manufacturing qualification.",
+      "bytes": 73420,
+      "sha256": "6b591e35353ca065306b6b909b84e1b4265efba8ee0d32a380ef318078bd7558",
+      "width": 1707,
+      "height": 1067
+    },
+    {
+      "file": "06-net-probe-on-3d.jpg",
+      "source": "olimex",
+      "workflow": "Probe and cross-select",
+      "title": "Layout probe over the 3D board",
+      "interaction": "Open a layout probe while keeping the main board in 3D.",
+      "limits": "The popup is an independent viewport in the same application page.",
+      "bytes": 93468,
+      "sha256": "044f99f17290c8c93d0e8e8ec609e86ad1cebf963067340c19f1ce1e9988e8d7",
+      "width": 1707,
+      "height": 1067
+    },
+    {
+      "file": "07-independent-probe-views.jpg",
+      "source": "olimex",
+      "workflow": "Probe and cross-select",
+      "title": "Independent sibling probes",
+      "interaction": "Rotate the layout probe by 90 degrees, open a sibling 3D probe, and drag the second popup to the right. Curved source guides remain visible.",
+      "limits": "The second popup moved from DOM x=76 to x=532; this is not a separate installed application window.",
+      "bytes": 104846,
+      "sha256": "0db42f26b74887d6b1cc458f3754c815d1d3824945e5cd0ae00a98907434735e",
+      "width": 1707,
+      "height": 1067
+    },
+    {
+      "file": "08-paired-3d-schematic.jpg",
+      "source": "olimex",
+      "workflow": "Probe and cross-select",
+      "title": "Paired 3D and schematic views",
+      "interaction": "Open the actual project schematic beside the board 3D view.",
+      "limits": "Pairing uses the retained saved project; it does not synchronize unsaved KiCad editor state.",
+      "bytes": 147632,
+      "sha256": "6dae4db31b6f034be8b74841046d364a1371f44695edcc12185d80a04a9937e0",
+      "width": 1707,
+      "height": 1067
+    },
+    {
+      "file": "09-pad-selection.jpg",
+      "source": "olimex",
+      "workflow": "Probe and cross-select",
+      "title": "Saved pad selection",
+      "interaction": "Select a pad and inspect its saved properties.",
+      "limits": "This capture proves pad selection only. The search/navigation step returns to a single PCB view; it is not evidence of paired pin highlighting.",
+      "bytes": 103200,
+      "sha256": "095da8b2df6944554813d1fa53c06db7cdbdc290c5b0feacb2b0ccb2521c5540",
+      "width": 1707,
+      "height": 1067
+    },
+    {
+      "file": "10-paired-net-highlight.jpg",
+      "source": "olimex",
+      "workflow": "Probe and cross-select",
+      "title": "Actual +5V cross-selection",
+      "interaction": "Cross-select +5V between the PCB and schematic; inspect the saved pin/pad-name properties.",
+      "limits": "This observed saved-net match does not establish every possible cross-sheet or repeated-unit mapping.",
+      "bytes": 159183,
+      "sha256": "71996581d9464030057380ce397b29354d7b550594070516b6a7a1e3d4ea51f6",
+      "width": 1707,
+      "height": 1067
+    },
+    {
+      "file": "11-floating-layers-net-labels.jpg",
+      "source": "olimex",
+      "workflow": "Board data and local review",
+      "title": "Layers and terminal labels",
+      "interaction": "Use the floating layer controls and the independent number/net-name controls.",
+      "limits": "Shown label visibility depends on zoom, saved identities and annotation budgets.",
+      "bytes": 96259,
+      "sha256": "435611879a35442cbbd5c1b714e5a5f8c4f78156d14198eb34f38f93232f1664",
+      "width": 1707,
+      "height": 1067
+    },
+    {
+      "file": "12-bom-column-picker.jpg",
+      "source": "olimex",
+      "workflow": "Board data and local review",
+      "title": "BoM column chooser",
+      "interaction": "Open the BoM table and choose the fields to display.",
+      "limits": "Fields come from the saved project; column choices do not rewrite the design.",
+      "bytes": 144508,
+      "sha256": "f89735aee24302078af402aa7d297e1b5a3fd46c88483642398a7d392317a12b",
+      "width": 1707,
+      "height": 1067
+    },
+    {
+      "file": "13-bom-assembly-tracker.jpg",
+      "source": "olimex",
+      "workflow": "Board data and local review",
+      "title": "Local assembly tracking",
+      "interaction": "Mark one assembly entry Placed. The local demonstration shows one placed and 142 not started.",
+      "limits": "These are demonstration tracking states, not a record of physical assembly.",
+      "bytes": 201882,
+      "sha256": "4a6ce7e29b34b1aa97719eaf78b30bf690b4158272490be48610e51bbb090528",
+      "width": 1707,
+      "height": 1067
+    },
+    {
+      "file": "14-measure-board-extents.jpg",
+      "source": "olimex",
+      "workflow": "Board data and local review",
+      "title": "Board-extent measurement",
+      "interaction": "Measure the saved board outline in the viewer.",
+      "limits": "Screen measurements are review aids, without inferred manufacturing tolerances.",
+      "bytes": 114984,
+      "sha256": "b359c3f0a6f62cac450f0ba1c6b300fc1d3ceed48169fc041f40891123d8d9f2",
+      "width": 1707,
+      "height": 1067
+    },
+    {
+      "file": "15-comment-composer-local.jpg",
+      "source": "olimex",
+      "workflow": "Board data and local review",
+      "title": "Local review-note composer",
+      "interaction": "Create a local Minor-severity issue draft with its drawing location.",
+      "limits": "No provider comment is sent.",
+      "bytes": 114206,
+      "sha256": "f6a0c946d329659d8cc586364af9c1415694f2e162858c7ed0139c482a274f62",
+      "width": 1707,
+      "height": 1067
+    },
+    {
+      "file": "16-comment-locate-local.jpg",
+      "source": "olimex",
+      "workflow": "Board data and local review",
+      "title": "Locate a saved local note",
+      "interaction": "Save the local draft and choose Locate to return to its drawing location.",
+      "limits": "This demonstrates local save/locate only, not remote publication or readback.",
+      "bytes": 126098,
+      "sha256": "8a8082f07e54e41ae799e26d84635f557afdd00133c10a19a5bd06cbb2675bc2",
+      "width": 1707,
+      "height": 1067
+    },
+    {
+      "file": "17-comment-filters.jpg",
+      "source": "olimex",
+      "workflow": "Board data and local review",
+      "title": "Filter local review notes",
+      "interaction": "Filter the saved local review entries.",
+      "limits": "Account threads and remote conversation refresh are not exercised.",
+      "bytes": 157025,
+      "sha256": "8656261d455b147b25c8e06e2cedc9e1330f430a4327ba060e785373f371f48a",
+      "width": 1707,
+      "height": 1067
+    },
+    {
+      "file": "18-fast-pi-reviewed-setup.jpg",
+      "source": "olimex",
+      "workflow": "Screening setup and Draftsman",
+      "title": "Reviewed Fast PI setup",
+      "interaction": "Review a 5 V, 0.1 A, 58 MS/m setup using the saved stackup.",
+      "limits": "Setup only: this actual Olimex board is rejected for unsupported slotted drills. No solved PI result is shown.",
+      "bytes": 125225,
+      "sha256": "3eb788bd8aeed1e7355a1430042c18fcacda2fbca66c92f9cf04676732b1be76",
+      "width": 1707,
+      "height": 1067
+    },
+    {
+      "file": "19-draftsman-kicad-template.jpg",
+      "source": "olimex",
+      "workflow": "Screening setup and Draftsman",
+      "title": "KiCad-style Draftsman sheet",
+      "interaction": "Choose the KiCad-style template and dimension the 28 × 80 mm board outline.",
+      "limits": "The drawing document is separate from the PCB source.",
+      "bytes": 101368,
+      "sha256": "e5afc592b4a1fb0b58b5d27e77311fd12c9d393de45c84680be1e97fe5813138",
+      "width": 1707,
+      "height": 1067
+    },
+    {
+      "file": "20-draftsman-multiple-views.jpg",
+      "source": "olimex",
+      "workflow": "Screening setup and Draftsman",
+      "title": "Multiple documentation views",
+      "interaction": "Arrange top and isometric views with copper hidden.",
+      "limits": "View visibility is a documentation choice, not a change to saved copper.",
+      "bytes": 106675,
+      "sha256": "f05fe0d58e7397dec12a4d31e69c6b1f3746d2e140561693f8687103e2ab46b2",
+      "width": 1707,
+      "height": 1067
+    },
+    {
+      "file": "21-draftsman-pdf-ready.jpg",
+      "source": "olimex",
+      "workflow": "Screening setup and Draftsman",
+      "title": "Generated PDF ready",
+      "interaction": "Generate the PDF and save a local drawing draft; the download link remains available.",
+      "limits": "GitHub save is disabled without authentication. This does not demonstrate a remote repository save.",
+      "bytes": 112198,
+      "sha256": "52269ebc7a0ff878c423ce5afd68dd215336ec8f749f47eb42628bdaa7f4225c",
+      "width": 1707,
+      "height": 1067
+    },
+    {
+      "file": "22-project-home-files.jpg",
+      "source": "olimex",
+      "workflow": "Project files and fabrication",
+      "title": "Project home and saved files",
+      "interaction": "Return to project home and inspect the actual saved source files.",
+      "limits": "The capture uses a loopback local-project bridge, not live provider discovery.",
+      "bytes": 54844,
+      "sha256": "f1f10b214b8bdb2f22817d291485758367efeaf81cdd17fe282014e36310fc63",
+      "width": 1707,
+      "height": 1067
+    },
+    {
+      "file": "23-gerber-copper-layers.jpg",
+      "source": "olimex",
+      "workflow": "Project files and fabrication",
+      "title": "Upstream Gerber layers",
+      "interaction": "Open the 13 actual upstream fabrication files from the pinned repository revision. Twelve render in this capture.",
+      "limits": "Partial import: PTH is rejected for unsupported slots/macros. The files are upstream saved outputs, not newly plotted from the current board.",
+      "bytes": 131948,
+      "sha256": "8a8c71805fa3ba1f7b40db3e4eeb3c3f9b354d6a556a80cac9ea82dcc2a33476",
+      "width": 1707,
+      "height": 1067
+    },
+    {
+      "file": "24-gerber-analysis-partial.jpg",
+      "source": "olimex",
+      "workflow": "Project files and fabrication",
+      "title": "Partial Gerber analysis",
+      "interaction": "Inspect the saved fabrication analysis and its 1,002 findings.",
+      "limits": "Findings are screening data, not DFM certification. Unsupported PTH slots/macros and incomplete rendering remain explicit.",
+      "bytes": 132017,
+      "sha256": "d2d780086393da9083146a2de4517805122bf0f567293526a672509fecee58d1",
+      "width": 1707,
+      "height": 1067
+    },
+    {
+      "file": "25-marble-root-hierarchy.jpg",
+      "source": "marble",
+      "workflow": "Large schematic hierarchy",
+      "title": "Marble root and hierarchy",
+      "interaction": "Open the actual Marble root schematic and its saved hierarchy.",
+      "limits": "This capture corpus deliberately excludes the 44 MB PCB and all models.",
+      "bytes": 146885,
+      "sha256": "9c0ac4d097c310b4ea434ad809ab6874407f9c26070ee1a92241d79cc8a1f756",
+      "width": 1707,
+      "height": 1067
+    },
+    {
+      "file": "26-marble-all-sheets.jpg",
+      "source": "marble",
+      "workflow": "Large schematic hierarchy",
+      "title": "All loaded schematic pages",
+      "interaction": "Open the all-sheets overview of all 25 loaded pages. Repeated QSFP2 is represented by a two-instance stack.",
+      "limits": "The overview does not claim that every repeated instance has been expanded into a separate page.",
+      "bytes": 167177,
+      "sha256": "eeaf1352cf7bc41134f67fcc961960c9552c63bd2ece02d1cc393d0a11cd2a49",
+      "width": 1707,
+      "height": 1067
+    },
+    {
+      "file": "27-marble-linked-sheets.jpg",
+      "source": "marble",
+      "workflow": "Large schematic hierarchy",
+      "title": "Only sheets matching FPGA_MISO",
+      "interaction": "Highlight FPGA_MISO and show only its four matching sheets.",
+      "limits": "The filter reflects this saved net and loaded sources, not a general connectivity proof.",
+      "bytes": 113843,
+      "sha256": "b55b18a50e0a9fc08b46f86ff7cb80847d05ab5e607fbf54290c97619e9713b0",
+      "width": 1707,
+      "height": 1067
+    },
+    {
+      "file": "28-net-links-without-hierarchy.jpg",
+      "source": "marble",
+      "workflow": "Large schematic hierarchy",
+      "title": "Net links without hierarchy links",
+      "interaction": "Turn hierarchy links off while leaving net links on.",
+      "limits": "The two link overlays are controlled independently.",
+      "bytes": 113168,
+      "sha256": "9078261751c8dc318490143834ebcc33339deb9c8042ab01ba4b95e34b0041a5",
+      "width": 1707,
+      "height": 1067
+    },
+    {
+      "file": "29-marble-sheet-net-indicators.jpg",
+      "source": "marble",
+      "workflow": "Large schematic hierarchy",
+      "title": "Sheet-level net indicators",
+      "interaction": "Use sheet indicators to follow the highlighted saved net.",
+      "limits": "Indicators reflect the active saved selection.",
+      "bytes": 134921,
+      "sha256": "a69c3c92db58f18ab5917ff1fe610e2340490cd53beaf78e2bdb0e5c97233093",
+      "width": 1707,
+      "height": 1067
+    },
+    {
+      "file": "30-schematic-theme-toggle.jpg",
+      "source": "marble",
+      "workflow": "Large schematic hierarchy",
+      "title": "Schematic theme control",
+      "interaction": "Toggle the schematic theme while retaining the loaded drawing.",
+      "limits": "Theme changes presentation, not source geometry.",
+      "bytes": 121178,
+      "sha256": "cba6861d786004609a24c32f2fa6df48ff2f939559d5f3e270f00871cbea6313",
+      "width": 1707,
+      "height": 1067
+    },
+    {
+      "file": "31-fmcw3-legacy-root.jpg",
+      "source": "fmcw3",
+      "workflow": "Legacy sheets and version identity",
+      "title": "FMCW3 legacy root",
+      "interaction": "Open the authentic FMCW3 legacy root schematic.",
+      "limits": "Restricted legacy preview; unsupported records or missing library content may be omitted with diagnostics.",
+      "bytes": 108522,
+      "sha256": "344775da6044e7ff7ae69f1ac129c4489fb5ab2426f89c56cfa46b3b5c7de4a1",
+      "width": 1707,
+      "height": 1067
+    },
+    {
+      "file": "32-fmcw3-legacy-subsheet.jpg",
+      "source": "fmcw3",
+      "workflow": "Legacy sheets and version identity",
+      "title": "FMCW3 power subsheet",
+      "interaction": "Navigate from the root to the saved power subsheet.",
+      "limits": "Schematic navigation works here. The FMCW3 PCB fails with “Invalid numeric KiCad value”; no successful PCB capture is included.",
+      "bytes": 128475,
+      "sha256": "f9890f30f1e7ca7375f691042158a3d9f9fe1e9945807d3f881592aa710a5119",
+      "width": 1707,
+      "height": 1067
+    },
+    {
+      "file": "33-about-packaged-version.jpg",
+      "source": "olimex",
+      "workflow": "Legacy sheets and version identity",
+      "title": "About the packaged version",
+      "interaction": "Open About and read the packaged 0.12.79 version.",
+      "limits": "The UI is from the audited package, served locally; this does not prove a store installation.",
+      "bytes": 128218,
+      "sha256": "88ff6495f95d19c1fad0eddaeab0d850cd6b12c999dbf050838edb17a9714369",
+      "width": 1707,
+      "height": 1067
+    },
+    {
+      "file": "34-generated-layout-download.jpg",
+      "source": "olimex",
+      "workflow": "Generated downloads and responsive web previews",
+      "title": "Generated layout PDF",
+      "interaction": "Choose Generate and download PDF. Production status reports “Generated ESP32-PoE_Rev_M2.pdf · 1920 × 4096 pixels. Your browser handles download”.",
+      "limits": "The PDF was generated and download was handed to the browser. No downloaded filesystem path was verified.",
+      "bytes": 60615,
+      "sha256": "59bbdb4ebd07846d363bd75911e933f9df392a0e23478365f5b6117b3dead6c7",
+      "width": 1707,
+      "height": 1067,
+      "generatedPdfName": "ESP32-PoE_Rev_M2.pdf",
+      "reportedRenderPixels": [
+        1920,
+        4096
+      ],
+      "browserDownloadHandedOff": true,
+      "downloadedFilePathVerified": false
+    },
+    {
+      "file": "35-phone-layout-preview.jpg",
+      "source": "olimex",
+      "workflow": "Generated downloads and responsive web previews",
+      "title": "Narrow layout web preview",
+      "interaction": "Inspect the real Olimex layout in a narrow responsive web viewport.",
+      "limits": "Requested viewport 390 × 844 at 75% browser zoom; actual DOM and JPEG are 520 × 1125, device-pixel ratio 0.75. This is not a physical Android capture.",
+      "bytes": 120458,
+      "sha256": "4ec39ae20691c2ec95595d8cd7a68262650091b6b7c71d1ffb150b868a568e40",
+      "width": 520,
+      "height": 1125,
+      "requestedViewport": [
+        390,
+        844
+      ],
+      "observedDomViewport": [
+        520,
+        1125
+      ],
+      "browserZoomPercent": 75,
+      "devicePixelRatio": 0.75,
+      "physicalDevice": false
+    },
+    {
+      "file": "36-phone-comments-preview.jpg",
+      "source": "olimex",
+      "workflow": "Generated downloads and responsive web previews",
+      "title": "Narrow local-comment web preview",
+      "interaction": "Open the local comment interface in the narrow responsive web viewport.",
+      "limits": "Requested viewport 390 × 844 at 75% browser zoom; actual DOM and JPEG are 520 × 1125, device-pixel ratio 0.75. Notes remain local; no provider send is demonstrated.",
+      "bytes": 57891,
+      "sha256": "3fcd4a1d6e51c1a79b4ffd11ec6f5f70e0ef51fed6c782c13808b4b8338aae9c",
+      "width": 520,
+      "height": 1125,
+      "requestedViewport": [
+        390,
+        844
+      ],
+      "observedDomViewport": [
+        520,
+        1125
+      ],
+      "browserZoomPercent": 75,
+      "devicePixelRatio": 0.75,
+      "physicalDevice": false
+    },
+    {
+      "file": "37-phone-3d-preview.jpg",
+      "source": "olimex",
+      "workflow": "Generated downloads and responsive web previews",
+      "title": "Narrow 3D web preview",
+      "interaction": "Switch the real board to 3D and wait for the visible 126/143 linked-model status.",
+      "limits": "Requested viewport 390 × 844 at 75% browser zoom; actual DOM and JPEG are 520 × 1125, device-pixel ratio 0.75. Responsive web evidence only; model coverage remains partial.",
+      "bytes": 34323,
+      "sha256": "55402999f6d167146716b6f5910fdc6b88e315ec403e2322d3bbaa30a6b79649",
+      "width": 520,
+      "height": 1125,
+      "requestedViewport": [
+        390,
+        844
+      ],
+      "observedDomViewport": [
+        520,
+        1125
+      ],
+      "browserZoomPercent": 75,
+      "devicePixelRatio": 0.75,
+      "physicalDevice": false
+    },
+    {
+      "file": "38-tablet-3d-preview.jpg",
+      "source": "olimex",
+      "workflow": "Generated downloads and responsive web previews",
+      "title": "Tablet-sized 3D web preview",
+      "interaction": "Inspect the top-camera 3D view after the visible 126/143 linked-model status.",
+      "limits": "Requested viewport 1024 × 768; JPEG dimensions are recorded below and in the manifest. This is a responsive web preview, not physical tablet or Android validation.",
+      "bytes": 64238,
+      "sha256": "e2c1e9329d46c884246181a2f5bfa946e2d008576a7c410cf1aaad884ca6a795",
+      "width": 1365,
+      "height": 1024,
+      "requestedViewport": [
+        1024,
+        768
+      ],
+      "physicalDevice": false,
+      "observedLinkedModels": 126,
+      "componentCount": 143
+    }
+  ],
+  "capabilities": [
+    {
+      "feature": "Saved PCB, schematic and project navigation",
+      "status": "Captured",
+      "captureIds": [
+        "01",
+        "03",
+        "22",
+        "25",
+        "31",
+        "32"
+      ],
+      "limits": "Authentic retained public files; local transport."
+    },
+    {
+      "feature": "Real 3D model geometry",
+      "status": "Partial",
+      "captureIds": [
+        "02"
+      ],
+      "limits": "126/143 components linked; no complete-model claim."
+    },
+    {
+      "feature": "Selected saved copper and via inspection",
+      "status": "Captured",
+      "captureIds": [
+        "05"
+      ],
+      "limits": "64 track segments and four vias in the observed +5V selection."
+    },
+    {
+      "feature": "Independent mini viewports, rotation, movement and guides",
+      "status": "Captured",
+      "captureIds": [
+        "06",
+        "07"
+      ],
+      "limits": "Same-page layout and 3D popups; layout rotation and popup movement exercised."
+    },
+    {
+      "feature": "Paired PCB/schematic net selection",
+      "status": "Captured",
+      "captureIds": [
+        "08",
+        "10"
+      ],
+      "limits": "Observed +5V case with saved pin/pad-name properties."
+    },
+    {
+      "feature": "Pad selection and label controls",
+      "status": "Captured",
+      "captureIds": [
+        "09",
+        "11"
+      ],
+      "limits": "09 demonstrates selection only; these images do not demonstrate dense BGA numbering."
+    },
+    {
+      "feature": "BoM columns and assembly tracking",
+      "status": "Captured local demo",
+      "captureIds": [
+        "12",
+        "13"
+      ],
+      "limits": "One placed state is demonstration data, not physical assembly."
+    },
+    {
+      "feature": "Measurements",
+      "status": "Captured",
+      "captureIds": [
+        "14"
+      ],
+      "limits": "Saved outline review; no manufacturing tolerance qualification."
+    },
+    {
+      "feature": "Review drafts, Locate and filters",
+      "status": "Captured local only",
+      "captureIds": [
+        "15",
+        "16",
+        "17"
+      ],
+      "limits": "No remote publication/readback or live account threads."
+    },
+    {
+      "feature": "Fast PI numerical results",
+      "status": "Setup only; no result",
+      "captureIds": [
+        "18"
+      ],
+      "limits": "Actual board rejects unsupported slotted drills. No solved field or numerical result is presented."
+    },
+    {
+      "feature": "Draftsman templates, views, PDF link and draft",
+      "status": "Captured local",
+      "captureIds": [
+        "19",
+        "20",
+        "21"
+      ],
+      "limits": "Generated PDF link and local draft; GitHub save disabled without authentication."
+    },
+    {
+      "feature": "Gerber/drill import and analysis",
+      "status": "Partial",
+      "captureIds": [
+        "23",
+        "24"
+      ],
+      "limits": "13 inputs, 12 rendered; PTH unsupported, 1,002 screening findings. Not DFM certification."
+    },
+    {
+      "feature": "Multi-sheet hierarchy, net filtering and independent link overlays",
+      "status": "Captured",
+      "captureIds": [
+        "25",
+        "26",
+        "27",
+        "28",
+        "29"
+      ],
+      "limits": "25 loaded pages, QSFP2 two-instance stack; FPGA_MISO filter shows four matching sheets."
+    },
+    {
+      "feature": "Restricted legacy schematic navigation",
+      "status": "Captured",
+      "captureIds": [
+        "31",
+        "32"
+      ],
+      "limits": "Legacy root/power sheet only; FMCW3 PCB numeric-load failure is not hidden."
+    },
+    {
+      "feature": "About/package version",
+      "status": "Captured",
+      "captureIds": [
+        "33"
+      ],
+      "limits": "Version 0.12.79 from the audited package."
+    },
+    {
+      "feature": "KiCad simulation workbook/waveform and wayriCAD results",
+      "status": "Not pictured",
+      "captureIds": [],
+      "limits": "No real corresponding saved results were available for these project corpora. No solver/result screenshots fabricated."
+    },
+    {
+      "feature": "Successful ERC/DRC report inspection",
+      "status": "Not pictured",
+      "captureIds": [],
+      "limits": "No successful report available; the optional native Olimex DRC attempt crashed and produced no report."
+    },
+    {
+      "feature": "Live provider account threads, send/readback, sync/backoff, discussion categories",
+      "status": "Not exercised",
+      "captureIds": [],
+      "limits": "Local note captures do not verify these account-backed operations."
+    },
+    {
+      "feature": "History, comparison, fork or remote repository saves",
+      "status": "Not exercised",
+      "captureIds": [],
+      "limits": "No remote actions or fabricated provider history included."
+    },
+    {
+      "feature": "Installed Chrome/VS Code or physical Android acceptance",
+      "status": "Not exercised",
+      "captureIds": [],
+      "limits": "Responsive browser previews 35–38 are not installed-extension, VS Code or physical-device acceptance."
+    },
+    {
+      "feature": "Dense BGA annotation coverage, calculators, photo alignment, physical assembly and other uncaptured tools",
+      "status": "Not pictured",
+      "captureIds": [],
+      "limits": "Feature availability is separate from evidence in this gallery."
+    },
+    {
+      "feature": "Generated layout PDF download",
+      "status": "Generated; handed to browser",
+      "captureIds": [
+        "34"
+      ],
+      "limits": "Reported 1920 × 4096 pixel render; no downloaded filesystem path verified."
+    },
+    {
+      "feature": "Narrow and tablet-sized layouts, comments and 3D",
+      "status": "Captured responsive web only",
+      "captureIds": [
+        "35",
+        "36",
+        "37",
+        "38"
+      ],
+      "limits": "Narrow images 520 × 1125 at 75% browser zoom, requested 390 × 844. Tablet image 1365 × 1024, requested 1024 × 768. No physical Android validation."
+    }
+  ],
+  "excludedCapture": {
+    "subject": "FMCW3 PCB",
+    "reason": "Provisional image removed because actual loading fails Invalid numeric KiCad value. Capture34 instead shows a successful PDF generation/browser-download handoff."
+  },
+  "captureCount": 38,
+  "harnessNotes": [
+    "The local capture bridge was corrected to load the legacy schematic adapter. This hosting correction is not evidence of a shipped-product defect; the separate FMCW3 PCB numeric-load failure remains disclosed."
+  ]
+}
