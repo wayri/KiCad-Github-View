@@ -113,6 +113,8 @@ Fresh captures from the **0.12.79 packaged viewer**, using pinned public **Olime
 
 The walkthrough also records unsupported cases: Olimex Fast PI rejects slotted drilled pads; its Gerber screening has partial coverage; no successful ERC/DRC or saved-simulation result is fabricated for these examples. FMCW3 schematic viewing is restricted legacy support; its PCB failed to load in this capture run.
 
+**Fast PI follow-up:** [real-board setup, solved overlays and measured browser speed](docs/FAST-PI-WALKTHROUGH-0.12.79.md) — 99.8 ms median for five fresh-worker solves on the PIC programmer example; includes mesh sensitivity and explicit timing limits.
+
 <details>
 <summary>Earlier release screenshots and platform previews</summary>
 

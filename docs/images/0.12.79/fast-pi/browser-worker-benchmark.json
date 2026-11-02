@@ -1,0 +1,102 @@
+{
+  "scope": "Browser fresh worker startup through result; excludes download, parse and painting",
+  "source": {
+    "repository": "KiCad/kicad-source-mirror",
+    "sha": "29798a640054e91411a44d230bd3a3425b3166e4"
+  },
+  "options": {
+    "net": 18,
+    "layers": [
+      {
+        "name": "F.Cu",
+        "zMm": 0,
+        "thicknessMm": 0.035
+      },
+      {
+        "name": "B.Cu",
+        "zMm": 1.545,
+        "thicknessMm": 0.035
+      }
+    ],
+    "conductivitySm": 58000000,
+    "cellSizeMm": 0.2,
+    "currentA": 0.1,
+    "sourceVoltageV": 12,
+    "viaPlatingMm": 0.025,
+    "source": {
+      "x": 143.002,
+      "y": 49.784,
+      "layer": "B.Cu"
+    },
+    "sink": {
+      "x": 128.27,
+      "y": 75.184,
+      "layer": "B.Cu"
+    }
+  },
+  "parseMs": 19,
+  "runs": [
+    {
+      "elapsedMs": 106.69999992847443,
+      "nodes": 857,
+      "edges": 1243,
+      "iterations": 443,
+      "voltageV": 11.995631919151606,
+      "dropV": 0.00436808084839403,
+      "currentA": 0.1,
+      "resistanceOhm": 0.0436808084839403,
+      "lossW": 0.0004368080848390149,
+      "residualA": 8.433724315178829e-10
+    },
+    {
+      "elapsedMs": 96.89999997615814,
+      "nodes": 857,
+      "edges": 1243,
+      "iterations": 443,
+      "voltageV": 11.995631919151606,
+      "dropV": 0.00436808084839403,
+      "currentA": 0.1,
+      "resistanceOhm": 0.0436808084839403,
+      "lossW": 0.0004368080848390149,
+      "residualA": 8.433724315178829e-10
+    },
+    {
+      "elapsedMs": 96.10000002384186,
+      "nodes": 857,
+      "edges": 1243,
+      "iterations": 443,
+      "voltageV": 11.995631919151606,
+      "dropV": 0.00436808084839403,
+      "currentA": 0.1,
+      "resistanceOhm": 0.0436808084839403,
+      "lossW": 0.0004368080848390149,
+      "residualA": 8.433724315178829e-10
+    },
+    {
+      "elapsedMs": 121.20000004768372,
+      "nodes": 857,
+      "edges": 1243,
+      "iterations": 443,
+      "voltageV": 11.995631919151606,
+      "dropV": 0.00436808084839403,
+      "currentA": 0.1,
+      "resistanceOhm": 0.0436808084839403,
+      "lossW": 0.0004368080848390149,
+      "residualA": 8.433724315178829e-10
+    },
+    {
+      "elapsedMs": 99.80000007152557,
+      "nodes": 857,
+      "edges": 1243,
+      "iterations": 443,
+      "voltageV": 11.995631919151606,
+      "dropV": 0.00436808084839403,
+      "currentA": 0.1,
+      "resistanceOhm": 0.0436808084839403,
+      "lossW": 0.0004368080848390149,
+      "residualA": 8.433724315178829e-10
+    }
+  ],
+  "medianMs": 99.80000007152557,
+  "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/156.0.0.0 Safari/537.36"
+}

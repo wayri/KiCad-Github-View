@@ -6,6 +6,8 @@ This is a workflow gallery, **not installed Chrome, VS Code, physical Android or
 
 [Machine-readable capture manifest](images/0.12.79/capture-manifest.json) · [Image provenance](images/0.12.79/README.md) · [User guide](../USER-GUIDE.md)
 
+**Fast PI follow-up:** [supported real-board setup, solved results and measured speed](FAST-PI-WALKTHROUGH-0.12.79.md). The original Olimex setup remains an unsupported case; the follow-up uses the unmodified public PIC programmer board.
+
 ## Public sources
 
 | Source | Immutable revision | Retained scope |

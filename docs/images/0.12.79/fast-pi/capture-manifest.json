@@ -1,0 +1,86 @@
+{
+  "release": "0.12.79",
+  "capturedOn": "2026-11-02",
+  "packageSha256": "02fdbb2e7387c6a151950b4ac856a2c329eeccb35b4ff3d86e1e5324b75e8789",
+  "source": {
+    "url": "https://raw.githubusercontent.com/KiCad/kicad-source-mirror/29798a640054e91411a44d230bd3a3425b3166e4/demos/pic_programmer/pic_programmer.kicad_pcb",
+    "revision": "29798a640054e91411a44d230bd3a3425b3166e4",
+    "sha256": "b9d90e6184a1e4873d50be65da1faefaf7d003638ed16cef8e0212f247e64da7",
+    "bytes": 684981
+  },
+  "captures": [
+    {
+      "file": "01-setup.jpg",
+      "sha256": "5e084a9e468576f4962bd8bb4740b4e2a978a0587db66be2ee2d3529c0cfc84a",
+      "bytes": 217536,
+      "width": 1707,
+      "height": 1067
+    },
+    {
+      "file": "02-voltage-results.jpg",
+      "sha256": "fc7a436ed9635eba488f4241577e1ed1e9ade53e8b17694eb94897555f2a52d4",
+      "bytes": 224745,
+      "width": 1707,
+      "height": 1067
+    },
+    {
+      "file": "03-density-net-only.jpg",
+      "sha256": "12f96fb8b8aeff1a1897ce92adfd0dea2550fd14641d963cb433518aa3240c80",
+      "bytes": 104133,
+      "width": 1707,
+      "height": 1067
+    },
+    {
+      "file": "04-floating-loss.jpg",
+      "sha256": "3c134207a7757088e63bf5f93b672d99fd845bcc1e057bbe497cb28a357300d6",
+      "bytes": 103169,
+      "width": 1707,
+      "height": 1067
+    },
+    {
+      "file": "05-browser-speed-test.jpg",
+      "sha256": "6f4aa03bab49e6f9046cef69e2c8d10299968bdd18e43522cc2f8dc1b1f97f8b",
+      "bytes": 95979,
+      "width": 1707,
+      "height": 1067
+    }
+  ],
+  "browserManualResult": {
+    "inputs": {
+      "net": "VPP",
+      "sourceVoltageV": 12,
+      "loadCurrentA": 0.1,
+      "conductivitySm": 58000000,
+      "cellSizeMm": 0.2,
+      "viaPlatingMm": 0.025,
+      "layers": [
+        {
+          "name": "F.Cu",
+          "zMm": 0,
+          "thicknessMm": 0.035
+        },
+        {
+          "name": "B.Cu",
+          "zMm": 1.545,
+          "thicknessMm": 0.035
+        }
+      ]
+    },
+    "contacts": "Manual clicks near C9.1 and R16.2; not exact pad centers",
+    "iterations": 466,
+    "residualA": 9.74e-10,
+    "loadVoltageVDisplayed": "11.996",
+    "dropVDisplayed": "0.0042299",
+    "resistanceOhmDisplayed": "0.042299",
+    "lossWDisplayed": "0.00042299",
+    "peakEdgeDensityAmm2Displayed": "9.8901"
+  },
+  "limits": [
+    "Local loopback capture bridge; no installed-extension or physical-phone acceptance.",
+    "Browser speed image is explicitly a diagnostic harness, not product UI.",
+    "No source geometry was edited. VPP has saved tracks and pads, no filled zones.",
+    "Mesh study is not converged; 0.19 versus 0.20 mm changes pad-center drop by about 12%.",
+    "12 V, 100 mA, conductivity and plating are demonstration assumptions, not inferred device operating conditions.",
+    "Source/sink pad-center benchmarks differ from manual browser clicks; do not equate their numerical values."
+  ]
+}
