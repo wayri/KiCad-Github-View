@@ -1530,6 +1530,6 @@ test('D opens only a selected component safe datasheet; C anchors selection; R r
  view.key('d');assert.deepEqual(links,[{href:'https://example.org/device.pdf',target:'_blank',rel:'noopener noreferrer'}]);
  view.key('d',{composedPath:()=>[{tagName:'INPUT'}]});assert.equal(links.length,1);
  view.key('c');assert.match(view.get('commentAnchor').textContent,/R1/);
- const turns=[];view.canvas.rotateQuarterTurn=n=>turns.push(n);view.key('r');view.key('R',{shiftKey:true});view.get('rotateViewCW').click();view.get('rotateViewCCW').click();assert.deepEqual(turns,[1,-1,1,-1]);view.key('r',{composedPath:()=>[{isContentEditable:true}]});assert.equal(turns.length,4);
- const rotations=[];view.workspace.setScene({setPopulation(){},setSelection(){},rotate:d=>rotations.push(d)});view.key('r');view.key('R',{shiftKey:true});assert.deepEqual(rotations,[90,-90]);view.workspace.dispose();
+ const turns=[];view.canvas.rotateDegrees=n=>turns.push(n);view.key('r');view.key('R',{shiftKey:true});view.get('rotateViewCW').click();view.get('rotateViewCCW').click();assert.deepEqual(turns,[15,-15,15,-15]);view.key('r',{composedPath:()=>[{isContentEditable:true}]});assert.equal(turns.length,4);
+ const rotations=[];view.workspace.setScene({setPopulation(){},setSelection(){},rotate:d=>rotations.push(d)});view.key('r');view.key('R',{shiftKey:true});assert.deepEqual(rotations,[15,-15]);view.workspace.dispose();
 });

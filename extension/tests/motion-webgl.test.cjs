@@ -45,3 +45,8 @@ test('rotated snapshot translation matches the camera and rejects orientation mi
   assert.equal(transform(saved,{...current,quarterTurns:(quarterTurns+1)%4}),null);assert.equal(transform({...saved,quarterTurns:NaN},current),null);
  }
 });
+
+test('15-degree gesture textures follow the same camera projection without snapping to quadrants',()=>{
+ const {Camera}=require('../owned-canvas.js');
+ for(const flipped of [false,true])for(const turn of [1/6,5/6,11/6,23/6]){const saved={x:12,y:24,zoom:4,width:1200,height:900,flipped,quarterTurns:turn},current={...saved,x:13,y:23,width:800,height:600},rect=transform(saved,current);assert.ok(rect);const a=new Camera(saved.width,saved.height),b=new Camera(current.width,current.height);for(const [c,v]of [[a,saved],[b,current]]){c.center.set(v.x,v.y);c.zoom=v.zoom;c.flipped=v.flipped;c.quarterTurns=v.quarterTurns;}for(const p of [{x:30,y:70},{x:600,y:450}]){const expected=b.world_to_screen(a.screen_to_world(p));assert.ok(Math.abs(rect.x+p.x*rect.width/saved.width-expected.x)<1e-8);assert.ok(Math.abs(rect.y+p.y*rect.height/saved.height-expected.y)<1e-8);}}
+});

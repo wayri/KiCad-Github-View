@@ -5,7 +5,7 @@
     return Boolean(view && Number.isFinite(view.x) && Number.isFinite(view.y) &&
       Math.abs(view.x) <= 1000000 && Math.abs(view.y) <= 1000000 &&
       Number.isFinite(view.zoom) && view.zoom >= .001 && view.zoom <= 10000 && (view.flipped===undefined||typeof view.flipped==='boolean') &&
-      (view.quarterTurns===undefined||Number.isInteger(view.quarterTurns)&&view.quarterTurns>=0&&view.quarterTurns<=3));
+      (view.quarterTurns===undefined||Number.isFinite(view.quarterTurns)&&view.quarterTurns>=0&&view.quarterTurns<4));
   }
   function read(camera) {
     const view = { x: camera?.center?.x, y: camera?.center?.y, zoom: camera?.zoom };

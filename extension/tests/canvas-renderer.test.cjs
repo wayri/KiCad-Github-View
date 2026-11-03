@@ -350,3 +350,12 @@ test('rotated native paths, arcs, text bounds and worksheet agree with the camer
  }
  assert.equal(paths.length,1);canvas.dispose();
 });
+
+test('15-degree views preserve fit, inverse picking, mirroring and full-turn stability',()=>{
+ const {canvas}=runtime(),c=canvas.viewport.camera;
+ for(const flipped of [false,true])for(let step=0;step<24;step++){
+  c.flipped=flipped;c.quarterTurns=step/6;c.bbox={x:10,y:20,w:80,h:25};
+  for(const p of [{x:10,y:20},{x:90,y:20},{x:90,y:45},{x:10,y:45},{x:31,y:27}]){const q=c.world_to_screen(p),back=c.screen_to_world(q);near(back.x,p.x);near(back.y,p.y);assert.ok(q.x>=-1e-8&&q.x<=c.width+1e-8&&q.y>=-1e-8&&q.y<=c.height+1e-8);}
+ }
+ c.quarterTurns=0;for(let i=0;i<24;i++)canvas.rotateDegrees(15);near(c.quarterTurns,0);canvas.rotateDegrees(-15);near(c.quarterTurns,23/6);canvas.rotateDegrees(15);near(c.quarterTurns,0);canvas.dispose();
+});

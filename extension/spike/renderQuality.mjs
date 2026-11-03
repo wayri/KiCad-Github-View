@@ -41,7 +41,7 @@ export const physicalColors=Object.freeze({coatedCopper:0x164631,exposedCopper:0
 export function boardClipRange(distance, radius) {
   const d = Number.isFinite(distance) && distance > 0 ? distance : 1;
   const r = Number.isFinite(radius) && radius > 0 ? radius : 1;
-  return { near: Math.max(.005, Math.min(.1, d / 1000)), far: Math.max(10, d + r * 4) };
+  return { near: Math.max(.005, d / 200), far: Math.max(10, d + r * 4) };
 }
 
 // Neutral studio lighting is paired about the board plane, so turning a PCB
@@ -65,4 +65,13 @@ export function probeViewportPlan(width,height,deviceRatio=1){
  const w=Number.isFinite(width)&&width>0?width:1,h=Number.isFinite(height)&&height>0?height:1,dpr=Number.isFinite(deviceRatio)&&deviceRatio>0?deviceRatio:1;
  const ratio=Math.min(Math.max(1,dpr),2,1024/w,1024/h,Math.sqrt(500000/(w*h)));
  return {ratio,width:Math.max(1,Math.floor(w*ratio)),height:Math.max(1,Math.floor(h*ratio)),maxPixels:500000};
+}
+
+// Resolve overlapping manufactured copper in depth-buffer space without
+// moving saved pads, tracks, drill walls or component model interfaces.
+// Keep slope bias zero: extruded side walls can otherwise jump through caps.
+export function copperDepthPolicy(role) {
+  const rank = {zone:1,track:-1,pad:-2,via:-3}[role];
+  if (typeof rank !== 'number') throw Error('Unknown copper surface role.');
+  return {polygonOffset:true,polygonOffsetFactor:0,polygonOffsetUnits:rank*2};
 }

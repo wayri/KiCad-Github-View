@@ -31,3 +31,38 @@ test('compact folder marker cannot authorize files, traversal, false markers or 
   const h=setup({session:async(r,ref,action,path)=>({sha,items:path===''?[{path:'base',type:'directory'}]:[bad]})});await assert.rejects(h.api.inventory(repo,sha),/Unsafe/);assert.ok(h.reads.every(read=>!read[3]||read[3]==='base'));h.api.dispose();
  }
 });
+
+
+test('private context is resolved through the client session before anonymous HTML and is never globally cached',async()=>{
+ const calls=[],api=create({readSession:async(...args)=>{calls.push(args);return{repository:repo,ref:'feature/board',directory:'hw',sha,items:[{path:'hw/private.kicad_pcb',type:'file'}]};},fetch:async()=>{throw Error('Anonymous access must not run');}});for(let i=0;i<2;i++)assert.deepEqual(await api.context('https://github.com/'+repo+'/tree/feature/board/hw'),{repository:repo,ref:'feature/board',directory:'hw',sha});assert.equal(calls.length,2);assert.ok(calls.every(call=>call[0]===repo&&call[1]==='HEAD'&&call[2]==='context'&&call[3]==='tree/feature/board/hw'));assert.equal(api.stats().entries,0);api.dispose();
+});
+
+test('explicit private session denial never falls back to anonymous website or API access',async()=>{
+ let fetched=0;const api=create({readSession:async()=>{throw Error('GitHub website access was denied (HTTP403).');},fetch:async()=>{fetched++;throw Error('No fallback');}});await assert.rejects(api.context('https://github.com/'+repo+'/tree/main/hw'),/access was denied/);assert.equal(fetched,0);assert.equal(api.stats().entries,0);api.dispose();
+});
+
+test('session context cannot change repository, requested branch directory or pinned tree identity',async()=>{
+ const good={repository:repo,ref:'feature/board',directory:'hw',sha,items:[{path:'hw/private.kicad_pcb',type:'file'}]};for(const patch of [{repository:'foreign/repo'},{ref:'main'},{directory:'elsewhere'},{sha:'not-a-sha'},{items:[{path:'other/private.kicad_pcb',type:'file'}]}]){let fetched=0;const api=create({readSession:async()=>({...good,...patch}),fetch:async()=>{fetched++;}});await assert.rejects(api.context('https://github.com/'+repo+'/tree/feature/board/hw'),/Invalid|mismatched|Unsafe/);assert.equal(fetched,0);assert.equal(api.stats().entries,0);api.dispose();}
+});
+
+test('private text64MiB and asset32MiB ceilings are forwarded without token or private byte caching',async()=>{
+ const limits=[],h=setup({fetcher:async()=>new Response('',{status:404}),session:async(r,ref,action,path,limit)=>{limits.push({action,limit});return action==='asset'?{sha,base64:'AAEC'}:{sha,content:'(kicad_pcb)'};}});await h.api.file(repo,sha,'board.kicad_pcb',64*1024*1024);await h.api.asset(repo,sha,'model.wrl',64*1024*1024);assert.deepEqual(limits,[{action:'file',limit:64*1024*1024},{action:'asset',limit:32*1024*1024}]);assert.equal(h.api.stats().entries,0);h.api.dispose();
+});
+
+test('cancelled private context cannot cache or return a late client-session result',async()=>{
+ let finish;const api=create({readSession:()=>new Promise(resolve=>finish=resolve),fetch:async()=>{throw Error('No anonymous request');}}),controller=new AbortController(),pending=api.context('https://github.com/'+repo+'/tree/main/hw',controller.signal);await tick();controller.abort();await assert.rejects(pending,/cancelled/);finish({repository:repo,ref:'main',directory:'hw',sha,items:[]});await tick();assert.equal(api.stats().entries,0);api.dispose();
+});
+
+
+test('explicit website session denial survives pinned tree reads without anonymous retry',async()=>{
+ for(const message of ['GitHub website access was denied (HTTP403).','Administrator policy prevents this project read.']){
+  let fetched=0;const denied=Error(message),api=create({readSession:async()=>{throw denied;},fetch:async()=>{fetched++;return new Response('',{status:404});}});
+  await assert.rejects(api.resolve(repo,sha),error=>error===denied);assert.equal(fetched,0);assert.equal(api.stats().entries,0);api.dispose();
+ }
+});
+
+test('missing private website session explains same-profile recovery without changing revision',async()=>{
+ const calls=[],reads=[],api=create({readSession:async(...args)=>{reads.push(args);return null;},fetch:async(url,init)=>{calls.push({url,init});return new Response('Not Found',{status:404});}});
+ await assert.rejects(api.resolve(repo,sha),error=>error.status===404&&error.source==='github-website'&&/same browser profile/.test(error.message)&&/click the extension icon again/.test(error.message)&&/also uses HTTP 404/.test(error.message)&&error.accessIssue.message===error.message);
+ assert.equal(calls.length,1);assert.equal(calls[0].url,'https://github.com/'+repo+'/tree/'+sha);assert.equal(calls[0].init.credentials,'omit');assert.equal(reads.length,1);assert.equal(reads[0][1],sha);assert.equal(api.stats().entries,0);api.dispose();
+});

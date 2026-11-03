@@ -15,23 +15,18 @@ const KiCadGitLabHosts = (() => {
   }
   async function allowed(host) {
     host=normalize(host);
-    return host==='https://gitlab.com'||(await list()).includes(host)&&!!(await chrome.permissions.contains({origins:[host+'/*']}));
+    return host==='https://gitlab.com'||(await list()).includes(host);
   }
   const id = host => 'kicad-gitlab-'+Array.from(host,c=>c.charCodeAt(0).toString(16)).join('');
   async function register(host) {
-    if(!chrome.scripting?.registerContentScripts)throw new Error('This browser cannot register self-hosted GitLab previews.');
+    // Remove older registrations; repository bridges now require an icon click.
+    if(!chrome.scripting?.getRegisteredContentScripts)return;
     const existing=await chrome.scripting.getRegisteredContentScripts({ids:[id(host)]});
-    const configuration={id:id(host),matches:[host+'/*'],js:['parsing.js','gitlab-session-reader.js','content.js'],runAt:'document_idle'};
-    if(!existing.length)await chrome.scripting.registerContentScripts([configuration]);
-    else if(JSON.stringify(existing[0].js)!==JSON.stringify(configuration.js)){
-      if(chrome.scripting.updateContentScripts)await chrome.scripting.updateContentScripts([configuration]);
-      else {await chrome.scripting.unregisterContentScripts({ids:[id(host)]});await chrome.scripting.registerContentScripts([configuration]);}
-    }
+    if(existing.length)await chrome.scripting.unregisterContentScripts({ids:[id(host)]});
   }
   async function add(value) {
     const host=normalize(value);
     if(host==='https://gitlab.com')return {host,hosts:await list()};
-    if(!await chrome.permissions.contains({origins:[host+'/*']}))throw new Error('Grant access to this GitLab server from extension settings first.');
     const hosts=await list();if(!hosts.includes(host)&&hosts.length>=21)throw new Error('At most 20 additional GitLab hosts are supported.');
     await register(host);
     await chrome.storage.local.set({[KEY]:[...new Set([...hosts,host])].filter(h=>h!=='https://gitlab.com')});

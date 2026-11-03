@@ -11,7 +11,7 @@ test('GitLab subgroup and slash refs stay encoded on an unauthenticated fixed ho
 });
 test('GitLab raw source enforces streamed byte limits and reports missing public files',async t=>{
  transport(t,async()=>new Response(null,{status:404}));assert.equal(await api.file('group/board','main','board.kicad_pcb'),null);
- global.fetch=async()=>new Response('123456');await assert.rejects(api.response('https://gitlab.com/api/v4/projects/x',5),/size limit/);
+ global.fetch=async()=>new Response('123456');await assert.rejects(api.response('https://gitlab.com/api/v4/projects/group%2Fboard',5),/size limit/);
 });
 test('GitLab inventory pins trees to a SHA, handles pagination and excludes symlinks',async t=>{
  const calls=[];transport(t,async url=>{calls.push(url);if(url.includes('/commits/'))return json({id:sha});const query=new URL(url).searchParams;assert.equal(query.get('ref'),sha);if(query.get('page')==='1')return json([{path:'main.kicad_pro',type:'blob',mode:'100644'},{path:'link.kicad_pcb',type:'blob',mode:'120000'},{path:'../secret.kicad_pcb',type:'blob',mode:'100644'}],{'x-next-page':'2'});return json([{path:'main.kicad_pcb',type:'blob',mode:'100644'}]);});
@@ -126,8 +126,8 @@ test('GitLab repository history has actual merge parents and bounded full messag
  const urls=[];transport(t,async url=>{urls.push(url);if(url.includes('/commits/'))return json({id:sha});const query=new URL(url).searchParams;assert.equal(query.get('ref_name'),sha);assert.equal(query.has('path'),false);assert.equal(query.get('per_page'),'30');assert.equal(query.get('page'),'3');return json([{id:'b'.repeat(40),parent_ids:['c'.repeat(40),'d'.repeat(40)],message:'Merge branch\n\nDetails\n'+('界'.repeat(4000)),author_name:'Name',authored_date:'2026-10-25T00:00:00Z'}],{'x-next-page':'4'});});
  const history=await api.repositoryHistory('group/board','main',3);assert.equal(history.snapshotRef,sha);assert.equal(history.nextPage,4);assert.deepEqual(history.commits[0].parents,['c'.repeat(40),'d'.repeat(40)]);assert.match(history.commits[0].message,/Merge branch\n\nDetails/);assert.ok(new TextEncoder().encode(history.commits[0].message).length<=8192);assert.match(history.warnings.join(' '),/8 KiB/);assert.equal(history.commits[0].url,'https://gitlab.com/group/board/-/commit/'+'b'.repeat(40));
 });
-test('GitLab repository metadata uses configured host authorization and never exposes credentials in results',async t=>{
- const old=global.KiCadGitLabReviewApi;global.KiCadGitLabReviewApi={authorizationHeaders:async host=>{assert.equal(host,'https://gitlab.example.org');return {'PRIVATE-TOKEN':'private-fixture'};}};t.after(()=>global.KiCadGitLabReviewApi=old);transport(t,async(url,init)=>{assert.equal(new URL(url).origin,'https://gitlab.example.org');assert.equal(init.headers['PRIVATE-TOKEN'],'private-fixture');assert.equal(init.credentials,'omit');assert.equal(init.redirect,'error');return json([{id:sha,parent_ids:[],message:'Root',author_name:'A',authored_date:'2026-01-01'}]);});
+test('GitLab repository metadata never consults account credentials',async t=>{
+ const old=global.KiCadGitLabReviewApi;global.KiCadGitLabReviewApi=new Proxy({}, {get(){throw Error('Account credentials must not be read');}});t.after(()=>global.KiCadGitLabReviewApi=old);transport(t,async(url,init)=>{assert.equal(new URL(url).origin,'https://gitlab.example.org');assert.equal(init.headers,undefined);assert.equal(init.credentials,'omit');assert.equal(init.redirect,'error');return json([{id:sha,parent_ids:[],message:'Root',author_name:'A',authored_date:'2026-01-01'}]);});
  const result=await api.forHost('https://gitlab.example.org').repositoryHistory('group/board',sha);assert.equal(JSON.stringify(result).includes('private-fixture'),false);assert.equal(result.commits[0].url,'https://gitlab.example.org/group/board/-/commit/'+sha);
 });
 test('GitLab repository metadata validates scope and pages before sending any request',async t=>{
@@ -144,4 +144,68 @@ test('GitLab operation cancellation aborts streamed bodies and prevents hierarch
  let cancelled=0,reads=0;const controller=new AbortController();transport(t,async()=>{reads++;return new Response(new ReadableStream({start(){},cancel(){cancelled++;}}));});
  const scoped=api.forHost('https://gitlab.com',{signal:controller.signal});const pending=scoped.resolve('group/board','main','board.kicad_sch');await new Promise(r=>setImmediate(r));controller.abort();await assert.rejects(pending,/cancelled/);assert.equal(cancelled,1);
  await assert.rejects(scoped.file('group/board',sha,'child.kicad_sch'),/cancelled/);assert.equal(reads,1);
+});
+
+
+test('private GitLab content uses the matching website session before anonymous requests, without account lookup',async t=>{
+ const readerModule=require('../gitlab-session-reader.js'),host='https://gitlab.example.org',repository='org/sub/private';
+ const old=global.KiCadGitLabReviewApi;global.KiCadGitLabReviewApi=new Proxy({},{get(){throw Error('Vault must never be consulted');}});t.after(()=>global.KiCadGitLabReviewApi=old);
+ let publicReads=0,sessionReads=0;transport(t,async()=>{publicReads++;return new Response(null,{status:401});});
+ const reader=readerModule.create({location:{href:host+'/'+repository+'/-/tree/main'},fetch:async(url,init)=>{
+  sessionReads++;assert.equal(init.credentials,'same-origin');assert.equal(init.headers,undefined);
+  if(url.includes('/files/'))return new Response('(kicad_pcb)');
+  if(url.includes('/commits/'))return json({id:sha});
+  if(url.includes('/branches?'))return json([{name:'main',commit:{id:sha}}]);
+  if(url.includes('/commits?'))return json([{id:sha,parent_ids:[],message:'Saved',author_name:'A'}]);
+  return json([{path:'main.kicad_pcb',type:'blob',mode:'100644',id:'b'.repeat(40)}]);
+ }});
+ const scoped=api.forHost(host,{sessionRead:async(url,limit)=>{const result=await reader.read({host,repository,url,limit});return {...result,bytes:Uint8Array.from(atob(result.base64),c=>c.charCodeAt(0))};}});
+ assert.equal(await scoped.file(repository,sha,'main.kicad_pcb'),'(kicad_pcb)');
+ assert.equal((await scoped.inventory(repository,'main','main.kicad_pcb')).files.length,1);
+ assert.equal((await scoped.repositoryHistory(repository,sha)).commits.length,1);
+ assert.equal((await scoped.repositoryBranches(repository,sha)).branches.length,1);
+ assert.equal((await scoped.modelIndex(repository,sha)).paths.length,0);
+ assert.ok(sessionReads>=6);assert.equal(publicReads,0);
+});
+
+test('GitLab public reads work without a matching website tab and never send authorization headers',async t=>{
+ let calls=0;transport(t,async(url,init)=>{calls++;assert.equal(init.credentials,'omit');assert.equal(init.headers,undefined);return new Response('(kicad_pcb)');});
+ assert.equal(await api.forHost('https://gitlab.com',{sessionRead:async()=>null}).file('group/board',sha,'main.kicad_pcb'),'(kicad_pcb)');assert.equal(calls,1);
+});
+
+test('GitLab content endpoints reject credentials, foreign projects paths and revision/size abuse before transport',async t=>{
+ let calls=0;transport(t,async()=>{calls++;return json([]);});const scoped=api.forHost('https://gitlab.com',{sessionRead:async()=>{calls++;return null;}}),base='https://gitlab.com/api/v4/projects/group%2Fboard';
+ for(const [url,limit]of [[base+'/issues',1024],[base+'/repository/tree?private_token=secret',1024],[base+'/repository/tree?ref=a&ref=b',1024],[base+'/repository/tree?ref='+('a'.repeat(201)),1024],[base+'/repository/files/..%2Fsecret/raw?ref=main',1024],[base,65*1024*1024],[base,1.5],['https://evil.test/api/v4/projects/group%2Fboard',1024]])await assert.rejects(scoped.response(url,limit));
+ assert.equal(calls,0);
+});
+
+test('GitLab policy is enforced before and after session reads without anonymous policy bypass',async t=>{
+ const old=global.KiCadManagedPolicy;t.after(()=>global.KiCadManagedPolicy=old);let reads=0,allow=false;
+ global.KiCadManagedPolicy={assertNetwork:async()=>{if(!allow)throw Object.assign(Error('Network disabled by policy'),{code:'MANAGED_POLICY'});}};
+ transport(t,async()=>{reads++;return json([]);});const scoped=api.forHost('https://gitlab.com',{sessionRead:async()=>{reads++;allow=false;return {bytes:new TextEncoder().encode('[]'),next:'',link:''};}});
+ await assert.rejects(scoped.response('https://gitlab.com/api/v4/projects/group%2Fboard'),{code:'MANAGED_POLICY'});assert.equal(reads,0);
+ allow=true;await assert.rejects(scoped.response('https://gitlab.com/api/v4/projects/group%2Fboard'),{code:'MANAGED_POLICY'});assert.equal(reads,1);
+});
+
+test('GitLab session SAML denial stays explicit without an anonymous retry',async t=>{
+ let fetches=0;transport(t,async()=>{fetches++;return json({});});const scoped=api.forHost('https://gitlab.com',{sessionRead:async()=>{throw Object.assign(Error('sensitive website payload'),{code:'GITLAB_SAML_REQUIRED'});}});
+ await assert.rejects(scoped.file('group/board',sha,'main.kicad_pcb'),error=>error.code==='GITLAB_SAML_REQUIRED'&&/SSO\/SAML/.test(error.message)&&!error.message.includes('sensitive'));assert.equal(fetches,0);
+});
+
+test('GitLab rejects disguised HTML drawings and models, while allowing inert saved HTML reports',async t=>{
+ transport(t,async()=>new Response('<!doctype html><html><body>Report</body></html>',{headers:{'content-type':'application/octet-stream'}}));
+ for(const path of ['main.kicad_pcb','part.wrl'])await assert.rejects(api.file('group/board',sha,path),{code:'GITLAB_UNEXPECTED_HTML'});
+ assert.match(await api.file('group/board',sha,'report.html'),/Report/);
+});
+
+test('GitLab rejects oversized session responses and mismatched immutable commits',async t=>{
+ let calls=0;transport(t,async()=>{calls++;return json({id:'b'.repeat(40)});});
+ const scoped=api.forHost('https://gitlab.com',{sessionRead:async()=>({bytes:new Uint8Array(6),next:'',link:''})});
+ await assert.rejects(scoped.response('https://gitlab.com/api/v4/projects/group%2Fboard',5),/oversized/);assert.equal(calls,0);
+ await assert.rejects(api.resolve('group/board',sha,'main.kicad_pcb'),/requested immutable/);
+});
+
+test('GitLab Stop releases a stalled session callback without making a public request',async t=>{
+ let calls=0;transport(t,async()=>{calls++;return json([]);});const controller=new AbortController(),scoped=api.forHost('https://gitlab.com',{signal:controller.signal,sessionRead:()=>new Promise(()=>{})});
+ const pending=scoped.file('group/board',sha,'main.kicad_pcb');await new Promise(r=>setImmediate(r));controller.abort();await assert.rejects(pending,/cancelled/);assert.equal(calls,0);
 });

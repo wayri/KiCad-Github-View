@@ -1863,9 +1863,9 @@
       let url;try{url=new URL(String(raw||''));}catch{}if(!url||!['https:','http:'].includes(url.protocol)||url.username||url.password){notice('Select a component with an HTTP or HTTPS datasheet link.');return false;}
       const link=make('a');link.href=url.href;link.target='_blank';link.rel='noopener noreferrer';document.body.append(link);link.click();link.remove();return true;
     }
-    function rotateDrawing(direction){const canvas=getCanvas();if(scene)scene.rotate?.(direction*90);else canvas?.rotateQuarterTurn?.(direction);}
+    function rotateDrawing(direction){const canvas=getCanvas();if(scene)scene.rotate?.(direction*15);else canvas?.rotateDegrees?.(direction*15);}
     function openSelectedProbe(){const rows=root.KiCadNetQuickView?.occurrences?.(probeEntries())||[];if(rows.length===1)return netQuickView?.openProbe(rows[0],{mode:scene?'3d':pcb?'layout':'schematic'});if(!netQuickView?.open())notice('Select a saved part, pin or net first.');}
-    for(const [id,label,icon,direction]of [['rotateViewCCW','Rotate view counterclockwise (Shift+R)','rotate-ccw',-1],['rotateViewCW','Rotate view clockwise (R)','rotate-cw',1]]){const control=button(label,()=>rotateDrawing(direction));control.id=id;control.className='icon-only';control.title=label;control.setAttribute('aria-label',label);control.setAttribute('data-icon',icon);$('drawingTools').append(control);root.KiCadUIIcons?.decorate?.(control);}
+    for(const [id,label,icon,direction]of [['rotateViewCCW','Rotate view counterclockwise 15° (Shift+R)','rotate-ccw',-1],['rotateViewCW','Rotate view clockwise 15° (R)','rotate-cw',1]]){const control=button(label,()=>rotateDrawing(direction));control.id=id;control.className='icon-only';control.title=label;control.setAttribute('aria-label',label);control.setAttribute('data-icon',icon);$('drawingTools').append(control);root.KiCadUIIcons?.decorate?.(control);}
     const reviewKeydown=event=>{
       if(event.defaultPrevented||event.repeat||event.isComposing||event.composedPath().some(node=>node?.isContentEditable||/^(INPUT|TEXTAREA|SELECT)$/.test(node?.tagName||'')))return;
       if(event.key==='Escape'){if(scene?.measurementState?.().mode)scene.setMeasurementMode(false);$('objectMenu').hidden=true;extraControls.hidden=companionChooser.hidden=true;controlsButton.setAttribute('aria-expanded','false');document.body?.classList?.remove('drawing-focused');try{root.parent?.postMessage({type:'kicad-review:focus',focused:false},location.origin);}catch{}focusCaption('Focus view');if(commentMode)setCommentMode(null);if(selectedNet||pinnedNets.size||pinnedClasses.size||highlightObjects.length||testpointHighlight)clearHighlights();if(measureMode)$('measureButton').click();return;}
@@ -1936,8 +1936,16 @@
         else {groups.push(...local.filter(n=>matching.some(m=>m.id===n.id)).map(net=>({...net,kind:'net',canonical:probeCanonical({kind:'net',net},path),selection:{kind:'net',net,group:net,primitives:net.primitives,canonical:probeCanonical({kind:'net',net},path)}})));if(groups.length)entries.push({...base,nets:local,groups});}
       }return entries;
     }
+    function probeParentNet(entry,selection){
+      const canonical=selection?.canonical;if(canonical?.kind!=='net')return null;
+      const local=netModel.nets.filter(n=>n.path===currentFile()),source=selection.net||selection.group;
+      if(entry.path===currentFile()){const match=local.filter(n=>n.id===source?.id);if(match.length===1)return match[0];}
+      const api=root.KiCadPairedReview,combined=[...new Map([...objects,...(selection.objects||entry.objects||[])].map(o=>[JSON.stringify([o.kind,o.path,o.uuid||o.id]),o])).values()],named=api?.relatedNet?.(local,combined,canonical,currentFile());
+      return named?.net||api?.relatedNetByTerminals?.(local,combined,canonical,source,{instancePath:entry.instanceId})?.net||null;
+    }
     function applyProbeSelection(entry,selection){
       const canonical=selection?.canonical;if(!root.KiCadPairedReview?.validSelection(canonical))return;
+      if(selection.kind==='net'){const mapped=probeParentNet(entry,selection);if(mapped){selectNet(mapped,false,false,false,false,entry.instanceId||null);return;}}
       if(entry.path===currentFile()&&entry.design===getCanvas()?.design){
         if(selection.kind==='net'){const net=netModel.nets.find(n=>n.path===entry.path&&n.id===selection.net?.id);if(net){selectNet(net,false,false,false,false,entry.instanceId||null);return;}}
         if(selection.kind==='part'&&objects.includes(selection.object)){selectObject(selection.object,false,false,false,false,true,false);options.onSelection?.(canonical);return;}
@@ -1947,13 +1955,13 @@
     netQuickView=root.KiCadNetQuickView?.mount({holder:document.body,getEntries:probeEntries,getLabelVisibility:()=>({showNumbers:getCanvas()?.showTerminalNumbers!==false,showNetNames:getCanvas()?.showNetNames===true}),resolveSelection:resolveProbeSelection,onSelect:applyProbeSelection,getSchematicRows:options.getSchematicProbeRows,
       resolveViews:async(row,selection,mode)=>{const current=selection||{kind:row.group.canonical?.kind,canonical:row.group.canonical,primitives:row.group.primitives};const resolved=await options.resolveProbeViews?.(row,current,mode);if(resolved)return resolved;const board=/\.kicad_pcb$/i.test(row.entry.path);return (mode==='schematic'?!board:board)?row:[];},
       mount3D:async(holder,config)=>{const factory=options.mountProbe3D||(scene?.createProbeViewport?((host,value)=>{if(value.entry.path!==currentFile())throw Error('This board is not loaded in the active 3D scene.');return scene.createProbeViewport(host,{...value,selection:value.group});}):null);if(!factory)throw Error('3D probes are unavailable in this drawing host.');let filter='all';const viewport=await factory(holder,{...config,onSelect:record=>{if(!record)return;const entry=config.entry,nets=probeNets(entry),reference=record.reference||record.ref,pinNumber=record.pinNumber??(record.type==='Pad'?record.name:undefined),kind=record.kind||record.probeKind||(record.type==='Component'?'part':record.type==='Pad'?'pin':null);let selection;
-        if(filter==='net'||kind==='net'||!record.uuid&&!reference&&(record.net!==undefined||record.netName)){const matches=nets.filter(n=>(record.net!==undefined||record.netCode!==undefined)&&(String(n.code)===String(record.net??record.netCode)||n.name===String(record.net??record.netCode))||record.netName&&n.name===record.netName);if(matches.length===1){const net=matches[0];selection={kind:'net',net,group:net,primitives:net.primitives,canonical:probeCanonical({kind:'net',net,objects:entry.objects},entry.path)};}}
+        if(filter==='net'||kind==='net'||!record.uuid&&!reference&&(record.net!==undefined||record.netName)){const matches=nets.filter(n=>(record.net!==undefined||record.netCode!==undefined)&&(String(n.code)===String(record.net??record.netCode)||n.name===String(record.net??record.netCode))||record.netName&&n.name===record.netName);if(matches.length===1){const net=matches[0];selection={kind:'net',net,group:net,netName:net.name,objects:entry.objects,primitives:net.primitives,canonical:probeCanonical({kind:'net',net,objects:entry.objects},entry.path)};}}
         else {const candidates=entry.design.primitives.filter(p=>pinNumber!==undefined?String(p.pinNumber??p.name??'')===String(pinNumber)&&(record.ownerUuid?p.ownerUuid===record.ownerUuid:record.uuid?p.uuid===record.uuid||p.ownerUuid===record.uuid:reference&&p.reference===reference):record.uuid?p.uuid===record.uuid||p.ownerUuid===record.uuid:reference&&p.reference===reference);if(candidates.length)selection=resolveProbeSelection(entry,candidates[0],filter!=='all'?filter:kind==='part'?'part':pinNumber!==undefined?'pin':'all');}
         if(selection)config.onSelect(selection);
       }});const setFilter=viewport.setSelectionFilter||viewport.setSelectionMode;viewport.setSelectionFilter=value=>{filter=['part','pin','net'].includes(value)?value:'all';setFilter?.call(viewport,filter);};return viewport;},
       getAnchor:(row,selection)=>{
         const item=selection?.canonical||row.selection?.canonical||row.group?.canonical;
-        if(scene)return item?scene.projectAnchor?.(item.kind==='net'?{net:item.qualifiedNetName||item.netName}:item.kind==='pin'?{reference:item.reference,pinNumber:item.pinNumber}:{reference:item.reference}):null;
+        if(scene){if(item?.kind==='net'){const mapped=probeParentNet(row.entry,selection||row.selection||{canonical:item,group:row.group});return mapped?scene.projectAnchor?.({net:mapped.name}):null;}return item?scene.projectAnchor?.(item.kind==='pin'?{reference:item.reference,pinNumber:item.pinNumber}:{reference:item.reference}):null;}
         const canvas=getCanvas(),rect=canvas?.canvas?.getBoundingClientRect?.(),live=canvas?.design?.primitives||[],key=selection||row.group,cached=probeAnchorCache.get(key);
         let position=cached?.live===live&&cached.path===currentFile()&&cached.group===row.group?cached.position:null;
         if(!cached||cached.live!==live||cached.path!==currentFile()||cached.group!==row.group){
@@ -1966,8 +1974,8 @@
             if(owners.length===1)primitives=live.filter(p=>(p.ownerUuid===owners[0].uuid||p.uuid===owners[0].uuid)&&(item.kind!=='pin'||String(p.pinNumber??p.name??'')===String(item.pinNumber)));
           }
           if(!primitives.length&&item?.kind==='net'){
-            const names=[item.qualifiedNetName,item.netName].filter(Boolean),nets=netModel.nets.filter(n=>n.path===currentFile()&&names.includes(n.name));
-            if(nets.length===1)primitives=nets[0].primitives.filter(p=>liveSet.has(p));
+            const net=probeParentNet(row.entry,selection||row.selection||{canonical:item,group:row.group});
+            if(net)primitives=net.primitives.filter(p=>liveSet.has(p));
           }
           const bounds=root.KiCadOwnedCanvas.bounds(primitives);
           position=bounds?{x:bounds.x+bounds.w/2,y:bounds.y+bounds.h/2}:null;

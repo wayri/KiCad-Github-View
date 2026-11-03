@@ -1241,3 +1241,11 @@ test('administrator failures retain only the recognized safe policy code across 
  global.KiCadManagedPolicy={authorize:async()=>{throw Object.assign(Error('Request rejected.'),{code:'PRIVATE_DETAIL_SECRET'});}};
  const rejected=await message({type:'repository-detect',source:'https://github.com/owner/repo',repository:'owner/repo'},viewer);assert.equal(rejected.code,undefined);assert.doesNotMatch(JSON.stringify(rejected),/PRIVATE_DETAIL/);
 });
+
+
+test('icon invocation installs only isolated read bridge after explicit click and handles policy rejection',async t=>{
+ const original=chrome.scripting;t.after(()=>chrome.scripting=original);const injected=[];chrome.scripting={executeScript:async value=>{injected.push(value);}};
+ await background.openFromAction({id:79,url:'https://github.com/owner/private'});assert.equal(injected.length,1);assert.equal(injected[0].target.tabId,79);assert.equal(injected[0].files.at(-1),'repository-session-bridge.js');assert.equal(injected[0].files.includes('content.js'),false);
+ const before=injected.length;await background.openFromAction({id:80,url:'https://unrelated.example/'});assert.equal(injected.length,before);
+ chrome.scripting.executeScript=async()=>{throw Error('SECRET POLICY DETAIL');};await background.openFromAction({id:79,url:'https://github.com/owner/private'});const result=new URL(calls.created.at(-1).url);assert.match(result.searchParams.get('error'),/blocked by policy/);assert.doesNotMatch(result.href,/SECRET/);
+});

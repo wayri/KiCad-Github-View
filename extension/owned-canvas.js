@@ -184,14 +184,14 @@
   class Camera {
     constructor(width=800,height=600){this.width=width;this.height=height;this.zoom=4;this.center={x:0,y:0,set(x,y){this.x=x;this.y=y;}};this.flipped=false;this.quarterTurns=0;}
     get quarterTurns(){return this._quarterTurns;}
-    set quarterTurns(value){this._quarterTurns=Number.isFinite(value)?((Math.trunc(value)%4)+4)%4:0;}
-    get bbox(){const odd=this.quarterTurns%2,w=(odd?this.height:this.width)/this.zoom,h=(odd?this.width:this.height)/this.zoom;return {x:this.center.x-w/2,y:this.center.y-h/2,w,h};}
-    set bbox(b){if(!b||![b.x,b.y,b.w,b.h].every(Number.isFinite)||b.w<=0||b.h<=0)return;this.center.set(b.x+b.w/2,b.y+b.h/2);const odd=this.quarterTurns%2;this.zoom=Math.max(.001,Math.min(10000,Math.min(this.width/(odd?b.h:b.w),this.height/(odd?b.w:b.h))));}
+    set quarterTurns(value){this._quarterTurns=Number.isFinite(value)?Math.round(((value%4+4)%4)*90*1e9)/1e9/90%4:0;const angle=this._quarterTurns*Math.PI/2;this.rotationCos=Math.abs(Math.cos(angle))<1e-12?0:Math.cos(angle);this.rotationSin=Math.abs(Math.sin(angle))<1e-12?0:Math.sin(angle);}
+    get bbox(){const co=Math.abs(this.rotationCos),si=Math.abs(this.rotationSin),w=(co*this.width+si*this.height)/this.zoom,h=(si*this.width+co*this.height)/this.zoom;return {x:this.center.x-w/2,y:this.center.y-h/2,w,h};}
+    set bbox(b){if(!b||![b.x,b.y,b.w,b.h].every(Number.isFinite)||b.w<=0||b.h<=0)return;this.center.set(b.x+b.w/2,b.y+b.h/2);const co=Math.abs(this.rotationCos),si=Math.abs(this.rotationSin);this.zoom=Math.max(.001,Math.min(10000,Math.min(this.width/(co*b.w+si*b.h),this.height/(si*b.w+co*b.h))));}
     // Mirror saved world X, then rotate clockwise in screen coordinates.
-    worldDeltaToScreen(p){const x=p.x*this.zoom*(this.flipped?-1:1),y=p.y*this.zoom;switch(this.quarterTurns){case 1:return{x:-y,y:x};case 2:return{x:-x,y:-y};case 3:return{x:y,y:-x};default:return{x,y};}}
-    screenDeltaToWorld(p){const x=p.x/this.zoom,y=p.y/this.zoom,sign=this.flipped?-1:1;switch(this.quarterTurns){case 1:return{x:y*sign,y:-x};case 2:return{x:-x*sign,y:-y};case 3:return{x:-y*sign,y:x};default:return{x:x*sign,y};}}
-    screen_to_world(p){const x=(p.x-this.width/2)/this.zoom,y=(p.y-this.height/2)/this.zoom,cx=this.center.x,cy=this.center.y,sign=this.flipped?-1:1;switch(this.quarterTurns){case 1:return{x:cx+y*sign,y:cy-x};case 2:return{x:cx-x*sign,y:cy-y};case 3:return{x:cx-y*sign,y:cy+x};default:return{x:cx+x*sign,y:cy+y};}}
-    world_to_screen(p){const x=(p.x-this.center.x)*this.zoom*(this.flipped?-1:1),y=(p.y-this.center.y)*this.zoom,cx=this.width/2,cy=this.height/2;switch(this.quarterTurns){case 1:return{x:cx-y,y:cy+x};case 2:return{x:cx-x,y:cy-y};case 3:return{x:cx+y,y:cy-x};default:return{x:cx+x,y:cy+y};}}
+    worldDeltaToScreen(p){const x=p.x*this.zoom*(this.flipped?-1:1),y=p.y*this.zoom;return{x:x*this.rotationCos-y*this.rotationSin,y:x*this.rotationSin+y*this.rotationCos};}
+    screenDeltaToWorld(p){const x=p.x/this.zoom,y=p.y/this.zoom;return{x:(x*this.rotationCos+y*this.rotationSin)*(this.flipped?-1:1),y:-x*this.rotationSin+y*this.rotationCos};}
+    screen_to_world(p){const d=this.screenDeltaToWorld({x:p.x-this.width/2,y:p.y-this.height/2});return{x:this.center.x+d.x,y:this.center.y+d.y};}
+    world_to_screen(p){const d=this.worldDeltaToScreen({x:p.x-this.center.x,y:p.y-this.center.y});return{x:this.width/2+d.x,y:this.height/2+d.y};}
 
   }
 
@@ -317,9 +317,10 @@
 
     paperColor(){return this.dark?'#1c2029':'#fdfdff';}
 
-    rotateQuarterTurn(direction=1){
-      const c=this.viewport.camera;if(!Number.isFinite(direction)||!Math.trunc(direction))return c.quarterTurns;
-      c.quarterTurns+=Math.trunc(direction);this.drag=null;this.dispatchEvent(new CustomEvent('kicad:viewrotation',{detail:{quarterTurns:c.quarterTurns}}));if(this.motion)this.motion.saved=null;this.finishMotion();return c.quarterTurns;
+    rotateQuarterTurn(direction=1){return this.rotateDegrees(Number.isFinite(direction)?Math.trunc(direction)*90:0);}
+    rotateDegrees(degrees=15){
+      const c=this.viewport.camera;if(!Number.isFinite(degrees)||!degrees)return c.quarterTurns;
+      c.quarterTurns+=degrees/90;this.drag=null;this.dispatchEvent(new CustomEvent('kicad:viewrotation',{detail:{quarterTurns:c.quarterTurns}}));if(this.motion)this.motion.saved=null;this.finishMotion();return c.quarterTurns;
     }
     cameraState(){const c=this.viewport.camera;return {x:c.center.x,y:c.center.y,zoom:c.zoom,width:c.width,height:c.height,flipped:c.flipped,quarterTurns:c.quarterTurns};}
     prepareMotion(){
@@ -399,7 +400,7 @@
 
       if(this.grid&&c.zoom>2){let step=Number.isFinite(this.gridPitch)&&this.gridPitch>=.001&&this.gridPitch<=100?this.gridPitch:(c.zoom>12?1:5);while(step*c.zoom<5)step*=10;const b=c.bbox;ctx.fillStyle=this.dark?'#2b3b46':'#d3d3c7';let count=0;for(let x=Math.ceil(b.x/step)*step;x<b.x+b.w&&count<20000;x+=step)for(let y=Math.ceil(b.y/step)*step;y<b.y+b.h&&count++<20000;y+=step){const s=c.world_to_screen({x,y});ctx.fillRect(s.x,s.y,1,1);}}
 
-      if(this.paperVisible){const page=this.design?.page||{width:297,height:210},a=c.world_to_screen({x:0,y:0}),b=c.world_to_screen({x:page.width,y:page.height});ctx.save();ctx.shadowColor='#00000055';ctx.shadowBlur=18;ctx.shadowOffsetY=4;ctx.fillStyle=this.paperColor();ctx.fillRect(Math.min(a.x,b.x),Math.min(a.y,b.y),Math.abs(b.x-a.x),Math.abs(b.y-a.y));ctx.restore();}
+      if(this.paperVisible){const page=this.design?.page||{width:297,height:210},a=c.world_to_screen({x:0,y:0}),b=c.world_to_screen({x:page.width,y:page.height});ctx.save();ctx.shadowColor='#00000055';ctx.shadowBlur=18;ctx.shadowOffsetY=4;ctx.fillStyle=this.paperColor();if(Number.isInteger(c.quarterTurns))ctx.fillRect(Math.min(a.x,b.x),Math.min(a.y,b.y),Math.abs(b.x-a.x),Math.abs(b.y-a.y));else{const corners=[{x:0,y:0},{x:page.width,y:0},{x:page.width,y:page.height},{x:0,y:page.height}].map(p=>c.world_to_screen(p));ctx.beginPath();ctx.moveTo(corners[0].x,corners[0].y);for(const p of corners.slice(1))ctx.lineTo(p.x,p.y);ctx.closePath();ctx.fill();}ctx.restore();}
 
       const view=c.bbox;
       const margin=3/c.zoom;

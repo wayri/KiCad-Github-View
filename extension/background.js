@@ -81,10 +81,12 @@ async function githubSessionRead(repository,ref,action,path='',limit=8*1024*1024
   for(const tab of tabs.slice(0,8)) {
     let url;try{url=new URL(tab.url);}catch{continue;}
     if(url.origin!=='https://github.com'||url.pathname.split('/').slice(1,3).join('/').toLowerCase()!==repository.toLowerCase())continue;
-    let reply;try{reply=await sessionLoadMessage(tab.id,{type:'github-session-read',repository,ref,action,path,limit:Math.min(limit,32*1024*1024)},signal);}catch{checkLoad(signal);continue;}
+    let reply;try{reply=await sessionLoadMessage(tab.id,{type:'github-session-read',repository,ref,action,path,limit:Math.min(limit,action==='file'?64*1024*1024:32*1024*1024)},signal);}catch{checkLoad(signal);continue;}
     if(!reply?.ok){if(typeof reply?.error==='string')accessError=Error(reply.error.slice(0,1000));continue;}
     const result=reply.result;
-    if(action==='history') {
+    if(action==='context') {
+      if(result?.repository!==repository||!KiCadBrowserData.validRef(result?.ref)||!KiCadGitHubSessionReader.safePath(result?.directory,true)||!SHA.test(result?.sha||'')||!Array.isArray(result?.items)||result.items.length>1000)throw Error('Invalid GitHub website context response.');
+    }else if(action==='history') {
       if(result?.ref!==ref||typeof result.content!=='string'||new TextEncoder().encode(result.content).byteLength>4*1024*1024)throw Error('Invalid GitHub website history response.');
     }else if(action==='asset') {
       if(result===null)return null;
@@ -976,6 +978,10 @@ async function openFromAction(tab) {
   if(!Number.isInteger(tab?.id)||typeof tab.url!=='string')return open({});
   let page;try{page=new URL(tab.url);}catch{return open({});}
   if(page.protocol!=='https:'||page.origin!=='https://github.com'&&!(await globalThis.KiCadGitLabHosts?.allowed(page.origin)))return open({});
+  if(chrome.scripting?.executeScript){
+    try{const firefox=chrome.runtime.getManifest?.()?.browser_specific_settings?.gecko;await chrome.scripting.executeScript({target:{tabId:tab.id},files:[...(firefox?['firefox/browser-api.js']:[]),'parsing.js','github-session-reader.js','gitlab-session-reader.js','repository-session-bridge.js']});}
+    catch{return open({error:'Browser site access was not granted or is blocked by policy. Click the extension on the repository tab again, or use Open local files.'});}
+  }
   let hint;try{hint=await chrome.tabs.sendMessage(tab.id,{type:'projectLaunchContext'},{frameId:0});}catch{}
   try{
     const context=KiCadProjectLaunch.context(tab.url,{...hint,allowUnresolved:true});
@@ -991,11 +997,10 @@ chrome.action.onClicked.addListener((tab) => openFromAction(tab).catch(async err
 }));
 
 const gitlabAssetBudgets = new Map();
-async function gitlabAnnotations(api,scope){
+async function gitlabAnnotations(scope){
   const normalized=KiCadReviewComments.normalizeScope({...scope,provider:'gitlab'}),notes=[],warnings=[];let projectId=null;
   const number=Number(scope.number||scope.issueNumber||scope.threadNumber);
   if(!Number.isSafeInteger(number)||number<1)return {notes,warnings:['Enter an existing GitLab issue number to read its review notes.']};
-  const endpoint=normalized.host+'/api/v4/projects/'+encodeURIComponent(normalized.repository)+'/issues/'+number;
   const issueUrl=normalized.host+'/'+normalized.repository+'/-/issues/'+number;
   const add=(text,record,isNote=false)=>{for(const note of KiCadReviewComments.fromMarkdown(text||''))if(note.anchor.provider==='gitlab'&&note.anchor.host===normalized.host&&note.anchor.repository===normalized.repository&&note.anchor.ref===normalized.ref&&note.anchor.file===normalized.file&&notes.length<100){
     const sourceId=isNote?Number(record.id):0;
@@ -1004,39 +1009,36 @@ async function gitlabAnnotations(api,scope){
     note.github={provider:'gitlab',url:issueUrl+(isNote?'#note_'+sourceId:''),source:note.threadType==='discussion'?'discussion':'issue',number,state:record.state||'posted',author:record.author?.username||''};
     notes.push(note);
   }};
-  const issue=await api.response(endpoint,1024*1024);if(!issue)throw new Error('GitLab issue is unavailable or access was denied.');
-  const issueRecord=JSON.parse(new TextDecoder().decode(issue.bytes));if(issueRecord.iid===number&&Number.isSafeInteger(issueRecord.project_id)&&issueRecord.project_id>0)projectId=issueRecord.project_id;add(issueRecord.description,issueRecord);
-  for(let page=1;page<=5;page++){
-    const response=await api.response(endpoint+'/notes?'+new URLSearchParams({per_page:'100',page:String(page)}),1024*1024);
-    if(!response)throw new Error('GitLab issue notes are unavailable.');
-    const records=JSON.parse(new TextDecoder().decode(response.bytes));if(!Array.isArray(records)||records.length>100)throw new Error('Invalid GitLab issue notes.');
-    for(const record of records)add(record.body,record,true);
-    if(!response.next&&records.length<100)break;
-    if(page===5)warnings.push('Readback stopped at 500 issue notes; open GitLab for the complete thread.');
-  }
+  const thread=await KiCadGitLabReviewApi.readThread({...normalized,kind:'issue',number,includeCapabilities:false});
+  if(thread?.number!==number||thread.repository!==normalized.repository||thread.host!==normalized.host||!Number.isSafeInteger(thread.projectId)||thread.projectId<1)throw Error('GitLab review thread identity could not be verified.');
+  projectId=thread.projectId;
+  add(thread.body,{state:thread.state,author:{username:thread.author}},false);
+  for(const record of thread.comments||[])add(record.body,{...record,state:thread.state,author:{username:record.author}},true);
+  warnings.push(...(thread.warnings||[]));
   return cacheProviderAnnotations(normalized,{notes:[...new Map(notes.map(note=>[note.id,note])).values()],warnings},{sourceUrl:issueUrl,complete:!warnings.length&&notes.length<100});
 }
 async function gitlabSessionResponse(host,contextRepository,url,limit,signal) {
   if(!chrome.tabs?.query)return null;
-  if(globalThis.KiCadGitLabHosts?!await KiCadGitLabHosts.allowed(host):host!=='https://gitlab.com')throw Error('GitLab host permission is no longer available.');
+  if(globalThis.KiCadGitLabHosts?!await KiCadGitLabHosts.allowed(host):host!=='https://gitlab.com')throw Object.assign(Error('GitLab host permission is no longer available.'),{definitive:true});
   const target=new URL(url),match=target.pathname.match(/^\/api\/v4\/projects\/([^/]+)/);
-  if(target.origin!==host||!match)throw Error('Invalid GitLab session endpoint.');
+  if(target.origin!==host||!match)throw Object.assign(Error('Invalid GitLab session endpoint.'),{definitive:true});
   const project=decodeURIComponent(match[1]),repository=/^[1-9][0-9]*$/.test(project)?contextRepository:project;
   if(!globalThis.KiCadGitLabProvider.forHost(host).validRepository(repository))return null;
   const tabs=await chrome.tabs.query({url:[`${host}/${repository}`,`${host}/${repository}/-/*`]});
-  limit=Math.min(limit,32*1024*1024);
+  limit=Math.min(limit,64*1024*1024);
+  let sessionError=null;
   for(const tab of tabs.slice(0,8)) {
     let page;try{page=new URL(tab.url);}catch{continue;}
     if(page.origin!==host||!(page.pathname===`/${repository}`||page.pathname.startsWith(`/${repository}/-/`)))continue;
     let reply;try{reply=await sessionLoadMessage(tab.id,{type:'gitlab-session-read',host,repository,url,limit},signal);}catch{checkLoad(signal);continue;}
-    if(!reply?.ok)continue;
-    if(globalThis.KiCadGitLabHosts?!await KiCadGitLabHosts.allowed(host):host!=='https://gitlab.com')throw Error('GitLab host permission was removed during retrieval.');
+    if(!reply?.ok){if(typeof reply?.error==='string')sessionError=Object.assign(Error(reply.error.slice(0,1000)),{...(['GITLAB_SAML_REQUIRED','GITLAB_LOGIN_REQUIRED','GITLAB_UNEXPECTED_HTML','MANAGED_POLICY'].includes(reply.code)?{code:reply.code}:{})});continue;}
+    if(globalThis.KiCadGitLabHosts?!await KiCadGitLabHosts.allowed(host):host!=='https://gitlab.com')throw Object.assign(Error('GitLab host permission was removed during retrieval.'),{definitive:true});
     const result=reply.result;if(result===null)return null;
-    if(typeof result?.base64!=='string'||result.base64.length>Math.ceil(limit/3)*4||result.base64.length%4!==0||!/^[A-Za-z0-9+/]*={0,2}$/.test(result.base64)||typeof result.next!=='string'||result.next&&!/^[1-9][0-9]{0,3}$/.test(result.next)||!['','<next>; rel="next"'].includes(result.link))throw Error('Invalid GitLab session response.');
-    const binary=atob(result.base64);if(binary.length>limit)throw Error('GitLab session response exceeds its size limit.');
+    if(typeof result?.base64!=='string'||result.base64.length>Math.ceil(limit/3)*4||result.base64.length%4!==0||!/^[A-Za-z0-9+/]*={0,2}$/.test(result.base64)||typeof result.next!=='string'||result.next&&!/^[1-9][0-9]{0,3}$/.test(result.next)||!['','<next>; rel="next"'].includes(result.link))throw Object.assign(Error('Invalid GitLab session response.'),{definitive:true});
+    const binary=atob(result.base64);if(binary.length>limit)throw Object.assign(Error('GitLab session response exceeds its size limit.'),{definitive:true});
     return {bytes:Uint8Array.from(binary,c=>c.charCodeAt(0)),next:result.next,link:result.link};
   }
-  return null;
+  if(sessionError)throw sessionError;return null;
 }
 
 async function gitlabDispatch(message, sender,signal) {
@@ -1144,7 +1146,7 @@ async function gitlabDispatch(message, sender,signal) {
     case 'chat-thread-list': return auth.chatThreadList({...message,provider:'gitlab',host});
     case 'chat-reaction': throw new Error('Chat reactions are not supported by this provider bridge.');
     case 'comment-remote-list':
-    case 'github-annotations': return gitlabAnnotations(api,{...message,host});
+    case 'github-annotations': return gitlabAnnotations({...message,host});
     case 'open-options': await chrome.runtime.openOptionsPage();return {opened:true};
     default: throw new Error('Unsupported GitLab operation.');
   }

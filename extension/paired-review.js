@@ -133,6 +133,20 @@
   if(!qualified.length&&currentPath){const local=matches.filter(n=>n.path===currentPath);if(local.length===1)matches=local;}
   return matches.length===1?{net:matches[0]}:{error:matches.length?'The related net is ambiguous across sheets or saved instances. Choose its sheet explicitly.':'No matching saved net in the paired drawing.'};
  }
+ // Resolve unnamed/generated network labels through saved component terminals.
+ // Every mapped terminal must agree; never guess by geometry or basename.
+ function relatedNetByTerminals(nets,objects,selection,sourceNet,{instancePath}={}){
+  if(!validSelection(selection)||selection.kind!=='net'||sourceNet?.path!==selection.path||!Array.isArray(sourceNet.members)||sourceNet.members.length>2048)return {error:'No source-bound terminal evidence for this net.'};
+  const schematic=/\.kicad_sch$/i.test(selection.path),kind=schematic?'symbol':'footprint',targets=nets.filter(n=>schematic?n.kind==='pcb':n.kind==='schematic');let candidates=null,evidence=0;
+  for(const member of sourceNet.members){const number=schematic?member.pin:member.pad;if(!number||!member.reference||member.kind!==(schematic?'pin':'pad'))continue;
+   const sources=objects.filter(o=>o.path===selection.path&&o.kind===kind&&o.reference===member.reference&&(!schematic||o.uuid===member.uuid));if(sources.length!==1)continue;
+   const canonical=partSelection(sources[0],{instancePath});if(!canonical)continue;const target=relatedPart(objects,canonical).object;if(!target)continue;
+   const matches=targets.filter(n=>n.path===target.path&&n.members?.some(m=>schematic?m.kind==='pad'&&m.reference===target.reference&&String(m.pad)===String(number):m.kind==='pin'&&m.uuid===target.uuid&&String(m.pin)===String(number)));
+   if(!matches.length)continue;evidence++;candidates=candidates===null?matches:candidates.filter(n=>matches.includes(n));
+   if(!candidates.length)return {error:'Saved terminals disagree about the related net.'};
+  }
+  return evidence&&candidates?.length===1?{net:candidates[0]}:{error:candidates?.length?'The related terminal net is ambiguous. Choose its sheet explicitly.':'No matching saved terminals in the paired drawing.'};
+ }
  function relatedGroup(objects,nets,selection,currentFile){
   const result={objects:[],nets:[],errors:[]};
   if(!validSelection(selection)||selection.kind!=='group'){result.errors.push('Invalid cross-highlight group.');return result;}
@@ -148,6 +162,6 @@
   result.objects=[...matchedObjects];result.nets=[...matchedNets];result.errors=[...errors];
   return result;
  }
- root.KiCadPairedReview={validSelection,relatedPart,relatedPin,symbolUuid,tstampPath,partSelection,sheetPrefix,qualifiedNetName,relatedNet,relatedGroup};
+ root.KiCadPairedReview={validSelection,relatedPart,relatedPin,symbolUuid,tstampPath,partSelection,sheetPrefix,qualifiedNetName,relatedNet,relatedNetByTerminals,relatedGroup};
  if(typeof module==='object'&&module.exports)module.exports=root.KiCadPairedReview;
 })(globalThis);

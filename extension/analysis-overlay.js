@@ -21,7 +21,7 @@
      const digest=Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',bytes)),v=>v.toString(16).padStart(2,'0')).join('');
      if(!bindings.some(b=>b.sha256.toLowerCase()===digest))continue;
      const design=KiCadPCBRenderer.build(KiCadDesignDiff.parse(content),file.path);
-     let assetPaths;try{assetPaths=(await options.request('repo-model-index',{})).paths;}catch{}if(dead||ticket!==generation)return;
+     let assetPaths;try{assetPaths=(await options.request('repo-model-index',{file:file.path})).paths;}catch{}if(dead||ticket!==generation)return;
      board={content,path:file.path,sha256:digest,assetPaths};background=design.primitives.filter(p=>!p.frame&&p.kind!=='footprint-hit');
      message('Source PCB verified by SHA-256 · '+file.path);stop();update(plot,probes);return;
     }

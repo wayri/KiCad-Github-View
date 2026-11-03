@@ -273,7 +273,9 @@
       const {model,rendered,nets,placements}=schematicProbeContexts.get(source),canonical=selection?.canonical||row?.selection?.canonical||row?.group?.canonical;
       const valid=KiCadPairedReview.validSelection(canonical),matching=new Map();
       if(valid&&canonical.kind==='net'){
-        const schematic=/\.kicad_sch$/i.test(canonical.path),seeds=schematic?nets.filter(n=>n.path===canonical.path&&(n.name===canonical.netName||n.names?.includes(canonical.netName))):nets.filter(n=>n.globalNames?.includes(canonical.netName)||KiCadPairedReview.qualifiedNetName(n,model.objects)===canonical.netName);
+        const schematic=/\.kicad_sch$/i.test(canonical.path),bound=selection?.net||selection?.group||row?.group;let seeds=schematic?nets.filter(n=>n.path===canonical.path&&(n.name===canonical.netName||n.names?.includes(canonical.netName))):nets.filter(n=>n.globalNames?.includes(canonical.netName)||KiCadPairedReview.qualifiedNetName(n,model.objects)===canonical.netName);
+        if(schematic&&bound?.path===canonical.path){const exact=nets.filter(n=>n.path===canonical.path&&n.id===bound.id);if(exact.length===1)seeds=exact;}
+        if(!schematic&&!seeds.length){const combined=[...new Map([...model.objects,...(selection?.objects||row?.entry?.objects||[])].map(o=>[JSON.stringify([o.kind,o.path,o.uuid||o.id]),o])).values()],mapped=KiCadPairedReview.relatedNetByTerminals(nets,combined,canonical,bound,{instancePath:row?.entry?.instanceId});if(mapped.net)seeds=[mapped.net];}
         const selected=[];
         for(const net of seeds){const instances=placements.filter(p=>p.path===net.path),active=row?.entry?.path===net.path?row.entry.instanceId:null;if(active&&instances.some(p=>p.id===active))selected.push({netId:net.id,instanceId:active});else if(!schematic||instances.length===1)for(const p of instances)selected.push({netId:net.id,instanceId:p.id});}
         const graph=globalThis.KiCadOverviewConnectivity?.resolve(nets,selected,placements);
@@ -308,8 +310,10 @@
         if(!primitives.length)throw Error('The saved terminal/component has no rendered geometry.');group={id:object.id,kind:canonical.kind,name:object.reference,primitives};
       }else{
         const netDesigns=new Map(paths.map(path=>[path,getDesign(path)])),nets=KiCadNetModel.build(source,netDesigns).nets;
-        const direct=sameKind?nets.filter(n=>n.path===canonical.path&&(n.name===canonical.netName||n.names?.includes(canonical.netName))):[];
-        const result=direct.length===1?{net:direct[0]}:KiCadPairedReview.relatedNet(nets,model.objects,canonical);
+        const bound=selection?.net||selection?.group||row?.group,byIdentity=sameKind&&bound?.path===canonical.path?nets.filter(n=>n.path===canonical.path&&n.id===bound.id):[];
+        const direct=byIdentity.length?byIdentity:sameKind?nets.filter(n=>n.path===canonical.path&&(n.name===canonical.netName||n.names?.includes(canonical.netName))):[];
+        let result=direct.length===1?{net:direct[0]}:KiCadPairedReview.relatedNet(nets,model.objects,canonical);
+        if(!result.net){const sourceObjects=selection?.objects||row?.entry?.objects||[],combined=[...new Map([...model.objects,...sourceObjects].map(o=>[JSON.stringify([o.kind,o.path,o.uuid||o.id]),o])).values()];result=KiCadPairedReview.relatedNetByTerminals(nets,combined,canonical,selection?.net||selection?.group||row?.group,{instancePath:row?.entry?.instanceId});}
         if(!result.net)throw Error(result.error||'No unambiguous saved net.');group=result.net;path=group.path;
       }
       const design=getDesign(path);if(!probeNets.has(design))probeNets.set(design,KiCadNetModel.build(source.filter(f=>f.path===path),new Map([[path,design]])).nets);const nets=probeNets.get(design);
@@ -331,7 +335,7 @@
         if(disposed)throw Error('Workspace closed.');if(!file)throw Error('3D board source unavailable.');
         probeMasterHost=document.createElement('div');Object.assign(probeMasterHost.style,{position:'fixed',left:'-400px',top:'0',width:'320px',height:'320px',visibility:'hidden'});document.body.append(probeMasterHost);
         const assets=probeAssets=KiCadBrowserData.createModelAssetCache(async path=>{const reply=await send({type:'repo-asset',repository,ref,file:path});if(!reply?.ok)throw Error(reply?.error||'Saved model unavailable.');return reply.result;});
-        const inventory=await send({type:'repo-model-index',repository,ref});if(disposed){assets.clear();probeMasterHost.remove();throw Error('Workspace closed.');}
+        const inventory=await send({type:'repo-model-index',repository,ref,file:entry.path});if(disposed){assets.clear();probeMasterHost.remove();throw Error('Workspace closed.');}
         parentScene=probeMaster=engine.mountBoard3D(probeMasterHost,file.content,{dark,boardPath:entry.path,assetPaths:inventory?.ok?inventory.result?.paths||[]:[],loadAsset:assets.load,externalInspector:true,onSelect:record=>workspace?.select3D(record),onInspect:record=>workspace?.inspect3D(record),onComment:record=>workspace?.comment3D(record),onViewChange:()=>workspace?.sceneViewChanged()});probeMasterPath=entry.path;
         }catch(error){if(!probeMaster){probeAssets?.clear();probeMasterHost?.remove();}throw error;}finally{probeMasterLoading=false;}
       }
@@ -459,7 +463,7 @@
       const mode=$('mode3d'),pane=$('threePane');mode.hidden=false;let busy=false,loading=null;
       let modelIndex=null,assetWarnings=[];
       const safeModelPath=path=>typeof path==='string'&&path.length<=500&&/\.(?:wrl|vrml|glb|step|stp)$/i.test(path)&&!/[\\:\x00-\x1f\x7f?#%]/.test(path)&&path.split('/').every(part=>part&&part!=='.'&&part!=='..');
-      const assetPaths=()=>modelIndex||=send({type:'repo-model-index',repository,ref}).then(result=>{
+      const assetPaths=()=>modelIndex||=send({type:'repo-model-index',repository,ref,file:rootFile}).then(result=>{
         if(!result?.ok||!Array.isArray(result.result?.paths)){assetWarnings=['Project model inventory is unavailable; explicit relative model paths can still be loaded.'];return [];}
         assetWarnings=Array.isArray(result.result.warnings)?result.result.warnings.filter(w=>typeof w==='string').slice(0,48).map(w=>w.slice(0,500)):[];
         if(result.result.paths.length>2000)assetWarnings.push('Model inventory was limited to 2000 paths.');

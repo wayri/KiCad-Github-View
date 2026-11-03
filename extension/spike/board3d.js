@@ -32,7 +32,7 @@ import {createNetInspection} from "./netInspection.mjs";
 import {createSelectionAppearance} from "./selectionAppearance.mjs";
 import { selectionMatcher, selectableRecord, tapGesture, holdGesture } from "./selectionState.mjs";
 import { sphereFitDistance,boxFitDistance } from "./fitPolicy.mjs";
-import { qualityName, qualityViewport, graphicsProfile, boardOcclusion, boardClipRange, studioMaterials, padHasMaskOpening, physicalColors } from "./renderQuality.mjs";
+import { qualityName, qualityViewport, graphicsProfile, boardOcclusion, boardClipRange, studioMaterials, padHasMaskOpening, physicalColors, copperDepthPolicy } from "./renderQuality.mjs";
 import { createResultOverlay } from "./result3d.js";
 import { sourceZoneGeometry,drillLoopInsideBoard } from "./sourceGeometry.mjs";
 import { padSourceDetails } from "./padGeometry.mjs";
@@ -334,7 +334,7 @@ export function mountBoard3D(container, source, options = {}) {
     const candidates=refinedTracks.tracks.filter(item=>item.layer===layer&&(isArc(item)?'arcs':'tracks')===category),stroke=copperStrokeBatches(THREE,candidates,{world,z,thickness:placement.thickness});
     if(stroke.invalid)geometryDiagnostics.push(`${layer}: invalid saved track widths or positions omitted.`);
     if(stroke.plan?.limited)geometryDiagnostics.push(`${layer}: large track caps exceed the ${stroke.plan.tolerance} mm tessellation tolerance at the 128-segment display limit.`);
-    const trackMaterial=new THREE.MeshStandardMaterial({color,...studioMaterials.copper});
+    const trackMaterial=new THREE.MeshStandardMaterial({color,...studioMaterials.copper,...copperDepthPolicy('track')});
     for(const batch of stroke.batches){const mesh=makeInstanced(groupFor(layer),batch.geometry,trackMaterial,batch.records,batch.place,viewportSceneIdentity('copper-track',layer,category+'-'+batch.part));if(mesh){visibilityRecord(mesh,category,layer);pickables.push(mesh);appearanceRecords.push({mesh,role:'tracks',layer});}}
     if(!stroke.batches.length)trackMaterial.dispose();
     }
@@ -342,7 +342,7 @@ export function mountBoard3D(container, source, options = {}) {
     const batches=new Map();let omittedPads=0;
     for(const pad of pads){const key=JSON.stringify([pad.shape,pad.width,pad.height,pad.roundrectRatio,pad.drill,pad.drillShape,pad.drillWidth,pad.drillHeight,pad.drillOffset]);if(!batches.has(key)){const outline=smoothPadOutline(pad);if(!outline||batches.size>=256){omittedPads++;continue;}if(outline.tessellation.limited)geometryDiagnostics.push(`${layer}: a pad contour retains validated geometry because the 0.0025 mm tolerance could not be met within hole-containment/display limits.`);batches.set(key,{outline,pads:[]});}batches.get(key).pads.push(pad);}
     if(omittedPads)geometryDiagnostics.push(`${layer}: ${omittedPads} unsupported/ambiguous pad shapes omitted; no rectangular stand-ins were substituted.`);
-    const padMaterial=new THREE.MeshStandardMaterial({color:0xffffff,...studioMaterials.copper,polygonOffset:true,polygonOffsetFactor:-1,polygonOffsetUnits:-1});
+    const padMaterial=new THREE.MeshStandardMaterial({color:0xffffff,...studioMaterials.copper,...copperDepthPolicy('pad')});
     for(const [key,batch]of batches){const geometry=new THREE.ExtrudeGeometry(padShape(batch.outline),{depth:placement.thickness,bevelEnabled:false,curveSegments:8});
       const padMesh=makeInstanced(groupFor(layer),geometry,padMaterial,batch.pads,(object,pad)=>{const[x,y]=world(pad.at);object.position.set(x,y,placement.base);object.rotation.z=(pad.rotation||0)*Math.PI/180;},viewportSceneIdentity('copper-pad',layer,key));
       if(padMesh){visibilityRecord(padMesh,'pads',layer);pickables.push(padMesh);appearanceRecords.push({mesh:padMesh,role:'pads',layer,pads:batch.pads});}
@@ -355,7 +355,7 @@ export function mountBoard3D(container, source, options = {}) {
         if (index === 0) zoneShape.moveTo(point.x, point.y); else zoneShape.lineTo(point.x, point.y);
       });
       const mesh = new THREE.Mesh(new THREE.ShapeGeometry(zoneShape),
-        new THREE.MeshStandardMaterial({ color,...studioMaterials.copper,side:THREE.DoubleSide,depthWrite:true }));
+        new THREE.MeshStandardMaterial({ color,...studioMaterials.copper,side:THREE.DoubleSide,depthWrite:true,...copperDepthPolicy('zone') }));
       mesh.position.z = layer==='F.Cu'?placement.base+placement.thickness-.0005:placement.base+.0005; mesh.userData.record = { ...zone, type: "Zone" };
       groupFor(layer).add(mesh);visibilityRecord(mesh,'fills',layer); pickables.push(mesh);
       appearanceRecords.push({mesh,role:'zone',layer});
@@ -364,7 +364,7 @@ export function mountBoard3D(container, source, options = {}) {
   const viaBatches=new Map();let omittedVias=0;
   for(const via of board.vias){const span=copperPlan.viaSpans.get(via.id),outline=smoothPadOutline({shape:'circle',width:via.size,height:via.size,drill:via.drill,drillShape:'circle'});if(!outline||!span){omittedVias++;continue;}const key=JSON.stringify([via.size,via.drill,span.zMin,span.zMax]);if(!viaBatches.has(key)){if(viaBatches.size>=128){omittedVias++;continue;}viaBatches.set(key,{outline,span,vias:[]});}viaBatches.get(key).vias.push(via);}
   if(omittedVias)geometryDiagnostics.push(`${omittedVias} via bodies with unsupported annuli or unknown saved spans omitted.`);
-  const viaMaterial=new THREE.MeshStandardMaterial({color:physicalColors.exposedCopper,...studioMaterials.copper});
+  const viaMaterial=new THREE.MeshStandardMaterial({color:physicalColors.exposedCopper,...studioMaterials.copper,...copperDepthPolicy('via')});
   for(const[key,batch]of viaBatches){const geometry=drillWallGeometry(THREE,smoothDrillOutline({drill:batch.vias[0].drill,drillShape:'circle'}),batch.span.zMax-batch.span.zMin);
     const wallMaterial=viaMaterial.clone();wallMaterial.side=THREE.DoubleSide;
     // Render the saved bore wall, not a solid annulus through the dielectric.
@@ -918,7 +918,7 @@ export function mountBoard3D(container, source, options = {}) {
     },
     fit(topView=false){if(active)fit(topView);},
     netAtPointer,
-    rotate(degrees=90){if(!active||!Number.isFinite(degrees))return false;userAdjustedCamera=true;const offset=camera.position.clone().sub(controls.target).applyAxisAngle(camera.up,degrees*Math.PI/180);camera.position.copy(controls.target).add(offset);controls.update();updateClipping();invalidate();return true;},
+    rotate(degrees=15){if(!active||!Number.isFinite(degrees))return false;userAdjustedCamera=true;const offset=camera.position.clone().sub(controls.target).applyAxisAngle(camera.up,degrees*Math.PI/180);camera.position.copy(controls.target).add(offset);controls.update();updateClipping();invalidate();return true;},
     flip(){if(!active)return false;userAdjustedCamera=true;const offset=camera.position.clone().sub(controls.target);camera.position.copy(controls.target).sub(offset);controls.update();updateClipping();invalidate();return true;},
     setView(view){if(!active||!boardViewPresets.some(preset=>preset.id===view))return false;userAdjustedCamera=true;fit(view);return true;},
     zoom(factor){if(!active||!Number.isFinite(factor)||factor<=0)return;const offset=camera.position.clone().sub(controls.target);const distance=Math.max(controls.minDistance,Math.min(controls.maxDistance,offset.length()/factor));if(offset.length()>0)camera.position.copy(controls.target).add(offset.setLength(distance));controls.update();},

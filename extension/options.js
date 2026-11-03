@@ -20,6 +20,10 @@ let refreshGeneration = 0;
 const demoPage = typeof location !== 'undefined' && /^https?:$/.test(location.protocol);
 let accountConnected = false;
 
+async function reviewSiteAccess(){
+  if(!chrome.permissions?.request)throw Error('This browser cannot request optional review-site access. Local and website-session viewing do not need this connection.');
+  if(!await chrome.permissions.request({origins:['https://github.com/*','https://api.github.com/*','https://uploads.github.com/*']}))throw Error('Optional GitHub review access was not granted. Project viewing remains available without account sign-in.');
+}
 async function request(type, extras = {}) {
   const response = await chrome.runtime.sendMessage({ type, ...extras });
   if (!response?.ok) throw new Error(response?.error || "Extension settings request failed.");
@@ -39,7 +43,7 @@ async function refresh() {
   statusElement.textContent = result.configured ? "GitHub connected for up to eight hours. Supported Chrome sessions survive background idle. Browser restart or extension reload requires sign-in; other browsers may also sign out after background restart." :
     "You are signed out. Public previews and local comments work without signing in.";
   if (!result.configured && result.reason === 'background-restarted') statusElement.textContent =
-    'The extension background restarted and could not recover the session key. Sign in again; GitHub authorization alone does not restore a lost key.';
+    'The extension background restarted and could not recover the session key. Sign in again for review actions; GitHub authorization alone does not restore a lost key.';
   else if (!result.configured && result.reason === 'expired') statusElement.textContent =
     'Your GitHub session expired. Sign in again.';
   else if (!result.configured && result.reason === 'session-locked') statusElement.textContent =
@@ -50,7 +54,7 @@ async function refresh() {
   buttonClear.disabled = !result.configured;
   availability.textContent = result.configured ?
     'GitHub is connected. Return to your repository and refresh its preview to use this session.' :
-    'Sign in with GitHub to read authorized repositories and publish reviews.';
+    'Connect GitHub only to synchronize or publish reviews. Open public/private project files through the repository website session without this connection.';
   if (result.configured && Number.isFinite(result.expiresAt)) {
     expiryTimer = setTimeout(() => refresh().catch(error => { statusElement.textContent = error.message; }),
       Math.max(1000, result.expiresAt - Date.now() + 50));
@@ -58,7 +62,7 @@ async function refresh() {
 }
 function showScope() {
   scopeHelp.textContent = accessInput.value === "repo" ?
-    "Private access requests GitHub's repo scope, which grants broad read and write access to public and private repositories. Approve it only if you need private repository access; organization approval or SSO may also be required." :
+    "Private access requests GitHub's repo scope, which grants broad read and write access to public and private repositories. It is used only for connected review actions, never project file loading. Prefer a fine-grained token restricted to the selected repository and review permissions; organization approval or SSO may be required." :
     "Public access requests GitHub's public_repo scope. Credentials are encrypted with a temporary key kept only in memory.";
 }
 accessInput.addEventListener("change", showScope);
@@ -116,6 +120,7 @@ connectButton.addEventListener("click", async () => {
   if (accountConnected) { await signOut(); return; }
   connectButton.disabled = true;
   try {
+    await reviewSiteAccess();
     const result = await request("github-device-start", { clientId: clientInput.value.trim(), scope: accessInput.value+(document.getElementById("githubProjectsAccess")?.checked?" project":"") });
     showDevice(result);
     schedulePoll(result.retryAfterMs);
@@ -140,6 +145,7 @@ buttonSave.addEventListener("click", async () => {
     stopTimer();
     await request("github-device-cancel");
     showDevice(null);
+    await reviewSiteAccess();
     await request("github-auth-set", { token: tokenInput.value });
     tokenInput.value = "";
     await refresh();

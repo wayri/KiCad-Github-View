@@ -43,21 +43,21 @@ test('GitLab settings request no permissions or credentials before explicit user
   assert.equal(h.permissions.length, 0); assert.equal(h.elements.get('gitlabRemoveHost').disabled, true);
   assert.equal(h.elements.get('gitlabRedirectUri').value, 'https://test.chromiumapp.org/gitlab');
 });
-test('self-hosted GitLab requests permission for the exact HTTPS origin before registration', async () => {
+test('self-hosted GitLab configuration stores an exact origin without requesting persistent viewing permission', async () => {
   const h = harness(); await tick();
   h.elements.get('gitlabNewHost').value = 'https://gitlab.example.org:8443'; await h.click('gitlabAddHost');
-  assert.equal(h.permissions.length, 1); assert.equal(h.permissions[0].origins.length, 1); assert.equal(h.permissions[0].origins[0], 'https://gitlab.example.org:8443/*');
+  assert.equal(h.permissions.length, 0);
   const add = h.requests.find(request => request.type === 'gitlab-host-add'); assert.equal(add.host, 'https://gitlab.example.org:8443'); assert.equal(add.provider, 'gitlab');
-  assert.ok(h.timeline.indexOf('permission') < h.timeline.indexOf('gitlab-host-add'));
+  assert.equal(h.timeline.includes('permission'),false);
   assert.equal(h.elements.get('gitlabHost').value, add.host); assert.equal(h.elements.get('gitlabAppLink').href, add.host + '/user_settings/applications');
 });
-test('invalid GitLab origins and denied permission never register a server', async () => {
+test('invalid GitLab origins never register a server and review denial does not prevent host configuration', async () => {
   for (const origin of ['http://gitlab.example.org', 'https://user:pass@gitlab.example.org', 'https://gitlab.example.org/path', 'https://gitlab.example.org?x=1', 'https://gitlab.example.org/#x']) {
     const h = harness(); await tick(); h.elements.get('gitlabNewHost').value = origin; await h.click('gitlabAddHost');
     assert.equal(h.permissions.length, 0); assert.equal(h.requests.some(request => request.type === 'gitlab-host-add'), false); assert.match(h.elements.get('gitlabStatus').textContent, /exact HTTPS/);
   }
   const denied = harness({ permission: false }); await tick(); denied.elements.get('gitlabNewHost').value = 'https://gitlab.example.org'; await denied.click('gitlabAddHost');
-  assert.equal(denied.requests.some(request => request.type === 'gitlab-host-add'), false); assert.match(denied.elements.get('gitlabStatus').textContent, /not granted/);
+  assert.equal(denied.requests.some(request => request.type === 'gitlab-host-add'), true); assert.equal(denied.permissions.length,0); await denied.click('gitlabOAuth'); assert.equal(denied.requests.some(request=>request.type==='gitlab-oauth-start'),false);assert.match(denied.elements.get('gitlabStatus').textContent,/not granted/);
 });
 test('GitLab token input is cleared before the privileged save request', async () => {
   const token = 'glpat_ui_test_abcdefghijklmnopqrst';
@@ -92,3 +92,6 @@ test('GitLab OAuth is disabled when the browser has no identity flow', async () 
   const h = harness({ oauthSupported: false }); await tick(); assert.equal(h.elements.get('gitlabOAuth').disabled, true);
   assert.equal(h.requests.some(request => request.type === 'gitlab-oauth-start'), false);
 });
+
+
+test('GitLab review-site permission is requested only for explicit comment account actions',async()=>{const h=harness();await tick();assert.equal(h.permissions.length,0);h.elements.get('gitlabToken').value='glpat_test_token_abcdefghijklmnop';await h.click('gitlabSaveToken');assert.equal(h.permissions.length,1);assert.equal(h.permissions[0].origins[0],'https://gitlab.com/*');assert.ok(h.timeline.indexOf('permission')<h.timeline.indexOf('gitlab-auth-set'));});

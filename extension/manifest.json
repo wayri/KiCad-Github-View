@@ -1,51 +1,18 @@
 {
   "manifest_version": 3,
   "name": "KiCad Visual Review for GitHub and GitLab",
-  "version": "0.12.80",
+  "version": "0.12.81",
   "description": "Browser-only KiCad schematic and PCB review on GitHub, GitLab.com and configured GitLab servers, with issue comments.",
-  "host_permissions": [
-    "https://github.com/*",
-    "https://gitlab.com/*",
-    "https://api.github.com/*",
-    "https://uploads.github.com/*",
-    "https://raw.githubusercontent.com/*"
-  ],
+  "host_permissions": [],
   "background": {
     "service_worker": "background.js"
   },
   "options_page": "options.html",
-  "storage": { "managed_schema": "managed-policy-schema.json" },
-  "content_scripts": [
-    {
-      "matches": [
-        "https://github.com/*",
-        "https://gitlab.com/*"
-      ],
-      "js": [
-        "parsing.js",
-        "github-session-reader.js",
-        "gitlab-session-reader.js",
-        "content.js"
-      ],
-      "run_at": "document_idle"
-    }
-  ],
-  "web_accessible_resources": [
-    {
-      "resources": [
-        "browser-viewer.html",
-        "pcb-viewer.html",
-        "schematic-viewer.html",
-        "revision-viewer.html",
-        "project-viewer.html",
-        "analysis-viewer.html",
-        "pdf-viewer.html"
-      ],
-      "matches": [
-        "https://*/*"
-      ]
-    }
-  ],
+  "storage": {
+    "managed_schema": "managed-policy-schema.json"
+  },
+  "content_scripts": [],
+  "web_accessible_resources": [],
   "action": {
     "default_title": "KiCad Visual Review",
     "default_icon": {
@@ -73,7 +40,8 @@
     "storage",
     "offscreen",
     "identity",
-    "scripting"
+    "scripting",
+    "activeTab"
   ],
   "sandbox": {
     "pages": [
@@ -84,7 +52,10 @@
     "extension_pages": "script-src 'self' 'wasm-unsafe-eval'; object-src 'self';",
     "sandbox": "sandbox allow-scripts; default-src 'none'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'unsafe-inline'; frame-src about:; child-src about:; connect-src 'none'; img-src data:; object-src 'none'; form-action 'none'; base-uri 'none';"
   },
-  "optional_permissions": ["downloads", "nativeMessaging"],
+  "optional_permissions": [
+    "downloads",
+    "nativeMessaging"
+  ],
   "optional_host_permissions": [
     "https://*/*"
   ]

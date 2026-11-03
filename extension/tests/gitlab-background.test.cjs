@@ -111,3 +111,10 @@ test('GitLab state changes require exact viewer and approved provider host',asyn
  const request={type:'chat-thread-state',provider:'gitlab',host:'https://gitlab.com',repository:'owner/repo',thread:{kind:'issue',number:42},confirmed:true};
  assert.equal((await message(request,tab)).ok,false);assert.equal((await message({...request,host:'https://evil.example'})).ok,false);assert.equal(called,0);assert.equal((await message(request)).ok,true);assert.equal(called,1);
 });
+
+
+test('GitLab annotation readback uses the review connector, never content file transport',async t=>{
+ const previous=global.KiCadGitLabReviewApi;t.after(()=>global.KiCadGitLabReviewApi=previous);const scope={provider:'gitlab',host:'https://gitlab.com',repository:'group/board',ref:'a'.repeat(40),file:'board.kicad_pcb'},time='2026-11-02T00:00:00Z',note={id:'annotation',text:'Review only',severity:'info',state:'open',createdAt:time,updatedAt:time,anchor:scope};let reads=0;
+ global.KiCadGitLabReviewApi={readThread:async request=>{reads++;assert.equal(request.number,7);return{number:7,repository:scope.repository,host:scope.host,projectId:55,state:'open',author:'reviewer',body:KiCadReviewComments.toMarkdown(note),comments:[],warnings:[]};}};
+ const reply=await message({...scope,type:'github-annotations',number:7});assert.equal(reply.ok,true,reply.error);assert.equal(reads,1);assert.equal(reply.result.notes[0].text,'Review only');assert.match(reply.result.notes[0].github.url,/issues\/7$/);
+});

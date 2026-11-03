@@ -1,4 +1,6 @@
-/* GitLab transport, bound to one explicitly authorized HTTPS origin. */
+/* Token-free GitLab content reads on one approved origin. Matching website tabs
+ * may use session cookies for GitLab read API endpoints; this is not API-free.
+ * Public fallback omits credentials. Review/account APIs remain separate. */
 ((root) => {
   'use strict';
   function forHost(host='https://gitlab.com',{sessionRead,signal}={}){
@@ -8,27 +10,74 @@
   const validPath=value=>typeof value==='string'&&value.length<=500&&value.length>0&&!value.startsWith('/')&&!/[\\:\x00-\x1f\x7f]/.test(value)&&value.split('/').every(p=>p&&p!=='.'&&p!=='..');
   function scope(repository,ref,file){if(!validRepository(repository)||!root.KiCadBrowserData.validRef(ref)||!validPath(file))throw new Error('Invalid GitLab project location.');}
   function endpoint(repository){if(!validRepository(repository))throw new Error('Invalid GitLab repository.');return host+'/api/v4/projects/'+encodeURIComponent(repository)+'/repository';}
+  const validRef=value=>root.KiCadBrowserData.validRef(value)&&value.split('/').every(part=>part&&part!=='.'&&part!=='..'&&!/[\\:]/.test(part));
+  function readURL(url,limit){
+    const target=new URL(url),match=target.pathname.match(/^\/api\/v4\/projects\/([^/]+)(.*)$/);
+    if(target.origin!==host||target.username||target.password||target.hash||!match||!Number.isSafeInteger(limit)||limit<1||limit>64*MIB)throw Error('Invalid GitLab content endpoint or byte limit.');
+    const project=decodeURIComponent(match[1]),tail=match[2];if(!validRepository(project)&&!(/^[1-9][0-9]{0,11}$/.test(project)&&tail===''))throw Error('Invalid GitLab content project.');
+    let keys;
+    if(tail==='')keys=[];
+    else if(tail==='/repository/tree')keys=['ref','recursive','per_page','page','path'];
+    else if(tail==='/repository/branches')keys=['per_page','page'];
+    else if(tail==='/repository/commits')keys=['ref_name','path','per_page','page'];
+    else if(tail==='/repository/compare')keys=['from','to','straight'];
+    else if(/^\/repository\/commits\/[^/]+$/.test(tail)){if(!validRef(decodeURIComponent(tail.split('/').at(-1))))throw Error('Invalid GitLab content revision.');keys=[];}
+    else if(/^\/repository\/files\/[^/]+\/raw$/.test(tail)){if(!validPath(decodeURIComponent(tail.split('/')[3])))throw Error('Invalid GitLab content file.');keys=['ref'];}
+    else if(/^\/merge_requests\/[1-9][0-9]{0,8}$/.test(tail))keys=[];
+    else throw Error('GitLab content transport supports bounded read endpoints only.');
+    const seen=new Set();for(const [key,value]of target.searchParams){
+      if(!keys.includes(key)||seen.has(key)||value.length>500||/[\x00-\x1f\x7f]/.test(value))throw Error('Invalid GitLab content query.');seen.add(key);
+      if(['ref','ref_name','from','to'].includes(key)&&!validRef(value))throw Error('Invalid GitLab content revision.');
+      if(key==='path'&&value!==''&&!validPath(value))throw Error('Invalid GitLab content directory.');
+      if(['recursive','straight'].includes(key)&&!['true','false'].includes(value))throw Error('Invalid GitLab content flag.');
+      if(['page','per_page'].includes(key)&&(!/^[1-9][0-9]{0,3}$/.test(value)||Number(value)>(key==='per_page'?100:1000)))throw Error('Invalid GitLab content pagination.');
+    }
+    return target;
+  }
+  function contentError(code,status){
+    const messages={GITLAB_SAML_REQUIRED:'GitLab website requires SSO/SAML verification. Complete it in the matching project tab, then retry.',GITLAB_LOGIN_REQUIRED:'GitLab website sign-in is required. Open this exact project in a signed-in tab on its approved server, then retry.',GITLAB_UNEXPECTED_HTML:'GitLab returned HTML instead of the requested project data. Check the matching website tab for sign-in, SSO/SAML or an access-denied page.'};
+    return Object.assign(Error(messages[code]||`GitLab content returned HTTP ${status}. Open this exact project in a signed-in tab on its approved server and complete any required SSO/SAML. File loading does not use review-account tokens.`),{code:code||'GITLAB_CONTENT_ACCESS'});
+  }
+  function checkBytes(bytes,target,type=''){
+    const sample=new TextDecoder().decode(bytes.subarray(0,16384)),looksHTML=/text\/html/i.test(type)||/^\s*(?:<!doctype\s+html|<html\b|<head\b|<body\b|<form\b)/i.test(sample);
+    if(!looksHTML)return;
+    if(/<input\b[^>]*\bname\s*=\s*["']SAML(?:Request|Response)["']|<form\b[^>]*\baction\s*=\s*["'][^"']*(?:\/saml|\/sso)/i.test(sample))throw contentError('GITLAB_SAML_REQUIRED');
+    if(/<input\b[^>]*\btype\s*=\s*["']password["']|<form\b[^>]*\baction\s*=\s*["'][^"']*\/users\/sign_in/i.test(sample))throw contentError('GITLAB_LOGIN_REQUIRED');
+    const raw=target.pathname.match(/\/repository\/files\/([^/]+)\/raw$/),htmlReport=raw&&/\.html?$/i.test(decodeURIComponent(raw[1]));
+    if(!htmlReport)throw contentError('GITLAB_UNEXPECTED_HTML');
+  }
+  async function readSession(url,limit){
+    let timer,abort;
+    try{return await Promise.race([Promise.resolve().then(()=>sessionRead(url,limit)),new Promise((_,reject)=>{
+      timer=setTimeout(()=>reject(Error('GitLab website session timed out.')),30000);
+      abort=()=>reject(Error('Project loading cancelled.'));signal?.addEventListener('abort',abort,{once:true});if(signal?.aborted)abort();
+    })]);}finally{clearTimeout(timer);signal?.removeEventListener('abort',abort);}
+  }
   async function response(url,limit=4*MIB){
-    if(new URL(url).origin!==host||!url.startsWith(host+'/api/v4/projects/'))throw new Error('Invalid GitLab API endpoint.');
-    if(signal?.aborted)throw Error('Project loading cancelled.');
-    const controller=new AbortController(),abort=()=>controller.abort(),timer=setTimeout(()=>controller.abort(),60000);
+    const target=readURL(url,limit),permit=async()=>{if(signal?.aborted)throw Error('Project loading cancelled.');await root.KiCadManagedPolicy?.assertNetwork?.();};
+    await permit();let sessionFailure=null;
+    if(sessionRead){
+      try{const session=await readSession(target.href,limit);await permit();if(session){if(!(session.bytes instanceof Uint8Array)||session.bytes.byteLength>limit||typeof session.next!=='string'||session.next&&!/^[1-9][0-9]{0,3}$/.test(session.next)||!['','<next>; rel="next"'].includes(session.link))throw Object.assign(Error('Invalid or oversized GitLab website session response.'),{definitive:true});checkBytes(session.bytes,target);return session;}}
+      catch(error){if(['GITLAB_SAML_REQUIRED','GITLAB_LOGIN_REQUIRED','GITLAB_UNEXPECTED_HTML'].includes(error?.code))throw contentError(error.code);if(signal?.aborted||error?.code==='MANAGED_POLICY'||error?.definitive)throw error;sessionFailure=error;}
+    }
+    await permit();const controller=new AbortController(),abort=()=>controller.abort(),timer=setTimeout(()=>controller.abort(),60000);
     signal?.addEventListener('abort',abort,{once:true});
-    try{const headers=await root.KiCadGitLabReviewApi?.authorizationHeaders(host);const result=await fetch(url,{...(headers&&Object.keys(headers).length?{headers}:{}),credentials:'omit',cache:'no-store',redirect:'error',signal:controller.signal});
-      if([401,403,404].includes(result.status)&&sessionRead){const session=await sessionRead(url,limit);if(session)return session;}
-      if(result.status===404)return null;
-      if(!result.ok)throw new Error(`GitLab returned HTTP ${result.status}; check the server, repository access and GitLab connection in extension settings.`);
-      if(Number(result.headers.get('content-length'))>limit)throw new Error('GitLab response exceeds its size limit.');
+    try{
+      const result=await fetch(target.href,{method:'GET',credentials:'omit',cache:'no-store',redirect:'error',signal:controller.signal});
+      if(!result.ok){await result.body?.cancel?.();if(result.status===404&&!sessionFailure)return null;if(['GITLAB_SAML_REQUIRED','GITLAB_LOGIN_REQUIRED','GITLAB_UNEXPECTED_HTML'].includes(sessionFailure?.code))throw contentError(sessionFailure.code);throw contentError(null,result.status);}
+      if(Number(result.headers.get('content-length'))>limit){await result.body?.cancel?.();throw Error('GitLab response exceeds its size limit.');}
       const reader=result.body.getReader(),chunks=[];let length=0;
       const cancelBody=()=>reader.cancel().catch(()=>{});controller.signal.addEventListener('abort',cancelBody,{once:true});if(controller.signal.aborted)cancelBody();
-      try{while(true){const {done,value}=await reader.read();if(done)break;length+=value.length;if(length>limit){await reader.cancel();throw new Error('GitLab response exceeds its size limit.');}chunks.push(value);}}finally{controller.signal.removeEventListener('abort',cancelBody);}
+      try{while(true){const {done,value}=await reader.read();if(done)break;length+=value.length;if(length>limit){await reader.cancel();throw Error('GitLab response exceeds its size limit.');}chunks.push(value);}}finally{controller.signal.removeEventListener('abort',cancelBody);}
       if(controller.signal.aborted)throw Error(signal?.aborted?'Project loading cancelled.':'GitLab retrieval timed out.');
       const bytes=new Uint8Array(length);let offset=0;for(const chunk of chunks){bytes.set(chunk,offset);offset+=chunk.length;}
-      return {bytes,next:result.headers.get('x-next-page')||'',link:result.headers.get('link')||''};
-    }catch(error){if(error.name==='AbortError')throw new Error('GitLab retrieval timed out.');throw error;}finally{clearTimeout(timer);signal?.removeEventListener('abort',abort);}
+      await permit();checkBytes(bytes,target,result.headers.get('content-type')||'');const next=result.headers.get('x-next-page')||'';if(next&&!/^[1-9][0-9]{0,3}$/.test(next))throw Error('Invalid GitLab pagination metadata.');
+      return {bytes,next,link:/rel="next"/.test(result.headers.get('link')||'')?'<next>; rel="next"':''};
+    }catch(error){if(error.name==='AbortError')throw Error(signal?.aborted?'Project loading cancelled.':'GitLab retrieval timed out.');throw error;}finally{clearTimeout(timer);signal?.removeEventListener('abort',abort);}
   }
   async function json(url){const result=await response(url);if(!result)throw new Error('GitLab resource was not found or access is unavailable.');return {...result,value:JSON.parse(new TextDecoder().decode(result.bytes))};}
   async function file(repository,ref,path){scope(repository,ref,path);const result=await response(`${endpoint(repository)}/files/${encodeURIComponent(path)}/raw?ref=${encodeURIComponent(ref)}`,root.KiCadBrowserData.fileByteLimit(path));return result?new TextDecoder().decode(result.bytes):null;}
-  async function resolve(repository,ref,path){scope(repository,ref,path);const {value}=await json(`${endpoint(repository)}/commits/${encodeURIComponent(ref)}`);if(!SHA.test(value?.id))throw new Error('GitLab did not resolve an immutable revision.');return {repository,ref,sha:value.id};}
+  async function resolve(repository,ref,path){scope(repository,ref,path);const {value}=await json(`${endpoint(repository)}/commits/${encodeURIComponent(ref)}`);if(!SHA.test(value?.id)||SHA.test(ref)&&value.id.toLowerCase()!==ref.toLowerCase())throw new Error('GitLab did not resolve the requested immutable revision.');return {repository,ref,sha:value.id.toLowerCase()};}
   async function tree(repository,ref,directory='',recursive=true){
     if(directory&&!validPath(directory))throw new Error('Invalid GitLab directory.');
     const entries=[],warnings=[];let more=false;
@@ -40,11 +89,11 @@
     if(more)warnings.push('GitLab tree discovery stopped at 1000 entries; the project listing may be incomplete.');
     return {entries:entries.filter(item=>item?.type==='blob'&&item.mode!=='120000'&&validPath(item.path)),warnings};
   }
-  async function directory(repository,ref,path,includeBoards=false){const result=await tree(repository,ref,path,false);if(result.warnings.length)throw new Error(result.warnings[0]);return result.entries.filter(item=>(includeBoards?/\.kicad_(sch|pcb)$/i:/\.kicad_sch$/i).test(item.path)&&item.path.split('/').slice(0,-1).join('/')===path).map(item=>item.path);}
+  async function directory(repository,ref,path,includeBoards=false){const result=await tree(repository,ref,path,false);if(result.warnings.length)throw new Error(result.warnings[0]);return result.entries.filter(item=>(includeBoards?/\.(?:kicad_(?:sch|pcb)|sch)$/i:/\.(?:kicad_sch|sch)$/i).test(item.path)&&item.path.split('/').slice(0,-1).join('/')===path).map(item=>item.path);}
   async function schematics(repository,ref){
     if(!validRepository(repository)||!SHA.test(ref||''))throw new Error('A pinned GitLab commit is required for schematic discovery.');
     const listing=await tree(repository,ref);if(listing.warnings.length)throw new Error(listing.warnings[0]);
-    const files=listing.entries.filter(item=>/\.kicad_sch$/i.test(item.path)).map(item=>item.path);
+    const files=listing.entries.filter(item=>/\.(?:kicad_sch|sch)$/i.test(item.path)).map(item=>item.path);
     if(files.length>root.KiCadBrowserData.PROJECT_MAX_FILES)throw new Error('More than 128 parent-sheet candidates; open the project root directly.');
     return files.sort();
   }

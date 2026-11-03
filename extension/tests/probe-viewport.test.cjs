@@ -29,10 +29,10 @@ function viewportHarness(THREE){
 }
 test('probe camera, selection and lifecycle stay independent while using real source geometry', {skip:!threePath},async()=>{
  const THREE=await import(pathToFileURL(threePath).href),{createSharedProbeViewport}=await helper(),h=viewportHarness(THREE);let sharedDisposals=0;h.geometry.addEventListener('dispose',()=>sharedDisposals++);h.material.addEventListener('dispose',()=>sharedDisposals++);
- const probe=createSharedProbeViewport({...h.args,selection:{references:['U1']}});h.flush();assert.equal(probe.getStats().selection.matched,1);assert.equal(h.rendered.length,1);const first=h.rendered[0],position=first.camera.position.clone();assert.ok(first.camera.position.toArray().every(Number.isFinite));
- probe.rotate(45);probe.zoom(2);h.flush();assert.notDeepEqual(first.camera.position.toArray(),position.toArray());assert.equal(h.mesh.position.x,0);assert.equal(h.source.children.length,1);
+ const probe=createSharedProbeViewport({...h.args,selection:{references:['U1']}});h.flush();assert.equal(probe.getStats().selection.matched,1);assert.equal(h.rendered.length,1);const first=h.rendered[0],position=first.camera.position.clone();assert.ok(first.camera.position.toArray().every(Number.isFinite));assert.ok(first.camera.far<1000,'probe clipping follows the millimetre scene, not a 10m far plane');const firstNear=first.camera.near;
+ probe.rotate(45);probe.zoom(2);h.flush();assert.notDeepEqual(first.camera.position.toArray(),position.toArray());assert.notEqual(first.camera.near,firstNear,'zoom recomputes depth precision');assert.equal(h.mesh.position.x,0);assert.equal(h.source.children.length,1);
  probe.setSelection({uuids:['missing']});h.flush();assert.equal(probe.getStats().selection.matched,0);probe.setTheme(false);h.flush();assert.equal(first.scene.background.getHex(),0xe7ebf1);assert.equal(h.args.sourceScene.background,null);
- const addition=new THREE.Mesh(h.geometry,h.material);addition.userData.record={type:'Component',ref:'U2',uuid:'u2'};h.source.add(addition);probe.sourceAdded(addition);probe.setSelection({references:['U2']});assert.equal(probe.getStats().selection.matched,1);assert.equal(probe.getStats().sourceParses,0);assert.equal(probe.getStats().modelRequests,0);
+ const addition=new THREE.Mesh(h.geometry,h.material);addition.position.z=500;addition.userData.record={type:'Component',ref:'U2',uuid:'u2'};h.source.add(addition);probe.sourceAdded(addition);probe.setSelection({references:['U2']});assert.equal(probe.getStats().selection.matched,1);assert.equal(probe.getStats().sourceParses,0);assert.equal(probe.getStats().modelRequests,0);h.flush();assert.ok(first.camera.far>500,'late model bounds expand the clip range without changing the camera');
  probe.dispose();probe.dispose();h.flush();assert.equal(sharedDisposals,0);assert.equal(h.disposed(),1);assert.equal(h.loss(),1);assert.equal(probe.getStats().active,false);assert.equal(h.source.children.length,2);
  h.geometry.dispose();h.material.dispose();
 });
@@ -115,4 +115,11 @@ test('3D probe flip reverses the view and roundtrips without changing source or 
  assert.equal(probe.flip(),true);h.flush();assert.ok(camera.position.distanceTo(start)>1);assert.ok(Math.abs(camera.position.length()-start.length())<1e-8);
  probe.flip();h.flush();assert.ok(camera.position.distanceTo(start)<1e-8);assert.deepEqual(h.source.matrixWorld.elements,before.elements);assert.ok(changed>1);
  for(let i=0;i<4;i++)probe.rotate(90);h.flush();assert.ok(camera.position.distanceTo(start)<1e-8);probe.dispose();assert.equal(probe.flip(),false);h.geometry.dispose();h.material.dispose();
+});
+
+
+test('probe3D presets use main board directions and fifteen-degree steps retain target and distance',{skip:!threePath},async()=>{
+ const THREE=await import(pathToFileURL(threePath).href),{createSharedProbeViewport}=await helper(),h=viewportHarness(THREE),{boardViewPresets}=await import('../spike/viewPresets.mjs'),probe=createSharedProbeViewport(h.args);h.flush();
+ for(const preset of boardViewPresets){assert.equal(probe.setView(preset.id),true);h.flush();const camera=h.rendered.at(-1).camera,direction=camera.position.clone().normalize(),expected=new THREE.Vector3(...preset.direction).normalize();assert.ok(direction.distanceTo(expected)<1e-8,preset.id);assert.deepEqual(camera.up.toArray(),preset.up);}
+ assert.equal(probe.setView('unknown'),false);probe.setView('iso');h.flush();const camera=h.rendered.at(-1).camera,start=camera.position.clone();for(let i=0;i<24;i++)assert.equal(probe.rotate(15),true);h.flush();assert.ok(camera.position.distanceTo(start)<1e-8);probe.rotate(-15);probe.rotate(15);h.flush();assert.ok(camera.position.distanceTo(start)<1e-8);probe.dispose();assert.equal(probe.setView('top'),false);h.geometry.dispose();h.material.dispose();
 });

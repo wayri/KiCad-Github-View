@@ -103,6 +103,7 @@ test('3D inventory retains model paths, rejects unsafe paths, and passes diagnos
  await v.get('mode3d').click();
  assert.deepEqual(plain(v.calls.modelOptions.assetPaths),['models/part.wrl','models/part.step','models/part.glb']);
  assert.deepEqual(plain(v.calls.modelOptions.assetWarnings),['Inventory truncated']);
+ assert.equal(v.calls.requests.find(m=>m.type==='repo-model-index').file,'board.kicad_pcb');
 });
 
 test('3D mode reuses successful model assets across toggles and clears them on pagehide',async()=>{
@@ -262,4 +263,23 @@ test('component popup occurrences retain the explicitly selected reused-sheet in
  {path:'child.kicad_sch',content:'(kicad_sch (uuid child) (lib_symbols (symbol "Device:R" (symbol "R_0_1" (rectangle (start -1 -2) (end 1 2) (stroke (width .2)) (fill (type none)))))) (symbol (lib_id "Device:R") (at 10 10) (uuid sym) (property "Reference" "R1") (instances (project "Demo" (path "/root/a" (reference "R1") (unit 1)) (path "/root/b" (reference "R1") (unit 1))))))'}];
  const v=await revision('',[],{realRender:true,projectReply:()=>({ok:true,result:files})}),selection={canonical:{kind:'part',path:'board.kicad_pcb',reference:'R1',symbolUuid:'sym',tstampPath:'/root/a/sym'}};
  const rows=await v.calls.workspaceOptions.getSchematicProbeRows(null,selection);assert.equal(rows.sheets.length,3);assert.equal(rows.occurrences.length,1);assert.ok(rows.occurrences[0].label.endsWith('A'));const resolved=await v.calls.workspaceOptions.resolveProbeViews(null,selection,'schematic');assert.equal(resolved.selection.canonical.tstampPath,'/root/a/sym');v.hide();
+});
+
+test('schematic-origin 3D probe requests the target board model inventory',async()=>{
+ const v=await revision('',[{path:'hw/board.kicad_pcb',content:'(kicad_pcb)'}]);
+ await v.calls.workspaceOptions.mountProbe3D({}, {entry:{path:'hw/board.kicad_pcb'},group:{kind:'part',name:'R1',primitives:[]},onSelect(){},onViewChange(){}});
+ assert.equal(v.calls.requests.find(m=>m.type==='repo-model-index').file,'hw/board.kicad_pcb');v.hide();
+});
+
+test('a newly selected unnamed schematic net opens the correct layout/3D probe and maps back by saved terminals',async()=>{
+ const schematic={path:'root.kicad_sch',content:fs.readFileSync(path.join(__dirname,'fixtures/kicad8/custom_fields.kicad_sch'),'utf8')},model=require('../design-model.js').buildProject([schematic]),resistor=model.objects.find(o=>o.reference==='R1'),connector=model.objects.find(o=>o.reference==='J1');
+ const footprint=(o,x)=>`(footprint "test" (layer "F.Cu") (at ${x} 10) (uuid fp-${o.reference}) (path "/${o.uuid}") (property "Reference" "${o.reference}") (pad "1" smd rect (at 0 0) (size 1 1) (layers "F.Cu") (uuid pad-${o.reference}-1) (net 1 "NET_ONE")) (pad "2" smd rect (at 0 2) (size 1 1) (layers "F.Cu") (uuid pad-${o.reference}-2) (net 2 "NET_TWO")))`;
+ const board={path:'board.kicad_pcb',content:`(kicad_pcb (version 20241229) (layers (0 "F.Cu" signal)) (net 1 "NET_ONE") (net 2 "NET_TWO") ${footprint(resistor,10)} ${footprint(connector,20)})`};
+ const v=await revision('',[],{realRender:true,projectReply:()=>({ok:true,result:[schematic,board]})}),design=require('../schematic-renderer.js').build(require('../design-diff.js').parse(schematic.content),schematic.path),nets=require('../net-model.js').build([schematic],new Map([[schematic.path,design]])).nets,net=nets.find(n=>n.members.some(m=>m.reference==='R1'&&m.pin==='2'));
+ const selection={kind:'net',net,group:net,primitives:net.primitives,canonical:{kind:'net',path:schematic.path,netName:net.name}},row={entry:{path:schematic.path,objects:model.objects},group:net};
+ const layout=await v.calls.workspaceOptions.resolveProbeViews(row,selection,'layout');assert.equal(layout.group.name,'NET_TWO');
+ const three=await v.calls.workspaceOptions.resolveProbeViews(row,selection,'3d');assert.equal(three.group.name,'NET_TWO');
+ const occurrences=await v.calls.workspaceOptions.getSchematicProbeRows(layout,layout.selection);assert.equal(occurrences.occurrences.length,1);
+ const back=await v.calls.workspaceOptions.resolveProbeViews(layout,layout.selection,'schematic');assert.ok(back.group.members.some(m=>m.reference==='R1'&&m.pin==='2'));assert.ok(!back.group.members.some(m=>m.reference==='R1'&&m.pin==='1'));
+ const again=await v.calls.workspaceOptions.resolveProbeViews(back,back.selection,'schematic');assert.equal(again.group.id,back.group.id);v.hide();
 });

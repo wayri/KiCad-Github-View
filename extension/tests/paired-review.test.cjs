@@ -100,3 +100,21 @@ test('terminal cross-probe resolves saved parent identity and pin number, never 
  assert.match(relatedPin([symbol,{...symbol,path:'repeated.kicad_sch'}],[],{kind:'pin',path:'board.kicad_pcb',reference:'U9',symbolUuid:'sym',pinNumber:'2'}).error,/Multiple saved/);
  for(const bad of [{...selection,pinNumber:''},{...selection,pinNumber:'1\n'},{...selection,ownerUuid:'a'.repeat(201)},{...selection,extra:'unsafe'}])assert.equal(validSelection(bad),false);
 });
+
+test('unnamed probe nets map in both directions through saved component terminals, including renamed references',()=>{
+ const api=require('../paired-review.js'),sym=part('symbol','R1','sym'),fp=part('footprint','R9','fp','board.kicad_pcb','sym'),objects=[sym,fp];
+ const sch={kind:'schematic',path:'root.kicad_sch',name:'Unnamed network (wire-id)',members:[{kind:'pin',reference:'R1',uuid:'sym',pin:'1'}]},pcb={kind:'pcb',path:'board.kicad_pcb',name:'Net-(R9-Pad1)',members:[{kind:'pad',reference:'R9',uuid:'pad-id',pad:'1'}]};
+ assert.equal(api.relatedNetByTerminals([pcb],objects,{kind:'net',path:sch.path,netName:sch.name},sch).net,pcb);
+ assert.equal(api.relatedNetByTerminals([sch],objects,{kind:'net',path:pcb.path,netName:pcb.name},pcb).net,sch);
+ assert.match(api.relatedNetByTerminals([pcb],objects,{kind:'net',path:'foreign.kicad_sch',netName:sch.name},sch).error,/source-bound/);
+ assert.match(api.relatedNetByTerminals([pcb],objects,{kind:'net',path:sch.path,netName:sch.name},{...sch,members:[{kind:'pin',reference:'R1',uuid:'foreign',pin:'1'}]}).error,/No matching/);
+ assert.match(api.relatedNetByTerminals([pcb],objects,{kind:'net',path:sch.path,netName:sch.name},{...sch,members:[{kind:'pin',reference:'R1',uuid:'sym',pin:'2'}]}).error,/No matching/);
+});
+
+test('probe terminal mapping rejects ambiguous nets, disagreeing terminals and conflicting saved associations',()=>{
+ const api=require('../paired-review.js'),sym=part('symbol','R1','sym'),fp=part('footprint','R1','fp','board.kicad_pcb','sym'),objects=[sym,fp],selection={kind:'net',path:sym.path,netName:'Unnamed network (wire)'};
+ const source={path:sym.path,members:[{kind:'pin',reference:'R1',uuid:'sym',pin:'1'},{kind:'pin',reference:'R1',uuid:'sym',pin:'2'}]},a={kind:'pcb',path:fp.path,name:'A',members:[{kind:'pad',reference:'R1',pad:'1'}]},b={kind:'pcb',path:fp.path,name:'B',members:[{kind:'pad',reference:'R1',pad:'2'}]};
+ assert.match(api.relatedNetByTerminals([a,b],objects,selection,source).error,/disagree/);
+ assert.match(api.relatedNetByTerminals([a,{...a,name:'duplicate'}],objects,selection,{...source,members:source.members.slice(0,1)}).error,/ambiguous/);
+ assert.match(api.relatedNetByTerminals([a],[sym,part('footprint','R1','fp',fp.path,'foreign')],selection,source).error,/No matching/);
+});

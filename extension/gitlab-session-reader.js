@@ -1,6 +1,7 @@
 "use strict";
 (function(root){
-  const MAX=32*1024*1024;
+  // Read-only GitLab API transport using this matching website tab, not account tokens.
+  const MAX=64*1024*1024;
   const pathOK=value=>typeof value==='string'&&value.length<=500&&value!==''&&value.split('/').every(p=>p&&p!=='.'&&p!=='..'&&!/[\\:\x00-\x1f\x7f]/.test(p));
   const repoOK=value=>pathOK(value)&&value.length<=300&&/^[A-Za-z0-9_.-]+(?:\/[A-Za-z0-9_.-]+)+$/.test(value);
   function validate({host,repository,url,limit},location) {
@@ -28,10 +29,22 @@
       if(['per_page','page'].includes(key)&&(!/^[1-9][0-9]{0,3}$/.test(value)||Number(value)>(key==='per_page'?100:1000)))throw Error('Invalid GitLab pagination.');
       if(['recursive','straight'].includes(key)&&!['true','false'].includes(value))throw Error('Invalid GitLab query flag.');
       if(key==='path'&&value!==''&&!pathOK(value))throw Error('Unsafe GitLab directory.');
-      if(['ref','ref_name','from','to'].includes(key)&&!pathOK(value))throw Error('Invalid GitLab revision.');
+      if(['ref','ref_name','from','to'].includes(key)&&(!pathOK(value)||value.length>200))throw Error('Invalid GitLab revision.');
     }
-    if(endpoint.includes('/commits/')){if(!pathOK(decodeURIComponent(endpoint.split('/').at(-1))))throw Error('Invalid GitLab revision.');}
+    if(endpoint.includes('/commits/')){if(!pathOK(decodeURIComponent(endpoint.split('/').at(-1)))||decodeURIComponent(endpoint.split('/').at(-1)).length>200)throw Error('Invalid GitLab revision.');}
     return target.href;
+  }
+  function contentError(code,status){
+    const messages={GITLAB_SAML_REQUIRED:'GitLab website requires SSO/SAML verification. Complete it in the matching project tab, then retry.',GITLAB_LOGIN_REQUIRED:'GitLab website sign-in is required. Open this exact project in a signed-in tab on its approved server, then retry.',GITLAB_UNEXPECTED_HTML:'GitLab returned HTML instead of the requested project data. Check the matching website tab for sign-in, SSO/SAML or an access-denied page.'};
+    return Object.assign(Error(messages[code]||`GitLab content returned HTTP ${status}. Open this exact project in a signed-in tab on its approved server and complete any required SSO/SAML. File loading does not use review-account tokens.`),{code:code||'GITLAB_CONTENT_ACCESS'});
+  }
+  function checkBytes(bytes,target,type=''){
+    const sample=new TextDecoder().decode(bytes.subarray(0,16384)),looksHTML=/text\/html/i.test(type)||/^\s*(?:<!doctype\s+html|<html\b|<head\b|<body\b|<form\b)/i.test(sample);
+    if(!looksHTML)return;
+    if(/<input\b[^>]*\bname\s*=\s*["']SAML(?:Request|Response)["']|<form\b[^>]*\baction\s*=\s*["'][^"']*(?:\/saml|\/sso)/i.test(sample))throw contentError('GITLAB_SAML_REQUIRED');
+    if(/<input\b[^>]*\btype\s*=\s*["']password["']|<form\b[^>]*\baction\s*=\s*["'][^"']*\/users\/sign_in/i.test(sample))throw contentError('GITLAB_LOGIN_REQUIRED');
+    const raw=target.pathname.match(/\/repository\/files\/([^/]+)\/raw$/),htmlReport=raw&&/\.html?$/i.test(decodeURIComponent(raw[1]));
+    if(!htmlReport)throw contentError('GITLAB_UNEXPECTED_HTML');
   }
   function create({fetch:fetcher=root.fetch,location=root.location,signal}={}) {
     async function read(message) {
@@ -40,15 +53,15 @@
       signal?.addEventListener('abort',abort,{once:true});
       try {
         const response=await fetcher(url,{method:'GET',credentials:'same-origin',cache:'no-store',redirect:'error',signal:controller.signal});
-        if(response.status===404)return null;
-        if(!response.ok)throw Error(`GitLab session returned HTTP ${response.status}. Check website access or connect GitLab in settings.`);
-        if(/text\/html/i.test(response.headers.get('content-type')||''))throw Error('GitLab returned a login page instead of project data.');
+        if(response.status===404){await response.body?.cancel();return null;}
+        if(!response.ok){await response.body?.cancel();throw Object.assign(Error(`GitLab website session returned HTTP ${response.status}. Open this exact project on its approved server and complete any required sign-in or SSO/SAML. Review-account tokens are not used for file loading.`),{code:'GITLAB_CONTENT_ACCESS'});}
         if(Number(response.headers.get('content-length'))>message.limit){await response.body?.cancel();throw Error('GitLab session response exceeds its size limit.');}
         const reader=response.body.getReader(),chunks=[];let count=0;
         const cancel=()=>reader.cancel().catch(()=>{});controller.signal.addEventListener('abort',cancel,{once:true});if(controller.signal.aborted)cancel();
         try{while(true){const {done,value}=await reader.read();if(done)break;count+=value.length;if(count>message.limit){await reader.cancel();throw Error('GitLab session response exceeds its size limit.');}chunks.push(value);}}finally{controller.signal.removeEventListener('abort',cancel);}
         if(controller.signal.aborted)throw Error('Project loading cancelled.');
         const bytes=new Uint8Array(count);let offset=0;for(const chunk of chunks){bytes.set(chunk,offset);offset+=chunk.length;}
+        checkBytes(bytes,new URL(url),response.headers.get('content-type')||'');
         let binary='';for(let i=0;i<bytes.length;i+=8192)binary+=String.fromCharCode(...bytes.subarray(i,i+8192));
         const next=response.headers.get('x-next-page')||'';
         if(next&&!/^[1-9][0-9]{0,3}$/.test(next))throw Error('Invalid GitLab pagination metadata.');

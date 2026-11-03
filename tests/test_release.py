@@ -156,8 +156,8 @@ class ReleaseTests(unittest.TestCase):
             self.assertGreater(audit['chromeFiles'], 40)
             with zipfile.ZipFile(chrome_path) as original, zipfile.ZipFile(root / 'bad.zip', 'w') as altered:
                 for name in original.namelist():
-                    altered.writestr(name, b'changed' if name == 'content.js' else original.read(name))
-            with self.assertRaisesRegex(ValueError, 'mismatch: content.js'):
+                    altered.writestr(name, b'changed' if name == 'background.js' else original.read(name))
+            with self.assertRaisesRegex(ValueError, 'mismatch: background.js'):
                 release.audit_packages(root / 'bad.zip', native_path)
 
     def test_application_archive_normalization_preserves_bytes_and_rejects_traversal(self):

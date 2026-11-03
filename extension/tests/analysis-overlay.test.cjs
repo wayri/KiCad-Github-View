@@ -8,7 +8,7 @@ function harness(request){
 const content='exact PCB bytes',sha=crypto.createHash('sha256').update(content).digest('hex'),report={request:{board_path:'board.kicad_pcb'},source_sha256:sha};
 test('PCB background requires exact saved source bytes, not merely matching filename',async()=>{
  for(const [actual,expected]of [[content,1],[content+'\n',0]]){
-  const h=harness(async type=>type==='project-inventory'?{files:[{path:'board.kicad_pcb'}]}:type==='project-file'?{content:actual}:{paths:[]});
+  const h=harness(async (type,args)=>{if(type==='repo-model-index')assert.equal(args.file,'board.kicad_pcb');return type==='project-inventory'?{files:[{path:'board.kicad_pcb'}]}:type==='project-file'?{content:actual}:{paths:[]};});
   await h.controller.setReport(report);assert.equal(h.builds(),expected);assert.match(h.node('overlayStatus').textContent,expected?/verified by SHA-256/:/could not be matched/);h.controller.dispose();
  }
 });

@@ -83,3 +83,70 @@ test('live Ttl/vna2 compact directory metadata retains explicit safe navigation 
  for(const patch of [{hasSimplifiedPath:false},{hasSimplifiedPath:1},{contentType:'file'},{name:'other/new'},{name:'../new'},{path:'elsewhere/constrs_1/new'},{path:directory+'/constrs_1/../new'},{name:'constrs_1\\new'}])assert.throws(()=>treeData(tree(directory,[{...items[0],...patch}]),sha,directory),/unsafe/);
  assert.deepEqual(treeData(tree('',[{name:'design/board',path:'design/board',contentType:'directory',hasSimplifiedPath:true}]),sha,'').items,[{path:'design/board',type:'directory',hasSimplifiedPath:true}]);
 });
+
+
+test('private folder context resolves slash branch and pinned identity from its signed-in page without fetch or tokens',async()=>{
+ let fetched=0;const api=create({location:{href:'https://github.com/'+repo+'/tree/feature/board/hw'},parseDocument:()=>tree('hw',[{path:'hw/private.kicad_pcb',contentType:'file'}]),fetch:async()=>{fetched++;throw Error('Anonymous fetch must not run');}}),result=await api.read({repository:repo,ref:'HEAD',action:'context',path:'tree/feature/board/hw'});
+ assert.deepEqual(result,{repository:repo,ref:'feature/board',directory:'hw',sha,items:[{path:'hw/private.kicad_pcb',type:'file'}]});assert.equal(fetched,0);await assert.rejects(api.read({repository:'foreign/repo',ref:'HEAD',action:'context',path:'tree/main/hw'}),/tab/);assert.equal(fetched,0);
+});
+
+test('private context may fetch only the exact same repository website with browser session and rejects opaque denials',async()=>{
+ let requested;const api=create({location:{href:'https://github.com/'+repo},parseDocument:()=>[],parseHTML:()=>tree('hw'),fetch:async(url,init)=>{requested={url,init};return response('private metadata',url,'text/html');}});assert.equal((await api.read({repository:repo,ref:'HEAD',action:'context',path:'tree/feature/board/hw'})).sha,sha);assert.equal(requested.url,'https://github.com/'+repo+'/tree/feature/board/hw');assert.equal(requested.init.credentials,'same-origin');assert.equal(requested.init.redirect,'error');assert.equal(requested.init.headers,undefined);
+ const denied=create({location:{href:'https://github.com/'+repo},parseDocument:()=>[],fetch:async url=>{const r=response('Access denied',url,'text/html');Object.defineProperty(r,'status',{value:403});Object.defineProperty(r,'ok',{value:false});return r;}});await assert.rejects(denied.read({repository:repo,ref:'HEAD',action:'context',path:'tree/main/hw'}),/website access was denied/);
+ for(const path of ['blob/main/file','tree/../secret','tree/main/../../other','https://evil.test/tree/main'])await assert.rejects(api.read({repository:repo,ref:'HEAD',action:'context',path}),/Invalid|Unsupported/);
+});
+
+test('private source files permit64MiB reviewed limits while binary assets remain capped at32MiB',async()=>{
+ let fetched=0;const api=create({location:{href:'https://github.com/'+repo},fetch:async url=>{fetched++;return response('(kicad_pcb)','https://raw.githubusercontent.com/'+repo+'/'+sha+'/board.kicad_pcb');}});assert.equal((await api.read({repository:repo,ref:sha,action:'file',path:'board.kicad_pcb',limit:64*1024*1024})).content,'(kicad_pcb)');assert.equal(fetched,1);await assert.rejects(api.read({repository:repo,ref:sha,action:'file',path:'board.kicad_pcb',limit:64*1024*1024+1}),/Invalid/);await assert.rejects(api.read({repository:repo,ref:sha,action:'asset',path:'model.wrl',limit:32*1024*1024+1}),/Invalid/);assert.equal(fetched,1);
+});
+
+test('private context cancellation aborts a signed-in website read before returning metadata',async()=>{
+ const controller=new AbortController();let aborted=false;const api=create({location:{href:'https://github.com/'+repo},signal:controller.signal,parseDocument:()=>[],fetch:async(url,init)=>new Promise((resolve,reject)=>init.signal.addEventListener('abort',()=>{aborted=true;reject(Error('cancelled'));}))}),pending=api.read({repository:repo,ref:'HEAD',action:'context',path:'tree/main/hw'});controller.abort();await assert.rejects(pending,/cancelled/);assert.equal(aborted,true);
+});
+
+test('signed-in server-rendered table supplies pinned metadata without hydration JSON',()=>{
+ const {documentObjects,treeData,contextData}=require('../github-session-reader.js');
+ const link=href=>({getAttribute:()=>href}),row=(...urls)=>({querySelectorAll:()=>urls.map(link)});
+ const doc={querySelectorAll:selector=>selector.startsWith('script')?[]:[link('/'+repo+'/commit/'+sha)],querySelector:selector=>selector.startsWith('table')?{textContent:'Name Last commit',querySelectorAll:()=>[row('/'+repo+'/tree/main/models'),row('/'+repo+'/blob/main/board.kicad_pcb','/'+repo+'/blob/main/board.kicad_pcb'),row('/foreign/repo/blob/main/leak.step')]}:{textContent:'main'}};
+ const values=documentObjects(doc,'https://github.com/'+repo);
+ assert.equal(contextData(values,repo).sha,sha);assert.deepEqual(treeData(values,sha,'').items,[{path:'models',type:'directory'},{path:'board.kicad_pcb',type:'file'}]);
+ // The current directory commit may predate HEAD; never infer a branch SHA there.
+ assert.deepEqual(documentObjects(doc,'https://github.com/'+repo+'/tree/main/hw'),[{githubFileTableContext:{repository:repo,ref:'main',directory:'hw'}}]);
+ const pinned={...doc,querySelector:selector=>selector.startsWith('table')?{textContent:'Name',querySelectorAll:()=>[row('/'+repo+'/blob/'+sha+'/models/body.step')]}:{textContent:sha.slice(0,7)}};
+ assert.deepEqual(treeData(documentObjects(pinned,'https://github.com/'+repo+'/tree/'+sha+'/models'),sha,'models').items,[{path:'models/body.step',type:'file'}]);
+ assert.deepEqual(documentObjects(doc,'https://elsewhere.test/'+repo),[]);
+});
+
+
+test('classic nested tables resolve branch root before reading a pinned folder, including slash branches',async()=>{
+ const {documentObjects}=require('../github-session-reader.js');
+ for(const ref of ['main','feature/board']){
+  const calls=[],lastChange='b'.repeat(40),location={href:'https://github.com/'+repo+'/tree/'+ref+'/hw/sub'};
+  const doc={querySelectorAll:selector=>selector.startsWith('script')?[]:[{getAttribute:()=>'/'+repo+'/commit/'+lastChange}],querySelector:selector=>selector.startsWith('table')?{querySelectorAll:()=>[],textContent:'Files'}:{textContent:ref}};
+  const rootTree=tree();rootTree[0].payload.codeViewTreeRoute.refInfo.name=ref;
+  const api=create({location,parseDocument:()=>documentObjects(doc,location.href),fetch:async(url,init)=>{calls.push(url);assert.equal(init.credentials,'same-origin');assert.equal(init.redirect,'error');assert.equal(init.headers,undefined);return response('metadata',url);},parseHTML:(_html,url)=>url.endsWith('/tree/'+encodeURIComponent(ref))?rootTree:tree('hw/sub',[{path:'hw/sub/board.kicad_pcb',contentType:'file'}])});
+  assert.deepEqual(await api.read({repository:repo,ref:'HEAD',action:'context',path:'tree/'+ref+'/hw/sub'}),{repository:repo,ref,directory:'hw/sub',sha,items:[{path:'hw/sub/board.kicad_pcb',type:'file'}]});
+  assert.deepEqual(calls,['https://github.com/'+repo+'/tree/'+encodeURIComponent(ref),'https://github.com/'+repo+'/tree/'+sha+'/hw/sub']);assert.ok(calls.every(url=>!url.includes(lastChange)));
+ }
+});
+
+test('classic context hints cannot escape the requested repository, branch or folder',async()=>{
+ for(const patch of [{repository:'foreign/repo'},{ref:'other'},{directory:'elsewhere'},{directory:'../secret'},{ref:'main/../other'},{ref:sha}]){
+  let calls=0;const api=create({location:{href:'https://github.com/'+repo+'/tree/main/hw'},parseDocument:()=>[{githubFileTableContext:{repository:repo,ref:'main',directory:'hw',...patch}}],fetch:async()=>{calls++;throw Error('No fetch expected');}});
+  await assert.rejects(api.read({repository:repo,ref:'HEAD',action:'context',path:'tree/main/hw'}),/Invalid/);assert.equal(calls,0);
+ }
+});
+
+test('classic nested context rejects stale branch identity, stale pinned folders and redirected pages',async()=>{
+ for(const failure of ['branch','folder','redirect']){
+  let calls=0;const branch=tree(),folder=tree('hw');branch[0].payload.codeViewTreeRoute.refInfo.name=failure==='branch'?'other':'main';if(failure==='folder')folder[0].payload.codeViewTreeRoute.refInfo.currentOid='b'.repeat(40);
+  const api=create({location:{href:'https://github.com/'+repo+'/tree/main/hw'},parseDocument:()=>[{githubFileTableContext:{repository:repo,ref:'main',directory:'hw'}}],fetch:async url=>{calls++;return response('metadata',failure==='redirect'?'https://github.com/foreign/repo':url);},parseHTML:()=>calls===1?branch:folder});
+  await assert.rejects(api.read({repository:repo,ref:'HEAD',action:'context',path:'tree/main/hw'}),/different/);assert.equal(calls,failure==='folder'?2:1);
+ }
+});
+
+test('classic nested context cancellation stops between branch resolution and folder fetch',async()=>{
+ const controller=new AbortController();let calls=0;const branch=tree();branch[0].payload.codeViewTreeRoute.refInfo.name='main';
+ const api=create({location:{href:'https://github.com/'+repo+'/tree/main/hw'},signal:controller.signal,parseDocument:()=>[{githubFileTableContext:{repository:repo,ref:'main',directory:'hw'}}],fetch:async url=>{calls++;return response('metadata',url);},parseHTML:()=>{controller.abort();return branch;}});
+ await assert.rejects(api.read({repository:repo,ref:'HEAD',action:'context',path:'tree/main/hw'}),/cancelled/);assert.equal(calls,1);
+});

@@ -5,10 +5,10 @@
   const MAX_PIXELS=16000000;
   function transform(saved,current){
     const turn=saved.quarterTurns??0,currentTurn=current.quarterTurns??0;
-    if(!Number.isInteger(turn)||turn<0||turn>3||turn!==currentTurn||saved.flipped!==current.flipped)return null;
+    if(!Number.isFinite(turn)||turn<0||turn>=4||turn!==currentTurn||saved.flipped!==current.flipped)return null;
     const scale=current.zoom/saved.zoom,sign=current.flipped?-1:1;
     let dx=(saved.x-current.x)*current.zoom*sign,dy=(saved.y-current.y)*current.zoom;
-    switch(turn){case 1:[dx,dy]=[-dy,dx];break;case 2:[dx,dy]=[-dx,-dy];break;case 3:[dx,dy]=[dy,-dx];break;}
+    switch(turn){case 1:[dx,dy]=[-dy,dx];break;case 2:[dx,dy]=[-dx,-dy];break;case 3:[dx,dy]=[dy,-dx];break;default:{const angle=turn*Math.PI/2,co=Math.cos(angle),si=Math.sin(angle);[dx,dy]=[dx*co-dy*si,dx*si+dy*co];}}
     const x=dx+current.width/2-saved.width*scale/2;
     const y=dy+current.height/2-saved.height*scale/2;
     const width=saved.width*scale,height=saved.height*scale;

@@ -23,7 +23,7 @@
     oauthSupported=Boolean(result.oauthSupported);$('gitlabOAuth').disabled=!oauthSupported;
     $('gitlabRemoveHost').disabled=hostSelect.value==='https://gitlab.com';
     status.textContent=result.configured?'Connected to '+result.host+' for up to eight hours. Supported Chrome sessions survive background idle. Browser restart or extension reload requires sign-in; other browsers may also sign out after background restart.':
-      result.releaseConfigured?'Sign in with your GitLab account. No application registration is needed.':'Publisher sign-in is not configured in this build. The publisher or server administrator configures it once; access tokens remain available under Advanced.';
+      result.releaseConfigured?'Connect GitLab for review actions only. Project files use the open website session without this connection.':'Publisher sign-in is not configured in this build. The publisher or server administrator configures it once; access tokens remain available under Advanced.';
     $('gitlabAppLink').href=hostSelect.value+'/user_settings/applications';
   }
   async function action(button,work){button.disabled=true;try{await work();}catch(error){status.textContent=error.message;}finally{button.disabled=button.id==='gitlabRemoveHost'&&hostSelect.value==='https://gitlab.com'||button.id==='gitlabOAuth'&&!oauthSupported;}}
@@ -31,17 +31,17 @@
   $('gitlabAddHost').addEventListener('click',event=>action(event.currentTarget,async()=>{
     const value=$('gitlabNewHost').value.trim(),url=new URL(value);
     if(url.protocol!=='https:'||url.username||url.password||url.pathname!=='/'||url.search||url.hash)throw new Error('Enter an exact HTTPS server origin, such as https://gitlab.example.com.');
-    if(!await chrome.permissions.request({origins:[url.origin+'/*']}))throw new Error('Server access permission was not granted.');
     const result=await send('gitlab-host-add',{host:url.origin});await refreshHosts(result.host);
   }));
   $('gitlabRemoveHost').addEventListener('click',event=>action(event.currentTarget,async()=>{await send('gitlab-host-remove');await refreshHosts();}));
+  async function reviewSiteAccess(){if(!chrome.permissions?.request||!await chrome.permissions.request({origins:[hostSelect.value+'/*']}))throw Error('Optional GitLab review-site access was not granted. Open project files through the website session instead.');}
   $('gitlabSaveToken').addEventListener('click',event=>action(event.currentTarget,async()=>{
-    const token=$('gitlabToken').value;$('gitlabToken').value='';await send('gitlab-auth-set',{token});await refresh();
+    await reviewSiteAccess();const token=$('gitlabToken').value;$('gitlabToken').value='';await send('gitlab-auth-set',{token});await refresh();
   }));
   $('gitlabSignOut').addEventListener('click',event=>action(event.currentTarget,async()=>{$('gitlabToken').value='';await send('gitlab-auth-clear');await refresh();}));
   $('gitlabReset').addEventListener('click',event=>action(event.currentTarget,async()=>{$('gitlabToken').value='';await send('gitlab-auth-reset');await refresh();}));
   $('gitlabOAuth').addEventListener('click',event=>action(event.currentTarget,async()=>{
-    const clientId=$('gitlabClientId').value.trim();if(clientId)await send('gitlab-client-set',{clientId});
+    await reviewSiteAccess();const clientId=$('gitlabClientId').value.trim();if(clientId)await send('gitlab-client-set',{clientId});
     status.textContent='Complete authorization in the GitLab sign-in window.';await send('gitlab-oauth-start');await refresh();
   }));
   refreshHosts().catch(error=>status.textContent=error.message);

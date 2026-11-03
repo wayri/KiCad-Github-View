@@ -4,7 +4,7 @@ const vm = require('node:vm');
 const fs = require('node:fs');
 const path = require('node:path');
 
-function optionsHarness(respond, protocol = 'chrome-extension:') {
+function optionsHarness(respond, protocol = 'chrome-extension:', permission = true) {
   const elements = new Map();
   for (const id of ['token', 'tokenStatus', 'saveToken', 'clearToken', 'resetAuth', 'clientId',
     'connectGitHub', 'cancelGitHub', 'deviceInstructions', 'deviceCode', 'verificationLink', 'deviceStatus', 'githubAccess', 'scopeHelp', 'signinAvailability',
@@ -13,14 +13,14 @@ function optionsHarness(respond, protocol = 'chrome-extension:') {
       setAttribute(name,value) {this.attributes.set(name,value);},
       addEventListener(type, fn) { this.listeners.set(type, fn); } });
   }
-  const requests = [], timers = [], windowEvents = new Map(), documentEvents = new Map();
+  const permissions = [], requests = [], timers = [], windowEvents = new Map(), documentEvents = new Map();
   let storageListener;
   const context = { URL, location: { protocol }, document: { getElementById: (id) => elements.get(id),
     addEventListener: (type, fn) => documentEvents.set(type, fn) },
     window: { addEventListener: (type, fn) => windowEvents.set(type, fn) },
     setTimeout: (fn, delay) => { timers.push({ fn, delay }); return timers.length; },
     clearTimeout: () => {},
-    chrome: { storage: { onChanged: { addListener: fn => { storageListener = fn; } } }, runtime: { sendMessage: async (request) => {
+    chrome: { permissions:{request:async value=>{permissions.push(value);return permission;}}, storage: { onChanged: { addListener: fn => { storageListener = fn; } } }, runtime: { sendMessage: async (request) => {
       requests.push(request);
       return { ok: true, result: respond ? respond(request) : request.type === 'github-auth-status' ?
         { configured: false } : request.type === 'github-device-status' ?
@@ -28,7 +28,7 @@ function optionsHarness(respond, protocol = 'chrome-extension:') {
     } } } };
   const source = fs.readFileSync(path.join(__dirname, '..', 'options.js'), 'utf8');
   vm.runInNewContext(source, context, { filename: 'options.js' });
-  return { elements, requests, timers, windowEvents, documentEvents,
+  return { elements, requests, permissions, timers, windowEvents, documentEvents,
     storageChanged: (changes, area) => storageListener(changes, area) };
 }
 
@@ -172,3 +172,6 @@ test('unconfigured release explains publisher setup and advanced fields are coll
   assert.ok(html.indexOf('<details id="advancedAuth">') < html.indexOf('id="clientId"'));
   assert.ok(html.indexOf('<details id="advancedAuth">') < html.indexOf('id="token"'));
 });
+
+
+test('GitHub commenting site grants are opt-in and denial never starts account authorization',async()=>{const h=optionsHarness(undefined,'chrome-extension:',false);await new Promise(setImmediate);assert.equal(h.permissions.length,0);await h.elements.get('connectGitHub').listeners.get('click')();assert.equal(h.permissions.length,1);assert.equal(h.requests.some(m=>m.type==='github-device-start'),false);assert.match(h.elements.get('deviceStatus').textContent,/viewing remains available/);});

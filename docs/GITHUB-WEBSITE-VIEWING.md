@@ -32,3 +32,6 @@ Normal website/raw downloads can still fail because of connectivity, website
 limits, private access, browser policy or unavailable files. API-free viewing is
 not a claim of unlimited service access. Imported local projects remain available
 without GitHub access.
+
+
+Development update: [Client-side project access](CLIENT-SIDE-REPOSITORY-LOADING.md) describes the on-click permission model, signed-in private context resolution and token-free GitLab adapter now in source. This is newer than the published0.12.80 package; installed behavior changes only after an update.

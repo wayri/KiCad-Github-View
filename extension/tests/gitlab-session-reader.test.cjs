@@ -36,3 +36,27 @@ test('GitLab session Stop aborts fetch and stalled body without returning partia
  const scoped=create({location:{href:'https://gitlab.com/group/board/-/tree/main'},signal:controller.signal,fetch:async(url,init)=>{signal=init.signal;return new Response(new ReadableStream({start(){},cancel(){cancelled++;}}));}});
  const pending=scoped.read({host:'https://gitlab.com',repository:'group/board',url:'https://gitlab.com/api/v4/projects/group%2Fboard/repository/tree?ref='+sha,limit:1024});await new Promise(r=>setImmediate(r));controller.abort();await assert.rejects(pending,/cancelled/);assert.equal(cancelled,1);assert.equal(signal.aborted,true);
 });
+
+
+test('website session distinguishes explicit SAML and login interstitials from ordinary access errors',async()=>{
+ for(const [body,code]of [['<html><form action="/groups/org/-/saml/sso"><input name="SAMLResponse"></form></html>','GITLAB_SAML_REQUIRED'],['<form action="/users/sign_in"><input type="password"></form>','GITLAB_LOGIN_REQUIRED'],['<html>Access denied</html>','GITLAB_UNEXPECTED_HTML']]){
+  const reader=create({location,fetch:async()=>new Response(body,{headers:{'content-type':'application/octet-stream'}})});
+  await assert.rejects(reader.read(request('/repository/files/board.kicad_pcb/raw?ref='+sha)),{code});
+ }
+ const reader=create({location,fetch:async()=>new Response('not authorized',{status:403})});
+ await assert.rejects(reader.read(request('/repository/tree')),error=>error.code==='GITLAB_CONTENT_ACCESS'&&/SSO\/SAML/.test(error.message)&&!error.message.includes('settings'));
+});
+
+test('website session permits authentic saved HTML reports, but never sign-in forms masquerading as reports',async()=>{
+ const report='<html><body>Saved fabrication report</body></html>';
+ let body=report;const reader=create({location,fetch:async()=>new Response(body,{headers:{'content-type':'text/html'}})});
+ assert.equal(atob((await reader.read(request('/repository/files/report.html/raw?ref='+sha))).base64),report);
+ body='<html><input type="password"></html>';await assert.rejects(reader.read(request('/repository/files/report.html/raw?ref='+sha)),{code:'GITLAB_LOGIN_REQUIRED'});
+ for(const tail of ['/repository/tree?ref='+('a'.repeat(201)),'/repository/commits/'+('a'.repeat(201))])assert.throws(()=>validate(request(tail),location),/revision/);
+});
+
+
+test('website read limits are bounded at 64 MiB and do not promise disk-backed transfer',()=>{
+ assert.equal(validate(request('/repository/tree',{limit:64*1024*1024}),location),endpoint+'/repository/tree');
+ for(const limit of [0,1.5,64*1024*1024+1,256*1024*1024])assert.throws(()=>validate(request('/repository/tree',{limit}),location),/Invalid GitLab session read/);
+});
