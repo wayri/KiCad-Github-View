@@ -1,4 +1,4 @@
-# Pocket KiView BoM interchange
+# KiCad Online BoM interchange
 
 `extension/bom-import.js` reads saved BoM data into the shared component manager. It never evaluates repository scripts, opens repository HTML as an executable document, or changes KiCad source files.
 

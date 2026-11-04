@@ -1,4 +1,4 @@
-# Pocket KiView BoM and assembly tools
+# KiCad Online BoM and assembly tools
 
 Open **BoM & assembly** from the home screen or project overview. In a drawing, the BoM pane's **Open BoM manager** uses its saved schematic symbols or PCB footprints. **Manage variants** is available in drawing tools. Engineering calculators are available from home, project overview and drawing tools without an account.
 

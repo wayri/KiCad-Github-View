@@ -40,7 +40,7 @@
   const key=JSON.stringify(record);if(seen.has(key)||records.length>=6)return;seen.add(key);records.push(record);render();
  }
  function diagnostics(){let version='development';try{version=root.chrome?.runtime?.getManifest?.().version||root.KiCadVSCodeContext?.version||version;}catch{}
-  return ['KiCad viewer diagnostics','Version: '+version,...records.map(r=>r.kind+': '+r.file+(r.line?':'+r.line:'')+' ('+r.name+')')].join('\n');
+  return ['KiCad Online diagnostics','Version: '+version,...records.map(r=>r.kind+': '+r.file+(r.line?':'+r.line:'')+' ('+r.name+')')].join('\n');
  }
  function render(){
   const d=root.document;if(!d)return;

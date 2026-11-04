@@ -1,50 +1,68 @@
 <p align="center">
-  <img src="docs/play-store/assets/store-icon-512.png" alt="Pocket KiView app icon" width="112" height="112">
+  <img src="docs/play-store/assets/store-icon-512.png" alt="KiCad Online app icon" width="112" height="112">
 </p>
 
-# Pocket KiView
+# KiCad Online
+
+Formerly Pocket KiView / KiCad Visual Review. An independent viewer and review tool; not affiliated with or endorsed by the KiCad project. The new name does not require online use: local and offline projects remain supported.
 
 **Your KiCad project, ready for review—at your desk or at the bench.**
 
 Explore schematics and PCB layouts, follow nets, measure geometry, work through a BoM and carry review notes between devices. Use the Chromium extension, VS Code, or an Android phone/tablet. Ordinary viewing needs no KiCad installation or rendering server.
 
-[![CI](https://github.com/wayri/KiCad-Github-View/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/wayri/KiCad-Github-View/actions/workflows/ci.yml)
-[![Release asset downloads](https://img.shields.io/github/downloads/wayri/KiCad-Github-View/total?label=release%20downloads&color=2ea44f)](docs/DOWNLOAD-STATS.md)
+[![CI](https://github.com/wayri/KiCad-Online/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/wayri/KiCad-Online/actions/workflows/ci.yml)
+[![Release asset downloads](https://img.shields.io/github/downloads/wayri/KiCad-Online/total?label=release%20downloads&color=2ea44f)](docs/DOWNLOAD-STATS.md)
 [![Status](https://img.shields.io/badge/status-preview-orange)](#downloads)
 [![License](https://img.shields.io/badge/license-source--available-blue)](LICENSE)
 [![Desktop](https://img.shields.io/badge/desktop-Windows%20%7C%20Linux%20%7C%20macOS-555)](docs/INSTALL.md)
 [![KiCad formats](https://img.shields.io/badge/KiCad-8%20%7C%209%20%7C%2010-314CB0)](docs/KICAD-COMPATIBILITY.md)
 
-[Illustrated user guide](USER-GUIDE.md) | [Installation](docs/INSTALL.md) | [Release notes](https://github.com/wayri/KiCad-Github-View/releases) | [Report an issue](https://github.com/wayri/KiCad-Github-View/issues) | [Contact support](mailto:support.kivi@sigharmonic.com)
+[Illustrated user guide](USER-GUIDE.md) | [Installation](docs/INSTALL.md) | [Release notes](https://github.com/wayri/KiCad-Online/releases) | [Report an issue](https://github.com/wayri/KiCad-Online/issues) | [Contact support](mailto:support.kivi@sigharmonic.com)
 
 ## Downloads
 
-**Release 0.12.84 / Android 1.87:** documentation and distribution refresh with the 123-image capability gallery and coverage index. Engineering functionality is unchanged from 0.12.83; the Altium beta remains separate and excluded. [Release notes and known limits](docs/releases/v0.12.84.md). Store publication and device acceptance are separate from GitHub packages. Android is a non-debuggable development-signed preview; its AAB is unsigned and not Play-ready. [Channel details](docs/RELEASE-STATUS.md). [Mozilla update plan](docs/store-submissions/mozilla-0.12.84-plan.md).
+**Release candidate 0.12.85 / Android 1.88:** the fresh **KiCad Online** branding update across browsers, VS Code, Android and the web viewer, with a Firefox Android internal-tab fallback. Existing installation identities/settings and the license are retained. Local/offline projects remain supported. [Release notes and known limits](docs/releases/v0.12.85.md). The Altium beta remains separate and excluded. [Actual channel status](docs/RELEASE-STATUS.md). Android preview is development-signed and non-debuggable; its unsigned AAB is not Play upload-ready.
 
 The live counter above totals GitHub release-asset downloads, including downloads initiated by KiCad PCM **when its package URL points to a GitHub release asset in this repository**. GitHub does not expose a browser-versus-PCM breakdown or unique install count. No PCM package/repository is currently configured here, and downloads hosted elsewhere are not included. [What the counter measures](docs/DOWNLOAD-STATS.md).
 
-[![Download Android APK](https://img.shields.io/badge/Android-Download%20APK%201.87-3DDC84?logo=android&logoColor=white)](https://github.com/wayri/KiCad-Github-View/releases/download/v0.12.84/pocket-kivi-android-phone-tablet-1.87-development.apk)
-[![Download Chromium extension](https://img.shields.io/badge/Chrome%20%2F%20Chromium-Download%20ZIP-4285F4?logo=googlechrome&logoColor=white)](https://github.com/wayri/KiCad-Github-View/releases/download/v0.12.84/kicad-visual-review-chrome-edge-brave-opera-vivaldi-chromium-0.12.84.zip)
-[![Download VS Code VSIX](https://img.shields.io/badge/VS%20Code-Download%20VSIX%200.12.84-007ACC)](https://github.com/wayri/KiCad-Github-View/releases/download/v0.12.84/kicad-visual-review-vscode-0.12.84.vsix)
+[![Download Android APK](https://img.shields.io/badge/Android-Download%20APK%201.88-3DDC84?logo=android&logoColor=white)](https://github.com/wayri/KiCad-Online/releases/download/v0.12.85/pocket-kivi-android-phone-tablet-1.88-development.apk)
+[![Download Chromium extension](https://img.shields.io/badge/Chrome%20%2F%20Chromium-Download%20ZIP-4285F4?logo=googlechrome&logoColor=white)](https://github.com/wayri/KiCad-Online/releases/download/v0.12.85/kicad-visual-review-chrome-edge-brave-opera-vivaldi-chromium-0.12.85.zip)
+[![Download VS Code VSIX](https://img.shields.io/badge/VS%20Code-Download%20VSIX%200.12.85-007ACC)](https://github.com/wayri/KiCad-Online/releases/download/v0.12.85/kicad-visual-review-vscode-0.12.85.vsix)
 
 | Edition | Download / install | Availability |
 | --- | --- | --- |
-| Android | APK button above | Android 8+; published 1.82 preview, development-signed; manual installation and updates |
-| Chrome, Edge, Brave, Opera, Vivaldi, Chromium | Chromium ZIP button above | Published 0.12.84 preview; extract and load unpacked; candidate browsers have differing validation coverage |
-| VS Code | [Marketplace](https://marketplace.visualstudio.com/items?itemName=wayri.kicad-visual-review) / [offline VSIX 0.12.84](https://github.com/wayri/KiCad-Github-View/releases/download/v0.12.84/kicad-visual-review-vscode-0.12.84.vsix) | Windows, Linux and macOS; VS Code 1.95+; Marketplace and GitHub versions may differ |
-| Firefox / compatible derivatives | [Development ZIP 0.12.84](https://github.com/wayri/KiCad-Github-View/releases/download/v0.12.84/kicad-visual-review-firefox-0.12.84.zip) | Firefox desktop 140+; unsigned temporary add-on; Zen/LibreWolf/Waterfox candidates unverified; [install, signing and Mozilla publishing](docs/FIREFOX.md) |
-| Safari | [Development ZIP 0.12.84](https://github.com/wayri/KiCad-Github-View/releases/download/v0.12.84/kicad-visual-review-safari-0.12.84.zip) | macOS Safari 16.4+; requires Xcode conversion/signing; native verification pending; [instructions](docs/SAFARI.md) |
+| Android | APK button above | Android 8+; 1.88 preview, development-signed; manual installation and updates |
+| Chrome, Edge, Brave, Opera, Vivaldi, Chromium | Chromium ZIP button above | Published 0.12.85 preview; extract and load unpacked; candidate browsers have differing validation coverage |
+| VS Code | [Marketplace](https://marketplace.visualstudio.com/items?itemName=wayri.kicad-visual-review) / [offline VSIX 0.12.85](https://github.com/wayri/KiCad-Online/releases/download/v0.12.85/kicad-visual-review-vscode-0.12.85.vsix) | Windows, Linux and macOS; VS Code 1.95+; Marketplace and GitHub versions may differ |
+| Firefox / compatible derivatives | [Development ZIP 0.12.85](https://github.com/wayri/KiCad-Online/releases/download/v0.12.85/kicad-visual-review-firefox-0.12.85.zip) | Firefox desktop 140+; unsigned temporary add-on; Zen/LibreWolf/Waterfox candidates unverified; [install, signing and Mozilla publishing](docs/FIREFOX.md) |
+| Safari | [Development ZIP 0.12.85](https://github.com/wayri/KiCad-Online/releases/download/v0.12.85/kicad-visual-review-safari-0.12.85.zip) | macOS Safari 16.4+; requires Xcode conversion/signing; native verification pending; [instructions](docs/SAFARI.md) |
 
-Browser/desktop downloads above are the [v0.12.84 GitHub preview](https://github.com/wayri/KiCad-Github-View/releases/tag/v0.12.84). Android 1.87 is included in the same release. Store channels are updated separately. The source repository and GitHub downloads are public.
+Browser/desktop downloads above are the [v0.12.85 GitHub preview](https://github.com/wayri/KiCad-Online/releases/tag/v0.12.85). Android 1.88 is included in the same release. Store channels are updated separately. The source repository and GitHub downloads are public.
 
 <details>
 <summary>Release versions, checksums and Android signing</summary>
 
 Release packages are built from the tagged source; screenshots show several retained development versions and may differ from the packaged UI. The Chrome Store link above is the existing public listing; its approved version can lag GitHub. No Google Play installation is advertised here.
 
-Compare preview downloads with [SHA256SUMS.txt](https://github.com/wayri/KiCad-Github-View/releases/download/v0.12.84/SHA256SUMS.txt). An AAB is a Play upload bundle, not a directly installable Android app. Preserve/export projects and review state before changing signing channels; do not uninstall merely to bypass a signature mismatch. [Installation and updates](docs/INSTALL.md).
+Compare preview downloads with [SHA256SUMS.txt](https://github.com/wayri/KiCad-Online/releases/download/v0.12.85/SHA256SUMS.txt). An AAB is a Play upload bundle, not a directly installable Android app. Preserve/export projects and review state before changing signing channels; do not uninstall merely to bypass a signature mismatch. [Installation and updates](docs/INSTALL.md).
 
 </details>
+
+## Current KiCad Online preview
+
+Fresh 0.12.85 source captures from the public **OLIMEX ESP32-PoE M2** project.
+The 3D view loaded 126/143 linked models; unresolved assets and geometry limits
+are disclosed. These are local browser captures, not installed-store acceptance.
+[All five current screenshots and provenance](docs/BRAND-SCREENSHOTS-0.12.85.md).
+
+![KiCad Online project launcher](docs/images/0.12.85/01-project.jpg)
+
+| Schematic | Layout | 3D |
+| :---: | :---: | :---: |
+| ![KiCad Online schematic](docs/images/0.12.85/02-schematic.jpg) | ![KiCad Online layout](docs/images/0.12.85/03-layout.jpg) | ![KiCad Online 3D](docs/images/0.12.85/04-3d.jpg) |
+
+The older capability gallery below remains historical evidence. Its original UI
+labels are preserved; new captures above show the renamed product.
 
 ## Get started
 
@@ -95,7 +113,7 @@ See saved findings in the schematic or PCB viewer, show/hide severity markers, c
 
 ## Works with WayriCAD simulation results
 
-Run simulations in **[wayriCAD / kiWay](https://github.com/wayri/WayriCAD)**, then open their supported saved results in **Pocket KiView on Android or in the browser**. Bring the result files with the project to inspect them offline, or share those exports with another reviewer.
+Run simulations in **[wayriCAD / kiWay](https://github.com/wayri/WayriCAD)**, then open their supported saved results in **KiCad Online on Android or in the browser**. Bring the result files with the project to inspect them offline, or share those exports with another reviewer.
 
 | WayriCAD tool | Review in KiView |
 | --- | --- |

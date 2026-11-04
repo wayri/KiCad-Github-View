@@ -1,4 +1,4 @@
-# Pocket KiView â€” Portable KiCAD Viewer
+# KiCad Online â€” Portable KiCAD Viewer
 
 This hybrid Android app packages the shared KiCad schematic, PCB and approximate 3D viewer inside a native Java host. One APK adapts to phones and tablets. It requires Android 8 (API 26) or later and targets API 36. Source designs are read-only.
 
@@ -87,11 +87,11 @@ Tap a wire, pad or track to highlight its net. If several networks are within 14
 
 ## Open links from Chrome and other apps
 
-In Chrome, open a GitHub/GitLab repository or KiCad file page and choose **Share â†’ Pocket KiView**. The app opens the provider dialog with repository and revision filled in. Tap **Add and open project**; private repositories use the existing provider account. A matching linked KiCad file opens after import. Existing review drafts stay intact until you choose to change projects.
+In Chrome, open a GitHub/GitLab repository or KiCad file page and choose **Share â†’ KiCad Online**. The app opens the provider dialog with repository and revision filled in. Tap **Add and open project**; private repositories use the existing provider account. A matching linked KiCad file opens after import. Existing review drafts stay intact until you choose to change projects.
 
 Redirect buttons can use `kicadvizdiff://open?url=` followed by the URL-encoded HTTPS repository/file link. Chrome intent links can use `intent://open?url=ENCODED_URL#Intent;scheme=kicadvizdiff;package=dev.kicadvizdiff.android;end`. Browser restrictions may require a user tap rather than an automatic redirect.
 
-Normal GitHub.com and GitLab.com HTTPS links are registered as unverified supported links. On Android 12+, these usually open in the browser unless the user enables the domains under **Android Settings â†’ Apps â†’ Pocket KiView â†’ Open by default / Open supported links**. We cannot verify domains owned by GitHub/GitLab. Self-hosted GitLab uses Share or the app redirect scheme; the app does not claim every HTTPS host.
+Normal GitHub.com and GitLab.com HTTPS links are registered as unverified supported links. On Android 12+, these usually open in the browser unless the user enables the domains under **Android Settings â†’ Apps â†’ KiCad Online â†’ Open by default / Open supported links**. We cannot verify domains owned by GitHub/GitLab. Self-hosted GitLab uses Share or the app redirect scheme; the app does not claim every HTTPS host.
 
 Home, tree, blob and raw file links are accepted. URLs with a slash-containing branch encoded as one segment retain it; otherwise verify/edit the revision field, since a web URL alone cannot separate an unescaped branch from the file path. Links cannot sign in, publish comments, change scopes or fetch arbitrary Drive URLs. Drive projects still open through the Android document picker as files/ZIPs.
 

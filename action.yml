@@ -1,4 +1,4 @@
-name: KiCad Visual Review
+name: KiCad Online
 description: Compare changed KiCad schematics and PCBs across Git revisions, or render one selected drawing.
 branding:
   icon: eye

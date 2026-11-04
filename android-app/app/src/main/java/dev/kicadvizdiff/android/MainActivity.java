@@ -672,8 +672,8 @@ public final class MainActivity extends Activity {
                 if (!trustedPage()) return;
                 if(!ManagedPolicy.read(MainActivity.this).network){sendError("Network access is disabled by managed application policy.");return;}
                 Intent draft = new Intent(Intent.ACTION_SENDTO, Uri.parse("mailto:support@sigharmonic.com?subject="
-                        + Uri.encode("Pocket KiView content/user report") + "&body=" + Uri.encode(body)));
-                draft.putExtra(Intent.EXTRA_SUBJECT, "Pocket KiView content/user report");
+                        + Uri.encode("KiCad Online content/user report") + "&body=" + Uri.encode(body)));
+                draft.putExtra(Intent.EXTRA_SUBJECT, "KiCad Online content/user report");
                 draft.putExtra(Intent.EXTRA_TEXT, body);
                 try { startActivity(draft); }
                 catch (android.content.ActivityNotFoundException error) {
@@ -1032,7 +1032,7 @@ public final class MainActivity extends Activity {
             }
             completeTemporaryPermission(replyId);
             if(!settings.notificationsAllowed())new android.app.AlertDialog.Builder(this).setTitle("Notifications disabled")
-                .setMessage("Temporary downloads still work. Enable Pocket KiView notifications in Android settings to receive the Keep reminder.")
+                .setMessage("Temporary downloads still work. Enable KiCad Online notifications in Android settings to receive the Keep reminder.")
                 .setPositiveButton("Android settings",(dialog,which)->startActivity(new Intent(android.provider.Settings.ACTION_APP_NOTIFICATION_SETTINGS).putExtra(android.provider.Settings.EXTRA_APP_PACKAGE,getPackageName())))
                 .setNegativeButton("Later",null).show();
         }catch(Exception error){if(replyId>0)libraryReply(replyId,null,"Could not enable temporary reminders");}

@@ -1,4 +1,4 @@
-# Pocket KiView offline calculators
+# KiCad Online offline calculators
 
 `extension/calculator-viewer.html` is a standalone mobile page. It requires no repository, network or native calculator executable. `calculator-tools.js` contains pure scalar equations; the page validates inputs, clears outdated results after errors, displays units, and provides System / KiCad light / KiCad dark themes. Nothing is written into board or schematic files.
 

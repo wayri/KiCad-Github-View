@@ -1,4 +1,4 @@
-# KiCad Visual Review
+# KiCad Online
 
 Open KiCad schematics and PCBs beside your code—without installing KiCad. Inspect a design, review assembly fields, leave notes, and compare Git conflicts visually.
 
@@ -6,12 +6,12 @@ Open KiCad schematics and PCBs beside your code—without installing KiCad. Insp
 
 ## Open your first project
 
-For the separate browser companion, see [installation on Firefox and compatible derivatives, signing and Mozilla publishing](https://github.com/wayri/KiCad-Github-View/blob/main/docs/FIREFOX.md). Firefox uses its own temporary add-on package; the VSIX is only for VS Code.
+For the separate browser companion, see [installation on Firefox and compatible derivatives, signing and Mozilla publishing](https://github.com/wayri/KiCad-Online/blob/main/docs/FIREFOX.md). Firefox uses its own temporary add-on package; the VSIX is only for VS Code.
 
 **KiCad versions:** recognized KiCad **8, 9 and 10** `.kicad_sch` and `.kicad_pcb` constructs use the shared viewer. Native reference fixtures use KiCad 10; 8/9 coverage is narrower and does not certify every feature. Newer generator versions open as warned previews. No KiCad installation is required. Linked and supported embedded 3D models can load when their assets resolve. Component-class rules, schematic net-class rule areas and native schematic tables are not implemented. [Compatibility details](https://github.com/wayri/kiview-marketplace-assets/blob/main/COMPATIBILITY.md).
 
 1. Install the extension and open your KiCad project folder in VS Code.
-2. Select a `.kicad_sch` or `.kicad_pcb`. If it opens as text, choose **Open With → KiCad Visual Review**.
+2. Select a `.kicad_sch` or `.kicad_pcb`. If it opens as text, choose **Open With → KiCad Online**.
 3. Use **Explorer** for parts, nets and layers; use the search box to find a component or signal.
 
 You can also press **Ctrl+Shift+P** and run **KiCad: Open Visual Viewer**.
@@ -62,7 +62,7 @@ Create a draft or choose **Reply**, review the destination and optional screensh
 
 ## Guide and limits
 
-**Companion browser edition:** [KiCad Visual Review for Chrome](https://github.com/wayri/kiview-marketplace-assets/blob/main/CHROME-HOME.md) reviews local projects and supported GitHub/GitLab pages. The latest companion ZIP is available from the project releases; store and GitHub versions may differ. Each edition works independently; portable review exports transfer supported review state.
+**Companion browser edition:** [KiCad Online for Chrome](https://github.com/wayri/kiview-marketplace-assets/blob/main/CHROME-HOME.md) reviews local projects and supported GitHub/GitLab pages. The latest companion ZIP is available from the project releases; store and GitHub versions may differ. Each edition works independently; portable review exports transfer supported review state.
 
 [Full user guide: all workflows, shortcuts, supported files and troubleshooting](https://github.com/wayri/kiview-marketplace-assets/blob/main/VSCODE-GUIDE.md)
 
@@ -72,6 +72,15 @@ Screenshots use the public KiCad PIC Programmer demo. The conflict fixture inten
 
 Copyright © 2026 Yawar B (wayri). Source-available license; paid software distribution and monetized hosting require written permission. See the packaged `LICENSE.txt`. Third-party licenses remain applicable.
 
-[GitHub project](https://github.com/wayri/KiCad-Github-View) · [Support](mailto:support.kivi@sigharmonic.com)
+[GitHub project](https://github.com/wayri/KiCad-Online) · [Support](mailto:support.kivi@sigharmonic.com)
 
 The GitHub repository is public; browse the source, guides and release downloads there.
+
+## Current shared viewer preview
+
+KiCad Online 0.12.85 refreshes the public name while retaining
+`wayri.kicad-visual-review` for in-place updates. The following screenshot shows
+the shared renderer in a local browser using public OLIMEX M2 files; it is not
+an installed VS Code capture. [Fresh screenshot set and limits](https://github.com/wayri/KiCad-Online/blob/main/docs/BRAND-SCREENSHOTS-0.12.85.md).
+
+![KiCad Online shared 3D viewer](https://raw.githubusercontent.com/wayri/KiCad-Online/main/docs/images/0.12.85/04-3d.jpg)

@@ -1,6 +1,6 @@
 # Chrome extension privacy policy
 
-**KiCad Visual Review for GitHub and GitLab**  
+**KiCad Online**
 Effective date: 29 October 2026  
 Publisher: Yawar B (wayri)  
 Contact: support.kivi@sigharmonic.com

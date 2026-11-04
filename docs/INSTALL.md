@@ -1,12 +1,12 @@
-# Install Pocket KiView
+# Install KiCad Online
 
-Current prepared preview: **extension 0.12.84 / Android 1.87**. Store submission
+Current prepared preview: **extension 0.12.85 / Android 1.88**. Store submission
 and approval are separate from GitHub downloads. See [release status](RELEASE-STATUS.md).
 
-Download `kicad-visual-review-chrome-edge-brave-opera-vivaldi-chromium-0.12.84.zip`,
-`kicad-visual-review-firefox-0.12.84.zip`, `kicad-visual-review-vscode-0.12.84.vsix`,
-or `pocket-kivi-android-phone-tablet-1.87-development.apk` from
-[GitHub Releases](https://github.com/wayri/KiCad-Github-View/releases/tag/v0.12.84).
+Download `kicad-visual-review-chrome-edge-brave-opera-vivaldi-chromium-0.12.85.zip`,
+`kicad-visual-review-firefox-0.12.85.zip`, `kicad-visual-review-vscode-0.12.85.vsix`,
+or `pocket-kivi-android-phone-tablet-1.88-development.apk` from
+[GitHub Releases](https://github.com/wayri/KiCad-Online/releases/tag/v0.12.85).
 GitHub's automatic Source code archives are source checkouts, not installable extensions.
 
 The browser and VS Code editions support Windows, Linux and macOS. Ordinary
@@ -25,8 +25,8 @@ desktop installer or Google Play installation is included in this preview.
 ## VS Code — Windows, Linux and macOS
 
 1. Install [Visual Studio Code](https://code.visualstudio.com/) 1.95 or newer.
-2. In **Extensions**, search for **KiCad Visual Review** by publisher **wayri**, or open the [Marketplace listing](https://marketplace.visualstudio.com/items?itemName=wayri.kicad-visual-review), and select **Install**.
-3. Open a project folder. Open a `.kicad_sch` or `.kicad_pcb`, then use **Reopen Editor With → KiCad Visual Review**, or run **KiCad: Open Visual Viewer** from the Command Palette.
+2. In **Extensions**, search for **KiCad Online** by publisher **wayri**, or open the [Marketplace listing](https://marketplace.visualstudio.com/items?itemName=wayri.kicad-visual-review), and select **Install**.
+3. Open a project folder. Open a `.kicad_sch` or `.kicad_pcb`, then use **Reopen Editor With → KiCad Online**, or run **KiCad: Open Visual Viewer** from the Command Palette.
 4. Follow the [VS Code illustrated guide](../vscode-extension/GUIDE.md) for inspection, annotations and visual Git conflict resolution.
 
 For offline/manual installation, download the `.vsix` release asset and use **Extensions: Install from VSIX…**. Select the downloaded file; reload VS Code if prompted. Marketplace and GitHub package versions can differ.
@@ -40,7 +40,7 @@ code --install-extension wayri.kicad-visual-review
 For a downloaded VSIX, replace the filename with the actual package:
 
 ```sh
-code --install-extension ./kicad-visual-review-vscode-0.12.84.vsix
+code --install-extension ./kicad-visual-review-vscode-0.12.85.vsix
 ```
 
 On macOS, VS Code's **Shell Command: Install 'code' command in PATH** enables this optional terminal route. The Extensions UI does not need it.
@@ -77,7 +77,7 @@ For online projects, open a normal repository file page for `.kicad_sch` or `.ki
 
 ## Firefox and derivatives — Windows, Linux and macOS
 
-1. Download the [Firefox 0.12.82 ZIP](https://github.com/wayri/KiCad-Github-View/releases/download/v0.12.82/kicad-visual-review-firefox-0.12.82.zip), verify its checksum and extract it.
+1. Download the [Firefox 0.12.82 ZIP](https://github.com/wayri/KiCad-Online/releases/download/v0.12.82/kicad-visual-review-firefox-0.12.82.zip), verify its checksum and extract it.
 2. In desktop Firefox 128+, open `about:debugging#/runtime/this-firefox`, choose **Load Temporary Add-on**, and select the extracted `manifest.json`.
 3. Click the extension icon for local files/folders, or refresh a GitHub/GitLab design page. Preferences/Options contains optional provider accounts and approved servers.
 4. To update, reload its `about:debugging` card after replacing the extracted files and refresh design tabs. Load it again after restarting Firefox.
@@ -96,7 +96,7 @@ Safari cannot load the Chromium ZIP as a normal extension. The Safari developmen
 
 1. Download the `.apk` release asset on your Android 8+ phone/tablet, or copy it from your computer. Do not download the `.aab` for direct installation.
 2. Open the APK. If Android blocks installation, allow **Install unknown apps** for the specific browser/file manager you used, install it, then turn that permission off if no longer needed. Menu labels vary by device.
-3. Open **Pocket KiView**. Import a project folder/ZIP through the app's file picker, or browse a supported repository.
+3. Open **KiCad Online**. Import a project folder/ZIP through the app's file picker, or browse a supported repository.
 4. Updates are manual: download and install the newer APK over the existing app when its package and signing identity match.
 
 The current GitHub 1.82 APK is a **development-signed preview**. It is not a Play Store release. Development and future distribution/Play signing identities may differ. If Android reports a signature conflict, preserve/export projects and review state before deciding how to migrate; do not immediately uninstall or clear app data. Installing an older version over a newer version may also be rejected.
@@ -151,7 +151,7 @@ A matching hash verifies bytes against the published checksum; it is not a publi
 | --- | --- |
 | Extension folder rejected | Extract the archive; select the folder directly containing `manifest.json` |
 | Toolbar button appears to do nothing | Confirm the extension is enabled, check host permission, reload it and refresh the repository tab; use Options to open the local workspace |
-| VS Code shows source text | Use **Reopen Editor With → KiCad Visual Review** and confirm the extension is enabled |
+| VS Code shows source text | Use **Reopen Editor With → KiCad Online** and confirm the extension is enabled |
 | Private project returns 404/403 | Verify the matching host, repository access and account connection; a 404 may hide denied access |
 | Viewer chrome loads but controls fail | In updated builds, read the startup-error panel and use Options → Connection and browser checks; see [startup diagnostics](VIEWER-RELIABILITY.md) |
 | Managed Chrome/Edge cannot open public files | Ask IT to check `ExtensionSettings` runtime hosts and network access to GitHub, its API and raw source host; the extension cannot override policy |

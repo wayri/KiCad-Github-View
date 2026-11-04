@@ -1,6 +1,6 @@
 # Draftsman drawing sheets
 
-Open **Draftsman** with a loaded PCB to create mechanical and assembly documentation in the current tab. The KiCad design stays read-only. This is a Pocket KiVi document format, not an Altium `.PCBDwf` or Xpedition interchange editor.
+Open **Draftsman** with a loaded PCB to create mechanical and assembly documentation in the current tab. The KiCad design stays read-only. This is a KiCad Online document format, not an Altium `.PCBDwf` or Xpedition interchange editor.
 
 [Illustrated walkthrough](../USER-GUIDE.md#9-create-draftsman-documentation) | [Installation](INSTALL.md) | [Downloads](../README.md#downloads)
 

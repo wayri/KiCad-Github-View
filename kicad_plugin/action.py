@@ -20,16 +20,16 @@ def python_executable(explicit=None):
         sibling = candidate.parent / 'python.exe'
         if sibling.is_file():
             return str(sibling)
-    raise ValueError('A standalone Python interpreter could not be located. Launch Pocket KiView using the documented Python browser command.')
+    raise ValueError('A standalone Python interpreter could not be located. Launch KiCad Online using the documented Python browser command.')
 
 
 def launch_saved_board(board, executable=None):
     filename = board.GetFileName() if board is not None else ''
     if not filename:
-        raise ValueError('Save the PCB first. Pocket KiView reads saved sources; unsaved editor changes are not included.')
+        raise ValueError('Save the PCB first. KiCad Online reads saved sources; unsaved editor changes are not included.')
     source = Path(filename).expanduser().resolve(strict=True)
     if source.suffix.lower() != '.kicad_pcb' or not source.is_file():
-        raise ValueError('Open a saved .kicad_pcb board before launching Pocket KiView.')
+        raise ValueError('Open a saved .kicad_pcb board before launching KiCad Online.')
     bundle = Path(__file__).resolve().parents[1]
     env = os.environ.copy()
     # The deterministic plugin bundle includes the Python module at its root.
@@ -46,7 +46,7 @@ def launch_saved_board(board, executable=None):
 
 class PocketKiViewAction(pcbnew.ActionPlugin):
     def defaults(self):
-        self.name = 'Pocket KiView browser workspace'
+        self.name = 'KiCad Online browser workspace'
         self.category = 'Read-only inspection'
         self.description = 'Open saved schematics, PCB and project assets in the browser alongside KiCad.'
         self.show_toolbar_button = False
@@ -56,4 +56,4 @@ class PocketKiViewAction(pcbnew.ActionPlugin):
             launch_saved_board(pcbnew.GetBoard())
         except (OSError, ValueError) as error:
             import wx
-            wx.MessageBox(str(error), 'Pocket KiView', wx.OK | wx.ICON_INFORMATION)
+            wx.MessageBox(str(error), 'KiCad Online', wx.OK | wx.ICON_INFORMATION)

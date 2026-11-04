@@ -2,19 +2,19 @@
 
 # KiCad GitHub View
 
-[![CI](https://github.com/wayri/KiCad-Github-View/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/wayri/KiCad-Github-View/actions/workflows/ci.yml)
-[![Latest release, including previews](https://img.shields.io/github/v/release/wayri/KiCad-Github-View?include_prereleases&label=release&color=0078d4)](https://github.com/wayri/KiCad-Github-View/releases)
-[![Release downloads](https://img.shields.io/github/downloads/wayri/KiCad-Github-View/total?color=2ea44f)](https://github.com/wayri/KiCad-Github-View/releases)
+[![CI](https://github.com/wayri/KiCad-Online/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/wayri/KiCad-Online/actions/workflows/ci.yml)
+[![Latest release, including previews](https://img.shields.io/github/v/release/wayri/KiCad-Github-View?include_prereleases&label=release&color=0078d4)](https://github.com/wayri/KiCad-Online/releases)
+[![Release downloads](https://img.shields.io/github/downloads/wayri/KiCad-Online/total?color=2ea44f)](https://github.com/wayri/KiCad-Online/releases)
 [![Status: preview](https://img.shields.io/badge/status-preview-orange)](#what-you-can-do)
 [![Chromium: Manifest V3](https://img.shields.io/badge/Chromium-Manifest%20V3-4285f4?logo=googlechrome&logoColor=white)](../docs/INSTALL.md)
 [![VS Code: VSIX](https://img.shields.io/badge/VS%20Code-VSIX-007acc)](../docs/INSTALL.md)
-[![Download Android APK](https://img.shields.io/badge/Download%20Android%20APK-1.53-3DDC84?logo=android&logoColor=white)](https://github.com/wayri/KiCad-Github-View/releases/download/v0.12.41/pocket-kivi-android-phone-tablet-1.53-development.apk)
+[![Download Android APK](https://img.shields.io/badge/Download%20Android%20APK-1.53-3DDC84?logo=android&logoColor=white)](https://github.com/wayri/KiCad-Online/releases/download/v0.12.41/pocket-kivi-android-phone-tablet-1.53-development.apk)
 [![GitHub and GitLab: public and private repositories](https://img.shields.io/badge/GitHub%20%2B%20GitLab-public%20%2B%20private-6f42c1)](../docs/GIT-HOSTS.md)
 [![Design access: read only](https://img.shields.io/badge/design%20access-read--only-2ea44f)](#what-you-can-do)
 
 **Interactive KiCad review inside GitHub and GitLab file pages.** Open schematics and PCB layouts as drawings, inspect saved parts and nets, compare revisions, and anchor review notes to the design. The viewer runs in the browser with our own schematic/PCB engine and the owner-authorized SPIKE 3D adapter. No KiCad installation, local companion process or rendering server is needed for the browser extension.
 
-[Download v0.12.41](https://github.com/wayri/KiCad-Github-View/releases/tag/v0.12.41) · [Android APK](https://github.com/wayri/KiCad-Github-View/releases/download/v0.12.41/pocket-kivi-android-phone-tablet-1.53-development.apk) · [Install](../docs/INSTALL.md) · [Comment integration](../docs/COMMENTS.md) · [Git services](../docs/GIT-HOSTS.md) · [Release notes](../docs/releases/v0.12.41.md)
+[Download v0.12.41](https://github.com/wayri/KiCad-Online/releases/tag/v0.12.41) · [Android APK](https://github.com/wayri/KiCad-Online/releases/download/v0.12.41/pocket-kivi-android-phone-tablet-1.53-development.apk) · [Install](../docs/INSTALL.md) · [Comment integration](../docs/COMMENTS.md) · [Git services](../docs/GIT-HOSTS.md) · [Release notes](../docs/releases/v0.12.41.md)
 
 The workspace has **Project · Schematic · Layout** tabs, with **Split view** and **Compare commits** on the same row. Schematics automatically open their saved root; navigate with the hierarchy tree, double-click sheet symbols, or use the top Back / Forward / Up / Root icons. Parent discovery follows saved links across repository folders, with diagnostics for incomplete or ambiguous hierarchies.
 
@@ -85,7 +85,7 @@ Properties and analytics come from the saved source revision. Missing settings a
 
 ## Install in Chrome or Edge
 
-1. Download **`kicad-visual-review-chrome-edge-brave-opera-vivaldi-chromium-0.12.41.zip`** from [Releases](https://github.com/wayri/KiCad-Github-View/releases/tag/v0.12.41). The GitHub **Source code** archives are not the prepared extension package.
+1. Download **`kicad-visual-review-chrome-edge-brave-opera-vivaldi-chromium-0.12.41.zip`** from [Releases](https://github.com/wayri/KiCad-Online/releases/tag/v0.12.41). The GitHub **Source code** archives are not the prepared extension package.
 2. Extract the ZIP into a permanent folder. Select the folder containing `manifest.json`, not the ZIP itself.
 3. Open `chrome://extensions` in Chrome/Chromium or `edge://extensions` in Edge.
 4. Enable **Developer mode**, select **Load unpacked**, and choose that folder.
@@ -196,7 +196,7 @@ Read [the complete comment guide](../docs/COMMENTS.md) for authentication, permi
 
 ## VS Code installation
 
-Download **`kicad-visual-review-vscode-0.12.41.vsix`** from Releases. In VS Code run **Extensions: Install from VSIX**, select the file and run **Developer: Reload Window**. Open a KiCad project folder and use **KiCad: Open Visual Viewer** or **Reopen Editor With → KiCad Visual Review**. The **KiCad Review** explorer lists saved drawings and review sidecars.
+Download **`kicad-visual-review-vscode-0.12.41.vsix`** from Releases. In VS Code run **Extensions: Install from VSIX**, select the file and run **Developer: Reload Window**. Open a KiCad project folder and use **KiCad: Open Visual Viewer** or **Reopen Editor With → KiCad Online**. The **KiCad Review** explorer lists saved drawings and review sidecars.
 
 ```sh
 code --install-extension kicad-visual-review-vscode-0.12.41.vsix --force
@@ -254,7 +254,7 @@ To publish a new version, update both manifests and release documentation, commi
 
 Copyright owner/licensor: **Yawar B (wayri)**. Owner-authored code is covered by [Pocket KiView Source-Available License 1.0](../LICENSE). Personal and internal professional use and uncompensated redistribution are permitted under its terms; paid distribution, paid bundles and monetized hosted access require separate written permission. This is **source-available, not open source**. Users retain rights to their designs and outputs. Third-party rights remain unchanged. See [LICENSING.md](../LICENSING.md) and [THIRD-PARTY-NOTICES.md](../THIRD-PARTY-NOTICES.md).
 
-Report reproducible problems through [repository Issues](https://github.com/wayri/KiCad-Github-View/issues), including browser/version, public file URL or a shareable minimal fixture, expected behavior and the visible diagnostic. Exclude tokens, private files and credentials. Design/rendering limitations, Git host ports and browser ports can also be discussed there.
+Report reproducible problems through [repository Issues](https://github.com/wayri/KiCad-Online/issues), including browser/version, public file URL or a shareable minimal fixture, expected behavior and the visible diagnostic. Exclude tokens, private files and credentials. Design/rendering limitations, Git host ports and browser ports can also be discussed there.
 
 ## Engineering limits
 
@@ -283,7 +283,7 @@ Measurement labels have opaque theme-aware backplates. For a three-point angle, 
 
 ## Android phone and tablet app
 
-[![Download the latest published Android APK](https://img.shields.io/badge/Download%20Android%20APK-1.53-3DDC84?logo=android&logoColor=white)](https://github.com/wayri/KiCad-Github-View/releases/download/v0.12.41/pocket-kivi-android-phone-tablet-1.53-development.apk)
+[![Download the latest published Android APK](https://img.shields.io/badge/Download%20Android%20APK-1.53-3DDC84?logo=android&logoColor=white)](https://github.com/wayri/KiCad-Online/releases/download/v0.12.41/pocket-kivi-android-phone-tablet-1.53-development.apk)
 
 The button downloads the latest published development APK, **1.50**, directly from release **v0.12.41**. Enable installation from your download source when Android prompts. This is a sideloaded preview; it is not a Play Store release.
 

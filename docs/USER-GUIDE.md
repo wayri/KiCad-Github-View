@@ -1,4 +1,4 @@
-# Pocket KiView user guide
+# KiCad Online user guide
 
 Open saved KiCad projects, inspect schematics and layouts, and record review or assembly findings without a KiCad installation. Design sources are read-only during ordinary viewing. Review notes, assembly progress and variants are separate data; the VS Code conflict resolver is an explicit exception that can write a resolved drawing after confirmation.
 
@@ -32,7 +32,7 @@ For online review, open a supported GitHub/GitLab repository file page. Allow th
 ### VS Code
 
 1. Open the folder containing the project.
-2. Select a `.kicad_sch` or `.kicad_pcb`. If it opens as text, choose **Open With… → KiCad Visual Review**, or run **KiCad: Open Visual Viewer** from the Command Palette.
+2. Select a `.kicad_sch` or `.kicad_pcb`. If it opens as text, choose **Open With… → KiCad Online**, or run **KiCad: Open Visual Viewer** from the Command Palette.
 3. Use the **KiCad Review** Explorer section to change drawings. Run **KiCad: Open Paired Schematic and PCB Review** for a companion editor.
 4. Close and reopen a drawing after external edits. Run **KiCad: Refresh Review Navigator** after adding project files.
 

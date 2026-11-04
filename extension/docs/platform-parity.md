@@ -1,6 +1,6 @@
 # App and browser extension parity
 
-Pocket KiView's Android app and browser extension package the same engineering
+KiCad Online's Android app and browser extension package the same engineering
 viewers and review modules. Open **Engineering tools** in a drawing or project
 to reach standalone imports. The extension opens a bundled tab; Android uses
 its viewer frame.

@@ -1,6 +1,6 @@
 # Photo population and variant review
 
-Pocket KiView shares this inspection workflow between the browser viewer and Android. Open a PCB, choose **Photo & AR review**, import or capture a still photo, and align four known component centers. Retain separately aligned front and back photographs by changing the Side selector. Choose **Population inspection** to review the table against the selected saved variant.
+KiCad Online shares this inspection workflow between the browser viewer and Android. Open a PCB, choose **Photo & AR review**, import or capture a still photo, and align four known component centers. Retain separately aligned front and back photographs by changing the Side selector. Choose **Population inspection** to review the table against the selected saved variant.
 
 Mark each component **Fitted**, **Empty / DNP**, or **Unknown** after inspecting the photo. Empty means visually absent; it does not prove the absence was intentional. A mismatch compares the observed state with the selected variant's population data and does not edit the design or BoM.
 

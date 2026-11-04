@@ -38,7 +38,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--origin', required=True)
     parser.add_argument('--owner', default='wayri')
-    parser.add_argument('--name', default='KiCad Visual Review')
+    parser.add_argument('--name', default='KiCad Online')
     parser.add_argument('--output', default=str(ROOT / '.vizdiff/github-app-registration'))
     args = parser.parse_args()
     try:

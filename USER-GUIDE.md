@@ -1,4 +1,4 @@
-# Pocket KiView illustrated user guide
+# KiCad Online illustrated user guide
 
 **Latest visual walkthrough:** the [0.12.83 capability gallery](docs/SCREENSHOT-GALLERY-0.12.83.md) contains 123 screenshots, including 67 fresh captures from the packaged viewer. Use the [searchable HTML gallery](docs/SCREENSHOT-GALLERY-0.12.83.html) and [coverage/gaps index](docs/CAPABILITY-SCREENSHOT-COVERAGE-0.12.83.md) to find drawings, probes, comments, calculators, assembly, fabrication, Draftsman and saved analysis views. Public-board examples, synthetic fixtures, responsive previews and historical captures are labelled separately. The [0.12.79 real-board walkthrough](docs/SCREENSHOT-GALLERY-0.12.79.md) remains available.
 
@@ -11,7 +11,7 @@ This guide describes the **0.12.77** development source (Android **1.77**); stor
 Start with the [installation guide](docs/INSTALL.md) for Android, Windows, Linux and macOS. Check the [KiCad compatibility matrix](docs/KICAD-COMPATIBILITY.md) before reviewing a new file format. Recognized KiCad 8, 9 and 10 constructs use the shared viewer; coverage is narrower for 8/9, and newer constructs may display warnings or incomplete previews.
 
 
-[Download packages](README.md#downloads) | [Published releases](https://github.com/wayri/KiCad-Github-View/releases) | [Support](mailto:support.kivi@sigharmonic.com)
+[Download packages](README.md#downloads) | [Published releases](https://github.com/wayri/KiCad-Online/releases) | [Support](mailto:support.kivi@sigharmonic.com)
 
 ## Your first five minutes
 
@@ -69,11 +69,11 @@ On a phone, collapse panels to recover drawing space. Use the panel's close/back
 
 1. Download the **Android APK** using the [README download button](README.md#downloads).
 2. Open it on your phone, permit installation from your chosen download app if Android asks, then install. This is a development-signed preview with manual updates, not a Google Play install. Keep the same signing channel; do not uninstall just to bypass a signature mismatch.
-3. Launch **Pocket KiView** and open your project using the steps below.
+3. Launch **KiCad Online** and open your project using the steps below.
 
 <table>
 <tr><th>PCB layout on a physical Samsung phone</th><th>Schematic on a physical phone</th></tr>
-<tr><td align="center"><a href="docs/images/android/marble-phone-layout.png"><img src="docs/images/android/marble-phone-layout.png" width="260" alt="Marble PCB in Pocket KiView on a physical Samsung phone"></a></td><td align="center"><a href="docs/images/android/phone-schematic.png"><img src="docs/images/android/phone-schematic.png" width="260" alt="Android schematic viewer on a physical phone"></a></td></tr>
+<tr><td align="center"><a href="docs/images/android/marble-phone-layout.png"><img src="docs/images/android/marble-phone-layout.png" width="260" alt="Marble PCB in KiCad Online on a physical Samsung phone"></a></td><td align="center"><a href="docs/images/android/phone-schematic.png"><img src="docs/images/android/phone-schematic.png" width="260" alt="Android schematic viewer on a physical phone"></a></td></tr>
 </table>
 
 **Load your files:**
@@ -109,14 +109,14 @@ For online review, open a supported GitHub/GitLab repository file page. Allow th
 
 ### VS Code
 
-Install **KiCad Visual Review**, publisher **wayri**, from the [VS Code Marketplace](https://marketplace.visualstudio.com/items?itemName=wayri.kicad-visual-review). VS Code 1.95+ is required; Windows, Linux and macOS are supported. For offline installation, download the release `.vsix`, run **Extensions: Install from VSIX…**, then reload the window if prompted.
+Install **KiCad Online**, publisher **wayri**, from the [VS Code Marketplace](https://marketplace.visualstudio.com/items?itemName=wayri.kicad-visual-review). VS Code 1.95+ is required; Windows, Linux and macOS are supported. For offline installation, download the release `.vsix`, run **Extensions: Install from VSIX…**, then reload the window if prompted.
 
 | Open the visual editor | Inspect a board inside VS Code |
 | --- | --- |
 | ![VS Code command palette launch command](vscode-extension/images/open-viewer-command.jpg) | ![Installed VS Code PCB inspection](vscode-extension/images/pcb-inspection.jpg) |
 
 1. Open the folder containing the project.
-2. Select a `.kicad_sch` or `.kicad_pcb`. If it opens as text, choose **Open With… → KiCad Visual Review**, or run **KiCad: Open Visual Viewer** from the Command Palette.
+2. Select a `.kicad_sch` or `.kicad_pcb`. If it opens as text, choose **Open With… → KiCad Online**, or run **KiCad: Open Visual Viewer** from the Command Palette.
 3. Use the **KiCad Review** Explorer section to change drawings. Run **KiCad: Open Paired Schematic and PCB Review** for a companion editor.
 4. Close and reopen a drawing after external edits. Run **KiCad: Refresh Review Navigator** after adding project files.
 

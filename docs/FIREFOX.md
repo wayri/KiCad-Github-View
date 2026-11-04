@@ -1,16 +1,16 @@
 # Firefox and Mozilla-based browsers
 
-The Firefox package is an unsigned Manifest V3 WebExtension for **Firefox desktop 140 or later**. It shares the owned schematic, PCB, project, comparison and 3D renderers with the Chromium extension. Packaging and event-page behavior are tested; an installed Firefox session has not yet been visually verified. Android Firefox is not a verified target.
+The Firefox package is an unsigned Manifest V3 WebExtension for **Firefox desktop 140+ and Firefox for Android 142+**. It shares the owned schematic, PCB, project, comparison and 3D renderers with the Chromium extension. Packaging and event-page behavior are tested; an installed Firefox session has not yet been visually verified. Firefox Android is declared as a target; physical-device extension acceptance remains pending. Desktop pop-out actions use an internal viewer tab on Android when its windows API is absent.
 
-Current preview candidate: [Firefox 0.12.83 ZIP](https://github.com/wayri/KiCad-Github-View/releases/download/v0.12.83/kicad-visual-review-firefox-0.12.83.zip). Verify the release's `SHA256SUMS.txt` as described in [download verification](INSTALL.md#verify-downloads). Use this Firefox-specific artifact, not the Chromium ZIP or automatic source archive.
+Current published GitHub preview: [Firefox 0.12.84 ZIP](https://github.com/wayri/KiCad-Online/releases/download/v0.12.84/kicad-visual-review-firefox-0.12.84.zip). Verify the release's `SHA256SUMS.txt` as described in [download verification](INSTALL.md#verify-downloads). Use this Firefox-specific artifact, not the Chromium ZIP or automatic source archive.
 
 | Goal | Available route |
 | --- | --- |
 | Try desktop Firefox | Temporary installation below; reload after browser restart |
-| Install permanently | Requires a Mozilla-signed XPI; none is published for this project yet |
+| Install permanently | Use the existing Mozilla listing for its approved version; newer GitHub ZIPs are unsigned |
 | Publish on Mozilla Add-ons (AMO) | Complete the publisher steps and consent-readiness gate below |
 | Try Zen, LibreWolf or Waterfox | Firefox-package compatibility candidates; installed acceptance is unverified |
-| Use on Android now | [Pocket KiView APK](INSTALL.md#android--apk-installation); Firefox Android acceptance is pending |
+| Use on Android now | [KiCad Online APK](INSTALL.md#android--apk-installation); Firefox Android acceptance is pending |
 
 ## Temporary installation
 
@@ -26,7 +26,7 @@ For files on your computer, click the extension icon, then **Open files** or **O
 
 ## Persistent installation after Mozilla signing
 
-These instructions apply to a future signed release, not the current unsigned ZIP:
+These instructions apply to signed distribution; the GitHub development ZIP remains unsigned:
 
 1. For a published official AMO listing, open its link in Firefox, choose **Add to Firefox**, and review permissions.
 2. For a self-distributed signed XPI, save it, open `about:addons`, open the settings gear and choose **Install Add-on From File…**. Select the signed `.xpi` and review the prompt.
@@ -50,7 +50,7 @@ Before relying on a derivative, test folder import, public repository viewing, s
 
 ## Firefox on Android
 
-This release is a desktop-targeted unsigned preview, not a mobile-certified add-on. Desktop `about:debugging` is not an end-user Android installation route. Use the [Android APK](INSTALL.md#android--apk-installation) for the supported phone/tablet app.
+The 0.12.85 candidate includes a constrained mobile internal-tab fallback and declares Firefox Android 142+. This is not a claim of physical-device acceptance or Mozilla approval. Desktop `about:debugging` is not an end-user Android installation route. Use the [Android APK](INSTALL.md#android--apk-installation) for the supported phone/tablet app.
 
 After a mobile-compatible extension has been tested and signed, Mozilla supports installing compatible extensions through its Android add-on catalog. Its [signed-XPI Android instructions](https://extensionworkshop.com/documentation/publish/install-self-distributed/#install-add-on-from-file-on-android) also describe: save the XPI; open **Settings → About Firefox**; tap the logo five times; return to **Settings → Install Extension from File**; select it and review permissions. Menu availability varies by browser/build. This is a future distribution route, not a claim that the current ZIP supports Android or bypasses signing.
 
@@ -63,7 +63,7 @@ After a mobile-compatible extension has been tested and signed, Mozilla supports
 3. Choose **On this site** for a public AMO listing, or **On your own** for a signed package distributed from GitHub/your site. Both routes require signing; unlisted does not mean unsigned.
 4. Upload the newly prepared **Firefox** ZIP with `manifest.json` at its root. Resolve validation errors and review warnings. Declare desktop/Android platforms only after actual testing.
 5. Supply readable source and exact build instructions for bundled/minified JavaScript and WASM, including relevant renderer/STEP sources, dependency versions and notices. Do not substitute a source-map link or include private designs, keys or tokens. See [source submission](https://extensionworkshop.com/documentation/publish/source-code-submission/).
-6. Provide listing text, genuine Firefox screenshots, license, accurate data disclosures and the [privacy policy](https://wayri.github.io/KiCad-Github-View/privacy.html). Use `support.kivi@sigharmonic.com` and [public support](https://github.com/wayri/KiCad-Github-View/issues). Adapt the [listing draft](STORE-LISTINGS.md) to the Firefox limits here; Chrome/Edge captures are not installed-Firefox evidence.
+6. Provide listing text, genuine Firefox screenshots, license, accurate data disclosures and the [privacy policy](https://wayri.github.io/KiCad-Online/privacy.html). Use `support.kivi@sigharmonic.com` and [public support](https://github.com/wayri/KiCad-Online/issues). Adapt the [listing draft](STORE-LISTINGS.md) to the Firefox limits here; Chrome/Edge captures are not installed-Firefox evidence.
 7. Provide a public sample and repeatable reviewer instructions. Account access is optional for public/local review; dedicated reviewer credentials belong only in private AMO fields.
 8. Submit for review. After signing, download the signed XPI and test clean-profile installation, restart, permissions and representative designs. Publish the actual AMO URL or signed XPI/hash after verifying them.
 9. Increment the version for updates, retaining the add-on ID and existing AMO item. Listed distribution can use AMO updates; self-distribution needs a documented update mechanism or explicit installation of each newly signed XPI. The current ZIP does not auto-update.
@@ -109,8 +109,12 @@ Implementation references: Mozilla documents [background scripts](https://develo
 
 ## Firefox 0.12.67 validation corrections
 
-The Firefox archive uses its own unsupported-vault stub; provider modules retain encrypted event-page session credentials without Chromium offscreen APIs. Saved HTML analysis reports are tokenized as bounded text/table data, with no privileged HTML insertion. Desktop Firefox remains 140+; the Android manifest floor is 142 for built-in data consent, while Android installation remains unverified and is excluded from this AMO submission.
+The Firefox archive uses its own unsupported-vault stub; provider modules retain encrypted event-page session credentials without Chromium offscreen APIs. Saved HTML analysis reports are tokenized as bounded text/table data, with no privileged HTML insertion. Desktop Firefox remains 140+; the Android manifest floor is 142 for built-in data consent, while physical Android extension acceptance remains unverified. The 0.12.84 upload selected both desktop and Android; the 0.12.85 candidate adds the mobile viewer-tab fallback.
 
 Firefox PDFs use the browser's built-in PDF viewer, with local/project PDF intake, an Open in Firefox action and a download fallback. No PDF.js library fork is included in the Firefox ZIP. Search, zoom, rotation, printing and password handling depend on Firefox's native viewer and settings; the shared custom PDF.js page/search/render budgets do not apply to that native viewer. PDF input remains bounded to 32 MiB. Chromium, Android and VS Code retain their existing platform-specific PDF path.
 
 Historical note: the initial AMO 0.12.66 listing was restricted during submission. The owner later supplied a tentative automated approval notice for that version. Current dashboard availability was not independently confirmed during 0.12.83 preparation. Do not treat the unsigned development ZIP, the old notice or a clean validator report as approval of the new candidate.
+
+## KiCad Online branding and current candidate
+
+The product is now **KiCad Online**; its existing Mozilla listing URL and add-on ID remain stable. The dashboard independently showed 0.12.66 Approved before the 0.12.84 update upload. Validation for 0.12.84 returned zero errors and warnings; validation is not approval. The fresh 0.12.85 candidate includes updated branding and the Firefox Android tab fallback. Its focused mobile API tests cover internal routes, desktop behavior, invalid requests and policy rejection; actual signed mobile installation, provider authentication, touch controls and 3D still require device acceptance.

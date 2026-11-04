@@ -1,6 +1,6 @@
 # Repository comment policy
 
-Place `.kicad-review-policy.json` at the **root of the target GitHub repository's current default branch** to control publishing through the KiCad Visual Review browser extension. For a pull request from a fork, the target is the base repository where its Issue or Discussion lives; the drawing's fork revision remains only the note anchor. The extension rereads the default-branch policy immediately before each new GitHub post. A historical or fork revision cannot select a weaker rule.
+Place `.kicad-review-policy.json` at the **root of the target GitHub repository's current default branch** to control publishing through the KiCad Online browser extension. For a pull request from a fork, the target is the base repository where its Issue or Discussion lives; the drawing's fork revision remains only the note anchor. The extension rereads the default-branch policy immediately before each new GitHub post. A historical or fork revision cannot select a weaker rule.
 
 Example:
 

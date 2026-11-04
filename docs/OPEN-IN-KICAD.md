@@ -15,8 +15,8 @@ the helper does not bypass those policies.
 ## Windows setup
 
 Requirements: Python 3.10 or newer, an installed KiCad distribution containing
-`kicad.exe`, `eeschema.exe` and `pcbnew.exe` together, and the Pocket KiVi extension.
-Download and extract the [Windows helper source ZIP](https://github.com/wayri/KiCad-Github-View/releases/download/v0.12.68/pocket-kivi-windows-kicad-helper-0.12.68.zip), or use a trusted checkout of this project. From its root, run:
+`kicad.exe`, `eeschema.exe` and `pcbnew.exe` together, and the KiCad Online extension.
+Download and extract the [Windows helper source ZIP](https://github.com/wayri/KiCad-Online/releases/download/v0.12.68/pocket-kivi-windows-kicad-helper-0.12.68.zip), or use a trusted checkout of this project. From its root, run:
 
 ```powershell
 python scripts/install_native_host.py --chrome-id YOUR_CHROME_EXTENSION_ID --kicad 'C:\Program Files\KiCad\9.0\bin\kicad.exe'
@@ -49,7 +49,7 @@ unit tests do not establish compatibility with a managed installation.
 ## Updating or removing the helper
 
 The installer deliberately refuses an existing installation or registration.
-To update, close the browser, remove the previous **Pocket KiVi helper only**,
+To update, close the browser, remove the previous **KiCad Online helper only**,
 then rerun the installer. Keep all downloaded projects.
 
 In Registry Editor, remove only the host's keys for browsers you installed:

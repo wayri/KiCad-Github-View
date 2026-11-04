@@ -137,7 +137,7 @@ async function updateGitHubBadge() {
   await chrome.action.setBadgeBackgroundColor({ color: status.configured ? '#238636' : '#6e7681' });
   await chrome.action.setBadgeText({ text: status.configured ? '●' : '' });
   await chrome.action.setTitle({ title: status.configured ?
-    'KiCad Visual Review — GitHub connected' : 'KiCad Visual Review — GitHub signed out' });
+    'KiCad Online — GitHub connected' : 'KiCad Online — GitHub signed out' });
 }
 // Clear a stale connected badge when a new worker cannot unlock the old session.
 updateGitHubBadge().catch(() => {});
@@ -1058,7 +1058,7 @@ async function openFromAction(tab) {
 }
 
 chrome.action.onClicked.addListener((tab) => openFromAction(tab).catch(async error => {
-  console.error('Pocket KiView could not open its workspace.', error);
+  console.error('KiCad Online could not open its workspace.', error);
   await chrome.runtime.openOptionsPage();
 }));
 

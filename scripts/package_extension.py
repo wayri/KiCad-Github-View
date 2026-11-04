@@ -67,7 +67,7 @@ def version_metadata(root: Path, platform: str) -> dict[str, str]:
 
 
 def version_text(metadata: dict[str, str]) -> bytes:
-    return ('Pocket KiView\nRelease: '+metadata['release']+'\nAppVersion: '+metadata['appVersion']+
+    return ('KiCad Online\nRelease: '+metadata['release']+'\nAppVersion: '+metadata['appVersion']+
             '\nPlatform: '+metadata['platform']+'\n').encode('utf-8')
 
 

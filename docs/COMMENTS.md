@@ -1,6 +1,6 @@
 # Review comments and Git host integration
 
-KiCad Visual Review stores comments alongside the design context they refer to: repository, revision, KiCad file, optional object identity or reference, and a point or rectangular area in drawing coordinates. Each note can also carry severity (`info`, `level-1`, `minor`, `major`, or `critical`), tags, mentions, text, timestamps, and a local state (`open`, `closed`, `skipped`, `resolved`, or `wont-fix`). Area captures can include a PNG. These annotations help reviewers discuss saved design data; they do not modify the schematic or board.
+KiCad Online stores comments alongside the design context they refer to: repository, revision, KiCad file, optional object identity or reference, and a point or rectangular area in drawing coordinates. Each note can also carry severity (`info`, `level-1`, `minor`, `major`, or `critical`), tags, mentions, text, timestamps, and a local state (`open`, `closed`, `skipped`, `resolved`, or `wont-fix`). Area captures can include a PNG. These annotations help reviewers discuss saved design data; they do not modify the schematic or board.
 
 ## Version 0.12.77 workflow
 

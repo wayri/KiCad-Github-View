@@ -45,9 +45,9 @@
   if(!d.body.classList.contains('android-home'))return;
   const header=d.querySelector('body>header'),title=header.querySelector('strong');title.id='appTitle';
   const menu=sheet('appMenuDialog','Library and accounts');API.openMenu=()=>openSheet(menu.dialog);
-  const privacy=sheet('androidPrivacyDialog','Privacy policy');privacy.dialog.classList.add('android-reader-dialog');const policy=make('iframe');policy.title='Pocket KiView privacy policy';policy.src='privacy.html';policy.setAttribute('sandbox','');privacy.content.append(policy);const privacyButton=button('Privacy policy',()=>openSheet(privacy.dialog));privacyButton.id='androidPrivacyButton';menu.content.append(privacyButton);
+  const privacy=sheet('androidPrivacyDialog','Privacy policy');privacy.dialog.classList.add('android-reader-dialog');const policy=make('iframe');policy.title='KiCad Online privacy policy';policy.src='privacy.html';policy.setAttribute('sandbox','');privacy.content.append(policy);const privacyButton=button('Privacy policy',()=>openSheet(privacy.dialog));privacyButton.id='androidPrivacyButton';menu.content.append(privacyButton);
   for(const [id,title,file,icon]of [['androidAbout','About','about.html','info'],['androidReadMe','Read Me','readme.html','sheet'],['androidTerms','Terms & disclaimers','terms.html','info']]){
-   const reader=sheet(id+'Dialog',title);reader.dialog.classList.add('android-reader-dialog');const frame=make('iframe');frame.title='Pocket KiView '+title;frame.src=file;frame.setAttribute('sandbox','');reader.content.append(frame);
+   const reader=sheet(id+'Dialog',title);reader.dialog.classList.add('android-reader-dialog');const frame=make('iframe');frame.title='KiCad Online '+title;frame.src=file;frame.setAttribute('sandbox','');reader.content.append(frame);
    const entry=button(title,()=>openSheet(reader.dialog));entry.id=id+'Button';entry.dataset.icon=icon;menu.content.append(entry);
   }
   header.prepend(button('Menu',API.openMenu));header.firstChild.id='appMenuButton';
@@ -70,7 +70,7 @@
    const scopeHelp=[...content.children].find(node=>node.classList?.contains('github-help')&&node!==intro);
    if(scopeHelp){const info=make('details');info.append(make('summary','Permissions and privacy'),scopeHelp);content.insertBefore(info,account.nextElementSibling?.nextElementSibling||null);}
   }
-  const update=()=>{const opened=!$('viewer').hidden;d.body.classList.toggle('android-viewing',opened);copy.disabled=!root.KiCadAndroidProject;tempCopy.disabled=!(root.KiCadAndroidProject?.github||root.KiCadAndroidProject?.remote);const p=root.KiCadAndroidProject;title.textContent=p?.name||'Pocket KiView';};new MutationObserver(update).observe($('viewer'),{attributes:true,attributeFilter:['hidden','src']});update();
+  const update=()=>{const opened=!$('viewer').hidden;d.body.classList.toggle('android-viewing',opened);copy.disabled=!root.KiCadAndroidProject;tempCopy.disabled=!(root.KiCadAndroidProject?.github||root.KiCadAndroidProject?.remote);const p=root.KiCadAndroidProject;title.textContent=p?.name||'KiCad Online';};new MutationObserver(update).observe($('viewer'),{attributes:true,attributeFilter:['hidden','src']});update();
  }
  function drawing(){
   if(!$('frameControls')||$('androidViewToolbar')||!$('universalSearch'))return;

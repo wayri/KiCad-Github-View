@@ -1,5 +1,5 @@
 {
-  "name": "KiCad Visual Review",
+  "name": "KiCad Online",
   "url": "https://YOUR-SERVICE.example",
   "setup_url": "https://YOUR-SERVICE.example/setup",
   "description": "Interactive browser-rendered KiCad schematic, PCB and SPIKE 3D review from GitHub pull requests.",

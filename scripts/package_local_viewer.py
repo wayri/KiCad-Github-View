@@ -30,7 +30,7 @@ def payload(root=ROOT):
     result['web/local-assets.json'] = (json.dumps({'files': [name for name in names if name != 'LICENSE.txt']}, indent=2) + '\n').encode()
     for name in PYTHON:
         result[name] = (root / name).read_bytes()
-    result['__init__.py'] = b'"""Pocket KiView legacy PCB launcher."""\nfrom . import kicad_plugin\n'
+    result['__init__.py'] = b'"""KiCad Online legacy PCB launcher."""\nfrom . import kicad_plugin\n'
     result['README.md'] = (root / 'docs/LOCAL-VIEWER.md').read_bytes()
     return result
 

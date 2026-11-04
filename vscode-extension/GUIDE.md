@@ -1,4 +1,4 @@
-# KiCad Visual Review — user guide
+# KiCad Online — user guide
 
 Inspect KiCad schematics and PCB layouts beside your code, review assembly data, and resolve marker-based Git conflicts with a visual comparison. Open saved project files directly in VS Code without installing KiCad. Ordinary inspection leaves the design files unchanged; resolving a conflict is an explicit, confirmed write action.
 
@@ -22,8 +22,8 @@ Screenshots show the installed extension with the public KiCad 10 PIC Programmer
 
 ## Start a review
 
-1. Install **KiCad Visual Review** and open a folder containing your saved KiCad project.
-2. Select a `.kicad_sch` or `.kicad_pcb` in Explorer. If it opens as text, use **Open With… → KiCad Visual Review**, or run **KiCad: Open Visual Viewer** from the Command Palette.
+1. Install **KiCad Online** and open a folder containing your saved KiCad project.
+2. Select a `.kicad_sch` or `.kicad_pcb` in Explorer. If it opens as text, use **Open With… → KiCad Online**, or run **KiCad: Open Visual Viewer** from the Command Palette.
 3. Use the **KiCad Review** section in Explorer to switch drawings. Inside the viewer, open **Explorer** for Parts, Nets and Layers, or use search to locate a reference, value or net.
 4. Run **KiCad: Open Paired Schematic and PCB Review** to open the companion drawing beside it. Select a part or net to follow it between the two views where the saved identities match.
 5. Add findings in **Review**, then inspect the generated `.kicad-review.json` in Source Control. Commit that sidecar with the project when you want to share the review history.
@@ -173,7 +173,7 @@ Packaging prepares the explicit shared media and writes an installable VSIX to `
 
 Automated checks cover virtual URIs, hierarchy bounds, the private bridge, annotations, conflict actions, content security policy and package contents. Installed desktop/web-host checks remain necessary.
 
-[Source and issue tracker](https://github.com/wayri/KiCad-Github-View) · [Support](mailto:support.kivi@sigharmonic.com)
+[Source and issue tracker](https://github.com/wayri/KiCad-Online) · [Support](mailto:support.kivi@sigharmonic.com)
 
 ## License
 
@@ -183,7 +183,7 @@ Copyright (c) 2026 Yawar B (wayri). Pocket KiView Source-Available License 1.0 a
 
 | Symptom | What to try |
 | --- | --- |
-| Drawing opens as source text | Use Open With → KiCad Visual Review, or run KiCad: Open Visual Viewer. |
+| Drawing opens as source text | Use Open With → KiCad Online, or run KiCad: Open Visual Viewer. |
 | A drawing or sidecar changed outside the viewer | Close and reopen the drawing to load its saved snapshot. |
 | New project files are absent from the navigator | Run KiCad: Refresh Review Navigator. |
 | A 3D model is missing | Supply a supported model inside the workspace; check the model path and size limits above. Absolute paths and unresolved library variables are unsupported. |

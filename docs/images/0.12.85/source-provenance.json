@@ -1,0 +1,17 @@
+{
+  "purpose": "Fresh KiCad Online branding captures",
+  "viewer": "current source, production local-project transport and viewers",
+  "captureStatus": "Capture in root browser session; image files must be verified separately",
+  "privateDataIncluded": false,
+  "board": {
+    "repository": "OLIMEX/ESP32-POE",
+    "revision": "deb38a377d50eadb04ddc7118a17a5ae58b1ee53",
+    "folder": "HARDWARE/ESP32-PoE-hardware-revision-M2",
+    "corpusSha256": "32217727ae33ed46bccf4f71191faf099696941c544d42b5d95297965912dd55"
+  },
+  "limitations": [
+    "Current-source browser preview does not prove packaged or installed-extension behavior",
+    "No physical Android acceptance is established",
+    "Linked model completeness must be read from actual rendering diagnostics"
+  ]
+}

@@ -1,6 +1,6 @@
-# Pocket KiView Terms of Service
+# KiCad Online Terms of Service
 
-Version: 2026-10-10. Applies to Pocket KiView (Portable KiCAD Viewer) and its companion review interfaces. Support and reports: support.kivi@sigharmonic.com, answered as Pocket KiView team.
+Version: 2026-10-10. Applies to KiCad Online (Portable KiCAD Viewer) and its companion review interfaces. Support and reports: support.kivi@sigharmonic.com, answered as KiCad Online team.
 
 ## Agreement and scope
 
@@ -8,9 +8,9 @@ Read these terms before using the app. By accepting them, you agree to these ter
 
 ## A companion viewer, not engineering approval
 
-Pocket KiView helps view, compare, annotate and review supported project files and saved analysis. Rendering, geometry, properties, comparisons, connectivity highlights, BoM output, 3D stand-ins, rule reports and simulation graphs may be incomplete, inaccurate, outdated or incompatible with particular file versions. A displayed report or saved simulation is not proof that checks were rerun or that a design is safe, correct, compliant or manufacturable. Missing warnings do not mean there are no defects.
+KiCad Online helps view, compare, annotate and review supported project files and saved analysis. Rendering, geometry, properties, comparisons, connectivity highlights, BoM output, 3D stand-ins, rule reports and simulation graphs may be incomplete, inaccurate, outdated or incompatible with particular file versions. A displayed report or saved simulation is not proof that checks were rerun or that a design is safe, correct, compliant or manufacturable. Missing warnings do not mean there are no defects.
 
-Independently verify important results using the original project, appropriate native tools, qualified engineering review and relevant physical tests. Do not use Pocket KiView as the sole basis for fabrication, regulatory approval or safety-critical decisions, including medical, aviation, automotive, industrial protection or hazardous-energy applications. The app does not provide professional engineering, legal or certification services.
+Independently verify important results using the original project, appropriate native tools, qualified engineering review and relevant physical tests. Do not use KiCad Online as the sole basis for fabrication, regulatory approval or safety-critical decisions, including medical, aviation, automotive, industrial protection or hazardous-energy applications. The app does not provide professional engineering, legal or certification services.
 
 ## Files, edits, storage and backups
 
@@ -30,11 +30,11 @@ Keep reviews relevant and respectful. Do not post or facilitate harassment, hate
 
 ## Reports and moderation
 
-Report abusive content or users through the app or support.kivi@sigharmonic.com. The app's report action opens an email draft; a report is sent only when you send it. Local blocking hides content in your app profile and does not block a provider account. The Pocket KiView team may restrict supported interactions in response to abuse, subject to applicable law. Provider moderators and repository owners control content removal and remote account actions. Reports may require follow-up; there is no guarantee of immediate review, removal or continuous monitoring. For imminent danger, contact appropriate local emergency services rather than relying on an app report.
+Report abusive content or users through the app or support.kivi@sigharmonic.com. The app's report action opens an email draft; a report is sent only when you send it. Local blocking hides content in your app profile and does not block a provider account. The KiCad Online team may restrict supported interactions in response to abuse, subject to applicable law. Provider moderators and repository owners control content removal and remote account actions. Reports may require follow-up; there is no guarantee of immediate review, removal or continuous monitoring. For imminent danger, contact appropriate local emergency services rather than relying on an app report.
 
 ## Software rights and independence
 
-Use of distributed app features does not grant ownership of the software or a blanket license to redistribute, modify or commercially exploit publicly visible source. Separate written licenses, distribution terms and third-party notices control those rights. Rights granted by applicable law or third-party licenses remain intact. Pocket KiView is an independent companion and is not affiliated with, endorsed by or certified by KiCad, GitHub, GitLab or their trademark owners.
+Use of distributed app features does not grant ownership of the software or a blanket license to redistribute, modify or commercially exploit publicly visible source. Separate written licenses, distribution terms and third-party notices control those rights. Rights granted by applicable law or third-party licenses remain intact. KiCad Online is an independent companion and is not affiliated with, endorsed by or certified by KiCad, GitHub, GitLab or their trademark owners.
 
 ## Disclaimers and liability
 

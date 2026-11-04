@@ -1,4 +1,4 @@
-# Pocket KiView local browser workspace
+# KiCad Online local browser workspace
 
 Open saved schematics and PCBs in a browser alongside KiCad, or independently.
 The viewer requires no KiCad installation and no internet connection. Its parsers,
@@ -38,7 +38,7 @@ independent. **Project** opens the shared project tree and setup interface.
 Build or download `pocket-kiview-local-preview-<version>.zip`. Extract its
 `pocket_kiview` directory, intact, into the scripting/plugins directory used by
 your KiCad installation. Reload plugins/restart the PCB editor. In PCB Editor,
-choose Tools → External Plugins → **Pocket KiView browser workspace**.
+choose Tools → External Plugins → **KiCad Online browser workspace**.
 
 The action reads the filename of the saved PCB and opens that file's parent
 project folder in the default browser. It does not save the board, change the

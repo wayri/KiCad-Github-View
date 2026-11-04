@@ -1,0 +1,38 @@
+KiCad Online
+
+Open a KiCad project from GitHub, GitLab or your computer and explore its schematic, PCB layout and 3D view in your browser. KiCad Online is an independent viewer and review tool, formerly Pocket KiView / KiCad Visual Review. It is not affiliated with or endorsed by KiCad, GitHub or GitLab. Local and offline viewing remain available.
+
+OPEN YOUR PROJECT
+Click the extension icon on a repository page. One detected project opens in a dedicated viewer tab; multiple projects offer a chooser. Optional in-page viewing is available when explicitly requested. Ordinary pages are not automatically replaced. Import local files, a project folder or a supported ZIP for local review.
+
+Supported repository files load through the selected site's signed-in browser session without a broad repository OAuth account. This does not bypass organization access controls, SSO, download restrictions or browser policy. Access to the selected site is required; missing or blocked files are reported.
+
+EXPLORE AND CROSS-PROBE
+Switch between schematic, layout and supported 3D models. Search parts, pins, nets and project data; follow sheet hierarchy and view multiple sheets. Inspect layers, pin/pad numbers, net labels and component fields. Use selection filters, measurements and independently navigable cross-probe pop-ups. Detach browser views with linked selection where the platform supports it.
+
+REVIEW AND COLLABORATE
+Keep point or rectangular-area notes with drawing path, revision and location metadata. Browse supported Issue and Discussion threads, filter by state or severity, mention users and explicitly send a review or reply. Supported GitHub website-session Issue workflows can send and read back comments without connecting a broad repository OAuth account. Other operations may require an optional account and repository permissions. Local notes never post automatically. Refresh and polling depend on provider limits and browser/background behavior; delivery is not guaranteed real-time.
+
+ASSEMBLY, DOCUMENTS AND SAVED RESULTS
+Explore a grouped BoM, select columns, track local assembly progress and export tables. Inspect supported Gerber, drill and fabrication-job data. Create mechanical Draftsman documents and export supported outputs. Display supported saved KiCad simulation data and separate wayriCAD-compatible analysis exports. Load saved ERC/DRC reports to inspect drawing markers and full messages.
+
+EXPERIMENTAL FAST PI
+Select source and load contacts for fixed-temperature, single-net DC screening on supported saved board copper. Inspect voltage/drop, current and available overlays. Results depend on geometry and stated assumptions. Smooth colors are interpolation, not increased numerical accuracy. This is not validated sign-off analysis.
+
+WHAT'S NEW IN 0.12.85
+One public name across browsers, VS Code and Android: KiCad Online. The repository is now wayri/KiCad-Online. Existing extension IDs, installed settings and Android app identity are retained. Firefox Android gains an internal-tab fallback for desktop pop-out actions. Product titles, About, documentation and store copy are refreshed. No new permissions. The Altium beta remains separate and excluded.
+
+LIMITS AND PRIVACY
+Native KiCad ERC/DRC and simulation engines do not run in this extension. Saved results are displayed, not recomputed by those engines. File constructs and model formats have differing coverage; missing assets and unsupported constructs are disclosed. Do not assume complete KiCad version certification, complete DFM or universal private-organization access. Validate engineering decisions with appropriate native tools.
+
+Viewer logic and decoders are bundled. Files are processed locally for viewing; explicit provider actions transfer the data needed for that operation. Optional HTML preview is isolated from privileged extension APIs. Review the privacy policy and requested site permissions before enabling connected features.
+
+GUIDES AND SUPPORT
+User guide: https://github.com/wayri/KiCad-Online/blob/main/USER-GUIDE.md
+Downloads and compatibility: https://github.com/wayri/KiCad-Online
+Support: https://github.com/wayri/KiCad-Online/issues
+Private support: support.kivi@sigharmonic.com
+VS Code: https://marketplace.visualstudio.com/items?itemName=wayri.kicad-visual-review
+Firefox: https://addons.mozilla.org/addon/pocket-kiview-kicad-review/
+
+Licensed under the existing Pocket KiView Source-Available License 1.0. The rename does not change the license or third-party notices.

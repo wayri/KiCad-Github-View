@@ -7,7 +7,7 @@ The repository is prepared for GitHub under owner `wayri`. Its extension release
 Create the intended repository under your GitHub account with the intended visibility, without an initial README or license. Connect this existing local checkout:
 
 ```sh
-git remote add origin https://github.com/wayri/KiCad-Github-View.git
+git remote add origin https://github.com/wayri/KiCad-Online.git
 git push -u origin main
 ```
 
@@ -41,6 +41,6 @@ Outputs: Chromium ZIP, unsigned Firefox development ZIP, Safari macOS developmen
 
 ## Next version
 
-Update the browser and VS Code manifest versions together, add `docs/releases/vX.Y.Z.md`, update the installation guide's filenames and package-test expectations, and commit the changes. Run the release checks, create `git tag -a vX.Y.Z -m 'KiCad Visual Review vX.Y.Z'`, and push the branch/tag. The tag must exactly match both manifests and point to the checkout being built. The current workflow publishes prereleases; change that policy explicitly when stable acceptance is complete.
+Update the browser and VS Code manifest versions together, add `docs/releases/vX.Y.Z.md`, update the installation guide's filenames and package-test expectations, and commit the changes. Run the release checks, create `git tag -a vX.Y.Z -m 'KiCad Online vX.Y.Z'`, and push the branch/tag. The tag must exactly match both manifests and point to the checkout being built. The current workflow publishes prereleases; change that policy explicitly when stable acceptance is complete.
 
 See [workflow details](release-ci.md). Source archives inherit repository visibility and licensing. Marketplace listings, payment/billing, App hosting and choosing a future open-source engine license are separate deliverables.

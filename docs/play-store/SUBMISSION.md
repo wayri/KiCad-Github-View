@@ -1,4 +1,4 @@
-# Pocket KiView Google Play submission checklist
+# KiCad Online Google Play submission checklist
 > Current preparation — 2026-10-24: Android 1.59/code62 upload-signed internal-test candidate is `dist/play-android-1.59/pocket-kiview-play-1.59.aab`. Release build and vital lint passed; packaged BoM reset asset matches source. `candidate-manifest.json` records checksum, certificate and validation limits. Not uploaded or Play-validated. Device acceptance, Data Safety/policy refresh (including camera), reviewer access and account gates remain pending. Earlier versions below are historical.
 
 
@@ -83,4 +83,4 @@ Stage the viewer with `python scripts/package_android.py`, then run `android-app
 - [Data Safety](https://support.google.com/googleplay/android-developer/answer/10787469?hl=en)
 - [Testing requirements for new personal accounts](https://support.google.com/googleplay/android-developer/answer/14151465?hl=en)
 
-These links are the source of the submission gates, not evidence that Pocket KiView has already satisfied them.
+These links are the source of the submission gates, not evidence that KiCad Online has already satisfied them.

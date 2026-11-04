@@ -1,4 +1,4 @@
-# Chrome Web Store — copy/paste fields (0.12.72)
+# Chrome Web Store — copy/paste fields (0.12.85)
 
 Upload only the extension ZIP as the package, not this folder or a VSIX. The uploaded title/summary come from the manifest. Use [CHROME-STORE-DESCRIPTION.txt](CHROME-STORE-DESCRIPTION.txt) for the Description field; the upload folder also includes it as description.txt. Its headings and bullet lists are plain text, without Markdown syntax.
 
@@ -9,8 +9,8 @@ Upload only the extension ZIP as the package, not this folder or a VSIX. The upl
 - Store icon: store-icon-128.png.
 - Global promo video: leave blank unless you have a real video URL.
 - Official URL: None unless your account has verified a website you own.
-- Homepage URL: https://github.com/wayri/kiview-marketplace-assets/blob/main/CHROME-HOME.md
-- Support URL: https://github.com/wayri/kiview-marketplace-assets/blob/main/SUPPORT.md
+- Homepage URL: https://github.com/wayri/KiCad-Online
+- Support URL: https://github.com/wayri/KiCad-Online/issues
 - Mature content: Off.
 - Contact/support email where requested: support.kivi@sigharmonic.com.
 - Screenshots: genuine Chrome-extension captures, 1280×800 or 640×400, JPEG or 24-bit PNG without alpha. At least one is required; up to five. Three actual Chrome captures are available in screenshots/ and chrome-store-screenshots.zip.
@@ -18,7 +18,7 @@ Upload only the extension ZIP as the package, not this folder or a VSIX. The upl
 
 ## Privacy
 
-Privacy policy URL: https://wayri.github.io/KiCad-Github-View/chrome-privacy.html
+Privacy policy URL: https://wayri.github.io/KiCad-Online/chrome-privacy.html
 
 Single purpose:
 Visually inspect and review saved KiCad engineering project files locally and on supported GitHub/GitLab repository pages.

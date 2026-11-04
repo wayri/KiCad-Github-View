@@ -1,8 +1,8 @@
 {
   "name": "kicad-visual-review",
-  "displayName": "KiCad Visual Review",
+  "displayName": "KiCad Online",
   "description": "View KiCad schematics and PCBs, inspect nets and assembly fields, and resolve Git conflicts visually.",
-  "version": "0.12.84",
+  "version": "0.12.85",
   "publisher": "wayri",
   "license": "SEE LICENSE IN LICENSE.txt",
   "engines": {
@@ -37,7 +37,7 @@
   },
   "contributes": {
     "configuration": {
-      "title": "KiCad Visual Review deployment",
+      "title": "KiCad Online deployment",
       "properties": {
         "kicadVisualReview.networkAccess": {
           "type": "boolean", "default": true, "scope": "application", "ignoreSync": true,
@@ -86,7 +86,7 @@
     "customEditors": [
       {
         "viewType": "kicadVisualReview.viewer",
-        "displayName": "KiCad Visual Review",
+        "displayName": "KiCad Online",
         "selector": [
           {
             "filenamePattern": "*.kicad_sch"
@@ -192,11 +192,11 @@
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/wayri/KiCad-Github-View.git"
+    "url": "https://github.com/wayri/KiCad-Online.git"
   },
-  "homepage": "https://github.com/wayri/KiCad-Github-View",
+  "homepage": "https://github.com/wayri/KiCad-Online",
   "bugs": {
-    "url": "https://github.com/wayri/KiCad-Github-View/issues"
+    "url": "https://github.com/wayri/KiCad-Online/issues"
   },
   "icon": "icon.png"
 }

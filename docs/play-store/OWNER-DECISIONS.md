@@ -15,7 +15,7 @@ No passwords, private keys or tokens belong here. Provide contact information an
 
 ## Proposed defaults for approval
 
-Brand: **Pocket KiView**. Category: **Tools**. No ads SDK is present in the reviewed source; confirm the final build and listing declare no ads if unchanged. This is an engineering companion viewer, with optional provider UGC; select audience and complete the content-rating questionnaire based on what users can actually access rather than choosing a rating from marketing copy. The [listing copy](LISTING.md) and [Data Safety worksheet](DATA-SAFETY.md) are prepared for review.
+Brand: **KiCad Online**. Category: **Tools**. No ads SDK is present in the reviewed source; confirm the final build and listing declare no ads if unchanged. This is an engineering companion viewer, with optional provider UGC; select audience and complete the content-rating questionnaire based on what users can actually access rather than choosing a rating from marketing copy. The [listing copy](LISTING.md) and [Data Safety worksheet](DATA-SAFETY.md) are prepared for review.
 
 ## Evidence to collect in Console
 
@@ -25,4 +25,4 @@ Brand: **Pocket KiView**. Category: **Tools**. No ads SDK is present in the revi
 4. If required by Console, run closed testing with at least 12 continuously opted-in testers for 14 days and apply for production access. This calendar requirement cannot be shortened by a source change. [Official testing requirements](https://support.google.com/googleplay/android-developer/answer/14151465?hl=en).
 5. Submit after the evidence is complete; Google makes the publication decision. Keep owner approvals and moderation response records privately rather than publishing sensitive details.
 
-Confirmed by owner: existing Play account (type unknown). On 2026-10-11 the owner requested the Pocket KiView name and support.kivi@sigharmonic.com address. Delivery and monitoring of the renamed mailbox have not been verified in this task. Automated triage is proposed in MODERATION.md and has not been configured in the mailbox.
+Confirmed by owner: existing Play account (type unknown). On 2026-10-11 the owner requested the KiCad Online name and support.kivi@sigharmonic.com address. Delivery and monitoring of the renamed mailbox have not been verified in this task. Automated triage is proposed in MODERATION.md and has not been configured in the mailbox.

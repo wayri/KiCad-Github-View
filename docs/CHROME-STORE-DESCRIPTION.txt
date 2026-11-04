@@ -1,65 +1,38 @@
-Review KiCad designs directly in your browser.
+KiCad Online
 
-KiCad Visual Review brings schematics, PCB layouts and engineering review tools to Chrome. Open a local project or inspect files on GitHub and GitLab without installing KiCad. Use it for design reviews, assembly checks and understanding changes between revisions.
+Open a KiCad project from GitHub, GitLab or your computer and explore its schematic, PCB layout and 3D view in your browser. KiCad Online is an independent viewer and review tool, formerly Pocket KiView / KiCad Visual Review. It is not affiliated with or endorsed by KiCad, GitHub or GitLab. Local and offline viewing remain available.
 
-OPEN AND EXPLORE
+OPEN YOUR PROJECT
+Click the extension icon on a repository page. One detected project opens in a dedicated viewer tab; multiple projects offer a chooser. Optional in-page viewing is available when explicitly requested. Ordinary pages are not automatically replaced. Import local files, a project folder or a supported ZIP for local review.
 
-• Open local files or a project folder, including nested sheets and available model assets. Local review works offline and does not require an account.
-• View supported KiCad files on GitHub, GitLab.com and explicitly configured self-hosted GitLab servers.
-• Browse repository folders, branches and commit messages with a colour-coded commit ancestry graph.
-• Use parallel schematic and layout views, search, cross-highlighting and hideable controls. Stop a pending load and retry when needed.
+Supported repository files load through the selected site's signed-in browser session without a broad repository OAuth account. This does not bypass organization access controls, SSO, download restrictions or browser policy. Access to the selected site is required; missing or blocked files are reported.
 
-INSPECT SCHEMATICS AND PCBS
-
-• Explore component fields, nets, hierarchical sheets and PCB layers.
-• Measure 2D geometry, highlight nets and testpoints, and display readable copper net names.
-• Inspect board geometry and supported linked or embedded 3D component models when their assets can be resolved.
-• Use KiCad Default layer colours and highlight DNP/DNI components.
-
-BOM AND ASSEMBLY
-
-• Review parts in a field table with search, filters and grouping by value, footprint or other available fields.
-• Track assembly progress, review variants and population status, and export the visible BoM as CSV.
-• Import supported InteractiveHtmlBom and WayriCAD BoM Studio exports.
-• Align top/bottom board photographs with saved component positions for assisted assembly review. Population suggestions require reference photos and manual confirmation.
+EXPLORE AND CROSS-PROBE
+Switch between schematic, layout and supported 3D models. Search parts, pins, nets and project data; follow sheet hierarchy and view multiple sheets. Inspect layers, pin/pad numbers, net labels and component fields. Use selection filters, measurements and independently navigable cross-probe pop-ups. Detach browser views with linked selection where the platform supports it.
 
 REVIEW AND COLLABORATE
+Keep point or rectangular-area notes with drawing path, revision and location metadata. Browse supported Issue and Discussion threads, filter by state or severity, mention users and explicitly send a review or reply. Supported GitHub website-session Issue workflows can send and read back comments without connecting a broad repository OAuth account. Other operations may require an optional account and repository permissions. Local notes never post automatically. Refresh and polling depend on provider limits and browser/background behavior; delivery is not guaranteed real-time.
 
-• Compare saved design revisions visually and inspect object-level changes.
-• Add component, point or area notes with severity, tags and local review states. Keep drafts local or explicitly publish them through an authorized account.
-• Read GitHub issue and Discussion conversations, including ordinary comments and replies. Read GitLab issue bodies and grouped discussion replies inside the viewer.
-• Create GitHub issues and supported PR comments or Discussions. On GitLab, create issues and post comments or discussion threads within existing issues.
-• Include supported drawing captures with published reviews. Export/import supported review state between compatible KiView clients.
+ASSEMBLY, DOCUMENTS AND SAVED RESULTS
+Explore a grouped BoM, select columns, track local assembly progress and export tables. Inspect supported Gerber, drill and fabrication-job data. Create mechanical Draftsman documents and export supported outputs. Display supported saved KiCad simulation data and separate wayriCAD-compatible analysis exports. Load saved ERC/DRC reports to inspect drawing markers and full messages.
 
-ENGINEERING TOOLS
+EXPERIMENTAL FAST PI
+Select source and load contacts for fixed-temperature, single-net DC screening on supported saved board copper. Inspect voltage/drop, current and available overlays. Results depend on geometry and stated assumptions. Smooth colors are interpolation, not increased numerical accuracy. This is not validated sign-off analysis.
 
-• View supported Gerber/drill files and PDFs.
-• Inspect board metrics, including trace lengths and saved zone polygon areas, and display imported ERC/DRC findings.
-• Explore interactive engineering calculators and circuit illustrations.
-• Open supported saved WayriCAD quickTherm, quickPI and quickSI exports. Inspect plots, data, probes and spatial overlays when the export contains the required results and coordinates.
+WHAT'S NEW IN 0.12.85
+One public name across browsers, VS Code and Android: KiCad Online. The repository is now wayri/KiCad-Online. Existing extension IDs, installed settings and Android app identity are retained. Firefox Android gains an internal-tab fallback for desktop pop-out actions. Product titles, About, documentation and store copy are refreshed. No new permissions. The Altium beta remains separate and excluded.
 
-GET STARTED
+LIMITS AND PRIVACY
+Native KiCad ERC/DRC and simulation engines do not run in this extension. Saved results are displayed, not recomputed by those engines. File constructs and model formats have differing coverage; missing assets and unsupported constructs are disclosed. Do not assume complete KiCad version certification, complete DFM or universal private-organization access. Validate engineering decisions with appropriate native tools.
 
-1. Install and pin the extension.
-2. Click its icon, then open your files or project folder. Alternatively, visit a supported KiCad file on GitHub or GitLab.
-3. Open the inspection, BoM or review tools for your task. Connect an account when authorized private access or publication is needed.
+Viewer logic and decoders are bundled. Files are processed locally for viewing; explicit provider actions transfer the data needed for that operation. Optional HTML preview is isolated from privileged extension APIs. Review the privacy policy and requested site permissions before enabling connected features.
 
-COMPATIBILITY AND LIMITS
+GUIDES AND SUPPORT
+User guide: https://github.com/wayri/KiCad-Online/blob/main/USER-GUIDE.md
+Downloads and compatibility: https://github.com/wayri/KiCad-Online
+Support: https://github.com/wayri/KiCad-Online/issues
+Private support: support.kivi@sigharmonic.com
+VS Code: https://marketplace.visualstudio.com/items?itemName=wayri.kicad-visual-review
+Firefox: https://addons.mozilla.org/addon/pocket-kiview-kicad-review/
 
-Recognized KiCad 8, 9 and 10 .kicad_sch and .kicad_pcb constructs are supported within documented limits. KiCad 10 has native-reference fixtures; 8/9 coverage is narrower. Newer versions may open with warnings. Legacy .sch/.brd files are not advertised as supported.
-
-Ordinary viewing does not edit source designs. This extension does not run native KiCad ERC/DRC or simulation solvers. Rendering, models and imported results depend on supported formats and available data. GitLab merge-request comment publication is not supplied. Local review states do not automatically close remote issues. This is an independent product, not an official KiCad, GitHub or GitLab extension.
-
-VS CODE COMPANION
-
-Review beside your source code with the companion VS Code extension, including its visual Git conflict resolver:
-https://marketplace.visualstudio.com/items?itemName=wayri.kicad-visual-review
-
-Each edition works independently. Feature availability differs by host; portable review exports transfer supported state, not complete projects or account sessions.
-
-PROJECT, LICENSE AND SUPPORT
-
-GitHub: https://github.com/wayri/KiCad-Github-View
-Support: support.kivi@sigharmonic.com
-
-Copyright 2026 Yawar B (wayri). Source-available license. Paid software distribution and monetized hosted access require written permission. Third-party terms remain applicable. Your designs and outputs remain yours.
+Licensed under the existing Pocket KiView Source-Available License 1.0. The rename does not change the license or third-party notices.

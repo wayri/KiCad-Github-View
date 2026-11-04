@@ -1,6 +1,6 @@
 # Saved analysis and simulation results
 
-In Pocket KiView, open **Project → Analysis & simulation**, then choose a saved report. Reports imported with a project are retained in its offline copy. Standalone supported report files can also open directly. In the browser extension, choose **Analysis** in the project viewer. Results are read-only: this feature does not run KiCad, ngspice or WayriCAD solvers.
+In KiCad Online, open **Project → Analysis & simulation**, then choose a saved report. Reports imported with a project are retained in its offline copy. Standalone supported report files can also open directly. In the browser extension, choose **Analysis** in the project viewer. Results are read-only: this feature does not run KiCad, ngspice or WayriCAD solvers.
 
 The viewer has Graphs, Data, Report and Source views. Select traces and linear/logarithmic axes for waveforms; point at a graph to read values. Thermal maps retain missing cells as gaps. Mechanical meshes can be rotated by dragging. Search Report for source hashes, assumptions, warnings, coverage and findings. Large property lists and tables load in batches.
 
@@ -33,7 +33,7 @@ Spatial fields offer **2D overlay**, **3D overlay** and the original map, with o
 
 An imported PCB is attached only when its exact SHA-256 matches the producer's saved source binding. A verified board can display its available 3D models behind the result overlay. Placement also requires a known elevation convention or explicit front/back copper layer; other fields use a standalone saved surface. The selected field is shown through opaque board geometry so internal layers remain inspectable. Without a matching source, the viewer shows saved result geometry alone. SI eye and waveform exports remain plots unless they include supported spatial data.
 
-For a PCB layout in Pocket KiView, tap **Measure** in the drawing toolbar. Tap two points for distance, or select **Angle** in **Measurement options** and tap endpoint → vertex → endpoint. The live and pinned readout stays visible above the drawing. Options include geometry and grid snapping, grid pitch, board extents and millimetres/mils. **Exit** or Android Back leaves measurement mode. Measurements use the saved layout geometry.
+For a PCB layout in KiCad Online, tap **Measure** in the drawing toolbar. Tap two points for distance, or select **Angle** in **Measurement options** and tap endpoint → vertex → endpoint. The live and pinned readout stays visible above the drawing. Options include geometry and grid snapping, grid pitch, board extents and millimetres/mils. **Exit** or Android Back leaves measurement mode. Measurements use the saved layout geometry.
 
 ## Verified formats
 

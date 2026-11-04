@@ -1,6 +1,6 @@
 # KiCad Monkey saved reports
 
-Pocket KiView reads saved **KiCad Monkey Design JSON a0** and **Netlist JSON a0** as component, net, terminal and custom-property tables in the existing **Project → Analysis** report viewer. Add the JSON export to the project/repository and select it from the saved reports. The shared reader is packaged with the browser extension, VS Code extension and Android app.
+KiCad Online reads saved **KiCad Monkey Design JSON a0** and **Netlist JSON a0** as component, net, terminal and custom-property tables in the existing **Project → Analysis** report viewer. Add the JSON export to the project/repository and select it from the saved reports. The shared reader is packaged with the browser extension, VS Code extension and Android app.
 
 From a drawing, open **Tools → Reports** (phone/tablet: **Drawing tools → Inspect → Reports**) and search for the saved JSON. In VS Code it opens a dedicated **Results** tab with the same component/net tables; project file and symlink boundaries still apply. Tabular reports open directly on Data, rather than making you search through schema metadata. The project Analysis section also offers **Open saved report** in VS Code.
 

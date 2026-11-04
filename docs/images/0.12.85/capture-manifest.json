@@ -1,0 +1,48 @@
+{
+  "schemaVersion": 1,
+  "release": "0.12.85",
+  "capturedAt": "2026-11-04T16:31:56.586308+00:00",
+  "capture": "Genuine current-source browser screenshots; cropped to viewer, no image content editing",
+  "sourceRepository": "https://github.com/OLIMEX/ESP32-POE",
+  "sourceRevision": "deb38a377d50eadb04ddc7118a17a5ae58b1ee53",
+  "sourceFolder": "HARDWARE/ESP32-PoE-hardware-revision-M2",
+  "screenshotCount": 5,
+  "records": [
+    {
+      "path": "01-project.jpg",
+      "view": "Project launcher",
+      "sha256": "753b9926237d61a669cb020b5693728fbdb1164970a3ed97cf58fd6fc39dd9fe",
+      "bytes": 46161
+    },
+    {
+      "path": "02-schematic.jpg",
+      "view": "Schematic",
+      "sha256": "381b627a62ec9d1e975e525be47e5c8478135bc78f223f78dfb07a8bb9cf6e61",
+      "bytes": 140483
+    },
+    {
+      "path": "03-layout.jpg",
+      "view": "PCB layout",
+      "sha256": "0b9154e66876f85e66cf80b10dc8ce4ca15614e0b83e30e35f1fdc7df6999718",
+      "bytes": 119170
+    },
+    {
+      "path": "04-3d.jpg",
+      "view": "3D linked models",
+      "sha256": "0d6c0837b68c49d284fc8095d79ab3b1b45d4046ee87aedaef0aee4cffc9fcb5",
+      "bytes": 70928
+    },
+    {
+      "path": "05-calculator.jpg",
+      "view": "Circuit workbench",
+      "sha256": "3e3e40736f2cc3c8869d4671a3acf6860918efd90da74a53a68a0633c441d0f4",
+      "bytes": 64730
+    }
+  ],
+  "limits": [
+    "Local public-corpus transport, not installed-store or live-provider acceptance",
+    "3D loaded 126 of 143 component models; missing assets and geometry warnings remain disclosed",
+    "Calculator is an analytical estimate, not a simulation run",
+    "Historical screenshots elsewhere remain labelled historical"
+  ]
+}

@@ -1,6 +1,6 @@
 # Integrated PDF viewer
 
-Pocket KiView opens PDFs inside the phone and browser viewer. Choose **PDF viewer** from Android home/menu/drawing tools, open an imported PDF in Files & actions, or choose a PDF from the extension project tree. The hosted web home also links to the viewer for local PDF selection.
+KiCad Online opens PDFs inside the phone and browser viewer. Choose **PDF viewer** from Android home/menu/drawing tools, open an imported PDF in Files & actions, or choose a PDF from the extension project tree. The hosted web home also links to the viewer for local PDF selection.
 
 Features: previous/next or direct page navigation, fit width, zoom, rotation, document bookmarks, text search with page/snippet results, and selectable extracted page text. Password-protected documents prompt for a session-only password. Close document releases its loading/rendering worker and clears text/search state.
 

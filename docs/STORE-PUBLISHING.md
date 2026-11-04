@@ -40,7 +40,7 @@ This is the manual first-listing procedure for the Chromium browser extension an
 ## Current submission — 2026-10-23
 
 Publish to Visual Studio Marketplace first, then Chrome Web Store. The owner has
-created the Pocket KiView publisher (`wayri`), and version 0.12.46 was uploaded
+created the KiCad Online publisher (`wayri`), and version 0.12.46 was uploaded
 successfully. The Marketplace currently shows **Verifying** and **Private**;
 public availability has not been established. Chrome registration/submission is
 still pending. Retain the publisher-management tab for the validation result.

@@ -42,7 +42,7 @@
   const intro=make('p','Open a KiCad folder, ZIP or online repository. Pick up a recent project below.');intro.className='home-intro';welcome.insertBefore(intro,welcome.querySelector('.android-welcome-actions'));
   for(const id of ['androidProjectHome','recentProjects']){const section=d.getElementById(id);if(section&&welcome.contains(section))welcome.insertBefore(section,homeHelp);}
   root.KiCadUIIcons?.decorate?.(d.body);
-  const securityUnavailable=()=>{if(dialog.open)dialog.close();let notice=d.getElementById('androidNativeSecurityNotice');if(!notice){notice=make('p','Update Android System WebView to enable secure file and account access. Pocket KiView has kept native access disabled.');notice.id='androidNativeSecurityNotice';notice.setAttribute('role','alert');welcome.insertBefore(notice,intro);}const status=d.getElementById('importStatus');if(status)status.textContent=notice.textContent;};
+  const securityUnavailable=()=>{if(dialog.open)dialog.close();let notice=d.getElementById('androidNativeSecurityNotice');if(!notice){notice=make('p','Update Android System WebView to enable secure file and account access. KiCad Online has kept native access disabled.');notice.id='androidNativeSecurityNotice';notice.setAttribute('role','alert');welcome.insertBefore(notice,intro);}const status=d.getElementById('importStatus');if(status)status.textContent=notice.textContent;};
   root.addEventListener?.('kicad-android-security-unavailable',securityUnavailable);
   if(root.KiCadAndroidNativeUnavailable){securityUnavailable();return;}
   // Defer until the shell is ready, and never interrupt an external project link.

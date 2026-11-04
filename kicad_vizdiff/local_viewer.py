@@ -1,4 +1,4 @@
-"""Read-only, session-bound loopback host for the shared Pocket KiView UI."""
+"""Read-only, session-bound loopback host for the shared KiCad Online UI."""
 from __future__ import annotations
 
 import argparse

@@ -1,6 +1,6 @@
 # View saved DRC and ERC reports
 
-Pocket KiView reads supported KiCad JSON rule reports and places their saved
+KiCad Online reads supported KiCad JSON rule reports and places their saved
 findings on the matching PCB or schematic. It does **not** run KiCad's ERC/DRC
 engine in the browser. A report may be older than the loaded design; the viewer
 shows its producer/date/source and revision uncertainty.

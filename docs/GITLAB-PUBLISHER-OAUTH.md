@@ -1,6 +1,6 @@
 # Publisher-managed GitLab sign-in
 
-Ordinary users choose **Sign in with GitLab**, authorize Pocket KiView on the
+Ordinary users choose **Sign in with GitLab**, authorize KiCad Online on the
 selected server, and return to their project. They do not register applications,
 copy an Application ID or enter a client secret. Publication uses their own
 account permissions. The publisher performs registration once for its releases;
@@ -9,7 +9,7 @@ self-hosted administrators configure their own instance once.
 ## Release prerequisite
 
 The checked-in `extension/provider-oauth.json` contains the publisher-owned
-GitLab.com public Application ID registered for **Pocket KiView**. Its currently
+GitLab.com public Application ID registered for **KiCad Online**. Its currently
 registered callback is Android’s `kicadvizdiff://gitlab-oauth`, with `api` scope
 and Confidential disabled. This registration was created through GitLab settings
 under the publisher’s normal account with explicit approval.

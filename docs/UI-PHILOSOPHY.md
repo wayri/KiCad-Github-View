@@ -1,4 +1,4 @@
-# Pocket KiView UI philosophy
+# KiCad Online UI philosophy
 
 The drawing or document is the primary workspace. Chrome uses neutral KiCad-style surfaces, a single blue interaction accent, system fonts, 6 px control corners and 8 px panel corners. Layer, plot, thermal and PDF page colours belong to their renderers and are independent of the chrome theme.
 

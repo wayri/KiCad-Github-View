@@ -483,7 +483,7 @@ function openStaticHTML(source,path){
   panel.webview.html=staticHTML(source);return {opened:true,interactive:false};
 }
 async function openOverview(session){
-  const panel=vscode.window.createWebviewPanel('kicadVisualReview.project','KiCad Project Review',vscode.ViewColumn.Beside,{enableScripts:true,localResourceRoots:[vscode.Uri.joinPath(session.context.extensionUri,'media'),session.context.extensionUri]});
+  const panel=vscode.window.createWebviewPanel('kicadVisualReview.project','KiCad Online',vscode.ViewColumn.Beside,{enableScripts:true,localResourceRoots:[vscode.Uri.joinPath(session.context.extensionUri,'media'),session.context.extensionUri]});
   const project={files:session.files,scope:session.scope,history:session.history},overview=createSession(session.uri,project,session.context);overview.overview=true;overview.closeForPolicy=()=>panel.dispose();overview.closeForPolicy=()=>panel.dispose();view.post=message=>panel.webview.postMessage(message);
   const receiver=panel.webview.onDidReceiveMessage(message=>handleMessage(message,overview,reply=>panel.webview.postMessage(reply)));panel.onDidDispose(()=>{overview.disposed=true;liveSessions.delete(overview);receiver.dispose();});panel.webview.html=await htmlFor(panel.webview,session.context,overview);return {opened:true};
 }

@@ -215,7 +215,7 @@ class Server(BoundedHTTPServer):
             if not designs:
                 return
             token = installation_token(os.environ['GITHUB_APP_ID'], os.environ['GITHUB_PRIVATE_KEY_PATH'], payload['installation']['id'])
-            summary = (f'Found {len(designs)} KiCad design file(s). Open **Files changed** with the KiCad Visual Review browser extension for native page previews and visual comparison. '
+            summary = (f'Found {len(designs)} KiCad design file(s). Open **Files changed** with the KiCad Online browser extension for native page previews and visual comparison. '
                        'The extension renders on demand. Page borders and title blocks are preserved.\n\n'
                        f'[Open visual review](https://github.com/{repo}/pull/{number}/files)')
             api(f'/repos/{repo}/check-runs', token, {'name': 'KiCad visual review', 'head_sha': pr['head']['sha'],

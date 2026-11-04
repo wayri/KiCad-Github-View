@@ -121,5 +121,5 @@ jobs:
           fi
           gh release create "$RELEASE_TAG" dist/release/* \
             --repo "$GH_REPO" --verify-tag --prerelease \
-            --title "KiCad Visual Review $RELEASE_TAG" \
+            --title "KiCad Online $RELEASE_TAG" \
             --notes-file dist/release/RELEASE-NOTES.md

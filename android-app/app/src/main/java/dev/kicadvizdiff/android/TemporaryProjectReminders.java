@@ -21,7 +21,7 @@ final class TemporaryProjectReminders {
         Intent no=new Intent(context,TemporaryProjectCleanup.class).setAction(DISMISS).setData(Uri.parse("kicadvizdiff://temporary/"+id+"/dismiss")).putExtra("temporaryId",id);
         int flags=PendingIntent.FLAG_UPDATE_CURRENT|PendingIntent.FLAG_IMMUTABLE;
         PendingIntent retain=PendingIntent.getActivity(context,0,keep,flags),dismiss=PendingIntent.getBroadcast(context,0,no,flags);
-        Notification publicVersion=new Notification.Builder(context,CHANNEL).setSmallIcon(android.R.drawable.ic_menu_save).setContentTitle("Pocket KiView").setContentText("A temporary project expires soon").build();
+        Notification publicVersion=new Notification.Builder(context,CHANNEL).setSmallIcon(android.R.drawable.ic_menu_save).setContentTitle("KiCad Online").setContentText("A temporary project expires soon").build();
         Notification notification=new Notification.Builder(context,CHANNEL).setSmallIcon(android.R.drawable.ic_menu_save)
             .setContentTitle("Temporary project expires soon").setContentText("Keep “"+project.optString("name","KiCad project")+"” offline?")
             .setVisibility(Notification.VISIBILITY_PRIVATE).setPublicVersion(publicVersion).setOnlyAlertOnce(true)

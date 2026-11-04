@@ -136,7 +136,7 @@
     view.hiddenTarget = original;
     async function load() {
       const token = sequence, run = ++runId;
-      setStatus(status, "Opening browser-side KiCad viewer…");
+      setStatus(status, "Opening KiCad Online…");
       content.replaceChildren(); loaded = false;
       if (original) original.hidden = view.originalHidden;
       const frame = element("iframe");frame.allow="camera";
