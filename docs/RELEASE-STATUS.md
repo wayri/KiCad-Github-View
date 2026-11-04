@@ -11,8 +11,8 @@ passes (one skip), Android offline assemble/lint/bundle and exact package audits
 | Channel | Verified state |
 | --- | --- |
 | Chrome | **0.12.85 submitted, pending review**, automatic publication after approval. Listing name, full description, support/homepage/policy links and two genuine 1280×800 layout/3D images updated. Old screenshots and old-name optional promo tiles removed with explicit approval. Last observed published version: 0.12.80. |
-| VS Code | **0.12.85 accepted and verifying**. Public extension and publisher display names are KiCad Online; publisher profile links and support email updated. The 0.12.84 upload finished verification before this update. |
-| Mozilla | **0.12.85 Awaiting Review**, zero validator errors/warnings, desktop and Android checked. Product name, description, support and homepage updated. The exact 91.5 MB readable-source companion is ready; final source attachment/Continue requires the owner because automation selects no file. No new approval is claimed. The existing approved version is 0.12.66. |
+| VS Code | **0.12.85 public; verification finished**. Public extension and publisher display names are KiCad Online; publisher profile links and support email updated. The 0.12.84 upload finished verification before this update. |
+| Mozilla | **0.12.85 Awaiting Review**, zero validator errors/warnings, desktop and Android checked. Product name, description, support and homepage updated. Submission is complete with the exact 91.5 MB readable-source companion attached (version 6664588). No new approval is claimed. The existing approved version is 0.12.66. |
 | Android | **1.88 / versionCode 91 installed and launched** on the connected Samsung phone, with the existing application ID/signer and data preserved. Development-signed/non-debuggable; unsigned AAB is not Play upload-ready. Physical Firefox Android extension acceptance is separate and pending. |
 | Public policies | Renamed Pages site serves updated Chrome privacy and Android privacy/terms. Checked HTTP 200 at the new policy URLs. |
 

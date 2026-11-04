@@ -1,6 +1,6 @@
 # Managed office browsers
 
-KiView follows browser and extension administrator policy. Signing in, changing an account or opening a project through another route cannot override a restriction. Use only the review workflow your organization permits.
+KiCad Online follows browser and extension administrator policy. Signing in, changing an account or opening a project through another route cannot override a restriction. Use only the review workflow your organization permits.
 
 ## Check the failing feature
 

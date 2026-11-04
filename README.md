@@ -115,14 +115,14 @@ See saved findings in the schematic or PCB viewer, show/hide severity markers, c
 
 Run simulations in **[wayriCAD / kiWay](https://github.com/wayri/WayriCAD)**, then open their supported saved results in **KiCad Online on Android or in the browser**. Bring the result files with the project to inspect them offline, or share those exports with another reviewer.
 
-| WayriCAD tool | Review in KiView |
+| WayriCAD tool | Review in KiCad Online |
 | --- | --- |
 | **[quickTherm](https://github.com/wayri/WayriCAD/tree/develop/quick_therm_plugin)** | Saved temperature fields, component tables and supported transient frames/history |
 | **[quickPI](https://github.com/wayri/WayriCAD/tree/develop/quick_pi_plugin)** | Saved voltage/current waveforms, copper-layer potential, power and current-density fields |
 | **[quickSI](https://github.com/wayri/WayriCAD)** | Saved eye traces, step responses, impedance/screening curves and report metadata |
 | **Other WayriCAD exports** | Supported JSON/CSV/TSV fields and tables; specialized plots depend on a recognized schema and saved numerical data |
 
-Inspect plots and probe saved values. Supported spatial exports provide **2D/3D overlays**; placing an overlay on a PCB requires a matching saved board hash and spatial/layer metadata. Results remain read-only, and KiView does not rerun the simulation. Compatibility applies to documented export formats, rather than every WayriCAD version or arbitrary result file. Current source also opens saved results in a dedicated VS Code panel.
+Inspect plots and probe saved values. Supported spatial exports provide **2D/3D overlays**; placing an overlay on a PCB requires a matching saved board hash and spatial/layer metadata. Results remain read-only, and KiCad Online does not rerun the simulation. Compatibility applies to documented export formats, rather than every WayriCAD version or arbitrary result file. Current source also opens saved results in a dedicated VS Code panel.
 
 [Supported formats, probing and overlay requirements](docs/ANALYSIS_VIEWER.md) | [Open a saved result](docs/USER-GUIDE.md#wayricad-simulation-results).
 
@@ -269,7 +269,7 @@ These **37 screenshots** cover the main implemented workflows discussed during d
 <details>
 <summary><strong>Analysis · 4 views</strong></summary>
 
-Run the analytics in [wayriCAD](https://github.com/wayri/WayriCAD), then bring supported saved results into KiView. [Quick PI](https://github.com/wayri/WayriCAD/tree/develop/quick_pi_plugin) and [QuickTherm](https://github.com/wayri/WayriCAD/tree/develop/quick_therm_plugin) fields can provide saved spatial data for overlays and probing. Quick SI exports provide plots when the recognised format includes samples. KiCad workbooks are a separate source and do not contain waveform samples. These captures display exported data; they do not run a solver.
+Run the analytics in [wayriCAD](https://github.com/wayri/WayriCAD), then bring supported saved results into KiCad Online. [Quick PI](https://github.com/wayri/WayriCAD/tree/develop/quick_pi_plugin) and [QuickTherm](https://github.com/wayri/WayriCAD/tree/develop/quick_therm_plugin) fields can provide saved spatial data for overlays and probing. Quick SI exports provide plots when the recognised format includes samples. KiCad workbooks are a separate source and do not contain waveform samples. These captures display exported data; they do not run a solver.
 
 | View | Context |
 | --- | --- |
@@ -471,7 +471,7 @@ These local fixture captures demonstrate controls and saved data. The collaborat
 
 Recognized KiCad 8, 9 and 10 saved-file constructs have differing test coverage; this is not complete version certification. See the [compatibility matrix](docs/KICAD-COMPATIBILITY.md). Legacy `.sch`/`.brd` formats are not advertised as supported.
 
-Source designs are ordinarily read-only. Explicit conflict-resolution actions in VS Code and supported export workflows are described separately. Saved ERC/DRC and simulation results are displayed; KiView does not run native KiCad checks or simulation solvers. Connectivity inference, model resolution and fabrication screening have limits. Verify engineering decisions and resolved designs in the appropriate native tools.
+Source designs are ordinarily read-only. Explicit conflict-resolution actions in VS Code and supported export workflows are described separately. Saved ERC/DRC and simulation results are displayed; KiCad Online does not run native KiCad checks or simulation solvers. Connectivity inference, model resolution and fabrication screening have limits. Verify engineering decisions and resolved designs in the appropriate native tools.
 
 ## Documentation and development
 

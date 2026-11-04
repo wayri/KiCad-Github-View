@@ -66,7 +66,7 @@ message history, compose box, paste/attach image, locate selection, settings and
 an Open in GitHub/GitLab action. Resolve repository, active document and provider
 connection in the backend. Credentials stay in the host's secure storage and
 must not be passed to the embedded pane or sidecar. Use the same provider IDs,
-versioned drawing-anchor metadata and refresh states as KiView.
+versioned drawing-anchor metadata and refresh states as KiCad Online.
 
 Comment location graphics must be transient view overlays or selection where
 the host API supports them; do not insert fake ERC/DRC violations or save review
