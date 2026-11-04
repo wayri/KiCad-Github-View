@@ -1,5 +1,7 @@
 # Distribution status
 
+**0.12.82 / Android 1.82 (4 November 2026):** [GitHub preview published](https://github.com/wayri/KiCad-Github-View/releases/tag/v0.12.82), including Chrome/Chromium, unsigned Firefox, VSIX, development-signed APK and unsigned AAB. Browser-session Issue replies/readback and point/area markers are included. Synthetic schematic/layout/3D marker checks passed; organization content and screenshots are excluded. No new store publication or device acceptance is claimed.
+
 **0.12.81 / Android 1.81 (3 November 2026):** GitHub preview packages include Firefox, VSIX and the development-signed Android APK, source and checksums. See [release notes](releases/v0.12.81.md). This does not claim new Marketplace/Mozilla submission or phone installation. Chrome 0.12.80 was submitted for review separately.
 
 **0.12.80 / Android 1.80 (2 November 2026):** [GitHub preview release published](https://github.com/wayri/KiCad-Github-View/releases/tag/v0.12.80) with 23 uploaded assets, checksums and source tag. Source and audited packages include independent schematic probe navigation, R1 cross-probe identity correction, flip/rotation controls and managed-browser diagnostics. The new store submission is not claimed; previous store snapshots below remain historical. See [release notes](releases/v0.12.80.md), [browser evidence](PROBE-WALKTHROUGH-0.12.80.md) and [security scope](SECURITY-REVIEW-0.12.80.md).
