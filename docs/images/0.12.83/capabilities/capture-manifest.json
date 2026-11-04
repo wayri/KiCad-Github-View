@@ -1,0 +1,548 @@
+{
+  "schemaVersion": 1,
+  "release": "0.12.83",
+  "capturedOn": "2026-11-04",
+  "package": "kicad-visual-review-chrome-edge-brave-opera-vivaldi-chromium-0.12.83.zip",
+  "notProofOf": [
+    "Installed extension behavior",
+    "Live GitHub/GitLab sync or writes",
+    "Physical mobile acceptance",
+    "Numerical qualification"
+  ],
+  "sources": [
+    {
+      "repository": "OLIMEX/ESP32-POE",
+      "commit": "deb38a377d50eadb04ddc7118a17a5ae58b1ee53",
+      "folder": "HARDWARE/ESP32-PoE-hardware-revision-M2",
+      "models": "126/143 linked components",
+      "transport": "Retained public source and models, no live repository access"
+    },
+    {
+      "kind": "Public repository QA fixtures",
+      "path": "extension/tests/fixtures",
+      "simulation": "Imported saved producer examples; Fast PI strip is an actual browser solve."
+    }
+  ],
+  "captures": [
+    {
+      "file": "01-layout.jpg",
+      "title": "Olimex M2 layout · compact navigation",
+      "limits": "",
+      "bytes": 138044,
+      "version": "0.12.83",
+      "environment": "Packaged shared viewer, integrated browser, public local transport"
+    },
+    {
+      "file": "02-object-filters.jpg",
+      "title": "Object types, side filters and explicit unsupported categories",
+      "limits": "",
+      "bytes": 172234,
+      "version": "0.12.83",
+      "environment": "Packaged shared viewer, integrated browser, public local transport"
+    },
+    {
+      "file": "03-layers-zones-labels.jpg",
+      "title": "Floating layer picker, filled zones, outlines, worksheet, pad and net label toggles",
+      "limits": "",
+      "bytes": 145042,
+      "version": "0.12.83",
+      "environment": "Packaged shared viewer, integrated browser, public local transport"
+    },
+    {
+      "file": "04-3d-display.jpg",
+      "title": "Real linked models, copper visibility, render quality and universal lighting controls",
+      "limits": "126/143 linked components; omitted geometry warnings remain disclosed.",
+      "bytes": 103809,
+      "version": "0.12.83",
+      "environment": "Packaged shared viewer, integrated browser, public local transport"
+    },
+    {
+      "file": "05-3d-models.jpg",
+      "title": "Olimex M2 real models · isometric view",
+      "limits": "126/143 linked components; not complete coverage.",
+      "bytes": 80021,
+      "version": "0.12.83",
+      "environment": "Packaged shared viewer, integrated browser, public local transport"
+    },
+    {
+      "file": "06-schematic.jpg",
+      "title": "Saved schematic worksheet and miniature sheet tree",
+      "limits": "",
+      "bytes": 157434,
+      "version": "0.12.83",
+      "environment": "Packaged shared viewer, integrated browser, public local transport"
+    },
+    {
+      "file": "07-universal-search.jpg",
+      "title": "Project-wide part/pad search and 3D jump",
+      "limits": "",
+      "bytes": 167640,
+      "version": "0.12.83",
+      "environment": "Packaged shared viewer, integrated browser, public local transport"
+    },
+    {
+      "file": "08-properties.jpg",
+      "title": "KiCad-style field/value table and connected nets",
+      "limits": "",
+      "bytes": 117401,
+      "version": "0.12.83",
+      "environment": "Packaged shared viewer, integrated browser, public local transport"
+    },
+    {
+      "file": "09-probe-controls.jpg",
+      "title": "Independent probe sheet/occurrence navigation, selection filters, rotation, flip and linked sibling action",
+      "limits": "",
+      "bytes": 107873,
+      "version": "0.12.83",
+      "environment": "Packaged shared viewer, integrated browser, public local transport"
+    },
+    {
+      "file": "10-sibling-cross-probe.jpg",
+      "title": "Schematic-origin sibling probe switched to layout with connection guide",
+      "limits": "",
+      "bytes": 116804,
+      "version": "0.12.83",
+      "environment": "Packaged shared viewer, integrated browser, public local transport"
+    },
+    {
+      "file": "11-schematic-layout-3d-probes.jpg",
+      "title": "Schematic main view with layout and 3D sibling probes",
+      "limits": "Independent local cameras and saved component correspondence; this is not detached-browser-window evidence.",
+      "bytes": 109069,
+      "version": "0.12.83",
+      "environment": "Packaged shared viewer, integrated browser, public local transport"
+    },
+    {
+      "file": "12-comment-composer.jpg",
+      "title": "Anchored local review composer · Issue/Discussion, severity and state",
+      "limits": "Local draft only; no provider send.",
+      "bytes": 119135,
+      "version": "0.12.83",
+      "environment": "Packaged shared viewer, integrated browser, public local transport"
+    },
+    {
+      "file": "13-comment-location.jpg",
+      "title": "Local review marker, saved sheet/coordinates and Locate",
+      "limits": "",
+      "bytes": 103210,
+      "version": "0.12.83",
+      "environment": "Packaged shared viewer, integrated browser, public local transport"
+    },
+    {
+      "file": "14-review-filters.jpg",
+      "title": "Review state, severity, read status, sorting, UTC dates and portable transfer",
+      "limits": "",
+      "bytes": 149037,
+      "version": "0.12.83",
+      "environment": "Packaged shared viewer, integrated browser, public local transport"
+    },
+    {
+      "file": "15-calculator-ohm.jpg",
+      "title": "Ohm’s law calculator · interactive circuit, units and computed results",
+      "limits": "",
+      "bytes": 80561,
+      "version": "0.12.83",
+      "environment": "Packaged shared viewer, integrated browser, public local transport"
+    },
+    {
+      "file": "calculator-divider.jpg",
+      "title": "Loaded voltage divider",
+      "limits": "Default example inputs; analytical model assumptions apply, not circuit simulation.",
+      "bytes": 90428,
+      "version": "0.12.83",
+      "environment": "Packaged shared viewer, integrated browser, public local transport"
+    },
+    {
+      "file": "calculator-regulator.jpg",
+      "title": "Adjustable regulator divider",
+      "limits": "Default example inputs; analytical model assumptions apply, not circuit simulation.",
+      "bytes": 89072,
+      "version": "0.12.83",
+      "environment": "Packaged shared viewer, integrated browser, public local transport"
+    },
+    {
+      "file": "calculator-led.jpg",
+      "title": "LED series resistor",
+      "limits": "Default example inputs; analytical model assumptions apply, not circuit simulation.",
+      "bytes": 88370,
+      "version": "0.12.83",
+      "environment": "Packaged shared viewer, integrated browser, public local transport"
+    },
+    {
+      "file": "calculator-color.jpg",
+      "title": "Resistor color bands",
+      "limits": "Default example inputs; analytical model assumptions apply, not circuit simulation.",
+      "bytes": 74533,
+      "version": "0.12.83",
+      "environment": "Packaged shared viewer, integrated browser, public local transport"
+    },
+    {
+      "file": "calculator-track.jpg",
+      "title": "Copper track width · IPC-2221",
+      "limits": "Default example inputs; analytical model assumptions apply, not circuit simulation.",
+      "bytes": 95056,
+      "version": "0.12.83",
+      "environment": "Packaged shared viewer, integrated browser, public local transport"
+    },
+    {
+      "file": "calculator-via.jpg",
+      "title": "Plated via DC resistance",
+      "limits": "Default example inputs; analytical model assumptions apply, not circuit simulation.",
+      "bytes": 91747,
+      "version": "0.12.83",
+      "environment": "Packaged shared viewer, integrated browser, public local transport"
+    },
+    {
+      "file": "calculator-wavelength.jpg",
+      "title": "Frequency & wavelength",
+      "limits": "Default example inputs; analytical model assumptions apply, not circuit simulation.",
+      "bytes": 80863,
+      "version": "0.12.83",
+      "environment": "Packaged shared viewer, integrated browser, public local transport"
+    },
+    {
+      "file": "calculator-length.jpg",
+      "title": "Length unit converter",
+      "limits": "Default example inputs; analytical model assumptions apply, not circuit simulation.",
+      "bytes": 75191,
+      "version": "0.12.83",
+      "environment": "Packaged shared viewer, integrated browser, public local transport"
+    },
+    {
+      "file": "calculator-rc.jpg",
+      "title": "RC low-pass / high-pass",
+      "limits": "Default example inputs; analytical model assumptions apply, not circuit simulation.",
+      "bytes": 96493,
+      "version": "0.12.83",
+      "environment": "Packaged shared viewer, integrated browser, public local transport"
+    },
+    {
+      "file": "calculator-rlc.jpg",
+      "title": "Series RLC resonance",
+      "limits": "Default example inputs; analytical model assumptions apply, not circuit simulation.",
+      "bytes": 97673,
+      "version": "0.12.83",
+      "environment": "Packaged shared viewer, integrated browser, public local transport"
+    },
+    {
+      "file": "calculator-timer555.jpg",
+      "title": "555 astable oscillator",
+      "limits": "Default example inputs; analytical model assumptions apply, not circuit simulation.",
+      "bytes": 93180,
+      "version": "0.12.83",
+      "environment": "Packaged shared viewer, integrated browser, public local transport"
+    },
+    {
+      "file": "calculator-opamp.jpg",
+      "title": "Ideal op-amp gain",
+      "limits": "Default example inputs; analytical model assumptions apply, not circuit simulation.",
+      "bytes": 87560,
+      "version": "0.12.83",
+      "environment": "Packaged shared viewer, integrated browser, public local transport"
+    },
+    {
+      "file": "calculator-reactance.jpg",
+      "title": "Inductive / capacitive reactance",
+      "limits": "Default example inputs; analytical model assumptions apply, not circuit simulation.",
+      "bytes": 83489,
+      "version": "0.12.83",
+      "environment": "Packaged shared viewer, integrated browser, public local transport"
+    },
+    {
+      "file": "calculator-noise.jpg",
+      "title": "Resistor thermal noise",
+      "limits": "Default example inputs; analytical model assumptions apply, not circuit simulation.",
+      "bytes": 94678,
+      "version": "0.12.83",
+      "environment": "Packaged shared viewer, integrated browser, public local transport"
+    },
+    {
+      "file": "calculator-buck.jpg",
+      "title": "Ideal buck · CCM",
+      "limits": "Default example inputs; analytical model assumptions apply, not circuit simulation.",
+      "bytes": 104659,
+      "version": "0.12.83",
+      "environment": "Packaged shared viewer, integrated browser, public local transport"
+    },
+    {
+      "file": "calculator-boost.jpg",
+      "title": "Ideal boost · CCM",
+      "limits": "Default example inputs; analytical model assumptions apply, not circuit simulation.",
+      "bytes": 106627,
+      "version": "0.12.83",
+      "environment": "Packaged shared viewer, integrated browser, public local transport"
+    },
+    {
+      "file": "analysis-quickpi-dc.jpg",
+      "title": "Imported wayriCAD Quick PI nodal potential overlay",
+      "limits": "Saved synthetic producer fixture; no source PCB attached and no live solve.",
+      "bytes": 82014,
+      "version": "0.12.83",
+      "environment": "Packaged shared viewer, integrated browser, public local transport"
+    },
+    {
+      "file": "analysis-quickpi-3d.jpg",
+      "title": "Imported wayriCAD spatial field in 3D",
+      "limits": "Saved result geometry; no matching source PCB attached.",
+      "bytes": 82017,
+      "version": "0.12.83",
+      "environment": "Packaged shared viewer, integrated browser, public local transport"
+    },
+    {
+      "file": "analysis-quickpi-electrothermal-transient.jpg",
+      "title": "quickpi-electrothermal-transient.json",
+      "limits": "Imported saved producer QA data; visualization only, no new simulation run.",
+      "bytes": 77277,
+      "version": "0.12.83",
+      "environment": "Packaged shared viewer, integrated browser, public local transport"
+    },
+    {
+      "file": "analysis-quickpi-transient.jpg",
+      "title": "quickpi-transient.json",
+      "limits": "Imported saved producer QA data; visualization only, no new simulation run.",
+      "bytes": 75238,
+      "version": "0.12.83",
+      "environment": "Packaged shared viewer, integrated browser, public local transport"
+    },
+    {
+      "file": "analysis-quicksi-eye.jpg",
+      "title": "quicksi-eye.json",
+      "limits": "Imported saved producer QA data; visualization only, no new simulation run.",
+      "bytes": 82843,
+      "version": "0.12.83",
+      "environment": "Packaged shared viewer, integrated browser, public local transport"
+    },
+    {
+      "file": "analysis-quicksi-screen.jpg",
+      "title": "quicksi-screen.json",
+      "limits": "Imported saved producer QA data; visualization only, no new simulation run.",
+      "bytes": 112955,
+      "version": "0.12.83",
+      "environment": "Packaged shared viewer, integrated browser, public local transport"
+    },
+    {
+      "file": "analysis-quicktherm-board-network.jpg",
+      "title": "quicktherm-board-network.json",
+      "limits": "Imported saved producer QA data; visualization only, no new simulation run.",
+      "bytes": 76581,
+      "version": "0.12.83",
+      "environment": "Packaged shared viewer, integrated browser, public local transport"
+    },
+    {
+      "file": "analysis-quicktherm-coupled-air.jpg",
+      "title": "quicktherm-coupled-air.json",
+      "limits": "Imported saved producer QA data; visualization only, no new simulation run.",
+      "bytes": 84115,
+      "version": "0.12.83",
+      "environment": "Packaged shared viewer, integrated browser, public local transport"
+    },
+    {
+      "file": "analysis-quicktherm-multilayer-transient.jpg",
+      "title": "quicktherm-multilayer-transient.json",
+      "limits": "Imported saved producer QA data; visualization only, no new simulation run.",
+      "bytes": 97629,
+      "version": "0.12.83",
+      "environment": "Packaged shared viewer, integrated browser, public local transport"
+    },
+    {
+      "file": "analysis-quicktherm-spatial-transient.jpg",
+      "title": "quicktherm-spatial-transient.json",
+      "limits": "Imported saved producer QA data; visualization only, no new simulation run.",
+      "bytes": 74910,
+      "version": "0.12.83",
+      "environment": "Packaged shared viewer, integrated browser, public local transport"
+    },
+    {
+      "file": "analysis-quicktherm-steady.jpg",
+      "title": "quicktherm-steady.json",
+      "limits": "Imported saved producer QA data; visualization only, no new simulation run.",
+      "bytes": 53136,
+      "version": "0.12.83",
+      "environment": "Packaged shared viewer, integrated browser, public local transport"
+    },
+    {
+      "file": "analysis-quicktherm-transient.jpg",
+      "title": "quicktherm-transient.json",
+      "limits": "Imported saved producer QA data; visualization only, no new simulation run.",
+      "bytes": 76758,
+      "version": "0.12.83",
+      "environment": "Packaged shared viewer, integrated browser, public local transport"
+    },
+    {
+      "file": "analysis-kicad-ac.jpg",
+      "title": "KiCad/ngspice saved AC traces",
+      "limits": "Retained RAW fixture; real/imaginary components shown, not a live solve.",
+      "bytes": 82199,
+      "version": "0.12.83",
+      "environment": "Packaged shared viewer, integrated browser, public local transport"
+    },
+    {
+      "file": "analysis-signals-axes.jpg",
+      "title": "Signal visibility and linear/logarithmic axes",
+      "limits": "",
+      "bytes": 92593,
+      "version": "0.12.83",
+      "environment": "Packaged shared viewer, integrated browser, public local transport"
+    },
+    {
+      "file": "analysis-data-table.jpg",
+      "title": "Saved numeric simulation data table",
+      "limits": "",
+      "bytes": 65841,
+      "version": "0.12.83",
+      "environment": "Packaged shared viewer, integrated browser, public local transport"
+    },
+    {
+      "file": "analysis-report-fields.jpg",
+      "title": "Saved simulation metadata and searchable report properties",
+      "limits": "",
+      "bytes": 58627,
+      "version": "0.12.83",
+      "environment": "Packaged shared viewer, integrated browser, public local transport"
+    },
+    {
+      "file": "bom-field-columns.jpg",
+      "title": "Public iBOM import · selectable field columns, grouping and assembly summary",
+      "limits": "Retained public iBOM example; not live procurement or physical assembly.",
+      "bytes": 147930,
+      "version": "0.12.83",
+      "environment": "Packaged shared viewer, integrated browser, public local transport"
+    },
+    {
+      "file": "bom-assembly-tracker.jpg",
+      "title": "Grouped assembly table and progress controls",
+      "limits": "Local demonstration; no physical placement verified.",
+      "bytes": 134174,
+      "version": "0.12.83",
+      "environment": "Packaged shared viewer, integrated browser, public local transport"
+    },
+    {
+      "file": "fast-pi-setup.jpg",
+      "title": "Experimental Fast PI · two copper contacts, electrical inputs and saved stackup",
+      "limits": "Synthetic 10 × 1 mm strip, 1 V and 1 A; return path and temperature feedback excluded.",
+      "bytes": 93355,
+      "version": "0.12.83",
+      "environment": "Packaged shared viewer, integrated browser, public local transport"
+    },
+    {
+      "file": "fast-pi-smooth-results.jpg",
+      "title": "Actual browser Fast PI solve · smooth voltage-drop field, current arrows and numerical sidebar",
+      "limits": "Synthetic strip, picked contacts 0.2793/9.6463 mm; 1 V, 1 A, 58 MS/m; sampled single-net screening.",
+      "bytes": 117618,
+      "version": "0.12.83",
+      "environment": "Packaged shared viewer, integrated browser, public local transport"
+    },
+    {
+      "file": "fast-pi-floating-results.jpg",
+      "title": "Floating Fast PI analytics and full drawing context",
+      "limits": "",
+      "bytes": 119899,
+      "version": "0.12.83",
+      "environment": "Packaged shared viewer, integrated browser, public local transport"
+    },
+    {
+      "file": "fast-pi-mesh-diagnostic.jpg",
+      "title": "Optional diagnostic mesh beside the smooth-field mode",
+      "limits": "",
+      "bytes": 141148,
+      "version": "0.12.83",
+      "environment": "Packaged shared viewer, integrated browser, public local transport"
+    },
+    {
+      "file": "fast-pi-current.jpg",
+      "title": "Current · solved Fast PI overlay",
+      "limits": "Interpolated mean incident-edge values; screening only.",
+      "bytes": 119005,
+      "version": "0.12.83",
+      "environment": "Packaged shared viewer, integrated browser, public local transport"
+    },
+    {
+      "file": "fast-pi-density.jpg",
+      "title": "Current density · solved Fast PI overlay",
+      "limits": "Interpolated mean incident-edge values; screening only.",
+      "bytes": 120110,
+      "version": "0.12.83",
+      "environment": "Packaged shared viewer, integrated browser, public local transport"
+    },
+    {
+      "file": "fast-pi-loss.jpg",
+      "title": "Copper loss · solved Fast PI overlay",
+      "limits": "Interpolated mean incident-edge values; screening only.",
+      "bytes": 119497,
+      "version": "0.12.83",
+      "environment": "Packaged shared viewer, integrated browser, public local transport"
+    },
+    {
+      "file": "draftsman-modern-dimensions.jpg",
+      "title": "Real-board mechanical Draftsman · automatic outline dimensions",
+      "limits": "Copper omitted; saved outline dimensions are not manufacturing tolerances.",
+      "bytes": 113529,
+      "version": "0.12.83",
+      "environment": "Packaged shared viewer, integrated browser, public local transport"
+    },
+    {
+      "file": "draftsman-kicad-template.jpg",
+      "title": "Alternative KiCad worksheet boundary and title block",
+      "limits": "",
+      "bytes": 120320,
+      "version": "0.12.83",
+      "environment": "Packaged shared viewer, integrated browser, public local transport"
+    },
+    {
+      "file": "draftsman-multiview-bom.jpg",
+      "title": "Multi-sheet Draftsman document · fitted-parts BoM sheet",
+      "limits": "",
+      "bytes": 160413,
+      "version": "0.12.83",
+      "environment": "Packaged shared viewer, integrated browser, public local transport"
+    },
+    {
+      "file": "draftsman-export-options.jpg",
+      "title": "Editable draft saved locally with PDF/SVG/document export and destination controls",
+      "limits": "Save to GitHub is disabled in the account-free local transport; no remote save claimed.",
+      "bytes": 162539,
+      "version": "0.12.83",
+      "environment": "Packaged shared viewer, integrated browser, public local transport"
+    },
+    {
+      "file": "draftsman-mechanical-multiview.jpg",
+      "title": "Real Olimex mechanical top and isometric projections, note and automatic dimensions",
+      "limits": "Generated from the saved PCB; copper intentionally omitted.",
+      "bytes": 117283,
+      "version": "0.12.83",
+      "environment": "Packaged shared viewer, integrated browser, public local transport"
+    },
+    {
+      "file": "gerber-drill-layers.jpg",
+      "title": "Olimex Gerber X2 and plated/non-plated drill layers · colors and opacity",
+      "limits": "13 retained public fabrication files.",
+      "bytes": 119089,
+      "version": "0.12.83",
+      "environment": "Packaged shared viewer, integrated browser, public local transport"
+    },
+    {
+      "file": "gerber-analysis.jpg",
+      "title": "Gerber/drill geometry screening, operation counts, extents, apertures and criteria",
+      "limits": "Partial coverage: unsupported aperture macros are omitted; 1,001 findings include import/render diagnostics, not DFM certification.",
+      "bytes": 115199,
+      "version": "0.12.83",
+      "environment": "Packaged shared viewer, integrated browser, public local transport"
+    },
+    {
+      "file": "responsive-phone-draftsman.jpg",
+      "title": "Draftsman saved document · phone viewport attempt",
+      "limits": "The requested viewport override retained desktop framing in this capture; this image does not demonstrate phone/tablet responsiveness or physical-device acceptance.",
+      "bytes": 117283,
+      "version": "0.12.83",
+      "environment": "Packaged shared viewer, integrated browser, public local transport"
+    },
+    {
+      "file": "responsive-tablet-draftsman.jpg",
+      "title": "Draftsman saved document · tablet viewport attempt",
+      "limits": "The requested viewport override retained desktop framing in this capture; this image does not demonstrate phone/tablet responsiveness or physical-device acceptance.",
+      "bytes": 117333,
+      "version": "0.12.83",
+      "environment": "Packaged shared viewer, integrated browser, public local transport"
+    }
+  ]
+}

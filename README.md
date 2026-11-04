@@ -48,6 +48,8 @@ Compare preview downloads with [SHA256SUMS.txt](https://github.com/wayri/KiCad-G
 
 ## Get started
 
+**[Browse the 123-image capability gallery](docs/SCREENSHOT-GALLERY-0.12.83.md)** · [Searchable offline gallery](docs/SCREENSHOT-GALLERY-0.12.83.html) · [Capability coverage and remaining evidence gaps](docs/CAPABILITY-SCREENSHOT-COVERAGE-0.12.83.md). The collection distinguishes 67 fresh 0.12.83 captures from historical UI, public-board examples and synthetic analysis fixtures.
+
 Browser update 0.12.83: click the extension toolbar icon on a repository to detect KiCad projects and open a standalone viewer tab. One result opens directly; multiple results offer a chooser. Empty listings show **No KiCad project detected**; partial listings and access failures remain explicit. Repository, file and pull-request pages stay untouched until you explicitly request a viewer. Reload an already-open repository page after updating. The shared viewer also reads [KiCad Monkey saved design/netlist reports](docs/KICAD-MONKEY.md). [Startup and managed-browser troubleshooting](docs/VIEWER-RELIABILITY.md) explains the new local diagnostics. These changes are included in the 0.12.83 preview.
 
 The development web and VS Code workspace uses a compact drawing toolbar, searchable project and properties panels, and a **More tools** menu for secondary actions. VS Code chrome follows the editor theme. A red **!** opens access diagnostics when a repository request is blocked or fails; an organization policy is identified only when the browser explicitly reports it.

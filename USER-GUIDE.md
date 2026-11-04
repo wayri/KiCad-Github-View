@@ -1,6 +1,6 @@
 # Pocket KiView illustrated user guide
 
-**Latest visual walkthrough:** the [0.12.79 real-board screenshot gallery](docs/SCREENSHOT-GALLERY-0.12.79.md) captures the packaged browser viewer on 2 November 2026. Follow actual search, cross-selection, probe, BoM, comment, Draftsman and fabrication interactions using pinned public Olimex, Marble and FMCW3 files. Local reviews, responsive previews and unsupported cases are identified explicitly. Older illustrations in this guide remain versioned historical examples.
+**Latest visual walkthrough:** the [0.12.83 capability gallery](docs/SCREENSHOT-GALLERY-0.12.83.md) contains 123 screenshots, including 67 fresh captures from the packaged viewer. Use the [searchable HTML gallery](docs/SCREENSHOT-GALLERY-0.12.83.html) and [coverage/gaps index](docs/CAPABILITY-SCREENSHOT-COVERAGE-0.12.83.md) to find drawings, probes, comments, calculators, assembly, fabrication, Draftsman and saved analysis views. Public-board examples, synthetic fixtures, responsive previews and historical captures are labelled separately. The [0.12.79 real-board walkthrough](docs/SCREENSHOT-GALLERY-0.12.79.md) remains available.
 
 Firefox and Firefox derivatives have a separate [installation, signing and Mozilla deployment guide](docs/FIREFOX.md), including Zen, LibreWolf and Waterfox compatibility limits. The current unsigned Firefox ZIP is temporary; Firefox Android extension acceptance is pending.
 

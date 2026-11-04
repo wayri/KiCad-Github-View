@@ -1,0 +1,1116 @@
+{
+  "schemaVersion": 1,
+  "release": "0.12.83",
+  "freshCaptureCount": 67,
+  "screenshotCount": 123,
+  "capturedOn": "2026-11-04",
+  "records": [
+    {
+      "path": "images/0.12.83/capabilities/01-layout.jpg",
+      "title": "Olimex M2 layout \u00b7 compact navigation",
+      "version": "0.12.83",
+      "limits": "",
+      "kind": "Fresh packaged viewer",
+      "bytes": 138044,
+      "sha256": "9a5dc581b8fad981e23043f1754a81786e9adcf49bbf5f43c495f4f9abebab5e"
+    },
+    {
+      "path": "images/0.12.83/capabilities/02-object-filters.jpg",
+      "title": "Object types, side filters and explicit unsupported categories",
+      "version": "0.12.83",
+      "limits": "",
+      "kind": "Fresh packaged viewer",
+      "bytes": 172234,
+      "sha256": "dd00c474d623991cfa56b55af50ec7a8ab65d7a4b2d415978090cc87118c3a7e"
+    },
+    {
+      "path": "images/0.12.83/capabilities/03-layers-zones-labels.jpg",
+      "title": "Floating layer picker, filled zones, outlines, worksheet, pad and net label toggles",
+      "version": "0.12.83",
+      "limits": "",
+      "kind": "Fresh packaged viewer",
+      "bytes": 145042,
+      "sha256": "1c818af278735c2fcc17eef3986f4f9f416b4fb69b9517bacc6d5756ddb3362c"
+    },
+    {
+      "path": "images/0.12.83/capabilities/04-3d-display.jpg",
+      "title": "Real linked models, copper visibility, render quality and universal lighting controls",
+      "version": "0.12.83",
+      "limits": "126/143 linked components; omitted geometry warnings remain disclosed.",
+      "kind": "Fresh packaged viewer",
+      "bytes": 103809,
+      "sha256": "c2028cb852341c0999fa3e72d85e4f4701d8a30f32a6722724e366f582bb1d58"
+    },
+    {
+      "path": "images/0.12.83/capabilities/05-3d-models.jpg",
+      "title": "Olimex M2 real models \u00b7 isometric view",
+      "version": "0.12.83",
+      "limits": "126/143 linked components; not complete coverage.",
+      "kind": "Fresh packaged viewer",
+      "bytes": 80021,
+      "sha256": "c9204141a71d42065c5831544bfc2df2b615de2012dc49eaef74d3ed1ce184a2"
+    },
+    {
+      "path": "images/0.12.83/capabilities/06-schematic.jpg",
+      "title": "Saved schematic worksheet and miniature sheet tree",
+      "version": "0.12.83",
+      "limits": "",
+      "kind": "Fresh packaged viewer",
+      "bytes": 157434,
+      "sha256": "6fdfa43577ebe9f85f5fbb62ec77c604a180e98221492782f310c6b38498169c"
+    },
+    {
+      "path": "images/0.12.83/capabilities/07-universal-search.jpg",
+      "title": "Project-wide part/pad search and 3D jump",
+      "version": "0.12.83",
+      "limits": "",
+      "kind": "Fresh packaged viewer",
+      "bytes": 167640,
+      "sha256": "d9d485169da963a7791fe5ccbb1e81ba8f58a8de47ae7087856120a150029fa7"
+    },
+    {
+      "path": "images/0.12.83/capabilities/08-properties.jpg",
+      "title": "KiCad-style field/value table and connected nets",
+      "version": "0.12.83",
+      "limits": "",
+      "kind": "Fresh packaged viewer",
+      "bytes": 117401,
+      "sha256": "6d4b1c5193c7fa3f58bb1eba3171b3c87d0427f39112c6c4273e92dfe88165e9"
+    },
+    {
+      "path": "images/0.12.83/capabilities/09-probe-controls.jpg",
+      "title": "Independent probe sheet/occurrence navigation, selection filters, rotation, flip and linked sibling action",
+      "version": "0.12.83",
+      "limits": "",
+      "kind": "Fresh packaged viewer",
+      "bytes": 107873,
+      "sha256": "6857992d47dc9589be6d7bc6558edd039ab4a3b64c02bbafe33d2552c69361db"
+    },
+    {
+      "path": "images/0.12.83/capabilities/10-sibling-cross-probe.jpg",
+      "title": "Schematic-origin sibling probe switched to layout with connection guide",
+      "version": "0.12.83",
+      "limits": "",
+      "kind": "Fresh packaged viewer",
+      "bytes": 116804,
+      "sha256": "249e53617f50acb483b7c1b14ee535187775dc808de893567cc83dfa51966239"
+    },
+    {
+      "path": "images/0.12.83/capabilities/11-schematic-layout-3d-probes.jpg",
+      "title": "Schematic main view with layout and 3D sibling probes",
+      "version": "0.12.83",
+      "limits": "Independent local cameras and saved component correspondence; this is not detached-browser-window evidence.",
+      "kind": "Fresh packaged viewer",
+      "bytes": 109069,
+      "sha256": "cdbb2c6174758980bb3d84cb298f25a67c6db2f6d132922a4d82e31d255b25cd"
+    },
+    {
+      "path": "images/0.12.83/capabilities/12-comment-composer.jpg",
+      "title": "Anchored local review composer \u00b7 Issue/Discussion, severity and state",
+      "version": "0.12.83",
+      "limits": "Local draft only; no provider send.",
+      "kind": "Fresh packaged viewer",
+      "bytes": 119135,
+      "sha256": "1983a9b6470696a9abf45f7e9dab7fd3b50fb9df7fdae3fa6e51ba67e8cbbff9"
+    },
+    {
+      "path": "images/0.12.83/capabilities/13-comment-location.jpg",
+      "title": "Local review marker, saved sheet/coordinates and Locate",
+      "version": "0.12.83",
+      "limits": "",
+      "kind": "Fresh packaged viewer",
+      "bytes": 103210,
+      "sha256": "b81b6a8f94fa69185f1eff42fc341ca44ec4a9186e58ec36b1d2991c58518dcf"
+    },
+    {
+      "path": "images/0.12.83/capabilities/14-review-filters.jpg",
+      "title": "Review state, severity, read status, sorting, UTC dates and portable transfer",
+      "version": "0.12.83",
+      "limits": "",
+      "kind": "Fresh packaged viewer",
+      "bytes": 149037,
+      "sha256": "8fa87ee4d10ba2c3dc713c22863443221e2333ab19a07b1bae6dafe8e7b4ee28"
+    },
+    {
+      "path": "images/0.12.83/capabilities/15-calculator-ohm.jpg",
+      "title": "Ohm\u2019s law calculator \u00b7 interactive circuit, units and computed results",
+      "version": "0.12.83",
+      "limits": "",
+      "kind": "Fresh packaged viewer",
+      "bytes": 80561,
+      "sha256": "678248207d92f28776d86e01a7c1f12ca58abe34829eb739ac202e62bbb3d7f0"
+    },
+    {
+      "path": "images/0.12.83/capabilities/calculator-divider.jpg",
+      "title": "Loaded voltage divider",
+      "version": "0.12.83",
+      "limits": "Default example inputs; analytical model assumptions apply, not circuit simulation.",
+      "kind": "Fresh packaged viewer",
+      "bytes": 90428,
+      "sha256": "694d4ab13ddd4ca59ccb5784689df72e50acb31344dc526b7d7f45f642346636"
+    },
+    {
+      "path": "images/0.12.83/capabilities/calculator-regulator.jpg",
+      "title": "Adjustable regulator divider",
+      "version": "0.12.83",
+      "limits": "Default example inputs; analytical model assumptions apply, not circuit simulation.",
+      "kind": "Fresh packaged viewer",
+      "bytes": 89072,
+      "sha256": "b25398c21a770ec214a8808853ed7b3f17b2867e2524054ba8b4213718736cb7"
+    },
+    {
+      "path": "images/0.12.83/capabilities/calculator-led.jpg",
+      "title": "LED series resistor",
+      "version": "0.12.83",
+      "limits": "Default example inputs; analytical model assumptions apply, not circuit simulation.",
+      "kind": "Fresh packaged viewer",
+      "bytes": 88370,
+      "sha256": "2b9f3abfde35a0d4552a3e07b6054bc1464e86b36add52f56749cb938f4d0be9"
+    },
+    {
+      "path": "images/0.12.83/capabilities/calculator-color.jpg",
+      "title": "Resistor color bands",
+      "version": "0.12.83",
+      "limits": "Default example inputs; analytical model assumptions apply, not circuit simulation.",
+      "kind": "Fresh packaged viewer",
+      "bytes": 74533,
+      "sha256": "d83465fe12f595b1627a0fbf25d9d432031854d05aedc14f644bad25f9f83f2e"
+    },
+    {
+      "path": "images/0.12.83/capabilities/calculator-track.jpg",
+      "title": "Copper track width \u00b7 IPC-2221",
+      "version": "0.12.83",
+      "limits": "Default example inputs; analytical model assumptions apply, not circuit simulation.",
+      "kind": "Fresh packaged viewer",
+      "bytes": 95056,
+      "sha256": "45b5773520156931fb3104ddf6067445457d4f7c38da87fd1c7f3627e478ec8d"
+    },
+    {
+      "path": "images/0.12.83/capabilities/calculator-via.jpg",
+      "title": "Plated via DC resistance",
+      "version": "0.12.83",
+      "limits": "Default example inputs; analytical model assumptions apply, not circuit simulation.",
+      "kind": "Fresh packaged viewer",
+      "bytes": 91747,
+      "sha256": "d6aecf6e33ab68b3cd9bb31e50d06dba6544dce63a5209c22fafd5ea20254224"
+    },
+    {
+      "path": "images/0.12.83/capabilities/calculator-wavelength.jpg",
+      "title": "Frequency & wavelength",
+      "version": "0.12.83",
+      "limits": "Default example inputs; analytical model assumptions apply, not circuit simulation.",
+      "kind": "Fresh packaged viewer",
+      "bytes": 80863,
+      "sha256": "f64a8212d6d6c534241b178191692417b439d8bfa0d96c327372105252c58421"
+    },
+    {
+      "path": "images/0.12.83/capabilities/calculator-length.jpg",
+      "title": "Length unit converter",
+      "version": "0.12.83",
+      "limits": "Default example inputs; analytical model assumptions apply, not circuit simulation.",
+      "kind": "Fresh packaged viewer",
+      "bytes": 75191,
+      "sha256": "ab2e5c96ec70c5bedf1bbf62045ce78b7575bce453a6ce89d74ac7a91c6a4e94"
+    },
+    {
+      "path": "images/0.12.83/capabilities/calculator-rc.jpg",
+      "title": "RC low-pass / high-pass",
+      "version": "0.12.83",
+      "limits": "Default example inputs; analytical model assumptions apply, not circuit simulation.",
+      "kind": "Fresh packaged viewer",
+      "bytes": 96493,
+      "sha256": "c40346d521effa128f661cfb6d7b4207da4322a810f5a3521a55a1871e5d347f"
+    },
+    {
+      "path": "images/0.12.83/capabilities/calculator-rlc.jpg",
+      "title": "Series RLC resonance",
+      "version": "0.12.83",
+      "limits": "Default example inputs; analytical model assumptions apply, not circuit simulation.",
+      "kind": "Fresh packaged viewer",
+      "bytes": 97673,
+      "sha256": "04b95e4c41a8478d8f6fd783c6dea054396532d85f9e73fbe3fe18981de074a2"
+    },
+    {
+      "path": "images/0.12.83/capabilities/calculator-timer555.jpg",
+      "title": "555 astable oscillator",
+      "version": "0.12.83",
+      "limits": "Default example inputs; analytical model assumptions apply, not circuit simulation.",
+      "kind": "Fresh packaged viewer",
+      "bytes": 93180,
+      "sha256": "e2d8ed07656a8c46d5ac3002371b817c212dbe523ac38d206831e5668ed8c7b0"
+    },
+    {
+      "path": "images/0.12.83/capabilities/calculator-opamp.jpg",
+      "title": "Ideal op-amp gain",
+      "version": "0.12.83",
+      "limits": "Default example inputs; analytical model assumptions apply, not circuit simulation.",
+      "kind": "Fresh packaged viewer",
+      "bytes": 87560,
+      "sha256": "a4786666538b43897a0b3ae3315a3619e3aa9aeba9065b3c7339876026f56f67"
+    },
+    {
+      "path": "images/0.12.83/capabilities/calculator-reactance.jpg",
+      "title": "Inductive / capacitive reactance",
+      "version": "0.12.83",
+      "limits": "Default example inputs; analytical model assumptions apply, not circuit simulation.",
+      "kind": "Fresh packaged viewer",
+      "bytes": 83489,
+      "sha256": "2337ed2bd63779d16977b3e06abb5757541bdbb6ae971593a3946f10174cbd78"
+    },
+    {
+      "path": "images/0.12.83/capabilities/calculator-noise.jpg",
+      "title": "Resistor thermal noise",
+      "version": "0.12.83",
+      "limits": "Default example inputs; analytical model assumptions apply, not circuit simulation.",
+      "kind": "Fresh packaged viewer",
+      "bytes": 94678,
+      "sha256": "e1205168357f85554a34cedee79e28a831f8153afe8dfc6a7863f104f2d6b67f"
+    },
+    {
+      "path": "images/0.12.83/capabilities/calculator-buck.jpg",
+      "title": "Ideal buck \u00b7 CCM",
+      "version": "0.12.83",
+      "limits": "Default example inputs; analytical model assumptions apply, not circuit simulation.",
+      "kind": "Fresh packaged viewer",
+      "bytes": 104659,
+      "sha256": "c92f28fa2de8cde98e6d86dd0811be5ac5d5439d7389cbf3779d25c1cdfbc861"
+    },
+    {
+      "path": "images/0.12.83/capabilities/calculator-boost.jpg",
+      "title": "Ideal boost \u00b7 CCM",
+      "version": "0.12.83",
+      "limits": "Default example inputs; analytical model assumptions apply, not circuit simulation.",
+      "kind": "Fresh packaged viewer",
+      "bytes": 106627,
+      "sha256": "5a227b3b3d2e4e921ee0a0f6f3d0d2060e86953dc82df08aa1d38675ed183fa9"
+    },
+    {
+      "path": "images/0.12.83/capabilities/analysis-quickpi-dc.jpg",
+      "title": "Imported wayriCAD Quick PI nodal potential overlay",
+      "version": "0.12.83",
+      "limits": "Saved synthetic producer fixture; no source PCB attached and no live solve.",
+      "kind": "Fresh packaged viewer",
+      "bytes": 82014,
+      "sha256": "d1caf3762047fe36963ede21cc6c3b59886f5aa46a5f24f7d7314036e8955d7a"
+    },
+    {
+      "path": "images/0.12.83/capabilities/analysis-quickpi-3d.jpg",
+      "title": "Imported wayriCAD spatial field in 3D",
+      "version": "0.12.83",
+      "limits": "Saved result geometry; no matching source PCB attached.",
+      "kind": "Fresh packaged viewer",
+      "bytes": 82017,
+      "sha256": "ad82175a2c06f8d912a173aab95d59a63df97eb78b909ba127788fd2476656d1"
+    },
+    {
+      "path": "images/0.12.83/capabilities/analysis-quickpi-electrothermal-transient.jpg",
+      "title": "quickpi-electrothermal-transient.json",
+      "version": "0.12.83",
+      "limits": "Imported saved producer QA data; visualization only, no new simulation run.",
+      "kind": "Fresh packaged viewer",
+      "bytes": 77277,
+      "sha256": "80ec5fb27b51efb9b7a31c332544acc222baaf5dac21e98b821193f7ca9c1305"
+    },
+    {
+      "path": "images/0.12.83/capabilities/analysis-quickpi-transient.jpg",
+      "title": "quickpi-transient.json",
+      "version": "0.12.83",
+      "limits": "Imported saved producer QA data; visualization only, no new simulation run.",
+      "kind": "Fresh packaged viewer",
+      "bytes": 75238,
+      "sha256": "9ab4e57acdd843aa9df6e076439d4b4cc5c1a354baeaeeaf932499424e184dc7"
+    },
+    {
+      "path": "images/0.12.83/capabilities/analysis-quicksi-eye.jpg",
+      "title": "quicksi-eye.json",
+      "version": "0.12.83",
+      "limits": "Imported saved producer QA data; visualization only, no new simulation run.",
+      "kind": "Fresh packaged viewer",
+      "bytes": 82843,
+      "sha256": "7c741958c6796d1317113f2a80b00686b8f4280bfccfe699ca4e5db900aa0f16"
+    },
+    {
+      "path": "images/0.12.83/capabilities/analysis-quicksi-screen.jpg",
+      "title": "quicksi-screen.json",
+      "version": "0.12.83",
+      "limits": "Imported saved producer QA data; visualization only, no new simulation run.",
+      "kind": "Fresh packaged viewer",
+      "bytes": 112955,
+      "sha256": "e0966bd6b9175a49002ab7b6acec6e674dffa1901c5f23752175218cfe14309b"
+    },
+    {
+      "path": "images/0.12.83/capabilities/analysis-quicktherm-board-network.jpg",
+      "title": "quicktherm-board-network.json",
+      "version": "0.12.83",
+      "limits": "Imported saved producer QA data; visualization only, no new simulation run.",
+      "kind": "Fresh packaged viewer",
+      "bytes": 76581,
+      "sha256": "4d619d7af22aad9f6c1ded237c7bbe92698af798eefb9364ae554a934e4193e1"
+    },
+    {
+      "path": "images/0.12.83/capabilities/analysis-quicktherm-coupled-air.jpg",
+      "title": "quicktherm-coupled-air.json",
+      "version": "0.12.83",
+      "limits": "Imported saved producer QA data; visualization only, no new simulation run.",
+      "kind": "Fresh packaged viewer",
+      "bytes": 84115,
+      "sha256": "d5e9a11e30ee0c1bc780e95640d6237d05657008434eeb574b59a38c05d59e78"
+    },
+    {
+      "path": "images/0.12.83/capabilities/analysis-quicktherm-multilayer-transient.jpg",
+      "title": "quicktherm-multilayer-transient.json",
+      "version": "0.12.83",
+      "limits": "Imported saved producer QA data; visualization only, no new simulation run.",
+      "kind": "Fresh packaged viewer",
+      "bytes": 97629,
+      "sha256": "c1512491f2d96fd4c912af04784106d5b9d6593714a7e854a21d8d00c68c5546"
+    },
+    {
+      "path": "images/0.12.83/capabilities/analysis-quicktherm-spatial-transient.jpg",
+      "title": "quicktherm-spatial-transient.json",
+      "version": "0.12.83",
+      "limits": "Imported saved producer QA data; visualization only, no new simulation run.",
+      "kind": "Fresh packaged viewer",
+      "bytes": 74910,
+      "sha256": "1b741bec2d81eac013167cffb3f3b1b10931e6e5ebb5ea8f4a2224a1b909948b"
+    },
+    {
+      "path": "images/0.12.83/capabilities/analysis-quicktherm-steady.jpg",
+      "title": "quicktherm-steady.json",
+      "version": "0.12.83",
+      "limits": "Imported saved producer QA data; visualization only, no new simulation run.",
+      "kind": "Fresh packaged viewer",
+      "bytes": 53136,
+      "sha256": "bfef87c5aea2cc48be9f6e3d65a00857a07873982b0f042daae29d3c692184b8"
+    },
+    {
+      "path": "images/0.12.83/capabilities/analysis-quicktherm-transient.jpg",
+      "title": "quicktherm-transient.json",
+      "version": "0.12.83",
+      "limits": "Imported saved producer QA data; visualization only, no new simulation run.",
+      "kind": "Fresh packaged viewer",
+      "bytes": 76758,
+      "sha256": "53b2199cbcc8a6e99310faabf2f4fb1c554e9c7ae90185e09e7bdf572cbe20f2"
+    },
+    {
+      "path": "images/0.12.83/capabilities/analysis-kicad-ac.jpg",
+      "title": "KiCad/ngspice saved AC traces",
+      "version": "0.12.83",
+      "limits": "Retained RAW fixture; real/imaginary components shown, not a live solve.",
+      "kind": "Fresh packaged viewer",
+      "bytes": 82199,
+      "sha256": "3f8a4548a54d14ca795b35e0e98eb9567cca2bf2fa4bc430bddfa6f62e7486bc"
+    },
+    {
+      "path": "images/0.12.83/capabilities/analysis-signals-axes.jpg",
+      "title": "Signal visibility and linear/logarithmic axes",
+      "version": "0.12.83",
+      "limits": "",
+      "kind": "Fresh packaged viewer",
+      "bytes": 92593,
+      "sha256": "e826d9d0503f2eead6fc7c8fa232bc3f96a95fb2dd2930bbd6d5920ecca8db32"
+    },
+    {
+      "path": "images/0.12.83/capabilities/analysis-data-table.jpg",
+      "title": "Saved numeric simulation data table",
+      "version": "0.12.83",
+      "limits": "",
+      "kind": "Fresh packaged viewer",
+      "bytes": 65841,
+      "sha256": "ae0635c83403bed4d3cde227f65a98e5f7ad3202c73298b17a7162bd6f79bec7"
+    },
+    {
+      "path": "images/0.12.83/capabilities/analysis-report-fields.jpg",
+      "title": "Saved simulation metadata and searchable report properties",
+      "version": "0.12.83",
+      "limits": "",
+      "kind": "Fresh packaged viewer",
+      "bytes": 58627,
+      "sha256": "3cd1173402b8d1ce8c3818eb608714ea0ce081a9d08a3b7db2ffa2f5e92aa986"
+    },
+    {
+      "path": "images/0.12.83/capabilities/bom-field-columns.jpg",
+      "title": "Public iBOM import \u00b7 selectable field columns, grouping and assembly summary",
+      "version": "0.12.83",
+      "limits": "Retained public iBOM example; not live procurement or physical assembly.",
+      "kind": "Fresh packaged viewer",
+      "bytes": 147930,
+      "sha256": "c27a4ae0f73d4cae190167e39deae1df102ba9bfb5f0df79bb8954d7312337c6"
+    },
+    {
+      "path": "images/0.12.83/capabilities/bom-assembly-tracker.jpg",
+      "title": "Grouped assembly table and progress controls",
+      "version": "0.12.83",
+      "limits": "Local demonstration; no physical placement verified.",
+      "kind": "Fresh packaged viewer",
+      "bytes": 134174,
+      "sha256": "85e6ea2a95454c6d8c915cff7e636982f998fa83fc4166e09d6a9d90ee7e0175"
+    },
+    {
+      "path": "images/0.12.83/capabilities/fast-pi-setup.jpg",
+      "title": "Experimental Fast PI \u00b7 two copper contacts, electrical inputs and saved stackup",
+      "version": "0.12.83",
+      "limits": "Synthetic 10 \u00d7 1 mm strip, 1 V and 1 A; return path and temperature feedback excluded.",
+      "kind": "Fresh packaged viewer",
+      "bytes": 93355,
+      "sha256": "f7cbcd0973c953d7090447019d7dff75d05d497017031280c5c661c9cb4f4a3c"
+    },
+    {
+      "path": "images/0.12.83/capabilities/fast-pi-smooth-results.jpg",
+      "title": "Actual browser Fast PI solve \u00b7 smooth voltage-drop field, current arrows and numerical sidebar",
+      "version": "0.12.83",
+      "limits": "Synthetic strip, picked contacts 0.2793/9.6463 mm; 1 V, 1 A, 58 MS/m; sampled single-net screening.",
+      "kind": "Fresh packaged viewer",
+      "bytes": 117618,
+      "sha256": "528c1238531f6bd05a00fdc3cda192d8fabf0492ff8528a766e3b2a24a207dbd"
+    },
+    {
+      "path": "images/0.12.83/capabilities/fast-pi-floating-results.jpg",
+      "title": "Floating Fast PI analytics and full drawing context",
+      "version": "0.12.83",
+      "limits": "",
+      "kind": "Fresh packaged viewer",
+      "bytes": 119899,
+      "sha256": "42c8e7d528101a560f21bf18f538019c22cef474cefa348bf8a3c7d1b1bcf4e6"
+    },
+    {
+      "path": "images/0.12.83/capabilities/fast-pi-mesh-diagnostic.jpg",
+      "title": "Optional diagnostic mesh beside the smooth-field mode",
+      "version": "0.12.83",
+      "limits": "",
+      "kind": "Fresh packaged viewer",
+      "bytes": 141148,
+      "sha256": "4babdb36189e4e393e8a95330947102a0978cb893be4377ddf53850b19a6d04d"
+    },
+    {
+      "path": "images/0.12.83/capabilities/fast-pi-current.jpg",
+      "title": "Current \u00b7 solved Fast PI overlay",
+      "version": "0.12.83",
+      "limits": "Interpolated mean incident-edge values; screening only.",
+      "kind": "Fresh packaged viewer",
+      "bytes": 119005,
+      "sha256": "5fcb0ce5eb4bb118af5a9f2263eb27ee27e9168ced957d18d7c5ce503f174462"
+    },
+    {
+      "path": "images/0.12.83/capabilities/fast-pi-density.jpg",
+      "title": "Current density \u00b7 solved Fast PI overlay",
+      "version": "0.12.83",
+      "limits": "Interpolated mean incident-edge values; screening only.",
+      "kind": "Fresh packaged viewer",
+      "bytes": 120110,
+      "sha256": "80bf8329c588a94c76a7961605dd4fbccef4422024321657b2f676cb71fac4a2"
+    },
+    {
+      "path": "images/0.12.83/capabilities/fast-pi-loss.jpg",
+      "title": "Copper loss \u00b7 solved Fast PI overlay",
+      "version": "0.12.83",
+      "limits": "Interpolated mean incident-edge values; screening only.",
+      "kind": "Fresh packaged viewer",
+      "bytes": 119497,
+      "sha256": "f9d5f1c17cbb34d944f06734dc86311f99edc810b5c73a7ed82e90f8fb36ad80"
+    },
+    {
+      "path": "images/0.12.83/capabilities/draftsman-modern-dimensions.jpg",
+      "title": "Real-board mechanical Draftsman \u00b7 automatic outline dimensions",
+      "version": "0.12.83",
+      "limits": "Copper omitted; saved outline dimensions are not manufacturing tolerances.",
+      "kind": "Fresh packaged viewer",
+      "bytes": 113529,
+      "sha256": "63a81c4478a581d8369490e4506c9a12e44fd11fbbafef8477501be707cc705d"
+    },
+    {
+      "path": "images/0.12.83/capabilities/draftsman-kicad-template.jpg",
+      "title": "Alternative KiCad worksheet boundary and title block",
+      "version": "0.12.83",
+      "limits": "",
+      "kind": "Fresh packaged viewer",
+      "bytes": 120320,
+      "sha256": "efba767072b3e7add80ead3cb6d701334891001f1399a7213f286f8d2ae18e6b"
+    },
+    {
+      "path": "images/0.12.83/capabilities/draftsman-multiview-bom.jpg",
+      "title": "Multi-sheet Draftsman document \u00b7 fitted-parts BoM sheet",
+      "version": "0.12.83",
+      "limits": "",
+      "kind": "Fresh packaged viewer",
+      "bytes": 160413,
+      "sha256": "83871ff3a995076afb804fc0c5a5233211302947ee2c7eecf69ea3bf2cf907ac"
+    },
+    {
+      "path": "images/0.12.83/capabilities/draftsman-export-options.jpg",
+      "title": "Editable draft saved locally with PDF/SVG/document export and destination controls",
+      "version": "0.12.83",
+      "limits": "Save to GitHub is disabled in the account-free local transport; no remote save claimed.",
+      "kind": "Fresh packaged viewer",
+      "bytes": 162539,
+      "sha256": "63c93e7d0ec2c5359822d68bce5c7b3680a766d2bad91cbe37c4d8ac7acf3738"
+    },
+    {
+      "path": "images/0.12.83/capabilities/draftsman-mechanical-multiview.jpg",
+      "title": "Real Olimex mechanical top and isometric projections, note and automatic dimensions",
+      "version": "0.12.83",
+      "limits": "Generated from the saved PCB; copper intentionally omitted.",
+      "kind": "Fresh packaged viewer",
+      "bytes": 117283,
+      "sha256": "956c1b024a44eed6aba45181d54e2c46c25823abb28eba6a71ae556ba0e94947"
+    },
+    {
+      "path": "images/0.12.83/capabilities/gerber-drill-layers.jpg",
+      "title": "Olimex Gerber X2 and plated/non-plated drill layers \u00b7 colors and opacity",
+      "version": "0.12.83",
+      "limits": "13 retained public fabrication files.",
+      "kind": "Fresh packaged viewer",
+      "bytes": 119089,
+      "sha256": "3cf65bb474b7b2090e6724b6defe22bac4b0704fe8e5de4844d566ee7b2c9e43"
+    },
+    {
+      "path": "images/0.12.83/capabilities/gerber-analysis.jpg",
+      "title": "Gerber/drill geometry screening, operation counts, extents, apertures and criteria",
+      "version": "0.12.83",
+      "limits": "Partial coverage: unsupported aperture macros are omitted; 1,001 findings include import/render diagnostics, not DFM certification.",
+      "kind": "Fresh packaged viewer",
+      "bytes": 115199,
+      "sha256": "39f1b035bb86655e8f030064f8be40250b0aa62efc859111b0f6fb4545f6849d"
+    },
+    {
+      "path": "images/0.12.83/capabilities/responsive-phone-draftsman.jpg",
+      "title": "Draftsman saved document \u00b7 phone viewport attempt",
+      "version": "0.12.83",
+      "limits": "The requested viewport override retained desktop framing in this capture; this image does not demonstrate phone/tablet responsiveness or physical-device acceptance.",
+      "kind": "Fresh packaged viewer",
+      "bytes": 117283,
+      "sha256": "956c1b024a44eed6aba45181d54e2c46c25823abb28eba6a71ae556ba0e94947"
+    },
+    {
+      "path": "images/0.12.83/capabilities/responsive-tablet-draftsman.jpg",
+      "title": "Draftsman saved document \u00b7 tablet viewport attempt",
+      "version": "0.12.83",
+      "limits": "The requested viewport override retained desktop framing in this capture; this image does not demonstrate phone/tablet responsiveness or physical-device acceptance.",
+      "kind": "Fresh packaged viewer",
+      "bytes": 117333,
+      "sha256": "5f2b2888237fb6cc8349fffb0bd387852d70c5135ca14680d4053fdf22a1ab19"
+    },
+    {
+      "path": "images/0.12.83/rule-reports/drc-report.jpg",
+      "title": "DRC report, saved location and note",
+      "version": "0.12.83",
+      "limits": "Native KiCad 10.0.6 export on a public fixture.",
+      "kind": "Fresh report demonstration",
+      "bytes": 106448,
+      "sha256": "9bfeb78033b39d6bd901873d8323ecd9a33db2db73b628ce47eca0a08b15e6ca"
+    },
+    {
+      "path": "images/0.12.83/rule-reports/erc-report.jpg",
+      "title": "ERC error/warning markers and note",
+      "version": "0.12.83",
+      "limits": "Synthetic ERC QA fixture; no native run claimed.",
+      "kind": "Fresh report demonstration",
+      "bytes": 119728,
+      "sha256": "b899c66d39beed6517f80e8fa2d4fc2aec45d6cfffce2e4bdb7b33dd3864c636"
+    },
+    {
+      "path": "images/0.12.79/01-olimex-layout.jpg",
+      "title": "Olimex PCB layout",
+      "version": "0.12.79",
+      "limits": "Saved source shown.",
+      "kind": "Historical public-board evidence",
+      "bytes": 147819,
+      "sha256": "d6da041230e8a78129bd913e821db672ef917c9bdc1e6216d322c8ed6a217a0f"
+    },
+    {
+      "path": "images/0.12.79/02-olimex-3d-real-models.jpg",
+      "title": "Real component models in 3D",
+      "version": "0.12.79",
+      "limits": "Model coverage is partial; unlinked components are not evidence of a complete mechanical assembly.",
+      "kind": "Historical public-board evidence",
+      "bytes": 78521,
+      "sha256": "a831c89a7f60d46c4f9653a2eec6ad41acb9735500c0b541fce0ef74207ad68d"
+    },
+    {
+      "path": "images/0.12.79/03-project-search.jpg",
+      "title": "Project-wide search",
+      "version": "0.12.79",
+      "limits": "Search evidence is limited to the loaded project.",
+      "kind": "Historical public-board evidence",
+      "bytes": 105430,
+      "sha256": "fefac724df11c794062b39881f847593073b854f33b20c45caf506e1fd5a8cb9"
+    },
+    {
+      "path": "images/0.12.79/04-3d-selection-properties.jpg",
+      "title": "3D selection and native properties",
+      "version": "0.12.79",
+      "limits": "Selection and properties are viewing operations, not design edits.",
+      "kind": "Historical public-board evidence",
+      "bytes": 102161,
+      "sha256": "16effca1e958319dc180be92a63875925e5047122723ffcce477b06870a1faae"
+    },
+    {
+      "path": "images/0.12.79/05-3d-net-highlight.jpg",
+      "title": "Selected +5V copper",
+      "version": "0.12.79",
+      "limits": "Saved-net inspection is not electrical or manufacturing qualification.",
+      "kind": "Historical public-board evidence",
+      "bytes": 73420,
+      "sha256": "6b591e35353ca065306b6b909b84e1b4265efba8ee0d32a380ef318078bd7558"
+    },
+    {
+      "path": "images/0.12.79/06-net-probe-on-3d.jpg",
+      "title": "Layout probe over the 3D board",
+      "version": "0.12.79",
+      "limits": "The popup is an independent viewport in the same application page.",
+      "kind": "Historical public-board evidence",
+      "bytes": 93468,
+      "sha256": "044f99f17290c8c93d0e8e8ec609e86ad1cebf963067340c19f1ce1e9988e8d7"
+    },
+    {
+      "path": "images/0.12.79/07-independent-probe-views.jpg",
+      "title": "Independent sibling probes",
+      "version": "0.12.79",
+      "limits": "The second popup moved from DOM x=76 to x=532; this is not a separate installed application window.",
+      "kind": "Historical public-board evidence",
+      "bytes": 104846,
+      "sha256": "0db42f26b74887d6b1cc458f3754c815d1d3824945e5cd0ae00a98907434735e"
+    },
+    {
+      "path": "images/0.12.79/08-paired-3d-schematic.jpg",
+      "title": "Paired 3D and schematic views",
+      "version": "0.12.79",
+      "limits": "Pairing uses the retained saved project; it does not synchronize unsaved KiCad editor state.",
+      "kind": "Historical public-board evidence",
+      "bytes": 147632,
+      "sha256": "6dae4db31b6f034be8b74841046d364a1371f44695edcc12185d80a04a9937e0"
+    },
+    {
+      "path": "images/0.12.79/09-pad-selection.jpg",
+      "title": "Saved pad selection",
+      "version": "0.12.79",
+      "limits": "This capture proves pad selection only. The search/navigation step returns to a single PCB view; it is not evidence of paired pin highlighting.",
+      "kind": "Historical public-board evidence",
+      "bytes": 103200,
+      "sha256": "095da8b2df6944554813d1fa53c06db7cdbdc290c5b0feacb2b0ccb2521c5540"
+    },
+    {
+      "path": "images/0.12.79/10-paired-net-highlight.jpg",
+      "title": "Actual +5V cross-selection",
+      "version": "0.12.79",
+      "limits": "This observed saved-net match does not establish every possible cross-sheet or repeated-unit mapping.",
+      "kind": "Historical public-board evidence",
+      "bytes": 159183,
+      "sha256": "71996581d9464030057380ce397b29354d7b550594070516b6a7a1e3d4ea51f6"
+    },
+    {
+      "path": "images/0.12.79/11-floating-layers-net-labels.jpg",
+      "title": "Layers and terminal labels",
+      "version": "0.12.79",
+      "limits": "Shown label visibility depends on zoom, saved identities and annotation budgets.",
+      "kind": "Historical public-board evidence",
+      "bytes": 96259,
+      "sha256": "435611879a35442cbbd5c1b714e5a5f8c4f78156d14198eb34f38f93232f1664"
+    },
+    {
+      "path": "images/0.12.79/12-bom-column-picker.jpg",
+      "title": "BoM column chooser",
+      "version": "0.12.79",
+      "limits": "Fields come from the saved project; column choices do not rewrite the design.",
+      "kind": "Historical public-board evidence",
+      "bytes": 144508,
+      "sha256": "f89735aee24302078af402aa7d297e1b5a3fd46c88483642398a7d392317a12b"
+    },
+    {
+      "path": "images/0.12.79/13-bom-assembly-tracker.jpg",
+      "title": "Local assembly tracking",
+      "version": "0.12.79",
+      "limits": "These are demonstration tracking states, not a record of physical assembly.",
+      "kind": "Historical public-board evidence",
+      "bytes": 201882,
+      "sha256": "4a6ce7e29b34b1aa97719eaf78b30bf690b4158272490be48610e51bbb090528"
+    },
+    {
+      "path": "images/0.12.79/14-measure-board-extents.jpg",
+      "title": "Board-extent measurement",
+      "version": "0.12.79",
+      "limits": "Screen measurements are review aids, without inferred manufacturing tolerances.",
+      "kind": "Historical public-board evidence",
+      "bytes": 114984,
+      "sha256": "b359c3f0a6f62cac450f0ba1c6b300fc1d3ceed48169fc041f40891123d8d9f2"
+    },
+    {
+      "path": "images/0.12.79/15-comment-composer-local.jpg",
+      "title": "Local review-note composer",
+      "version": "0.12.79",
+      "limits": "No provider comment is sent.",
+      "kind": "Historical public-board evidence",
+      "bytes": 114206,
+      "sha256": "f6a0c946d329659d8cc586364af9c1415694f2e162858c7ed0139c482a274f62"
+    },
+    {
+      "path": "images/0.12.79/16-comment-locate-local.jpg",
+      "title": "Locate a saved local note",
+      "version": "0.12.79",
+      "limits": "This demonstrates local save/locate only, not remote publication or readback.",
+      "kind": "Historical public-board evidence",
+      "bytes": 126098,
+      "sha256": "8a8082f07e54e41ae799e26d84635f557afdd00133c10a19a5bd06cbb2675bc2"
+    },
+    {
+      "path": "images/0.12.79/17-comment-filters.jpg",
+      "title": "Filter local review notes",
+      "version": "0.12.79",
+      "limits": "Account threads and remote conversation refresh are not exercised.",
+      "kind": "Historical public-board evidence",
+      "bytes": 157025,
+      "sha256": "8656261d455b147b25c8e06e2cedc9e1330f430a4327ba060e785373f371f48a"
+    },
+    {
+      "path": "images/0.12.79/18-fast-pi-reviewed-setup.jpg",
+      "title": "Reviewed Fast PI setup",
+      "version": "0.12.79",
+      "limits": "Setup only: this actual Olimex board is rejected for unsupported slotted drills. No solved PI result is shown.",
+      "kind": "Historical public-board evidence",
+      "bytes": 125225,
+      "sha256": "3eb788bd8aeed1e7355a1430042c18fcacda2fbca66c92f9cf04676732b1be76"
+    },
+    {
+      "path": "images/0.12.79/19-draftsman-kicad-template.jpg",
+      "title": "KiCad-style Draftsman sheet",
+      "version": "0.12.79",
+      "limits": "The drawing document is separate from the PCB source.",
+      "kind": "Historical public-board evidence",
+      "bytes": 101368,
+      "sha256": "e5afc592b4a1fb0b58b5d27e77311fd12c9d393de45c84680be1e97fe5813138"
+    },
+    {
+      "path": "images/0.12.79/20-draftsman-multiple-views.jpg",
+      "title": "Multiple documentation views",
+      "version": "0.12.79",
+      "limits": "View visibility is a documentation choice, not a change to saved copper.",
+      "kind": "Historical public-board evidence",
+      "bytes": 106675,
+      "sha256": "f05fe0d58e7397dec12a4d31e69c6b1f3746d2e140561693f8687103e2ab46b2"
+    },
+    {
+      "path": "images/0.12.79/21-draftsman-pdf-ready.jpg",
+      "title": "Generated PDF ready",
+      "version": "0.12.79",
+      "limits": "GitHub save is disabled without authentication. This does not demonstrate a remote repository save.",
+      "kind": "Historical public-board evidence",
+      "bytes": 112198,
+      "sha256": "52269ebc7a0ff878c423ce5afd68dd215336ec8f749f47eb42628bdaa7f4225c"
+    },
+    {
+      "path": "images/0.12.79/22-project-home-files.jpg",
+      "title": "Project home and saved files",
+      "version": "0.12.79",
+      "limits": "The capture uses a loopback local-project bridge, not live provider discovery.",
+      "kind": "Historical public-board evidence",
+      "bytes": 54844,
+      "sha256": "f1f10b214b8bdb2f22817d291485758367efeaf81cdd17fe282014e36310fc63"
+    },
+    {
+      "path": "images/0.12.79/23-gerber-copper-layers.jpg",
+      "title": "Upstream Gerber layers",
+      "version": "0.12.79",
+      "limits": "Partial import: PTH is rejected for unsupported slots/macros. The files are upstream saved outputs, not newly plotted from the current board.",
+      "kind": "Historical public-board evidence",
+      "bytes": 131948,
+      "sha256": "8a8c71805fa3ba1f7b40db3e4eeb3c3f9b354d6a556a80cac9ea82dcc2a33476"
+    },
+    {
+      "path": "images/0.12.79/24-gerber-analysis-partial.jpg",
+      "title": "Partial Gerber analysis",
+      "version": "0.12.79",
+      "limits": "Findings are screening data, not DFM certification. Unsupported PTH slots/macros and incomplete rendering remain explicit.",
+      "kind": "Historical public-board evidence",
+      "bytes": 132017,
+      "sha256": "d2d780086393da9083146a2de4517805122bf0f567293526a672509fecee58d1"
+    },
+    {
+      "path": "images/0.12.79/25-marble-root-hierarchy.jpg",
+      "title": "Marble root and hierarchy",
+      "version": "0.12.79",
+      "limits": "This capture corpus deliberately excludes the 44 MB PCB and all models.",
+      "kind": "Historical public-board evidence",
+      "bytes": 146885,
+      "sha256": "9c0ac4d097c310b4ea434ad809ab6874407f9c26070ee1a92241d79cc8a1f756"
+    },
+    {
+      "path": "images/0.12.79/26-marble-all-sheets.jpg",
+      "title": "All loaded schematic pages",
+      "version": "0.12.79",
+      "limits": "The overview does not claim that every repeated instance has been expanded into a separate page.",
+      "kind": "Historical public-board evidence",
+      "bytes": 167177,
+      "sha256": "eeaf1352cf7bc41134f67fcc961960c9552c63bd2ece02d1cc393d0a11cd2a49"
+    },
+    {
+      "path": "images/0.12.79/27-marble-linked-sheets.jpg",
+      "title": "Only sheets matching FPGA_MISO",
+      "version": "0.12.79",
+      "limits": "The filter reflects this saved net and loaded sources, not a general connectivity proof.",
+      "kind": "Historical public-board evidence",
+      "bytes": 113843,
+      "sha256": "b55b18a50e0a9fc08b46f86ff7cb80847d05ab5e607fbf54290c97619e9713b0"
+    },
+    {
+      "path": "images/0.12.79/28-net-links-without-hierarchy.jpg",
+      "title": "Net links without hierarchy links",
+      "version": "0.12.79",
+      "limits": "The two link overlays are controlled independently.",
+      "kind": "Historical public-board evidence",
+      "bytes": 113168,
+      "sha256": "9078261751c8dc318490143834ebcc33339deb9c8042ab01ba4b95e34b0041a5"
+    },
+    {
+      "path": "images/0.12.79/29-marble-sheet-net-indicators.jpg",
+      "title": "Sheet-level net indicators",
+      "version": "0.12.79",
+      "limits": "Indicators reflect the active saved selection.",
+      "kind": "Historical public-board evidence",
+      "bytes": 134921,
+      "sha256": "a69c3c92db58f18ab5917ff1fe610e2340490cd53beaf78e2bdb0e5c97233093"
+    },
+    {
+      "path": "images/0.12.79/30-schematic-theme-toggle.jpg",
+      "title": "Schematic theme control",
+      "version": "0.12.79",
+      "limits": "Theme changes presentation, not source geometry.",
+      "kind": "Historical public-board evidence",
+      "bytes": 121178,
+      "sha256": "cba6861d786004609a24c32f2fa6df48ff2f939559d5f3e270f00871cbea6313"
+    },
+    {
+      "path": "images/0.12.79/31-fmcw3-legacy-root.jpg",
+      "title": "FMCW3 legacy root",
+      "version": "0.12.79",
+      "limits": "Restricted legacy preview; unsupported records or missing library content may be omitted with diagnostics.",
+      "kind": "Historical public-board evidence",
+      "bytes": 108522,
+      "sha256": "344775da6044e7ff7ae69f1ac129c4489fb5ab2426f89c56cfa46b3b5c7de4a1"
+    },
+    {
+      "path": "images/0.12.79/32-fmcw3-legacy-subsheet.jpg",
+      "title": "FMCW3 power subsheet",
+      "version": "0.12.79",
+      "limits": "Schematic navigation works here. The FMCW3 PCB fails with \u201cInvalid numeric KiCad value\u201d; no successful PCB capture is included.",
+      "kind": "Historical public-board evidence",
+      "bytes": 128475,
+      "sha256": "f9890f30f1e7ca7375f691042158a3d9f9fe1e9945807d3f881592aa710a5119"
+    },
+    {
+      "path": "images/0.12.79/33-about-packaged-version.jpg",
+      "title": "About the packaged version",
+      "version": "0.12.79",
+      "limits": "The UI is from the audited package, served locally; this does not prove a store installation.",
+      "kind": "Historical public-board evidence",
+      "bytes": 128218,
+      "sha256": "88ff6495f95d19c1fad0eddaeab0d850cd6b12c999dbf050838edb17a9714369"
+    },
+    {
+      "path": "images/0.12.79/34-generated-layout-download.jpg",
+      "title": "Generated layout PDF",
+      "version": "0.12.79",
+      "limits": "The PDF was generated and download was handed to the browser. No downloaded filesystem path was verified.",
+      "kind": "Historical public-board evidence",
+      "bytes": 60615,
+      "sha256": "59bbdb4ebd07846d363bd75911e933f9df392a0e23478365f5b6117b3dead6c7"
+    },
+    {
+      "path": "images/0.12.79/35-phone-layout-preview.jpg",
+      "title": "Narrow layout web preview",
+      "version": "0.12.79",
+      "limits": "Requested viewport 390 \u00d7 844 at 75% browser zoom; actual DOM and JPEG are 520 \u00d7 1125, device-pixel ratio 0.75. This is not a physical Android capture.",
+      "kind": "Historical public-board evidence",
+      "bytes": 120458,
+      "sha256": "4ec39ae20691c2ec95595d8cd7a68262650091b6b7c71d1ffb150b868a568e40"
+    },
+    {
+      "path": "images/0.12.79/36-phone-comments-preview.jpg",
+      "title": "Narrow local-comment web preview",
+      "version": "0.12.79",
+      "limits": "Requested viewport 390 \u00d7 844 at 75% browser zoom; actual DOM and JPEG are 520 \u00d7 1125, device-pixel ratio 0.75. Notes remain local; no provider send is demonstrated.",
+      "kind": "Historical public-board evidence",
+      "bytes": 57891,
+      "sha256": "3fcd4a1d6e51c1a79b4ffd11ec6f5f70e0ef51fed6c782c13808b4b8338aae9c"
+    },
+    {
+      "path": "images/0.12.79/37-phone-3d-preview.jpg",
+      "title": "Narrow 3D web preview",
+      "version": "0.12.79",
+      "limits": "Requested viewport 390 \u00d7 844 at 75% browser zoom; actual DOM and JPEG are 520 \u00d7 1125, device-pixel ratio 0.75. Responsive web evidence only; model coverage remains partial.",
+      "kind": "Historical public-board evidence",
+      "bytes": 34323,
+      "sha256": "55402999f6d167146716b6f5910fdc6b88e315ec403e2322d3bbaa30a6b79649"
+    },
+    {
+      "path": "images/0.12.79/38-tablet-3d-preview.jpg",
+      "title": "Tablet-sized 3D web preview",
+      "version": "0.12.79",
+      "limits": "Requested viewport 1024 \u00d7 768; JPEG dimensions are recorded below and in the manifest. This is a responsive web preview, not physical tablet or Android validation.",
+      "kind": "Historical public-board evidence",
+      "bytes": 64238,
+      "sha256": "e2c1e9329d46c884246181a2f5bfa946e2d008576a7c410cf1aaad884ca6a795"
+    },
+    {
+      "path": "images/0.12.79/cross-probes/01-schematic-origin-three-views.jpg",
+      "title": "01 schematic origin three views",
+      "version": "0.12.79",
+      "limits": "Historical public-board capture; see its version manifest for exact provenance and limitations.",
+      "kind": "Historical public-board evidence",
+      "bytes": 137124,
+      "sha256": "4e4cc31e08d3a30d77dc2e05a84185b1b864f8119e936d8de22c477bf62059a4"
+    },
+    {
+      "path": "images/0.12.79/cross-probes/02-layout-origin-three-views.jpg",
+      "title": "02 layout origin three views",
+      "version": "0.12.79",
+      "limits": "Historical public-board capture; see its version manifest for exact provenance and limitations.",
+      "kind": "Historical public-board evidence",
+      "bytes": 133739,
+      "sha256": "90864bbd2b5fdef11478242724d280410b987ec762d69f93ee0a1fd37a66d40b"
+    },
+    {
+      "path": "images/0.12.79/cross-probes/03-3d-origin-three-views.jpg",
+      "title": "03 3d origin three views",
+      "version": "0.12.79",
+      "limits": "Historical public-board capture; see its version manifest for exact provenance and limitations.",
+      "kind": "Historical public-board evidence",
+      "bytes": 120884,
+      "sha256": "e8fd598523b24d1316747f71c59b0267834a3936d75610032469ebf8cbf91afb"
+    },
+    {
+      "path": "images/0.12.79/cross-probes/04-independent-popup-interactions.jpg",
+      "title": "04 independent popup interactions",
+      "version": "0.12.79",
+      "limits": "Historical public-board capture; see its version manifest for exact provenance and limitations.",
+      "kind": "Historical public-board evidence",
+      "bytes": 119242,
+      "sha256": "6b0f96eb4ee15e0bd85a5b1638f97e5081a0e62ceed557b7c4727387be301a54"
+    },
+    {
+      "path": "images/0.12.79/fast-pi/01-setup.jpg",
+      "title": "01 setup",
+      "version": "0.12.79",
+      "limits": "Historical public-board capture; see its version manifest for exact provenance and limitations.",
+      "kind": "Historical public-board evidence",
+      "bytes": 217536,
+      "sha256": "5e084a9e468576f4962bd8bb4740b4e2a978a0587db66be2ee2d3529c0cfc84a"
+    },
+    {
+      "path": "images/0.12.79/fast-pi/02-voltage-results.jpg",
+      "title": "02 voltage results",
+      "version": "0.12.79",
+      "limits": "Historical public-board capture; see its version manifest for exact provenance and limitations.",
+      "kind": "Historical public-board evidence",
+      "bytes": 224745,
+      "sha256": "fc7a436ed9635eba488f4241577e1ed1e9ade53e8b17694eb94897555f2a52d4"
+    },
+    {
+      "path": "images/0.12.79/fast-pi/03-density-net-only.jpg",
+      "title": "03 density net only",
+      "version": "0.12.79",
+      "limits": "Historical public-board capture; see its version manifest for exact provenance and limitations.",
+      "kind": "Historical public-board evidence",
+      "bytes": 104133,
+      "sha256": "12f96fb8b8aeff1a1897ce92adfd0dea2550fd14641d963cb433518aa3240c80"
+    },
+    {
+      "path": "images/0.12.79/fast-pi/04-floating-loss.jpg",
+      "title": "04 floating loss",
+      "version": "0.12.79",
+      "limits": "Historical public-board capture; see its version manifest for exact provenance and limitations.",
+      "kind": "Historical public-board evidence",
+      "bytes": 103169,
+      "sha256": "3c134207a7757088e63bf5f93b672d99fd845bcc1e057bbe497cb28a357300d6"
+    },
+    {
+      "path": "images/0.12.79/fast-pi/05-browser-speed-test.jpg",
+      "title": "05 browser speed test",
+      "version": "0.12.79",
+      "limits": "Historical public-board capture; see its version manifest for exact provenance and limitations.",
+      "kind": "Historical public-board evidence",
+      "bytes": 95979,
+      "sha256": "6f4aa03bab49e6f9046cef69e2c8d10299968bdd18e43522cc2f8dc1b1f97f8b"
+    },
+    {
+      "path": "images/0.12.80/01-marble-independent-sheet-probe.jpg",
+      "title": "01 marble independent sheet probe",
+      "version": "0.12.80",
+      "limits": "Historical public-board capture; see its version manifest for exact provenance and limitations.",
+      "kind": "Historical public-board evidence",
+      "bytes": 94394,
+      "sha256": "686673d101487259bc1550bf4c6302b19a4613f7e8ce8e39cee3e87bd293c414"
+    },
+    {
+      "path": "images/0.12.80/02-r1-schematic-layout-3d-probes.jpg",
+      "title": "02 r1 schematic layout 3d probes",
+      "version": "0.12.80",
+      "limits": "Historical public-board capture; see its version manifest for exact provenance and limitations.",
+      "kind": "Historical public-board evidence",
+      "bytes": 118935,
+      "sha256": "44e8b61e2b6a27ec6824a46a2039b7e341f09e575e2ca82788c7f81c86b68120"
+    },
+    {
+      "path": "images/0.12.80/03-independent-3d-flip-rotation.jpg",
+      "title": "03 independent 3d flip rotation",
+      "version": "0.12.80",
+      "limits": "Historical public-board capture; see its version manifest for exact provenance and limitations.",
+      "kind": "Historical public-board evidence",
+      "bytes": 121367,
+      "sha256": "37005234e485d0ece635f3845df53cfad29e730320d2f10b1581594b2804d7ae"
+    },
+    {
+      "path": "images/features/showcase-kicad-workbook.png",
+      "title": "KiCad workbook settings \u00b7 no fabricated samples",
+      "version": "Historical",
+      "limits": "Source fixture preview",
+      "kind": "Historical platform/fixture",
+      "bytes": 30413,
+      "sha256": "4fbb49fe515ab64208af7016a00a537790885c8f1a814d80068ef38596f173fb"
+    },
+    {
+      "path": "images/android/marble-phone-layout.png",
+      "title": "Marble layout on the physical Android phone",
+      "version": "Historical",
+      "limits": "Historical physical-phone capture",
+      "kind": "Historical platform/fixture",
+      "bytes": 567039,
+      "sha256": "523749d43a37e03dad7fa95bcbb6d26f48073955d6d89dcaab250bdd9a518449"
+    },
+    {
+      "path": "images/android/phone-schematic.png",
+      "title": "Android schematic",
+      "version": "Historical",
+      "limits": "Historical Android capture",
+      "kind": "Historical platform/fixture",
+      "bytes": 75822,
+      "sha256": "95fede2ed46f93e00ae90292c1e33c0d4b0c17ed93302c631d91c5c9959f321e"
+    },
+    {
+      "path": "images/android/tablet-landscape.png",
+      "title": "Tablet landscape preview",
+      "version": "Historical",
+      "limits": "Historical responsive preview; not current hardware acceptance",
+      "kind": "Historical platform/fixture",
+      "bytes": 46066,
+      "sha256": "b5fa1ebc544dfcc7e27e8551881afd43af2b9a48fbf4815bde2aa743ad5e4c94"
+    },
+    {
+      "path": "../vscode-extension/images/pcb-inspection.jpg",
+      "title": "Installed VS Code PCB inspection",
+      "version": "Historical",
+      "limits": "Installed VS Code on a public deliberately conflicted demo; historical UI.",
+      "kind": "Historical installed host",
+      "bytes": 466703,
+      "sha256": "c59238d85e0166ac9cbc29e023dcf9731acee532bf35604079da63466cdf64b8"
+    },
+    {
+      "path": "../vscode-extension/images/visual-merge-conflict.jpg",
+      "title": "VS Code current/incoming conflict review",
+      "version": "Historical",
+      "limits": "Installed VS Code on a public deliberately conflicted demo; historical UI.",
+      "kind": "Historical installed host",
+      "bytes": 397917,
+      "sha256": "12ed91788324a2fb32f46d421ce832cc43ac3183dfb470d0369638ec54986bb1"
+    }
+  ]
+}
