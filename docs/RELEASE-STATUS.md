@@ -1,6 +1,24 @@
 # Distribution status
 
-**KiCad Online 0.12.85 / Android 1.88:** fresh branding/mobile-compatibility candidate in preparation. Repository renamed to `wayri/KiCad-Online`; stable installed identities and license retained. New packages are not yet claimed as uploaded or approved. Altium beta excluded. See [release notes](releases/v0.12.85.md).
+**KiCad Online 0.12.85 / Android 1.88 (4 November 2026):**
+[GitHub preview published](https://github.com/wayri/KiCad-Online/releases/tag/v0.12.85)
+with 23 assets; all remote sizes and SHA-256 hashes match local audited packages.
+The renamed UI, guides, five genuine public OLIMEX M2 screenshots and Firefox
+Android internal-tab fallback are included. Altium beta excluded. Installed IDs,
+settings and license retained. Checks: 149 Python tests (one skip), 2,388 JavaScript
+passes (one skip), Android offline assemble/lint/bundle and exact package audits.
+
+| Channel | Verified state |
+| --- | --- |
+| Chrome | **0.12.85 submitted, pending review**, automatic publication after approval. Listing name, full description, support/homepage/policy links and two genuine 1280×800 layout/3D images updated. Old screenshots and old-name optional promo tiles removed with explicit approval. Last observed published version: 0.12.80. |
+| VS Code | **0.12.85 accepted and verifying**. Public extension and publisher display names are KiCad Online; publisher profile links and support email updated. The 0.12.84 upload finished verification before this update. |
+| Mozilla | **0.12.85 Awaiting Review**, zero validator errors/warnings, desktop and Android checked. Product name, description, support and homepage updated. The exact 91.5 MB readable-source companion is ready; final source attachment/Continue requires the owner because automation selects no file. No new approval is claimed. The existing approved version is 0.12.66. |
+| Android | **1.88 / versionCode 91 installed and launched** on the connected Samsung phone, with the existing application ID/signer and data preserved. Development-signed/non-debuggable; unsigned AAB is not Play upload-ready. Physical Firefox Android extension acceptance is separate and pending. |
+| Public policies | Renamed Pages site serves updated Chrome privacy and Android privacy/terms. Checked HTTP 200 at the new policy URLs. |
+
+See [release notes](releases/v0.12.85.md) and [fresh captures/provenance](BRAND-SCREENSHOTS-0.12.85.md).
+Screenshots are local current-source browser captures, not installed-store or
+physical Android acceptance evidence. Older entries below are historical.
 
 **0.12.84 deployment check (4 November 2026):** Android 1.87 / version code 90 installed and launched on the connected Samsung phone. VS Code Marketplace accepted the owner upload and was still Verifying 0.12.84. Chrome 0.12.82 review was cancelled with authorization; 0.12.84 uploaded as a draft before the requested fresh branding update. Mozilla 0.12.84 validation returned zero errors/warnings and the matching source was selected; final submission/approval is not yet confirmed. The dashboard showed 0.12.66 Approved.
 

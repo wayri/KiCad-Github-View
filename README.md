@@ -21,7 +21,7 @@ Explore schematics and PCB layouts, follow nets, measure geometry, work through 
 
 ## Downloads
 
-**Release candidate 0.12.85 / Android 1.88:** the fresh **KiCad Online** branding update across browsers, VS Code, Android and the web viewer, with a Firefox Android internal-tab fallback. Existing installation identities/settings and the license are retained. Local/offline projects remain supported. [Release notes and known limits](docs/releases/v0.12.85.md). The Altium beta remains separate and excluded. [Actual channel status](docs/RELEASE-STATUS.md). Android preview is development-signed and non-debuggable; its unsigned AAB is not Play upload-ready.
+**Release 0.12.85 / Android 1.88:** the fresh **KiCad Online** branding update across browsers, VS Code, Android and the web viewer, with a Firefox Android internal-tab fallback. Existing installation identities/settings and the license are retained. Local/offline projects remain supported. [Release notes and known limits](docs/releases/v0.12.85.md). The Altium beta remains separate and excluded. [Actual channel status](docs/RELEASE-STATUS.md). Android preview is development-signed and non-debuggable; its unsigned AAB is not Play upload-ready.
 
 The live counter above totals GitHub release-asset downloads, including downloads initiated by KiCad PCM **when its package URL points to a GitHub release asset in this repository**. GitHub does not expose a browser-versus-PCM breakdown or unique install count. No PCM package/repository is currently configured here, and downloads hosted elsewhere are not included. [What the counter measures](docs/DOWNLOAD-STATS.md).
 
@@ -34,7 +34,7 @@ The live counter above totals GitHub release-asset downloads, including download
 | Android | APK button above | Android 8+; 1.88 preview, development-signed; manual installation and updates |
 | Chrome, Edge, Brave, Opera, Vivaldi, Chromium | Chromium ZIP button above | Published 0.12.85 preview; extract and load unpacked; candidate browsers have differing validation coverage |
 | VS Code | [Marketplace](https://marketplace.visualstudio.com/items?itemName=wayri.kicad-visual-review) / [offline VSIX 0.12.85](https://github.com/wayri/KiCad-Online/releases/download/v0.12.85/kicad-visual-review-vscode-0.12.85.vsix) | Windows, Linux and macOS; VS Code 1.95+; Marketplace and GitHub versions may differ |
-| Firefox / compatible derivatives | [Development ZIP 0.12.85](https://github.com/wayri/KiCad-Online/releases/download/v0.12.85/kicad-visual-review-firefox-0.12.85.zip) | Firefox desktop 140+; unsigned temporary add-on; Zen/LibreWolf/Waterfox candidates unverified; [install, signing and Mozilla publishing](docs/FIREFOX.md) |
+| Firefox / compatible derivatives | [Development ZIP 0.12.85](https://github.com/wayri/KiCad-Online/releases/download/v0.12.85/kicad-visual-review-firefox-0.12.85.zip) | Firefox desktop 140+ / Android 142+ declared; newer ZIP unsigned; Zen/LibreWolf/Waterfox candidates unverified; [install, signing and Mozilla publishing](docs/FIREFOX.md) |
 | Safari | [Development ZIP 0.12.85](https://github.com/wayri/KiCad-Online/releases/download/v0.12.85/kicad-visual-review-safari-0.12.85.zip) | macOS Safari 16.4+; requires Xcode conversion/signing; native verification pending; [instructions](docs/SAFARI.md) |
 
 Browser/desktop downloads above are the [v0.12.85 GitHub preview](https://github.com/wayri/KiCad-Online/releases/tag/v0.12.85). Android 1.88 is included in the same release. Store channels are updated separately. The source repository and GitHub downloads are public.
