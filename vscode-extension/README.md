@@ -84,3 +84,15 @@ the shared renderer in a local browser using public OLIMEX M2 files; it is not
 an installed VS Code capture. [Fresh screenshot set and limits](https://github.com/wayri/KiCad-Online/blob/main/docs/BRAND-SCREENSHOTS-0.12.85.md).
 
 ![KiCad Online shared 3D viewer](https://raw.githubusercontent.com/wayri/KiCad-Online/main/docs/images/0.12.85/04-3d.jpg)
+
+The following additional examples use the public KiCad PIC programmer demo in
+the shared browser viewer. They show local notes and a local comment draft,
+not live provider conversations or installed VS Code screenshots. The mechanical
+document uses fallback component bodies. See the linked capture guide above for
+source revisions and limits.
+
+![Saved local review with severity and state](https://raw.githubusercontent.com/wayri/KiCad-Online/main/docs/images/0.12.85/06-comments.jpg)
+
+![Local comment composer](https://raw.githubusercontent.com/wayri/KiCad-Online/main/docs/images/0.12.85/08-comment-composer.jpg)
+
+![Mechanical Draftsman document and automatic dimensions](https://raw.githubusercontent.com/wayri/KiCad-Online/main/docs/images/0.12.85/07-draftsman.jpg)

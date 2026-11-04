@@ -43,3 +43,15 @@ The screenshots below were visually inspected and cropped to exclude harness nav
 ### Circuit workbench
 
 ![KiCad Online — Circuit workbench](images/0.12.85/05-calculator.jpg)
+
+## Review and mechanical document examples
+
+These additional captures use the public [KiCad PIC programmer demo](https://github.com/KiCad/kicad-source-mirror/tree/29798a640054e91411a44d230bd3a3425b3166e4/demos/pic_programmer), at revision `29798a640054e91411a44d230bd3a3425b3166e4`. They show the production shared viewer from source commit `d44ccdc`, served locally. They are not installed VS Code screenshots. The note and draft are explicitly local examples, not live GitHub/GitLab conversations. Draftsman shows fallback component bodies because this retained demo has no linked model assets.
+
+![Saved local review with severity and state](images/0.12.85/06-comments.jpg)
+
+![Mechanical Draftsman document with automatic dimensions](images/0.12.85/07-draftsman.jpg)
+
+![Local comment composer with category, severity and state](images/0.12.85/08-comment-composer.jpg)
+
+The three images were uploaded to Mozilla and the captions were saved and re-opened to verify persistence. Chrome's pending 0.12.85 review locks image edits; its two existing layout/3D images remain. VS Code embeds images through the packaged README, so the source additions appear inline on its next package update. [Additional capture manifest](images/0.12.85/feature-capture-manifest.json).

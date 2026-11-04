@@ -1,0 +1,42 @@
+{
+  "product": "KiCad Online",
+  "version": "0.12.85",
+  "source_commit": "d44ccdc",
+  "board_repository": "https://github.com/KiCad/kicad-source-mirror",
+  "board_commit": "29798a640054e91411a44d230bd3a3425b3166e4",
+  "board_folder": "demos/pic_programmer",
+  "capture": "Production shared browser viewer, public retained files, loopback harness; navigation and OS bars excluded. No image retouching.",
+  "limits": "Local comment examples, not live provider threads or installed VS Code captures. Draftsman uses fallback component bodies; no engineering sign-off claim.",
+  "mozilla": "Three images uploaded, captions saved and re-opened to verify persistence.",
+  "chrome": "0.12.85 pending review; image controls disabled. Additional images pending listing unlock and Chrome-size capture.",
+  "vscode": "Source README and linked gallery updated; packaged Marketplace README needs next VSIX update.",
+  "images": [
+    {
+      "file": "06-comments.jpg",
+      "bytes": 184921,
+      "dimensions": [
+        1707,
+        920
+      ],
+      "sha256": "e977826b3bf14c5248add4aea0b12cc5abbca48102245a3a8484247806b9276a"
+    },
+    {
+      "file": "07-draftsman.jpg",
+      "bytes": 97449,
+      "dimensions": [
+        1707,
+        920
+      ],
+      "sha256": "b95353ecf57f466b6b0e3ab30563e9a2c93711d8071214163b3c9533819a35f7"
+    },
+    {
+      "file": "08-comment-composer.jpg",
+      "bytes": 186407,
+      "dimensions": [
+        1707,
+        920
+      ],
+      "sha256": "5d1286d8bd51572ff5c239fc7aef3fc6e5543335136dc710ddf5518ee6017f50"
+    }
+  ]
+}
