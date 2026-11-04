@@ -33,8 +33,14 @@ class PackageFirefoxTests(unittest.TestCase):
                 self.assertNotIn('importScripts(', archive.read('background.js').decode())
                 self.assertNotIn('html-sandbox.html', archive.namelist())
                 for name in archive.namelist():
-                    if name.endswith('.html'):
+                    if name.endswith('.html') and name not in builder.chrome_builder().LEGAL_FILES:
                         self.assertIn(f'<script src="{builder.SHIM}"></script>'.encode(), archive.read(name))
+
+    def test_project_license_and_static_terms_are_included_unchanged(self):
+        packed = builder.payload()
+        self.assertEqual(packed['LICENSE.txt'], (ROOT / 'LICENSE').read_bytes())
+        self.assertEqual(packed['terms.html'], (ROOT / 'extension/terms.html').read_bytes())
+        self.assertNotIn(f'<script src="{builder.SHIM}"></script>'.encode(), packed['terms.html'])
 
     def test_provider_data_consent_is_explicit_and_has_no_ungated_optional_types(self):
         gecko = json.loads(builder.payload()['manifest.json'])['browser_specific_settings']['gecko']

@@ -70,7 +70,7 @@ def payload(root: Path = ROOT) -> dict[str, bytes]:
     background, dependencies = adapt_background((source / worker).read_bytes())
     builder = chrome_builder()
     metadata = builder.version_metadata(root, 'firefox')
-    files = set(builder.FILES) | {worker, SHIM}
+    files = set(builder.FILES) | builder.LEGAL_FILES | {worker, SHIM}
     files.update(manifest.get('icons', {}).values())
     for content in manifest['content_scripts']:
         files.update(content['js'])
@@ -101,7 +101,7 @@ def payload(root: Path = ROOT) -> dict[str, bytes]:
             content = (json.dumps(manifest, indent=2) + '\n').encode()
         elif name == worker:
             content = background
-        elif name.endswith('.html'):
+        elif name.endswith('.html') and name not in builder.LEGAL_FILES:
             content = adapt_html(content, project=name == 'project-viewer.html')
             if name == 'project-viewer.html':
                 content = content.replace(b'Isolated self-contained HTML preview.', b'Static isolated HTML preview in Firefox. Repository scripts and interactive iBOM are disabled.')
