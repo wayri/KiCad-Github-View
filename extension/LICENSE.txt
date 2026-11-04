@@ -1,12 +1,13 @@
-Pocket KiView Source-Available License 1.0
+KiCad Online Source-Available License 1.0
 Effective date: 23 October 2026
+Product naming updated: 4 November 2026 (permissions and restrictions unchanged)
 Copyright (c) 2026 Yawar B (wayri). All rights reserved except as granted below.
 Licensing contact: support.kivi@sigharmonic.com
 
 1. Scope and ownership
-This license applies to the original Pocket KiView / KiCad Visual Review code,
-documentation and included owner-authored SPIKE subset supplied with this license
-(the Software), to the extent Yawar B (wayri) holds the necessary rights. It does
+This license applies to the original KiCad Online code (formerly Pocket KiView
+/ KiCad Visual Review), documentation and included owner-authored SPIKE subset
+supplied with this license (the Software), to the extent Yawar B (wayri) holds the necessary rights. It does
 not license the rest of the SPIKE repository. Separately licensed third-party
 material and previously granted rights are governed by their own terms (section
 6). Copyright and other intellectual property remain with their rights holders.

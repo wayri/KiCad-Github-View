@@ -252,7 +252,7 @@ To publish a new version, update both manifests and release documentation, commi
 
 ## Licensing and support
 
-Copyright owner/licensor: **Yawar B (wayri)**. Owner-authored code is covered by [Pocket KiView Source-Available License 1.0](../LICENSE). Personal and internal professional use and uncompensated redistribution are permitted under its terms; paid distribution, paid bundles and monetized hosted access require separate written permission. This is **source-available, not open source**. Users retain rights to their designs and outputs. Third-party rights remain unchanged. See [LICENSING.md](../LICENSING.md) and [THIRD-PARTY-NOTICES.md](../THIRD-PARTY-NOTICES.md).
+Copyright owner/licensor: **Yawar B (wayri)**. Owner-authored code is covered by [KiCad Online Source-Available License 1.0](../LICENSE). Personal and internal professional use and uncompensated redistribution are permitted under its terms; paid distribution, paid bundles and monetized hosted access require separate written permission. This is **source-available, not open source**. Users retain rights to their designs and outputs. Third-party rights remain unchanged. See [LICENSING.md](../LICENSING.md) and [THIRD-PARTY-NOTICES.md](../THIRD-PARTY-NOTICES.md).
 
 Report reproducible problems through [repository Issues](https://github.com/wayri/KiCad-Online/issues), including browser/version, public file URL or a shareable minimal fixture, expected behavior and the visible diagnostic. Exclude tokens, private files and credentials. Design/rendering limitations, Git host ports and browser ports can also be discussed there.
 

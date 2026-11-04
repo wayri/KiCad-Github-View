@@ -35,4 +35,4 @@ Private support: support.kivi@sigharmonic.com
 VS Code: https://marketplace.visualstudio.com/items?itemName=wayri.kicad-visual-review
 Firefox: https://addons.mozilla.org/addon/pocket-kiview-kicad-review/
 
-Licensed under the existing Pocket KiView Source-Available License 1.0. The rename does not change the license or third-party notices.
+Licensed under the existing KiCad Online Source-Available License 1.0. The rename does not change the license or third-party notices.

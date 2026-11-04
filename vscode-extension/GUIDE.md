@@ -177,7 +177,7 @@ Automated checks cover virtual URIs, hierarchy bounds, the private bridge, annot
 
 ## License
 
-Copyright (c) 2026 Yawar B (wayri). Pocket KiView Source-Available License 1.0 applies to owner-authored code and the included owner-authored SPIKE subset. Personal and internal professional use are permitted; paid distribution, paid bundles and monetized hosted access require separate written permission. Your own designs and outputs remain yours. Third-party components retain their own licenses. This is not an open-source license. See the packaged `LICENSE.txt`; commercial licensing: support.kivi@sigharmonic.com.
+Copyright (c) 2026 Yawar B (wayri). KiCad Online Source-Available License 1.0 applies to owner-authored code and the included owner-authored SPIKE subset. Personal and internal professional use are permitted; paid distribution, paid bundles and monetized hosted access require separate written permission. Your own designs and outputs remain yours. Third-party components retain their own licenses. This is not an open-source license. See the packaged `LICENSE.txt`; commercial licensing: support.kivi@sigharmonic.com.
 
 ## Troubleshooting
 

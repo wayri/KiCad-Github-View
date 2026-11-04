@@ -484,6 +484,6 @@ Source designs are ordinarily read-only. Explicit conflict-resolution actions in
 
 ## License and support
 
-Copyright (c) 2026 **Yawar B (wayri)**. Licensed under the [Pocket KiView Source-Available License 1.0](LICENSE), **not an OSI-approved open-source license**. Personal and internal professional use are permitted. Paid distribution, paid bundles and monetized hosted access require written permission. Your designs and outputs remain yours under the license. [Licensing details](LICENSING.md) | [Third-party notices](THIRD-PARTY-NOTICES.md).
+Copyright (c) 2026 **Yawar B (wayri)**. Licensed under the [KiCad Online Source-Available License 1.0](LICENSE), **not an OSI-approved open-source license**. Personal and internal professional use are permitted. Paid distribution, paid bundles and monetized hosted access require written permission. Your designs and outputs remain yours under the license. [Licensing details](LICENSING.md) | [Third-party notices](THIRD-PARTY-NOTICES.md).
 
 Support and commercial licensing: **[support.kivi@sigharmonic.com](mailto:support.kivi@sigharmonic.com)**. Optional sponsorship does not unlock app features. This independent project is not affiliated with or endorsed by KiCad, GitHub, GitLab, Google, Apple or Microsoft.

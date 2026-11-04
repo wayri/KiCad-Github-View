@@ -15,7 +15,7 @@ Uploaded 23 October 2026; Marketplace shows **Verifying**, availability **Privat
 
 ## Licensed packages: 0.12.49 (prepared, not uploaded)
 
-Owner/licensor: Yawar B (wayri). Pocket KiView Source-Available License 1.0 permits personal/internal professional use and uncompensated sharing under its terms; paid software distribution, paid bundles and monetized hosted access require separate written permission. Do not label it open source. Third-party licenses and valid earlier grants remain unchanged. The included owner-authored SPIKE subset is covered; the rest of SPIKE is not relicensed.
+Owner/licensor: Yawar B (wayri). KiCad Online Source-Available License 1.0 permits personal/internal professional use and uncompensated sharing under its terms; paid software distribution, paid bundles and monetized hosted access require separate written permission. Do not label it open source. Third-party licenses and valid earlier grants remain unchanged. The included owner-authored SPIKE subset is covered; the rest of SPIKE is not relicensed.
 
 Canonical terms: LICENSE. Chrome/VSIX copies: LICENSE.txt. VS Code uses `SEE LICENSE IN LICENSE.txt` and an addressable license asset. Android's next asset payload includes the same text; no APK was built. Prepared Chrome ZIP and VSIX plus licensing documents and checksums: `dist/licensed-0.12.49/`. Six packaging tests passed; both archives were inspected for exact license content and SPIKE notice scope. These files supersede 0.12.48 for the next upload; existing store uploads have not been modified. Private repository visibility remains unchanged. Custom legal text and commercial/contributor agreements should receive jurisdiction-specific legal review before reliance.
 
