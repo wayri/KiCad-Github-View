@@ -1,6 +1,6 @@
 # Distribution status
 
-**0.12.84 / Android 1.87 (4 November 2026):** release candidate in preparation. Documentation/gallery packaging refresh; engineering runtime unchanged from 0.12.83. Altium beta excluded. No new store submission, approval or physical-device acceptance is claimed. See [release notes](releases/v0.12.84.md).
+**0.12.84 / Android 1.87 (4 November 2026):** [GitHub preview published](https://github.com/wayri/KiCad-Github-View/releases/tag/v0.12.84) with 23 uploaded assets; all remote sizes and SHA-256 digests match the audited local packages. Documentation/gallery packaging refresh; engineering runtime unchanged from 0.12.83. Altium beta excluded. The gate passed 149 Python checks (one environment skip) and 2,383 JavaScript checks (one skip); Android offline assemble/lint/bundle and exact package audits passed. No new store submission, approval or physical-device acceptance is claimed. See [release notes](releases/v0.12.84.md).
 
 **0.12.83 / Android 1.86 (4 November 2026):** [GitHub preview published](https://github.com/wayri/KiCad-Github-View/releases/tag/v0.12.83) with 23 SHA-256-verified assets. This release adds faster
 large-board rendering, searchable Fast PI contacts, masked smooth result fields,
