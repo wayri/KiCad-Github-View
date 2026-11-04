@@ -79,3 +79,17 @@ test('authorization requests never retain the global blocking loading surface',a
  const task=api.request({type:'repositories'});api.reply(request.id,{ok:true,result:{repositories:[]}});await task;assert.equal(tracked,1);
  }finally{api.close();global.KiCadLoading=previous;}
 });
+
+test('GitHub and GitLab comment sync reads never show a global loading popup',async()=>{
+ const previous=global.KiCadLoading;let tracked=0,request;
+ global.KiCadLoading={track:promise=>{tracked++;return promise;}};
+ const api=bridge(()=>({githubRequest:(id,message)=>{request={id,message};}}),{setTimeout:()=>1,clearTimeout(){}});
+ try{
+  for(const type of ['review-list','review-categories','review-thread','chat-thread-list','review-read','review-contributors','review-policy','policy','threads','thread','contributors']){
+   for(const host of [undefined,'https://gitlab.com']){const task=api.request({type,...(host?{host}:{})});api.reply(request.id,{ok:true,result:{}});await task;}
+  }
+  assert.equal(tracked,0);
+  const failed=api.request({type:'review-thread'});api.reply(request.id,{ok:false,error:'Sync unavailable'});await assert.rejects(failed,/Sync unavailable/);assert.equal(tracked,0);
+  const project=api.request({type:'import'});api.reply(request.id,{ok:true,result:{}});await project;assert.equal(tracked,1,'project loading retains its progress surface');
+ }finally{api.close();global.KiCadLoading=previous;}
+});

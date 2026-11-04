@@ -470,3 +470,9 @@ body.android-design[data-size] #androidWorkspaceNav #workspaceTabs>button>span{f
 
 
 body.android-design #androidDetachViews{width:min(360px,calc(100vw - 24px));padding:0;border:1px solid var(--line,#405564);border-radius:12px;background:var(--panel,#192530);color:var(--text,#e8eff5)}body.android-design #androidDetachViews header{display:flex;align-items:center;justify-content:space-between;padding:10px 12px}body.android-design #androidDetachViews .android-sheet-content{padding:4px 12px 12px;display:grid;gap:6px}body.android-design #androidDetachViews .android-sheet-content>button{min-height:40px;font-size:12px;text-align:left}body.android-design #androidDetachViews p{font-size:11px;line-height:1.4;color:var(--muted,#a8b9c5)}body.android-design #androidDetachViews label{font-size:12px;display:flex;align-items:center;gap:4px}
+/* Draftsman is a full-screen editor, not a peek-height bottom sheet. */
+body.android-design[data-size] dialog.draftsman[open]{position:fixed!important;inset:0!important;margin:0!important;width:100%!important;max-width:100%!important;height:100dvh!important;max-height:100dvh!important;padding:0!important;overflow:hidden!important;border-radius:0;display:flex;flex-direction:column}
+body.android-design[data-size] dialog.draftsman>.draftsman-header{height:40px;min-height:40px!important;padding:2px 6px!important}
+body.android-design[data-size] dialog.draftsman :is(input,select){min-height:32px;height:32px;font-size:12px;padding:3px 6px}
+body.android-design[data-size] dialog.draftsman>.draftsman-header>select{min-width:70px;width:100px;max-width:100px}
+body.android-design[data-size] dialog.draftsman>.draftsman-body{flex:1;min-height:0;overflow:hidden}

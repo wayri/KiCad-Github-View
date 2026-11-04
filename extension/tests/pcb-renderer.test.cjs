@@ -206,3 +206,12 @@ test('saved net metadata covers pads, drill, tracks, arcs, vias and filled zones
   const parts=result.primitives.filter(p=>['pad','track','arc','via','drill','zone','zone-outline'].includes(p.kind));for(const kind of ['pad','track','arc','via','drill','zone','zone-outline'])assert.ok(parts.some(p=>p.kind===kind),kind);for(const p of parts){assert.equal(p.netId,id,p.kind);assert.equal(p.netCode,code,p.kind);assert.equal(p.netName,name,p.kind);}
  }
 });
+
+test('net-free board graphics preparation has a linear root-record access budget',()=>{
+ const count=2000,ast=parse('(kicad_pcb (version 20241229) (layers (0 "F.Cu" signal) (37 "F.SilkS" user)))');
+ for(let i=0;i<count;i++)ast.push(['gr_line',['start',i,0],['end',i,1],['width',.1],['layer',{quoted:'F.SilkS'}]]);
+ let rootReads=0;const observed=new Proxy(ast,{get(target,key,receiver){if(typeof key==='string'&&/^\d+$/.test(key))rootReads++;return Reflect.get(target,key,receiver);}});
+ const result=build(observed,'large-graphics.kicad_pcb');
+ const graphics=result.primitives.filter(p=>!p.frame);assert.equal(graphics.length,count);assert.ok(graphics.every(p=>p.kind==='gr_line'&&p.netId===undefined));
+ assert.ok(rootReads<ast.length*100,`whole-board scans must not multiply with each graphic (${rootReads} root reads for ${count} graphics)`);
+});

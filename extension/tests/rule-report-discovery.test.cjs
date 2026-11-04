@@ -62,3 +62,33 @@ test('native KiCad10 report exports parse and retain exact source association',(
  const drc=R.parse(fs.readFileSync(path.join(folder,'inspection-drc.json'),'utf8'),{kind:'drc'});assert.equal(drc.findings.length,5);assert.equal(R.associateSource(drc,[{path:'hw/inspection.kicad_pcb'}]),'hw/inspection.kicad_pcb');assert.ok(drc.findings.some(f=>f.description==='Track has unconnected end'));
  const erc=R.parse(fs.readFileSync(path.join(folder,'custom_fields-erc.json'),'utf8'),{kind:'erc'});assert.equal(erc.findings.length,0);assert.equal(R.associateSource(erc,[{path:'custom_fields.kicad_sch'}]),'custom_fields.kicad_sch');
 });
+
+test('uppercase JSON report discovery preserves the exact transport path',()=>{
+ assert.deepEqual(rules.reportCandidates(['checks/BOARD-DRC.JSON','checks/board-ERC.Json'],{kind:'drc'}),['checks/BOARD-DRC.JSON']);
+});
+
+test('manual import uses the canonical five MiB limit and cancels late reads after clear',async()=>{
+ const h=harness();h.get('ruleDrawing').value='design/board.kicad_pcb';
+ h.get('ruleReportFile').files=[{name:'board-drc.json',size:4*1024*1024+1,text:async()=>report()}];await h.get('ruleReportFile').onchange();assert.equal(h.api.routingReports('design/board.kicad_pcb').length,1);
+ h.get('clearRuleReports').onclick();let read=false;h.get('ruleReportFile').files=[{name:'too-big.json',size:rules.MAX_BYTES+1,text:async()=>{read=true;return report();}}];await h.get('ruleReportFile').onchange();assert.equal(read,false);assert.match(h.get('ruleStatus').textContent,/5 MiB/);
+ let finish;h.get('ruleReportFile').files=[{name:'board-drc.json',size:100,text:()=>new Promise(resolve=>{finish=()=>resolve(report());})}];const pending=h.get('ruleReportFile').onchange();h.get('clearRuleReports').onclick();finish();await pending;assert.equal(h.api.routingReports('design/board.kicad_pcb').length,0);assert.equal(h.get('ruleStatus').textContent,'Reports cleared.');
+});
+
+test('manual repository report rejects transport substitution and ignores late failed loads',async()=>{
+ const h=harness(async()=>({path:'other-drc.json',content:report()}));h.get('repoReportPath').value='board-drc.json';await h.get('loadRepoReport').onclick();assert.match(h.get('ruleStatus').textContent,/another source path/);assert.equal(h.api.routingReports('design/board.kicad_pcb').length,0);
+ let fail;h.options.request=()=>new Promise((resolve,reject)=>{fail=()=>reject(Error('late network failure'));});const pending=h.get('loadRepoReport').onclick();h.get('clearRuleReports').onclick();fail();await pending;assert.equal(h.get('ruleStatus').textContent,'Reports cleared.');
+});
+
+test('synthetic imported ERC draws saved sheet coordinates, opens full notes and honors the master visibility toggle',async()=>{
+ const content=fs.readFileSync(require('node:path').join(__dirname,'fixtures/rule-reports/synthetic-qa-erc.json'),'utf8'),h=harness();h.options.rootFile='custom_fields.kicad_sch';h.options.currentFile=()=>h.options.rootFile;h.options.getFiles=()=>[{path:h.options.rootFile}];h.get('ruleDrawing').value=h.options.rootFile;
+ h.get('ruleReportFile').files=[{name:'synthetic-qa-erc.json',size:content.length,text:async()=>content}];let target;h.options.locateRule=value=>{target=value;return true;};await h.get('ruleReportFile').onchange();
+ const overlay=new h.Node(),pins=new h.Node(),draw=()=>{pins.replaceChildren();overlay.replaceChildren();h.api.draw(overlay,pins,p=>p,(tag,attrs)=>Object.assign(new h.Node(tag),{attributes:attrs}));};draw();assert.equal(pins.children.length,2);pins.children[0].onclick();assert.equal(target.file,'custom_fields.kicad_sch');assert.deepEqual({...target.position},{x:142.24,y:92.71});draw();assert.match(pins.textContent,/not a claim that KiCad found this error/);assert.ok(overlay.children.length>0);
+ h.get('showRuleMarkers').checked=false;draw();assert.equal(pins.children.length,0);assert.equal(overlay.children.length,0);
+});
+
+test('ERC child-sheet markers require an explicit drawing association and then jump to that sheet',async()=>{
+ const data=JSON.parse(fs.readFileSync(require('node:path').join(__dirname,'fixtures/rule-reports/synthetic-qa-erc.json'),'utf8'));data.sheets=[{...data.sheets[0],path:'/Power supply/',uuid_path:'/11111111-2222-3333-4444-555555555555'}];
+ const h=harness();h.options.rootFile='custom_fields.kicad_sch';h.options.currentFile=()=> 'sub/power.kicad_sch';h.options.getFiles=()=>[{path:'custom_fields.kicad_sch'},{path:'sub/power.kicad_sch'}];h.get('ruleDrawing').value=h.options.rootFile;const content=JSON.stringify(data);h.get('ruleReportFile').files=[{name:'synthetic-child-erc.json',size:content.length,text:async()=>content}];await h.get('ruleReportFile').onchange();
+ const overlay=new h.Node(),pins=new h.Node(),draw=()=>{pins.replaceChildren();overlay.replaceChildren();h.api.draw(overlay,pins,p=>p,(tag,attrs)=>Object.assign(new h.Node(tag),{attributes:attrs}));};draw();assert.equal(pins.children.length,0);
+ const select=h.get('reportSheetMappings').children[0].children[0];select.value='sub/power.kicad_sch';select.onchange();draw();assert.equal(pins.children.length,2);let target;h.options.locateRule=value=>{target=value;return true;};pins.children[0].onclick();assert.equal(target.file,'sub/power.kicad_sch');assert.deepEqual({...target.position},{x:142.24,y:92.71});
+});

@@ -11,6 +11,7 @@ function library(storage){
  return{list,save:item=>{const value={repository:repository(item.repository),ref:String(item.ref||'').slice(0,200),sha:/^[a-f0-9]{40}$/.test(item.sha)?item.sha:'',private:Boolean(item.private)};if(/[\x00-\x1f]/.test(value.ref))throw Error('Invalid branch.');const items=list().filter(v=>v.repository!==value.repository||v.ref!==value.ref);items.unshift(value);storage.setItem(key,JSON.stringify(items.slice(0,100)));},remove:item=>storage.setItem(key,JSON.stringify(list().filter(v=>v.repository!==item.repository||v.ref!==item.ref)))};
 }
 const cancellableReads=new Set(['work-board-list','work-board-read','repositories','notifications','import','revision-import','revision-resolve','revision-branches','revision-commits','repository-tree','repository-history','repository-branches','review-list','review-categories','review-thread','chat-thread-list','review-read','review-contributors','review-policy','policy','threads','thread','contributors']);
+const inlineReviewReads=new Set(['review-list','review-categories','review-thread','chat-thread-list','review-read','review-contributors','review-policy','policy','threads','thread','contributors']);
 function bridge(native,{setTimeout:later=root.setTimeout,clearTimeout:clear=root.clearTimeout}={}){
  let next=0;const pending=new Map();
  const abortError=()=>Object.assign(Error('Project loading cancelled.'),{name:'AbortError',cancelled:true});
@@ -34,7 +35,7 @@ function bridge(native,{setTimeout:later=root.setTimeout,clearTimeout:clear=root
   });
   const backgroundAuth=['auth-status','device-start','device-poll','device-cancel','open-verification','open-verification-mobile','copy-device-code','sign-out'].includes(message.type);
   const loadingOptions=canStop&&pending.has(requestId)?{onStop:()=>cancelRequest(requestId)}:undefined;
-  return !backgroundAuth&&root.KiCadLoading?.track?root.KiCadLoading.track(promise,message.host?'Loading GitLab...':'Loading GitHub...',loadingOptions):promise;
+   return !backgroundAuth&&!inlineReviewReads.has(message.type)&&root.KiCadLoading?.track?root.KiCadLoading.track(promise,message.host?'Loading GitLab...':'Loading GitHub...',loadingOptions):promise;
  },reply:(id,response)=>{
   if(!Number.isSafeInteger(id)||!pending.has(id)||!response||typeof response.ok!=='boolean')return;
   const item=pending.get(id);pending.delete(id);clear(item.timer);item.signal?.removeEventListener?.('abort',item.abort);

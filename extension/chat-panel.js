@@ -165,7 +165,7 @@
   function stopAuto(){if(autoTimer!==null)cancelTimer(autoTimer);autoTimer=null;}
   function scheduleAuto(delay=3000){stopAuto();if(disposed||!autoRefresh.checked||!thread||d.hidden)return;const epoch=autoEpoch;
    autoTimer=timer(async()=>{autoTimer=null;if(disposed||!autoRefresh.checked||epoch!==autoEpoch)return;if(!conversationVisible()||readPromise||sending||saving||stateChanging){scheduleAuto();return;}if(h.navigator?.onLine===false){syncStatus.textContent='Offline · waiting for connection';scheduleAuto(30000);return;}
-    const scopeKey=key,ok=await readCurrent(true);if(disposed||!autoRefresh.checked||epoch!==autoEpoch)return;if(key!==scopeKey){autoFailures=0;scheduleAuto();return;}
+    syncStatus.textContent='Syncing comments…';const scopeKey=key,ok=await readCurrent(true);if(disposed||!autoRefresh.checked||epoch!==autoEpoch)return;if(key!==scopeKey){autoFailures=0;scheduleAuto();return;}
     autoFailures=ok?0:Math.min(autoFailures+1,7);syncStatus.textContent=ok?'Synced · auto refresh every 3 seconds':'Sync interrupted · retrying automatically';scheduleAuto(Math.min(300000,3000*2**autoFailures));
    },delay);
   }

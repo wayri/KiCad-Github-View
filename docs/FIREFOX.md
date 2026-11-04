@@ -2,7 +2,7 @@
 
 The Firefox package is an unsigned Manifest V3 WebExtension for **Firefox desktop 140 or later**. It shares the owned schematic, PCB, project, comparison and 3D renderers with the Chromium extension. Packaging and event-page behavior are tested; an installed Firefox session has not yet been visually verified. Android Firefox is not a verified target.
 
-Current preview: [Firefox 0.12.69 ZIP](https://github.com/wayri/KiCad-Github-View/releases/download/v0.12.69/kicad-visual-review-firefox-0.12.69.zip). Verify the release's `SHA256SUMS.txt` as described in [download verification](INSTALL.md#verify-downloads). Use this Firefox-specific artifact, not the Chromium ZIP or automatic source archive.
+Current preview candidate: [Firefox 0.12.83 ZIP](https://github.com/wayri/KiCad-Github-View/releases/download/v0.12.83/kicad-visual-review-firefox-0.12.83.zip). Verify the release's `SHA256SUMS.txt` as described in [download verification](INSTALL.md#verify-downloads). Use this Firefox-specific artifact, not the Chromium ZIP or automatic source archive.
 
 | Goal | Available route |
 | --- | --- |
@@ -17,10 +17,10 @@ Current preview: [Firefox 0.12.69 ZIP](https://github.com/wayri/KiCad-Github-Vie
 1. Download `kicad-visual-review-firefox-VERSION.zip` from the release assets and extract it to a folder. Use the Firefox asset, not the Chromium ZIP.
 2. Open `about:debugging#/runtime/this-firefox` in Firefox.
 3. Choose **Load Temporary Add-on**, then select the extracted `manifest.json`.
-4. Open a `.kicad_sch`, `.kicad_pcb` or supported project file on GitHub or GitLab. Private projects need a connected account; self-hosted GitLab needs an explicit server grant in Options. Approve the requested site permissions if Firefox asks. Refresh a page that was open before installation.
-5. Open the extension's **Preferences/Options** from `about:addons` to connect GitHub or the selected GitLab server for authorized private reads and explicit review publishing.
+4. Open an authorized GitHub or GitLab repository in your signed-in browser, then click the extension icon to detect projects and open a viewer tab. Ordinary pages stay untouched unless you explicitly choose in-page viewing. Foreground website-session loading does not require broad repository OAuth access; installed Firefox/private-organization acceptance is still unverified. Self-hosted GitLab needs an explicit exact-server grant. Refresh a page that was open before installation.
+5. Open **Preferences/Options** from `about:addons` for optional provider-connected reviews. Local files need no account. Website-session features and API-connected review features have separate coverage; organization policies can still block either workflow.
 
-Temporary installation ends when Firefox restarts. A ZIP is not an AMO-signed, permanent installation package. Permanent public distribution requires Mozilla signing/review and an accurate data-collection declaration. No signed XPI or AMO listing is supplied yet.
+Temporary installation ends when Firefox restarts. A ZIP is not an AMO-signed, permanent installation package. Permanent public distribution requires Mozilla signing/review and accurate data declarations. The owner supplied a tentative automated approval notice for AMO 0.12.66; it does not sign or approve this newer GitHub ZIP. Follow the [0.12.83 update plan](store-submissions/mozilla-0.12.83-plan.md).
 
 For files on your computer, click the extension icon, then **Open files** or **Open folder**. No account is needed for local/public viewing. Test both the toolbar action and an ordinary repository file page; Firefox internal/settings pages are not injection targets. See Mozilla's [temporary installation guide](https://extensionworkshop.com/documentation/develop/temporary-installation-in-firefox/).
 
@@ -113,4 +113,4 @@ The Firefox archive uses its own unsupported-vault stub; provider modules retain
 
 Firefox PDFs use the browser's built-in PDF viewer, with local/project PDF intake, an Open in Firefox action and a download fallback. No PDF.js library fork is included in the Firefox ZIP. Search, zoom, rotation, printing and password handling depend on Firefox's native viewer and settings; the shared custom PDF.js page/search/render budgets do not apply to that native viewer. PDF input remains bounded to 32 MiB. Chromium, Android and VS Code retain their existing platform-specific PDF path.
 
-The initial AMO 0.12.66 listing was restricted by Mozilla during submission. The dashboard currently blocks new versions and failed to load the review reason; this is separate from package validation warnings. Do not treat the unsigned development ZIP or a clean validator report as Mozilla publication approval.
+Historical note: the initial AMO 0.12.66 listing was restricted during submission. The owner later supplied a tentative automated approval notice for that version. Current dashboard availability was not independently confirmed during 0.12.83 preparation. Do not treat the unsigned development ZIP, the old notice or a clean validator report as approval of the new candidate.

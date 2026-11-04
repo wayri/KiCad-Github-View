@@ -52,6 +52,7 @@ public final class MainActivity extends Activity {
     private static final int REQUEST_WEB_FILE = 1005;
     private static final int REQUEST_TEMPORARY_NOTIFICATIONS = 1006;
     private static final int REQUEST_CAMERA = 1007;
+    private static final int REQUEST_DOCUMENT_EXPORT = 1008;
     private PermissionRequest pendingCameraRequest;
     private boolean cameraRuntimeRequested;
     private boolean cameraRuntimeGranted;
@@ -70,6 +71,9 @@ public final class MainActivity extends Activity {
     private final java.util.Map<Integer,ReadTicket> githubReads = new java.util.HashMap<>();
     private final java.util.Map<Integer,ReadTicket> gitlabReads = new java.util.HashMap<>();
     private final java.util.Map<Integer,ReadTicket> libraryReads = new java.util.HashMap<>();
+    private final java.util.Map<Integer,ReadTicket> repositoryBrowserReads = new java.util.HashMap<>();
+    private RepositorySessionBrowser repositoryBrowser;
+    private int repositoryBrowserControlId=-1;
     private ReadTicket localRead;
     private int pendingProjectLoadId = -1;
     private ReadTicket beginRead(java.util.Map<Integer,ReadTicket> reads,int id,boolean opens) {
@@ -86,14 +90,14 @@ public final class MainActivity extends Activity {
     }
     private void stopProjectLoads() {
         if(localRead!=null){localRead.operation.cancel();localRead=null;pendingProject=null;pendingProjectLoadId=-1;importGeneration.incrementAndGet();}
-        for(java.util.Map<Integer,ReadTicket> reads:java.util.Arrays.asList(githubReads,gitlabReads,libraryReads)) {
+        for(java.util.Map<Integer,ReadTicket> reads:java.util.Arrays.asList(githubReads,gitlabReads,libraryReads,repositoryBrowserReads)) {
             java.util.Iterator<ReadTicket> pending=reads.values().iterator();
             while(pending.hasNext()){ReadTicket ticket=pending.next();if(ticket.opensProject){ticket.operation.cancel();pending.remove();}}
         }
     }
     private void cancelAllReads() {
         stopProjectLoads();
-        for(java.util.Map<Integer,ReadTicket> reads:java.util.Arrays.asList(githubReads,gitlabReads,libraryReads)) {
+        for(java.util.Map<Integer,ReadTicket> reads:java.util.Arrays.asList(githubReads,gitlabReads,libraryReads,repositoryBrowserReads)) {
             for(ReadTicket ticket:reads.values())ticket.operation.cancel();reads.clear();
         }
     }
@@ -121,6 +125,9 @@ public final class MainActivity extends Activity {
     private android.webkit.ValueCallback<Uri[]> webFileCallback;
     private String pendingTextExport;
     private int pendingTextEpoch;
+    private byte[] pendingDocumentExport;
+    private String pendingDocumentExportId;
+    private int pendingDocumentEpoch;
     private final AtomicInteger downloadGeneration = new AtomicInteger();
     private final android.os.Handler loginHandler = new android.os.Handler(android.os.Looper.getMainLooper());
     private boolean githubPollInFlight;
@@ -142,6 +149,7 @@ public final class MainActivity extends Activity {
             if(github!=null)github.invalidateRequests();if(gitlab!=null)gitlab.cancelRequests();
         }
         appliedPolicy=policy;
+        if(repositoryBrowser!=null)repositoryBrowser.applyManagedPolicy();
     }
 
     private final NativeRequestGuard providerRequestGuard = new NativeRequestGuard();
@@ -303,7 +311,7 @@ public final class MainActivity extends Activity {
                 }
                 view.evaluateJavascript(
                     "(function(){var transport=window.NativeKiCadBridge;var host={};" +
-                    "['openFiles','openFolder','downloadProject','openRepositorySource','composeReport','setPresentation','exportCandidateProject','exportText','libraryRequest','githubRequest','gitlabRequest','cancelGithubRequest','cancelGitlabRequest','cancelLibraryRequest','cancelProjectLoad','acceptGithubRequest','acceptGitlabRequest','acceptLibraryRequest','acceptProjectLoad'].forEach(function(name){" +
+                    "['openFiles','openFolder','downloadProject','openRepositorySource','composeReport','setPresentation','exportCandidateProject','exportText','exportDocument','libraryRequest','githubRequest','gitlabRequest','repositoryBrowserRequest','cancelRepositoryBrowserRequest','acceptRepositoryBrowserRequest','cancelGithubRequest','cancelGitlabRequest','cancelLibraryRequest','cancelProjectLoad','acceptGithubRequest','acceptGitlabRequest','acceptLibraryRequest','acceptProjectLoad'].forEach(function(name){" +
                     "host[name]=function(){transport.postMessage(JSON.stringify({method:name,args:Array.from(arguments)}));};});" +
                     "Object.defineProperty(window,'NativeKiCadHost',{value:Object.freeze(host),writable:false,configurable:false});})()", null);
                 view.evaluateJavascript(
@@ -316,6 +324,7 @@ public final class MainActivity extends Activity {
                         "downloadProject:function(){NativeKiCadHost.downloadProject()}," +
                         "exportCandidateProject:function(value){NativeKiCadHost.exportCandidateProject(JSON.stringify(value))}," +
                         "exportText:function(name,text,mime){NativeKiCadHost.exportText(name,text,mime)}," +
+                        "exportDocument:function(id,name,mime,encoding,data){NativeKiCadHost.exportDocument(id,name,mime,encoding,data)}," +
                         "cancelGithubRequest:function(id){NativeKiCadHost.cancelGithubRequest(id)}," +
                         "cancelGitlabRequest:function(id){NativeKiCadHost.cancelGitlabRequest(id)}," +
                         "cancelLibraryRequest:function(id){NativeKiCadHost.cancelLibraryRequest(id)}," +
@@ -326,6 +335,9 @@ public final class MainActivity extends Activity {
                         "acceptProjectLoad:function(id){NativeKiCadHost.acceptProjectLoad(id)}," +
                         "libraryRequest:function(id,message){NativeKiCadHost.libraryRequest(id,JSON.stringify(message))}," +
                         "githubRequest:function(id,message){NativeKiCadHost.githubRequest(id,JSON.stringify(message))}," +
+                        "repositoryBrowserRequest:function(id,message){NativeKiCadHost.repositoryBrowserRequest(id,typeof message==='string'?message:JSON.stringify(message))}," +
+                        "cancelRepositoryBrowserRequest:function(id){NativeKiCadHost.cancelRepositoryBrowserRequest(id)}," +
+                        "acceptRepositoryBrowserRequest:function(id){NativeKiCadHost.acceptRepositoryBrowserRequest(id)}," +
                         "gitlabRequest:function(id,message){NativeKiCadHost.gitlabRequest(id,JSON.stringify(message))}});" +
                         "window.dispatchEvent(new Event('kicad-android-ready'));", null);
                 pageReady = true;
@@ -338,6 +350,7 @@ public final class MainActivity extends Activity {
             @Override
             public boolean onRenderProcessGone(WebView view, RenderProcessGoneDetail detail) {
                 pageReady = false;
+                pendingDocumentExport = null; pendingDocumentExportId = null;
                 if (webFileCallback != null) { webFileCallback.onReceiveValue(null); webFileCallback = null; }
                 pendingProject = null;
                 activeProject = null;
@@ -570,20 +583,24 @@ public final class MainActivity extends Activity {
             case "setPresentation": if (args.length() == 1 && args.get(0) instanceof Boolean) api.setPresentation(args.getBoolean(0)); break;
             case "exportCandidateProject": if (args.length() == 1 && args.get(0) instanceof String) api.exportCandidateProject(args.getString(0)); break;
             case "exportText": if (args.length() == 3 && args.get(0) instanceof String && args.get(1) instanceof String && args.get(2) instanceof String) api.exportText(args.getString(0), args.getString(1), args.getString(2)); break;
+            case "exportDocument": if (args.length() == 5 && args.get(0) instanceof String && args.get(1) instanceof String && args.get(2) instanceof String && args.get(3) instanceof String && args.get(4) instanceof String) api.exportDocument(args.getString(0), args.getString(1), args.getString(2), args.getString(3), args.getString(4)); break;
             case "cancelProjectLoad": if(args.length()==0)api.cancelProjectLoad();break;
             case "cancelGithubRequest": if(args.length()==1&&args.get(0) instanceof Number&&args.getDouble(0)==args.getInt(0)&&args.getInt(0)>=0)api.cancelGithubRequest(args.getInt(0));break;
             case "cancelGitlabRequest": if(args.length()==1&&args.get(0) instanceof Number&&args.getDouble(0)==args.getInt(0)&&args.getInt(0)>=0)api.cancelGitlabRequest(args.getInt(0));break;
             case "cancelLibraryRequest": if(args.length()==1&&args.get(0) instanceof Number&&args.getDouble(0)==args.getInt(0)&&args.getInt(0)>=0)api.cancelLibraryRequest(args.getInt(0));break;
+            case "cancelRepositoryBrowserRequest": if(args.length()==1&&args.get(0) instanceof Number&&args.getDouble(0)==args.getInt(0)&&args.getInt(0)>=0)api.cancelRepositoryBrowserRequest(args.getInt(0));break;
+            case "acceptRepositoryBrowserRequest": if(args.length()==1&&args.get(0) instanceof Number&&args.getDouble(0)==args.getInt(0)&&args.getInt(0)>=0)api.acceptRepositoryBrowserRequest(args.getInt(0));break;
             case "acceptGithubRequest": if(args.length()==1&&args.get(0) instanceof Number&&args.getDouble(0)==args.getInt(0)&&args.getInt(0)>=0)api.acceptGithubRequest(args.getInt(0));break;
             case "acceptGitlabRequest": if(args.length()==1&&args.get(0) instanceof Number&&args.getDouble(0)==args.getInt(0)&&args.getInt(0)>=0)api.acceptGitlabRequest(args.getInt(0));break;
             case "acceptLibraryRequest": if(args.length()==1&&args.get(0) instanceof Number&&args.getDouble(0)==args.getInt(0)&&args.getInt(0)>=0)api.acceptLibraryRequest(args.getInt(0));break;
             case "acceptProjectLoad": if(args.length()==1&&args.get(0) instanceof Number&&args.getDouble(0)==args.getInt(0)&&args.getInt(0)>=0)api.acceptProjectLoad(args.getInt(0));break;
-            case "libraryRequest": case "githubRequest": case "gitlabRequest":
+            case "libraryRequest": case "githubRequest": case "gitlabRequest": case "repositoryBrowserRequest":
                 if (args.length() != 2 || !(args.get(0) instanceof Number) || !(args.get(1) instanceof String)
                         || args.getDouble(0) != args.getInt(0) || args.getInt(0) < 0) return;
                 int id = args.getInt(0); String body = args.getString(1);
                 if (method.equals("libraryRequest")) api.libraryRequest(id, body);
                 else if (method.equals("githubRequest")) api.githubRequest(id, body);
+                else if (method.equals("repositoryBrowserRequest")) api.repositoryBrowserRequest(id, body);
                 else api.gitlabRequest(id, body);
                 break;
             default: break;
@@ -591,6 +608,40 @@ public final class MainActivity extends Activity {
     }
 
     private final class NativeBridge {
+        public void cancelRepositoryBrowserRequest(int id){runOnUiThread(()->{if(trustedPage()){cancelRead(repositoryBrowserReads,id);if(repositoryBrowser!=null&&repositoryBrowserControlId==id)repositoryBrowser.cancelRequest();}});}
+        public void acceptRepositoryBrowserRequest(int id){runOnUiThread(()->acceptRead(repositoryBrowserReads,id));}
+        public void repositoryBrowserRequest(int id,String body){
+            if(id<0||body==null||body.length()>1024*1024)return;
+            runOnUiThread(()->{
+                if(!trustedPage())return;
+                try{
+                    JSONObject request=new JSONObject(body);ManagedPolicy.requireNetwork(MainActivity.this);
+                    if(repositoryBrowser==null)repositoryBrowser=new RepositorySessionBrowser(MainActivity.this,()->{if(trustedPage())webView.evaluateJavascript("window.KiCadAndroidSession?.useProject();",null);});
+                    if(request.optString("action").equals("import")){
+                        stopProjectLoads();final ReadTicket read=beginRead(repositoryBrowserReads,id,true);
+                        RepositorySessionImporter importer=new RepositorySessionImporter(MainActivity.this,repositoryBrowser,diskProjectStore);
+                        importExecutor.execute(()->{JSONObject result=null;String error=null;
+                            try(NativeLoadOperation.Scope lease=read.operation.enter()){result=importer.load(request);}
+                            catch(Exception failure){error=failure instanceof ManagedPolicy.Denied?failure.getMessage():"Repository import failed. Keep its browser session open and check website access or choose a smaller project folder.";}
+                            final JSONObject answer=result;final String failure=error;
+                            runOnUiThread(()->{if(trustedPage()&&deliverRead(repositoryBrowserReads,id,read,answer,failure,"https://github.com"))repositoryBrowserReply(id,answer,failure);});
+                        });return;
+                    }
+                    JSONObject operation=request.optJSONObject("operation");
+                    if(operation!=null&&java.util.Set.of("review","policy").contains(operation.optString("type"))){
+                        final JSONObject source=activeProject;final int generation=downloadGeneration.get();
+                        final String repository=request.optString("repository"),ref=operation.optString("ref"),file=operation.optString("file");
+                        requireRepositorySessionScope(source,generation,repository,ref,file);
+                        if(operation.optString("action").equals("prepare"))repositoryBrowser.setWriteGuard(()->requireRepositorySessionScope(source,generation,repository,ref,file));
+                    }
+                    if(operation!=null&&operation.optString("type").equals("policy")){
+                        ManagedPolicy.requireAction(MainActivity.this,"chat-message-write");repositoryBrowserReply(id,new JSONObject().put("allowed",true),null);return;
+                    }
+                    repositoryBrowserControlId=id;
+                    repositoryBrowser.request(request,(result,error)->{if(repositoryBrowserControlId==id)repositoryBrowserControlId=-1;if(trustedPage())repositoryBrowserReply(id,result,error);});
+                }catch(Exception error){repositoryBrowserReply(id,null,error instanceof ManagedPolicy.Denied?error.getMessage():"Invalid repository browser request. Open its repository and complete website sign-in or SSO.");}
+            });
+        }
         public void cancelGithubRequest(int id){runOnUiThread(()->{if(trustedPage())cancelRead(githubReads,id);});}
         public void cancelGitlabRequest(int id){runOnUiThread(()->{if(trustedPage())cancelRead(gitlabReads,id);});}
         public void cancelLibraryRequest(int id){runOnUiThread(()->{if(trustedPage())cancelRead(libraryReads,id);});}
@@ -770,9 +821,34 @@ public final class MainActivity extends Activity {
             runOnUiThread(() -> {
                 final boolean presentation = "text/html".equals(mime) && "pocket-kivi-presentation.html".equals(name);
                 if (!trustedPage() || text == null || text.length() > (presentation ? 16 : 4) * 1024 * 1024 || name == null || !name.matches("[A-Za-z0-9._-]{1,100}") || !(presentation || "text/csv".equals(mime) || "application/json".equals(mime))) return;
-                if (pendingTextExport != null || pendingDownload != null) { sendError("Finish the current export first"); return; }
+                if (pendingTextExport != null || pendingDownload != null || pendingDocumentExportId != null) { sendError("Finish the current export first"); return; }
                 pendingTextExport = text; pendingTextEpoch = downloadGeneration.get();
                 Intent intent = new Intent(Intent.ACTION_CREATE_DOCUMENT); intent.addCategory(Intent.CATEGORY_OPENABLE); intent.setType(mime); intent.putExtra(Intent.EXTRA_TITLE, name); intent.addFlags(Intent.FLAG_GRANT_WRITE_URI_PERMISSION); startActivityForResult(intent, REQUEST_TEXT_EXPORT);
+            });
+        }
+
+        public void exportDocument(String id, String name, String mime, String encoding, String value) {
+            runOnUiThread(() -> {
+                if (!trustedPage() || !DocumentExportPolicy.requestId(id)) return;
+                if (pendingTextExport != null || pendingDownload != null || pendingDocumentExportId != null) { documentExportReply(id, false, "Finish the current export first.", false); return; }
+                if (activeProject == null) { documentExportReply(id, false, "Open the source project before exporting its document.", false); return; }
+                pendingDocumentExportId = id; pendingDocumentEpoch = downloadGeneration.get();
+                final int epoch = pendingDocumentEpoch;
+                try {
+                    importExecutor.execute(() -> {
+                        byte[] bytes;
+                        try { bytes = DocumentExportPolicy.decode(name, mime, encoding, value); validateGeneratedDocument(mime, value); }
+                        catch (Exception invalid) { runOnUiThread(() -> finishDocumentExport(id, false, "Invalid or oversized generated document. PDF supports 16 MiB, SVG 8 MiB and JSON 4 MiB.", false)); return; }
+                        runOnUiThread(() -> {
+                            if (!id.equals(pendingDocumentExportId)) return;
+                            if (!trustedPage() || destroyed || epoch != downloadGeneration.get()) { finishDocumentExport(id, false, "Export cancelled because the project changed.", true); return; }
+                            pendingDocumentExport = bytes;
+                            Intent intent = new Intent(Intent.ACTION_CREATE_DOCUMENT); intent.addCategory(Intent.CATEGORY_OPENABLE); intent.setType(mime); intent.putExtra(Intent.EXTRA_TITLE, name); intent.addFlags(Intent.FLAG_GRANT_WRITE_URI_PERMISSION);
+                            try { startActivityForResult(intent, REQUEST_DOCUMENT_EXPORT); }
+                            catch (Exception unavailable) { finishDocumentExport(id, false, "The Android document save picker is unavailable.", false); }
+                        });
+                    });
+                } catch (RuntimeException unavailable) { finishDocumentExport(id, false, "Document export is unavailable.", false); }
             });
         }
 
@@ -1016,6 +1092,20 @@ public final class MainActivity extends Activity {
             .setMessage("Allow a private notification shortly before this temporary copy expires? You can keep it offline then. Downloads work even if you choose Later.")
             .setPositiveButton("Enable",(dialog,which)->enableTemporaryReminders(-1)).setNegativeButton("Later",null).show();
     }
+    private void requireRepositorySessionScope(JSONObject source,int generation,String repository,String ref,String file)throws Exception{
+        if(!trustedPage()||source==null||activeProject!=source||downloadGeneration.get()!=generation||!"https://github.com".equals(activeProviderHost))throw new java.io.IOException("The active project changed. Reopen its conversation.");
+        JSONObject origin=source.optJSONObject("github");
+        if(origin==null||!"website-session".equals(origin.optString("transport"))||!origin.optString("repository").equals(repository)||!origin.optString("sha").equals(ref))throw new java.io.IOException("Review request belongs to another website-session project.");
+        org.json.JSONArray files=source.optJSONArray("files");boolean found=false;
+        if(files!=null)for(int i=0;i<files.length();i++)if(file.equals(files.getJSONObject(i).optString("path"))){found=true;break;}
+        if(!found)throw new java.io.IOException("Review drawing is not in the active project.");
+    }
+    private void repositoryBrowserReply(int id,JSONObject result,String error){
+        if(!trustedPage())return;
+        try{JSONObject reply=new JSONObject().put("ok",error==null);if(error==null)reply.put("result",result);else reply.put("error",error);
+            webView.evaluateJavascript("window.KiCadAndroidSession?.reply("+id+","+reply.toString().replace("\u2028","\\u2028").replace("\u2029","\\u2029")+");",null);
+        }catch(Exception ignored){/* No partial reply. */}
+    }
     private void recordProject(JSONObject project, String providerHost, boolean isPrivate) {
         if (project == null) return;
         activeProject = project;
@@ -1038,7 +1128,7 @@ public final class MainActivity extends Activity {
     private void launchDownload() { launchDownload(activeProject, "kicad-project.zip"); }
 
     private void launchDownload(JSONObject candidate, String filename) {
-        if (pendingDownload != null || pendingTextExport != null) return;
+        if (pendingDownload != null || pendingTextExport != null || pendingDocumentExportId != null) return;
         if (activeProject == null) { sendError("Open a project before downloading"); return; }
         if(candidate != null && candidate.optBoolean("diskBacked")) { sendError("This project is already downloaded in private app storage. Reopen or star it in Your projects. External ZIP export is unavailable for large downloaded copies."); return; }
         final JSONObject project = activeProject;
@@ -1094,6 +1184,66 @@ public final class MainActivity extends Activity {
                 "window.KiCadAndroid?.receiveDownloadResult?.(" + JSONObject.quote(message) + ");", null);
     }
 
+    private static void validateGeneratedDocument(String mime, String value) throws Exception {
+        if ("application/json".equals(mime)) {
+            org.json.JSONTokener parser = new org.json.JSONTokener(value);
+            Object document = parser.nextValue();
+            if (!(document instanceof JSONObject) && !(document instanceof org.json.JSONArray) || parser.nextClean() != 0) throw new java.io.IOException("Invalid JSON document.");
+        } else if ("image/svg+xml".equals(mime)) {
+            org.xmlpull.v1.XmlPullParser parser = android.util.Xml.newPullParser();
+            parser.setFeature(org.xmlpull.v1.XmlPullParser.FEATURE_PROCESS_NAMESPACES, true);
+            parser.setFeature("http://xmlpull.org/v1/doc/features.html#process-docdecl", false);
+            parser.setInput(new java.io.StringReader(value));
+            boolean root = false; int nodes = 0;
+            for (int event = parser.next(); event != org.xmlpull.v1.XmlPullParser.END_DOCUMENT; event = parser.next()) {
+                if (event == org.xmlpull.v1.XmlPullParser.DOCDECL || parser.getDepth() > 128 || ++nodes > 200000) throw new java.io.IOException("Unsupported SVG structure.");
+                if (event == org.xmlpull.v1.XmlPullParser.START_TAG && !root) {
+                    if (!"svg".equals(parser.getName()) || !"http://www.w3.org/2000/svg".equals(parser.getNamespace())) throw new java.io.IOException("Invalid SVG root.");
+                    root = true;
+                }
+            }
+            if (!root) throw new java.io.IOException("Missing SVG document.");
+        }
+    }
+
+    private void documentExportReply(String id, boolean ok, String error, boolean cancelled) {
+        if (!trustedPage() || !DocumentExportPolicy.requestId(id)) return;
+        try {
+            JSONObject detail = new JSONObject().put("id", id).put("ok", ok).put("cancelled", cancelled);
+            if (error != null) detail.put("error", error);
+            webView.evaluateJavascript("window.dispatchEvent(new CustomEvent('kicad-android-document-export',{detail:" + detail.toString() + "}));", null);
+        } catch (Exception ignored) { /* Never include payload bytes in an error. */ }
+    }
+
+    private void finishDocumentExport(String id, boolean ok, String error, boolean cancelled) {
+        if (!java.util.Objects.equals(id, pendingDocumentExportId)) return;
+        pendingDocumentExport = null; pendingDocumentExportId = null;
+        documentExportReply(id, ok, error, cancelled);
+    }
+
+    private void writeDocumentExport(Uri destination) {
+        final byte[] bytes = pendingDocumentExport;
+        final String id = pendingDocumentExportId;
+        final int epoch = pendingDocumentEpoch;
+        pendingDocumentExport = null;
+        if (bytes == null || id == null || !trustedPage() || epoch != downloadGeneration.get()) {
+            deleteIncompleteDownload(destination); finishDocumentExport(id, false, "Export cancelled because the project changed.", true); return;
+        }
+        importExecutor.execute(() -> {
+            try {
+                try (java.io.OutputStream output = getContentResolver().openOutputStream(destination, "wt")) {
+                    if (output == null) throw new java.io.IOException("Cannot write document destination.");
+                    for (int at = 0; at < bytes.length; at += 65536) {
+                        if (destroyed || epoch != downloadGeneration.get() || Thread.currentThread().isInterrupted()) throw new java.io.IOException("Export cancelled.");
+                        output.write(bytes, at, Math.min(65536, bytes.length - at));
+                    }
+                }
+                if (destroyed || epoch != downloadGeneration.get()) throw new java.io.IOException("Export cancelled.");
+                runOnUiThread(() -> { if (epoch == downloadGeneration.get()) finishDocumentExport(id, true, null, false); else finishDocumentExport(id, false, "Export cancelled because the project changed.", true); });
+            } catch (Exception failed) { deleteIncompleteDownload(destination); runOnUiThread(() -> finishDocumentExport(id, false, "Cannot save generated document; check the selected destination and retry.", false)); }
+        });
+    }
+
     private void libraryReply(int id, JSONObject result, String error) {
         runOnUiThread(() -> {
             if (!trustedPage()) return;
@@ -1141,6 +1291,7 @@ public final class MainActivity extends Activity {
         }
         if (resultCode != RESULT_OK || data == null || data.getData() == null) {
             if (requestCode == REQUEST_TEXT_EXPORT) { pendingTextExport = null; sendDownloadResult("Export cancelled"); }
+            if (requestCode == REQUEST_DOCUMENT_EXPORT) finishDocumentExport(pendingDocumentExportId, false, "Export cancelled.", true);
             if (requestCode == REQUEST_DOWNLOAD) {
                 pendingDownload = null;
                 sendDownloadResult("Project download cancelled");
@@ -1150,13 +1301,16 @@ public final class MainActivity extends Activity {
         Uri uri = data.getData();
         if (!NativeBridgePolicy.pickerContent(uri.toString())) {
             if (requestCode == REQUEST_TEXT_EXPORT) pendingTextExport = null;
+            if (requestCode == REQUEST_DOCUMENT_EXPORT) finishDocumentExport(pendingDocumentExportId, false, "Choose an Android document provider destination.", false);
             if (requestCode == REQUEST_DOWNLOAD) pendingDownload = null;
             // Do not attempt cleanup on a rejected destination: that would also
             // delegate the app's filesystem authority to the document handler.
             sendError("The document handler returned an unsupported location. Choose a document provider.");
             return;
         }
-        if (requestCode == REQUEST_TEXT_EXPORT) {
+        if (requestCode == REQUEST_DOCUMENT_EXPORT) {
+            writeDocumentExport(uri);
+        } else if (requestCode == REQUEST_TEXT_EXPORT) {
             final String text = pendingTextExport; final int epoch = pendingTextEpoch; pendingTextExport = null;
             if (text == null || epoch != downloadGeneration.get()) { deleteIncompleteDownload(uri); sendError("Export cancelled because the project changed"); return; }
             importExecutor.execute(() -> {
@@ -1348,6 +1502,7 @@ public final class MainActivity extends Activity {
         if(!cameraRuntimeRequested)clearCameraRequest(true);
         if(trustedPage())webView.evaluateJavascript("window.dispatchEvent(new Event('kicad-android-paused'));",null);
         activityResumed = false;
+        if(repositoryBrowser!=null)repositoryBrowser.onPause();
         if (webView != null) webView.onPause();
         super.onPause();
     }
@@ -1358,6 +1513,7 @@ public final class MainActivity extends Activity {
         applyManagedPolicy();
         if(diskProjectStore!=null) importExecutor.execute(() -> { diskProjectStore.cleanupExpired(); diskProjectStore.showDueReminders(); diskProjectStore.scheduleCleanup(); runOnUiThread(this::checkTemporaryExpiry); });
         activityResumed = true;
+        if(repositoryBrowser!=null)repositoryBrowser.onResume();
         if(cameraRuntimeGranted)finishCameraRequest();
         if(github != null && !github.pendingDevice()) clearCopiedGitHubCode();
         if (webView != null) { webView.onResume(); if(trustedPage()) webView.evaluateJavascript("window.dispatchEvent(new Event('kicad-android-resumed'));",null); }
@@ -1370,12 +1526,14 @@ public final class MainActivity extends Activity {
         applySystemBarAppearance();
         applyTextScale();
         if (webView != null) {webView.requestLayout();webView.requestApplyInsets();}
+        if(repositoryBrowser!=null)repositoryBrowser.resize();
     }
 
     @Override
     protected void onDestroy() {
         if(restrictionsListening){unregisterReceiver(restrictionsReceiver);restrictionsListening=false;}
         cancelAllReads();
+        if(repositoryBrowser!=null){repositoryBrowser.destroy();repositoryBrowser=null;}
         clearCameraRequest(true);
         destroyed = true;
         if (foldTracker != null && foldListening) foldTracker.removeWindowLayoutInfoListener(foldListener);
@@ -1385,6 +1543,7 @@ public final class MainActivity extends Activity {
         activeProviderHost = null;
         pendingDownload = null;
         pendingTextExport = null;
+        pendingDocumentExport = null; pendingDocumentExportId = null;
         if (webFileCallback != null) { webFileCallback.onReceiveValue(null); webFileCallback = null; }
         downloadGeneration.incrementAndGet();
         if (Build.VERSION.SDK_INT >= 33 && backCallback != null) {

@@ -297,7 +297,7 @@ export function mountBoard3D(container, source, options = {}) {
     if (!copperGroups.has(layer)) { const group = new THREE.Group(); group.name = layer; boardGroup.add(group); copperGroups.set(layer, group); group.visible=!mechanical; }
     return copperGroups.get(layer);
   };
-  const refinedTracks=refineCopperTracks(board.tracks,sourceAST);geometryDiagnostics.push(...refinedTracks.warnings);
+  const refinedTracks=mechanical?{tracks:[],warnings:[]}:refineCopperTracks(board.tracks,sourceAST);geometryDiagnostics.push(...refinedTracks.warnings);
   const substratePose=substrateEnvelope(thickness,copperPlan.byLayer);
   if(substratePose.missingOuterDepths)geometryDiagnostics.push('Outer copper inner-face depths are incomplete; missing substrate faces use the nominal board envelope.');
   const shape = boardShape(board, world);
@@ -328,6 +328,7 @@ export function mountBoard3D(container, source, options = {}) {
     new THREE.LineBasicMaterial({ color: 0x9bb7ac, transparent: true, opacity: .42 }));
   edges.position.z = substratePose.bottom; boardGroup.add(edges);
 
+  if(!mechanical){
   for (const [layer, color] of [["F.Cu", layerThreeColor("F.Cu")], ["B.Cu", layerThreeColor("B.Cu")]]) {
     const placement=outerCopperPlacement(layer,thickness,copperPlan.byLayer.get(layer)?.thickness||.035,copperPlan.byLayer.get(layer)?.z),z=placement.center;
     for(const category of ['tracks','arcs']){
@@ -378,7 +379,8 @@ export function mountBoard3D(container, source, options = {}) {
     const cap=makeInstanced(groupFor(layer),geometry,viaMaterial,batch.vias,(object,via)=>{const[x,y]=world(via.at);object.position.set(x,y,placement.base);},viewportSceneIdentity('via-annulus',layer,key));
     if(cap){visibilityRecord(cap,'vias',layer);pickables.push(cap);}
   }
-  const netInspection=createNetInspection(THREE,{board:{...board,tracks:refinedTracks.tracks},plan:copperPlan,zones:savedZones.records,sourceLimited:savedZones.truncated,pads:nativePads,world,colorForLayer:layerThreeColor});scene.add(netInspection.group);
+  }
+  const netInspection=createNetInspection(THREE,{board:{...board,tracks:refinedTracks.tracks},plan:copperPlan,zones:mechanical?[]:savedZones.records,sourceLimited:savedZones.truncated,pads:mechanical?[]:nativePads,world,colorForLayer:layerThreeColor});scene.add(netInspection.group);
   let fullNet3D=true;
   const netInspectionHelp=document.createElement('p');netInspectionHelp.className='quality-help';netInspectionHelp.hidden=true;renderingOptions.append(netInspectionHelp);
   applyAppearance();
@@ -580,7 +582,7 @@ export function mountBoard3D(container, source, options = {}) {
   let showTerminalLabels=options.showNetNames===true;
   const terminalLabelStatus=document.createElement('p');terminalLabelStatus.className='quality-help';terminalLabelStatus.setAttribute('role','status');terminalLabelStatus.hidden=true;layerOptions.append(terminalLabelStatus);
   const terminalSurfaceZ=layer=>{const saved=copperPlan.byLayer.get(layer),sign=layer==='F.Cu'?1:-1;return (saved?.z??sign*(thickness/2-(saved?.thickness||.035)/2))+sign*((saved?.thickness||.035)/2+.0015);};
-  const terminalSource={records:nativePads,world,top,bottom,surfaceZ:terminalSurfaceZ,layout:padLabels.layout,layerVisible:layer=>groupFor(layer).visible&&objectVisibility.visible('pads',layer)};
+  const terminalSource={records:mechanical?[]:nativePads,world,top,bottom,surfaceZ:terminalSurfaceZ,layout:padLabels.layout,layerVisible:layer=>groupFor(layer).visible&&objectVisibility.visible('pads',layer)};
   const terminalAnnotations=createTerminalAnnotations(THREE,{scene,camera,host:canvasHost,...terminalSource,showNetNames:showTerminalLabels,showTerminalNumbers:options.showTerminalNumbers,onStatus:state=>{
     terminalLabelStatus.hidden=!(state.numbers||state.nets)||state.shown>0&&!state.overlap&&!state.budget&&!state.sourceOmitted;
     terminalLabelStatus.textContent=state.shown?`${state.shown} pad annotations shown${state.overlap?`; ${state.overlap} overlapping labels omitted`:''}${state.budget?`; ${state.budget} omitted by the label/texture budget`:''}${state.sourceOmitted?`; ${state.sourceOmitted} beyond the source-record limit`:''}.`:'Zoom in on the facing copper surface for readable saved pad annotations.';

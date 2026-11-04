@@ -1,5 +1,20 @@
 # Distribution status
 
+**0.12.83 / Android 1.86 (prepared 4 November 2026):** preview release adds faster
+large-board rendering, searchable Fast PI contacts, masked smooth result fields,
+mechanical Draftsman optimization, Android document exports and corrected saved
+DRC/ERC report ingestion. See [release notes](releases/v0.12.83.md). Store upload
+and approval are separate; no new Chrome, Marketplace or Mozilla approval is
+claimed by this entry. The last full-Marble phone run predates the final added
+picker/field/export changes; the final added UI checks remain pending.
+
+**Mozilla notice:** the owner supplied an automated-screening notice reporting
+tentative public approval of **0.12.66**. Older disabled-listing snapshots below
+are historical. The current dashboard/listing state has not been independently
+confirmed. [The 0.12.83 update plan](store-submissions/mozilla-0.12.83-plan.md)
+requires the existing listing, matching readable source and installed-Firefox
+acceptance before a new submission/approval claim.
+
 **0.12.82 / Android 1.82 (4 November 2026):** [GitHub preview published](https://github.com/wayri/KiCad-Github-View/releases/tag/v0.12.82), including Chrome/Chromium, unsigned Firefox, VSIX, development-signed APK and unsigned AAB. Browser-session Issue replies/readback and point/area markers are included. Synthetic schematic/layout/3D marker checks passed; organization content and screenshots are excluded. No new store publication or device acceptance is claimed.
 
 **0.12.81 / Android 1.81 (3 November 2026):** GitHub preview packages include Firefox, VSIX and the development-signed Android APK, source and checksums. See [release notes](releases/v0.12.81.md). This does not claim new Marketplace/Mozilla submission or phone installation. Chrome 0.12.80 was submitted for review separately.

@@ -6,3 +6,24 @@
 
 /* Advanced inputs stay available without crowding the two-contact workflow. */
 .fast-pi-inputs details>label{display:flex;align-items:center;justify-content:space-between;gap:8px;margin:6px 0;font-size:11px}.fast-pi-inputs details>label>input{width:115px}.fast-pi-material{min-height:28px;text-align:left}.fast-pi-panel header{position:sticky;top:-10px;background:var(--panel,#192530);padding:5px 0;z-index:1}
+.fast-pi-panel .fast-pi-inputs[hidden],.fast-pi-panel .fast-pi-actions[hidden],.fast-pi-panel .fast-pi-intro[hidden],.fast-pi-panel .fast-pi-edit-inputs[hidden]{display:none!important}
+.fast-pi-contacts{display:grid;grid-template-columns:minmax(0,1fr) 28px minmax(0,1fr) 28px;gap:4px;margin:7px 0}.fast-pi-contacts>button{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;text-align:left}.fast-pi-contacts>button[aria-label]{text-align:center}.fast-pi-panel.picking .fast-pi-contacts{margin:3px 0}
+.fast-pi-contact-picker{position:fixed;inset:64px 16px auto auto;margin:0;width:min(420px,calc(100vw - 32px));max-height:min(65dvh,600px);padding:0;border:1px solid #587180;border-radius:10px;background:var(--panel,#192530);color:var(--text,#e4edf7);box-shadow:0 8px 30px #0006;font:12px system-ui;overflow:hidden;box-sizing:border-box}
+.fast-pi-contact-picker[open]{display:flex;flex-direction:column}.fast-pi-contact-picker::backdrop{background:#0003}.fast-pi-contact-picker header{display:flex;align-items:center;gap:8px;padding:8px;flex-shrink:0}.fast-pi-contact-picker header strong{flex:1;min-width:0;overflow-wrap:anywhere}.fast-pi-contact-picker>small,.fast-pi-contact-status{padding:0 8px;font-size:11px;color:var(--muted,#b7c8d5)}.fast-pi-contact-filters{display:flex;gap:5px;padding:8px;flex-shrink:0}.fast-pi-contact-filters input{flex:1;width:0;min-width:0}.fast-pi-contact-filters select{width:110px;min-width:0}.fast-pi-contact-list{overflow:auto;min-height:48px;overscroll-behavior:contain;padding:0 8px}.fast-pi-contact-picker button,.fast-pi-contact-picker input,.fast-pi-contact-picker select{font:inherit;min-height:32px;border:1px solid #587180;border-radius:5px;background:var(--panel,#202e3a);color:inherit;box-sizing:border-box}.fast-pi-contact-option{display:flex;flex-direction:column;align-items:flex-start;gap:2px;width:100%;padding:6px 8px;margin:0 0 4px;text-align:left}.fast-pi-contact-option small{font-size:10px;color:var(--muted,#b7c8d5)}.fast-pi-contact-picker :focus-visible{outline:2px solid #7ed4dd;outline-offset:1px}
+.fast-pi-contact-actions{padding:0 8px 8px;flex-shrink:0}
+.fast-pi-display-control{display:flex;align-items:center;justify-content:space-between;gap:6px;margin:6px 0}.fast-pi-display-control select{max-width:160px}.fast-pi-panel.picking>.fast-pi-display-control{display:none}
+@media(max-width:700px),(max-height:500px) and (pointer:coarse){.fast-pi-contact-picker{inset:auto 0 0;width:100%;max-height:65dvh;border-radius:12px 12px 0 0;padding-bottom:env(safe-area-inset-bottom,0px)}.fast-pi-contact-picker header{padding-top:10px}.fast-pi-contact-option{min-height:42px}.fast-pi-contact-filters{padding-top:4px}}
+
+/* Leave the board reachable while choosing contacts on a phone. Inputs and
+   results return after the second tap; no electrical assumptions are changed. */
+@media(max-width:700px){
+ .fast-pi-panel{left:0;right:0;top:auto;bottom:0;width:100%;max-height:56dvh;border-radius:12px 12px 0 0;padding:8px}
+ .fast-pi-panel.picking,body.android-design .fast-pi-panel.picking:not([hidden]){top:auto;left:0;right:0;bottom:0;width:100%;max-height:180px;resize:none}
+ .fast-pi-panel.picking>p:not(.fast-pi-status),.fast-pi-panel.picking>small,.fast-pi-panel.picking>.fast-pi-output,.fast-pi-panel.picking>.fast-pi-legend,.fast-pi-panel.picking>label{display:none}
+ .fast-pi-panel.picking .fast-pi-inputs{display:block;margin-top:4px}
+ .fast-pi-panel.picking .fast-pi-inputs>*{display:none}
+ .fast-pi-panel.picking .fast-pi-inputs>.fast-pi-pick-layer{display:flex;flex-direction:row;align-items:center;justify-content:space-between;gap:8px}
+ .fast-pi-panel.picking .fast-pi-inputs>.fast-pi-pick-layer>select{width:140px}
+ .fast-pi-panel.picking .fast-pi-actions{margin:5px 0}
+ .fast-pi-panel.picking .fast-pi-status{margin:4px 0;font-size:11px}
+}

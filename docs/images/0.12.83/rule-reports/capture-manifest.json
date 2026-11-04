@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "release": "0.12.83",
+  "captured": "2026-11-04",
+  "environment": "Integrated browser, shared viewer, public local fixtures; no provider account",
+  "captures": [
+    {"file": "drc-report.jpg", "drawing": "extension/tests/fixtures/net3d/inspection.kicad_pcb", "report": "extension/tests/fixtures/rule-reports/inspection-drc.json", "provenance": "Retained native KiCad 10.0.6 DRC export", "findings": 5, "markers": 6, "verified": ["Automatic discovery", "Marker click and jump", "Selected finding note", "Markers hidden: 0; restored: 6"]},
+    {"file": "erc-report.jpg", "drawing": "extension/tests/fixtures/kicad8/custom_fields.kicad_sch", "report": "extension/tests/fixtures/rule-reports/synthetic-qa-erc.json", "provenance": "Synthetic QA data; not a native ERC run", "findings": 2, "verified": ["Automatic discovery and drawing association", "Error marker click and jump", "Selected finding note", "Warnings hidden: 1 error marker and 0 warning markers; restored", "Light-theme controls inherit readable text color"]}
+  ],
+  "limits": "Imported report visualization only. No native rules run or installed-platform acceptance is implied."
+}

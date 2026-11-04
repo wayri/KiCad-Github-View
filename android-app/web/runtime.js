@@ -29,11 +29,14 @@
   if(message.type==='open-options'){window.top.document.getElementById(provider==='gitlab'?'gitlabButton':'githubButton').click();return{ok:true,result:{opened:true}};}
   if(message.type==='open-project-drawing'||message.type==='open-viewer-window'){if(message.searchResult){const r=message.searchResult;window.top.KiCadAndroid.openDrawing(message.file,{...r.position,uuid:r.uuid,netName:r.netName,view:r.view,ref:message.ref});}else window.top.KiCadAndroid.openDrawing(message.file);return{ok:true,result:{opened:true}};}
   if(online&&(message.repository&&message.repository.toLowerCase()!==info.repository.toLowerCase()||message.provider&&message.provider!==provider||message.host&&message.host!==project.remote?.host))throw Error('Request belongs to another repository or server.');
-  if(online&&['work-board-list','work-board-read','work-board-move','repository-fork-revision','revision-resolve','revision-branches','revision-commits','repository-tree','repository-history','repository-branches'].includes(message.type))return{ok:true,result:await nativeRequest(message)};
+  if(online&&['work-board-list','work-board-read','work-board-move','repository-fork-revision','revision-resolve','revision-branches','revision-commits','repository-tree','repository-history','repository-branches'].includes(message.type)){
+   if(window.top.KiCadAndroidSession?.owns(project)){if(message.type==='repository-tree')return api.send(message);throw Error('This repository-browser mode does not use the account API. Use the repository browser for history, branches or other website actions.');}
+   return{ok:true,result:await nativeRequest(message)};
+  }
   const snapshot=await source(message.ref||message.comment?.anchor?.ref||frameRef,load?{signal:load.controller.signal}:undefined);
   if(load?.controller.signal.aborted)throw Object.assign(Error('Loading cancelled.'),{name:'AbortError'});
   if(online&&remoteTypes.has(message.type)){
-   if(!reviewAdapters.has(snapshot.id))reviewAdapters.set(snapshot.id,KiCadAndroidRemote.create(snapshot,nativeRequest,window.top.KiCadReviewComments,localStorage));const remote=reviewAdapters.get(snapshot.id);
+    if(!reviewAdapters.has(snapshot.id))reviewAdapters.set(snapshot.id,window.top.KiCadAndroidSession?.owns(snapshot)?window.top.KiCadAndroidSession.remote(snapshot,localStorage):KiCadAndroidRemote.create(snapshot,nativeRequest,window.top.KiCadReviewComments,localStorage));const remote=reviewAdapters.get(snapshot.id);
    const reply=await remote.send(message);if(reply.authExpired)(provider==='gitlab'?window.top.KiCadAndroidGitLab:window.top.KiCadAndroidGitHub).authExpired?.(project.remote?.host);return reply;
   }
   return KiCadAndroidLocal.transport(snapshot,localStorage).send(message);

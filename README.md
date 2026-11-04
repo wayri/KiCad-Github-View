@@ -19,42 +19,42 @@ Explore schematics and PCB layouts, follow nets, measure geometry, work through 
 
 ## Downloads
 
-**Release 0.12.82 / Android 1.82:** browser-session GitHub Issue replies/readback, cached review discovery and saved point/area annotations in schematic, layout and 3D. [Release notes and known limits](docs/releases/v0.12.82.md). Store publication and device acceptance are separate from GitHub packages. Android is a non-debuggable development-signed preview; its AAB is unsigned and not Play-ready. [Channel details](docs/RELEASE-STATUS.md).
+**Release 0.12.83 / Android 1.86:** faster large-board loading, searchable Fast PI contacts and masked smooth result fields, mechanical-only Draftsman optimizations, Android document export and local/website-session workflows. [Release notes and known limits](docs/releases/v0.12.83.md). Store publication and device acceptance are separate from GitHub packages. Android is a non-debuggable development-signed preview; its AAB is unsigned and not Play-ready. [Channel details](docs/RELEASE-STATUS.md). [Mozilla update plan](docs/store-submissions/mozilla-0.12.83-plan.md).
 
 The live counter above totals GitHub release-asset downloads, including downloads initiated by KiCad PCM **when its package URL points to a GitHub release asset in this repository**. GitHub does not expose a browser-versus-PCM breakdown or unique install count. No PCM package/repository is currently configured here, and downloads hosted elsewhere are not included. [What the counter measures](docs/DOWNLOAD-STATS.md).
 
-[![Download Android APK](https://img.shields.io/badge/Android-Download%20APK%201.82-3DDC84?logo=android&logoColor=white)](https://github.com/wayri/KiCad-Github-View/releases/download/v0.12.82/pocket-kivi-android-phone-tablet-1.82-development.apk)
-[![Download Chromium extension](https://img.shields.io/badge/Chrome%20%2F%20Chromium-Download%20ZIP-4285F4?logo=googlechrome&logoColor=white)](https://github.com/wayri/KiCad-Github-View/releases/download/v0.12.82/kicad-visual-review-chrome-edge-brave-opera-vivaldi-chromium-0.12.82.zip)
-[![Download VS Code VSIX](https://img.shields.io/badge/VS%20Code-Download%20VSIX%200.12.82-007ACC)](https://github.com/wayri/KiCad-Github-View/releases/download/v0.12.82/kicad-visual-review-vscode-0.12.82.vsix)
+[![Download Android APK](https://img.shields.io/badge/Android-Download%20APK%201.86-3DDC84?logo=android&logoColor=white)](https://github.com/wayri/KiCad-Github-View/releases/download/v0.12.83/pocket-kivi-android-phone-tablet-1.86-development.apk)
+[![Download Chromium extension](https://img.shields.io/badge/Chrome%20%2F%20Chromium-Download%20ZIP-4285F4?logo=googlechrome&logoColor=white)](https://github.com/wayri/KiCad-Github-View/releases/download/v0.12.83/kicad-visual-review-chrome-edge-brave-opera-vivaldi-chromium-0.12.83.zip)
+[![Download VS Code VSIX](https://img.shields.io/badge/VS%20Code-Download%20VSIX%200.12.83-007ACC)](https://github.com/wayri/KiCad-Github-View/releases/download/v0.12.83/kicad-visual-review-vscode-0.12.83.vsix)
 
 | Edition | Download / install | Availability |
 | --- | --- | --- |
 | Android | APK button above | Android 8+; published 1.82 preview, development-signed; manual installation and updates |
-| Chrome, Edge, Brave, Opera, Vivaldi, Chromium | Chromium ZIP button above | Published 0.12.82 preview; extract and load unpacked; candidate browsers have differing validation coverage |
-| VS Code | [Marketplace](https://marketplace.visualstudio.com/items?itemName=wayri.kicad-visual-review) / [offline VSIX 0.12.82](https://github.com/wayri/KiCad-Github-View/releases/download/v0.12.82/kicad-visual-review-vscode-0.12.82.vsix) | Windows, Linux and macOS; VS Code 1.95+; Marketplace and GitHub versions may differ |
-| Firefox / compatible derivatives | [Development ZIP 0.12.82](https://github.com/wayri/KiCad-Github-View/releases/download/v0.12.82/kicad-visual-review-firefox-0.12.82.zip) | Firefox desktop 140+; unsigned temporary add-on; Zen/LibreWolf/Waterfox candidates unverified; [install, signing and Mozilla publishing](docs/FIREFOX.md) |
-| Safari | [Development ZIP 0.12.82](https://github.com/wayri/KiCad-Github-View/releases/download/v0.12.82/kicad-visual-review-safari-0.12.82.zip) | macOS Safari 16.4+; requires Xcode conversion/signing; native verification pending; [instructions](docs/SAFARI.md) |
+| Chrome, Edge, Brave, Opera, Vivaldi, Chromium | Chromium ZIP button above | Published 0.12.83 preview; extract and load unpacked; candidate browsers have differing validation coverage |
+| VS Code | [Marketplace](https://marketplace.visualstudio.com/items?itemName=wayri.kicad-visual-review) / [offline VSIX 0.12.83](https://github.com/wayri/KiCad-Github-View/releases/download/v0.12.83/kicad-visual-review-vscode-0.12.83.vsix) | Windows, Linux and macOS; VS Code 1.95+; Marketplace and GitHub versions may differ |
+| Firefox / compatible derivatives | [Development ZIP 0.12.83](https://github.com/wayri/KiCad-Github-View/releases/download/v0.12.83/kicad-visual-review-firefox-0.12.83.zip) | Firefox desktop 140+; unsigned temporary add-on; Zen/LibreWolf/Waterfox candidates unverified; [install, signing and Mozilla publishing](docs/FIREFOX.md) |
+| Safari | [Development ZIP 0.12.83](https://github.com/wayri/KiCad-Github-View/releases/download/v0.12.83/kicad-visual-review-safari-0.12.83.zip) | macOS Safari 16.4+; requires Xcode conversion/signing; native verification pending; [instructions](docs/SAFARI.md) |
 
-Browser/desktop downloads above are the [v0.12.82 GitHub preview](https://github.com/wayri/KiCad-Github-View/releases/tag/v0.12.82). Android 1.82 is included in the same release. Store channels are updated separately. The source repository and GitHub downloads are public.
+Browser/desktop downloads above are the [v0.12.83 GitHub preview](https://github.com/wayri/KiCad-Github-View/releases/tag/v0.12.83). Android 1.86 is included in the same release. Store channels are updated separately. The source repository and GitHub downloads are public.
 
 <details>
 <summary>Release versions, checksums and Android signing</summary>
 
 Release packages are built from the tagged source; screenshots show several retained development versions and may differ from the packaged UI. The Chrome Store link above is the existing public listing; its approved version can lag GitHub. No Google Play installation is advertised here.
 
-Compare preview downloads with [SHA256SUMS.txt](https://github.com/wayri/KiCad-Github-View/releases/download/v0.12.82/SHA256SUMS.txt). An AAB is a Play upload bundle, not a directly installable Android app. Preserve/export projects and review state before changing signing channels; do not uninstall merely to bypass a signature mismatch. [Installation and updates](docs/INSTALL.md).
+Compare preview downloads with [SHA256SUMS.txt](https://github.com/wayri/KiCad-Github-View/releases/download/v0.12.83/SHA256SUMS.txt). An AAB is a Play upload bundle, not a directly installable Android app. Preserve/export projects and review state before changing signing channels; do not uninstall merely to bypass a signature mismatch. [Installation and updates](docs/INSTALL.md).
 
 </details>
 
 ## Get started
 
-Browser update 0.12.82: click the extension toolbar icon on a repository to detect KiCad projects and open a standalone viewer tab. One result opens directly; multiple results offer a chooser. Empty listings show **No KiCad project detected**; partial listings and access failures remain explicit. Repository, file and pull-request pages stay untouched until you explicitly request a viewer. Reload an already-open repository page after updating. The shared viewer also reads [KiCad Monkey saved design/netlist reports](docs/KICAD-MONKEY.md). [Startup and managed-browser troubleshooting](docs/VIEWER-RELIABILITY.md) explains the new local diagnostics. These changes are included in the 0.12.82 preview.
+Browser update 0.12.83: click the extension toolbar icon on a repository to detect KiCad projects and open a standalone viewer tab. One result opens directly; multiple results offer a chooser. Empty listings show **No KiCad project detected**; partial listings and access failures remain explicit. Repository, file and pull-request pages stay untouched until you explicitly request a viewer. Reload an already-open repository page after updating. The shared viewer also reads [KiCad Monkey saved design/netlist reports](docs/KICAD-MONKEY.md). [Startup and managed-browser troubleshooting](docs/VIEWER-RELIABILITY.md) explains the new local diagnostics. These changes are included in the 0.12.83 preview.
 
 The development web and VS Code workspace uses a compact drawing toolbar, searchable project and properties panels, and a **More tools** menu for secondary actions. VS Code chrome follows the editor theme. A red **!** opens access diagnostics when a repository request is blocked or fails; an organization policy is identified only when the browser explicitly reports it.
 
 This preview includes chat-style Issue and Discussion conversations in **Comments → Threads** on Android, in the extension and in VS Code. Browse conversations or open a thread by number, search its messages, reply, mention contributors, and edit your own plain messages where the provider permits it. Paste a screenshot or attach the selected drawing location for ECAD context; review the destination before sending. Enter adds a line; Ctrl/Cmd+Enter opens the send review. The conversation opens with a compact icon header and a **+ / Send** composer; search, refresh, filters and attachment tools appear only when opened. Unsaved drafts survive switching conversations during the session; **+ → Save local draft** stores a review note without posting.
 
-GitHub Issues use linked quoted replies, GitHub Discussions use native replies, and GitLab conversations belong to Issues. Refresh loads new messages; this does not provide live presence or typing indicators. Reactions and editing published annotation metadata are unavailable. Context remains tied to its saved source revision; mutable VS Code workspaces and cross-repository fork comparisons may require opening the saved source before locating or attaching context. These features are included in the 0.12.82 preview downloads above.
+GitHub Issues use linked quoted replies, GitHub Discussions use native replies, and GitLab conversations belong to Issues. Refresh loads new messages; this does not provide live presence or typing indicators. Reactions and editing published annotation metadata are unavailable. Context remains tied to its saved source revision; mutable VS Code workspaces and cross-repository fork comparisons may require opening the saved source before locating or attaching context. These features are included in the 0.12.83 preview downloads above.
 
 Drawing tools group Design, Inspect and Review tasks, with shortcuts for Measure, Rules, 3D, Layers, BoM and saved Reports. The 2D ruler keeps five completed distance/angle measurements for session replay, including their original sheet. The 3D viewer measures between tapped model surfaces with XYZ deltas, mm/mil units and five-entry history; endpoints on footprint stand-ins are marked approximate. KiCad Monkey and other saved reports can open directly in a VS Code Results tab. Rules display saved settings and imported ERC/DRC findings; these controls do not run native KiCad checks.
 
@@ -69,6 +69,10 @@ New to the viewer? Start with the guide's [first five minutes](USER-GUIDE.md#you
 3. Select a part or net, open **Explorer**, **Inspect**, or **Review**, and follow the [illustrated user guide](USER-GUIDE.md).
 
 Local browser file/folder viewing works offline once the extension is installed. Repository access, sign-in and publishing need a network connection. Folder import preserves relative paths better than selecting a single drawing.
+
+### Saved DRC/ERC reports
+
+See saved findings in the schematic or PCB viewer, show/hide severity markers, click to jump and read the full note. This imports reports; it does not run KiCad rules in the browser. [Illustrated report walkthrough and examples](docs/DRC-ERC-REPORTS.md).
 
 ## What you can do
 

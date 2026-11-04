@@ -1,0 +1,13 @@
+What's new in 0.12.83
+
+Faster large-board loading and mechanical-only Draftsman preparation.
+Fast PI now offers searchable Source/Load pad suggestions with explicit pin and layer coordinates, independent clear/repick and improved narrow-screen controls.
+Smooth result fields use a clearer blue/cyan/yellow/red scale, masked to saved copper, drill holes and solved cells. Mesh diagnostics remain available. Interpolation does not increase solver accuracy.
+Corrected rotated-pad coordinates and retained bounded geometry, mesh and convergence checks.
+Improved imported DRC/ERC report handling and review markers.
+Routine comment synchronization uses an inline status rather than interrupting the drawing.
+
+This is an independent KiCad project viewer. It does not run KiCad's ERC/DRC engine in the browser. Experimental Fast PI is fixed-temperature, single-net DC screening and excludes return impedance, AC and thermal feedback.
+No broad repository OAuth permission is required for the supported foreground website-session viewing workflow. Organization/browser policies still apply. Review publication is explicit.
+
+No new permissions are requested in this update. Chromium, Firefox, VS Code and Android have different validation and platform limits; refer to the release notes.

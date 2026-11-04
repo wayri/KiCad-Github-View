@@ -13,7 +13,7 @@ test('two layers connected by explicit barrel obey Ohm law and positive loss',()
 
 test('Kirchhoff current balance holds at every solved nonterminal node',()=>{const o=options(),ast=board('(zone (net 1) (layer "F.Cu") (filled_polygon (layer "F.Cu") (pts (xy 0 0) (xy 10 0) (xy 10 4) (xy 0 4))))'),r=solveBoard(ast,o),balance=r.nodes.map(()=>0);for(const e of r.edges){balance[e.a]+=e.currentA;balance[e.b]-=e.currentA;}for(let i=0;i<balance.length;i++){const expected=i===r.sourceIndex?2:i===r.sinkIndex?-2:0;assert.ok(Math.abs(balance[i]-expected)<1e-7);}near(r.lossW,r.dropV*2);});
 
-test('global pad rotation is independent of footprint rotation and PTH connects layers',()=>{const o={...options(),source:{x:5,y:-3.5,layer:'F.Cu'},sink:{x:5,y:5.5,layer:'F.Cu'}},ast=board('(footprint "x" (at 5 0 90) (pad "1" smd rect (at 1 0 90) (size 10 1) (layers "F.Cu") (net 1 "VCC")))'),r=solveBoard(ast,o);near(r.resistanceOhm,.009/(58000000*.001*.000035));
+test('global pad rotation is independent of native clockwise footprint rotation and PTH connects layers',()=>{const o={...options(),source:{x:5,y:-5.5,layer:'F.Cu'},sink:{x:5,y:3.5,layer:'F.Cu'}},ast=board('(footprint "x" (at 5 0 90) (pad "1" smd rect (at 1 0 90) (size 10 1) (layers "F.Cu") (net 1 "VCC")))'),r=solveBoard(ast,o);near(r.resistanceOhm,.009/(58000000*.001*.000035));
 const pth=board('(footprint "x" (at .5 .5) (pad "1" thru_hole circle (at 0 0) (size 2 2) (drill .2) (layers "*.Cu") (net 1 "VCC")))'),p=solveBoard(pth,{...options(),layers:[{name:'F.Cu',zMm:0,thicknessMm:.035},{name:'B.Cu',zMm:1.6,thicknessMm:.035}],viaPlatingMm:.025,sink:{x:.5,y:.5,layer:'B.Cu'}});assert.equal(p.edges.filter(e=>e.kind==='via').length,1);near(p.lossW,2*p.dropV);});
 test('strip analytical solution is preserved across three grid resolutions',()=>{for(const step of [1,.5,.25]){const o={...options(),cellSizeMm:step,source:{x:step/2,y:step/2,layer:'F.Cu'},sink:{x:9+step/2,y:step/2,layer:'F.Cu'}},ast=board(`(zone (net 1) (layer "F.Cu") (filled_polygon (layer "F.Cu") (pts (xy 0 0) (xy ${9+step} 0) (xy ${9+step} ${step}) (xy 0 ${step}))))`),r=solveBoard(ast,o);near(r.resistanceOhm,.009/(58000000*step*.001*.000035));}});
 test('gap between occupied cell centers is not electrically bridged',()=>{const ast=board('(zone (net 1) (layer "F.Cu") (filled_polygon (layer "F.Cu") (pts (xy 0 0) (xy .9 0) (xy .9 1) (xy 0 1)))) (zone (net 1) (layer "F.Cu") (filled_polygon (layer "F.Cu") (pts (xy 1.1 0) (xy 2 0) (xy 2 1) (xy 1.1 1))))');assert.throws(()=>solveBoard(ast,{...options(),sink:{x:1.5,y:.5,layer:'F.Cu'}}),/disconnected/);});
@@ -22,4 +22,36 @@ test('KiCad 10 saved named-net strip solves against rho L/A within an interactiv
  const fs=require('node:fs'),{performance}=require('node:perf_hooks'),{savedStackup}=require('../fast-pi-workspace.js'),ast=parse(fs.readFileSync(require.resolve('./fixtures/fast-pi/dc-strip.kicad_pcb'),'utf8'));
  const start=performance.now(),r=solveBoard(ast,{...options(),net:'VCC',layers:savedStackup(ast)}),elapsed=performance.now()-start;
  near(r.resistanceOhm,.009/(58000000*.001*.000035));near(r.lossW,r.currentA*r.dropV);assert.ok(r.residualA<2e-8);assert.ok(elapsed<5000,'small saved fixture must finish within 5s');
+});
+
+test('a small rail remains solvable in a large board with unrelated records and remote drill holes',()=>{
+ const ast=board(copper('F.Cu')),unrelated=board('(segment (net 2) (start 100 100) (end 101 100) (width .2) (layer "F.Cu"))')[1];
+ ast.push(...Array(31000).fill(unrelated));
+ const via=board('(via (net 2) (at 100 100) (size .6) (drill .3) (layers "F.Cu" "B.Cu"))')[1];ast.push(...Array(1100).fill(via));
+ ast.push(board('(footprint "remote-slot" (at 100 100 90) (pad "1" thru_hole oval (at 0 0 90) (size 5 2) (drill oval 4 1) (layers "*.Cu") (net 2)))')[1]);
+ const layers=Array.from({length:12},(_,i)=>({name:i===0?'F.Cu':i===11?'B.Cu':`In${i}.Cu`,zMm:i*.14,thicknessMm:.035}));
+ const r=solveBoard(ast,{...options(),layers});near(r.resistanceOhm,.009/(58000000*.001*.000035));assert.equal(r.nodes.length,10);assert.ok(r.edges.every(edge=>edge.kind==='sheet'));
+});
+
+test('unselected rotated slots and offset round holes remain physical copper voids',()=>{
+ const {createContactValidator}=require('../fast-pi.js');
+ const slot=board(copper('F.Cu')+' (footprint "slot" (at 5 2 90) (pad "1" thru_hole oval (at 1 0 90) (size 5 2) (drill oval 4 .4) (layers "*.Cu") (net 2)))');
+ const accepts=createContactValidator(slot,1,options().layers);
+ assert.equal(accepts({x:5,y:.5,layer:'F.Cu'}),false,'rotated slot crosses the strip');assert.equal(accepts({x:4.5,y:.5,layer:'F.Cu'}),true);
+ assert.throws(()=>solveBoard(slot,options()),/disconnected/,'edge checks cannot electrically bridge the slot');
+ const offset=board(copper('F.Cu')+' (footprint "offset" (at 5 2 90) (pad "1" np_thru_hole circle (at 1 0 90) (size 1 1) (drill .4 (offset .5 0)) (layers "*.Cu")))');
+ const offsetAccepts=createContactValidator(offset,1,options().layers);assert.equal(offsetAccepts({x:5,y:.5,layer:'F.Cu'}),false,'pad-local offset rotates to global drill center');assert.equal(offsetAccepts({x:5.5,y:.5,layer:'F.Cu'}),true);
+ assert.throws(()=>createContactValidator(slot,2,options().layers),/selected slotted drilled pads.*barrel resistance is not modeled/);
+});
+
+test('native Marble USB regulator pad meets its saved track endpoint after clockwise footprint rotation',()=>{
+ const ast=board('(version 20211014) (layers (0 "F.Cu" signal) (31 "B.Cu" signal)) (net 312 "+1V8_USB") '+
+  '(footprint "U23" (at 152.146 115.57) (pad "43" smd roundrect (at 3.25 3.95 270) (size .85 .3) (layers "B.Cu") (roundrect_rratio .5) (net 312))) '+
+  '(footprint "C173" (at 156.21 122.174 -90) (pad "1" smd rect (at -.75 0 180) (size 1 .95) (layers "B.Cu") (uuid "cap-pad") (net 312))) '+
+  '(segment (start 155.396 120.61) (end 156.21 121.424) (width .381) (layer "B.Cu") (net 312)) '+
+  '(segment (start 155.396 119.52) (end 155.396 120.61) (width .381) (layer "B.Cu") (net 312))');
+ const {createContactValidator}=require('../fast-pi.js'),renderer=require('../pcb-renderer.js'),layers=[{name:'F.Cu',zMm:0,thicknessMm:.035},{name:'B.Cu',zMm:1.544994,thicknessMm:.035}],accepts=createContactValidator(ast,312,layers);
+ const pad=renderer.build(ast,'Marble-excerpt.kicad_pcb').primitives.find(p=>p.uuid==='cap-pad'&&p.type==='pad');assert.deepEqual(pad.padCenter,{x:156.21,y:121.424});
+ assert.equal(accepts({...pad.padCenter,layer:'B.Cu'}),true);assert.equal(accepts({x:156.21,y:122.924,layer:'B.Cu'}),false,'counterclockwise location is not this net');
+ const result=solveBoard(ast,{...options(),net:312,layers,sourceVoltageV:1.8,currentA:.1,cellSizeMm:.05,source:{x:155.396,y:119.52,layer:'B.Cu'},sink:{...pad.padCenter,layer:'B.Cu'}});assert.ok(result.dropV>0);assert.ok(result.residualA<=1e-9);near(result.lossW,result.dropV*.1);
 });

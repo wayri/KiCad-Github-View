@@ -20,7 +20,7 @@
   const originalClose=panel=>doc.getElementById?.(closeIds[panel.id])||[...(panel.querySelectorAll?.('button')||[])].find(b=>!b.classList?.contains('android-sheet-dismiss')&&(/^(Close|Cancel)$/i.test(b.textContent?.trim()||'')||/^(Close|Collapse)\b/i.test(b.getAttribute?.('aria-label')||'')));
   const dismiss=panel=>{const original=originalClose(panel);if(original){original.click();return;}if(panel.tagName==='DIALOG')panel.close();else panel.hidden=true;};
   function attach(panel){
-   if(panel.classList.contains('section-page')||panel.classList.contains('touch-net-picker'))return;
+   if(panel.classList.contains('section-page')||panel.classList.contains('touch-net-picker')||panel.classList.contains('draftsman'))return;
    if(registered.has(panel)){if(!panel.classList.contains?.('android-resizable-sheet'))panel.classList.add('android-resizable-sheet');const state=registered.get(panel);if(![...panel.children].includes(state.handle))panel.prepend(state.handle);if(state.close&&!panel.contains?.(state.close)&&![...panel.children].includes(state.close))panel.append(state.close);return;}
    panel.classList.add('android-resizable-sheet');
    const handle=doc.createElement('button');handle.type='button';handle.className='android-sheet-handle';handle.setAttribute('aria-label','Expand panel');handle.setAttribute('aria-expanded','false');handle.title='Drag up to enlarge; drag down to close; tap to expand or reduce';

@@ -52,6 +52,16 @@ Tokens stay in native AndroidKeyStore-backed AES-GCM storage and never enter Web
 
 Review drafts remain local until explicitly published. GitHub Issues/Discussions and GitLab issues/issue discussions support thread readback, member suggestions, policy checks, screenshot upload and duplicate retry protection. Remote permissions and account registration still apply. Offline review is local; remote publication and thread updates need a connection. Offline drafts are not automatically merged into another revision's remote comments.
 
+## Local review files for device, Drive and OneDrive projects
+
+For a local project opened through Android's storage picker, open **Files > Review file** to export or import review JSON. Drive and OneDrive work when their installed Android storage providers expose the selected file. No separate cloud login or API permission is added. Save the review JSON beside the original project or its ZIP, then open the same source project before importing that review file on another device.
+
+The review file preserves comment text, severity, all review states (open, closed, skipped, resolved and won't fix), tags, object/sheet identifiers, and point/area coordinates. A SHA-256 manifest binds it to the complete imported source and model file set, including paths and contents. Renaming, adding, removing or changing a source/model file requires a new review file; review notes are not automatically migrated between revisions. Generated Android import IDs may differ across devices.
+
+Import previews the number of new and unchanged notes and requires **Import notes** before writing. It adds new notes and preserves existing ones. Divergent copies of the same note are rejected, even if one has a newer timestamp; resolve those copies deliberately before importing. Changes made after preview require another preview. Reopen the drawing's Comments pane to refresh imported markers. Keep the exported JSON as a portable backup; app data alone is not a portable backup.
+
+Limits are 1 MiB per review JSON, 2,000 notes across the project, and 2,000 source/model files. Source/model data is bounded to 96 MiB for inline imports or 1 GiB for native disk-backed imports. Disk reading is restricted to the imported appassets manifest, with 64 MiB per PCB, 8 MiB per schematic/library and 32 MiB per other file/model; oversized individual models require reopening a smaller source set. Exact source contents must be available. This workflow exports ordinary, unencrypted JSON and may contain private review text or saved screenshots. It does not publish to GitHub/GitLab, edit KiCad source files, automatically update a cloud file, or synchronize comment changes. Save a new review file after changes and use Android's picker to choose its destination.
+
 ## Build and packages
 
 For Google Play, follow [the submission and upload-key guide](../docs/play-store/SUBMISSION.md). `bundlePlayRelease` requires a production upload key supplied through environment variables and never falls back to debug signing. Ordinary `bundleRelease` remains unsigned when no key is configured. Keep signing keys outside this checkout and back them up securely. Play Console submission and approval are separate from GitHub releases.
@@ -271,3 +281,88 @@ normalization, source attachment and destination confirmation.
 with PBR lighting, tone mapping, real linked models, ambient occlusion and enhanced
 antialiasing where supported. [3D diagnostics and acceptance](../docs/ANDROID-3D.md)
 distinguish emulator rendering checks from physical-phone GPU performance.
+
+## Repository website session (Android 1.83 beta)
+
+In **GitHub**, enter an `owner/repository` name and choose **Open through browser ·
+no repo OAuth**. Sign in inside that panel, complete any organization SSO, navigate
+to the project folder, then choose **Use project**. Files are read through that
+website session, pinned to an immutable commit and imported into app storage as a
+temporary project. **Files > Repository browser** reopens the panel. Phones use an
+expandable bottom sheet; tablets use a side panel.
+
+This browser has its own session, separate from Chrome. Where Android WebView
+supports multiple profiles it also uses a separate cookie/storage profile; older
+WebViews use a bridge-free instance in the app's default profile and disclose that
+fallback. Remote pages have no native JavaScript bridge, local file/content access,
+credential export or certificate-error bypass. Only packaged scripts perform
+bounded operations in the selected GitHub.com repository. No broad repository
+OAuth grant or account API is used by this transport. External SSO origins require
+explicit approval; some identity providers prohibit embedded sign-in. This does
+not override organization access, download or device policies.
+
+For an imported website-session project, Comments can list/read existing Issues
+and send replies through GitHub's rendered composer. A native confirmation shows
+the destination and message before sending. The account, selected project and
+pending draft are checked again at Send. Confirmed receipts prevent duplicates;
+uncertain outcomes require checking the Issue rather than automatic resending.
+Point/area/sheet/revision metadata travels in the comment body and can reconstruct
+matching drawing markers on readback. Refresh uses bounded foreground polling,
+not a real-time service. New Issues, Discussions, attachments and Issue state
+changes are not implemented by this session adapter; use the website for those.
+GitLab and GitHub Enterprise Server need separate website-session adapters.
+
+Drive, OneDrive and other Android document providers use **Drive / cloud** or
+**Open files** instead. Import a complete project ZIP and keep its portable
+**Files > Review file** JSON beside it. That sidecar retains comment states,
+severity and point/area locations. Import/export is explicit; there is no cloud
+account integration or automatic sidecar synchronization.
+
+Comment synchronization uses a small inline status in the conversation. Review
+reads, including GitLab reads, do not open the global project-loading popup.
+
+Verification for this beta: all 2,360 JavaScript tests, 121 native URL-policy
+checks, Android build/lint, and 21 synthetic physical-phone browser checks passed.
+The phone also read the public `wayri/KiCad-Github-View` sensor PCB at a pinned
+commit and confirmed a separate WebView profile. Synthetic checks cover direct
+reply, reverse readback, duplicate/stale-draft rejection and streamed import;
+they send no real comments. Live organization SSO, real account posting, Drive/
+OneDrive provider interactions and tablet hardware acceptance remain unverified.
+
+## Android 1.85 contact selection and result display
+
+In Fast PI, choose a net and use **Source** or **Load** to search its saved
+component pads. Suggestions show the reference, pin number, layer and exact
+coordinates. Each contact can be cleared or picked again independently. Board
+taps remain available; ambiguous taps offer candidates rather than choosing a
+different conductor silently. The chooser uses a bottom sheet on narrow screens
+and a compact panel on wider screens, retaining its state through rotation.
+
+**Smooth field** is the default result display. It interpolates accepted mesh
+samples and clips the image to saved copper, drill voids and solved cells.
+**Mesh diagnostic** exposes the underlying discretization. Current, density and
+loss fields interpolate mean incident edge values; they do not add simulation
+resolution. Refine the mesh before relying on extrema. Unsupported masking is
+reported and falls back to the mesh display.
+
+Draftsman PDF, SVG and editable JSON downloads use Android's document save picker.
+Cancellation keeps the document open. Mobile export limits are 16 MiB for PDF,
+8 MiB for SVG and 4 MiB for JSON.
+
+## Android 1.84 mobile engineering fixes
+
+Draftsman remains a full-screen drawing editor rather than an Android peek-height
+bottom sheet. Tools, Properties and Save/export overlay the sheet on phones;
+Fit sheet accounts for both available width and height, including landscape.
+
+Fast PI captures contact taps before ordinary net selection and reduces its panel
+while picking so the drawing remains reachable. It uses the packaged worker for
+experimental fixed-temperature DC copper screening. Enter reviewed voltage,
+current, material and stackup values; it is not a thermal or return-path solve.
+
+Physical-phone acceptance: 22 checks passed using a synthetic saved copper-strip
+board, including native source/load taps, the packaged worker, immediate results
+and portrait/landscape Draftsman fitting. At 2 A the strip returned 8.867 mV drop,
+matching the analytical copper resistance within 1 µV. Android build/lint and
+all 2,361 JavaScript tests passed. This does not benchmark large-board solving or
+establish tablet hardware acceptance.

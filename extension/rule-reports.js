@@ -91,7 +91,7 @@
   const ranked=new Map();
   for(const entry of entries.slice(0,20000)){
    const path=typeof entry==='string'?entry:entry?.path;
-   if(typeof path!=='string'||path.length>500||!path.endsWith('.json')||path.startsWith('/')||/[\\:\x00-\x1f\x7f]/.test(path)||path.split('/').some(p=>!p||p==='.'||p==='..'))continue;
+    if(typeof path!=='string'||path.length>500||!/\.json$/i.test(path)||path.startsWith('/')||/[\\:\x00-\x1f\x7f]/.test(path)||path.split('/').some(p=>!p||p==='.'||p==='..'))continue;
    if(Number.isFinite(entry?.size)&&entry.size>MAX_BYTES)continue;
    const name=path.split('/').at(-1),typed=/(?:^|[_.-])(erc|drc)(?:[_.-]|$)/i.exec(name);
    if(typed&&kind&&typed[1].toLowerCase()!==kind)continue;

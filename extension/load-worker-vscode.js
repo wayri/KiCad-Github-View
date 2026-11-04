@@ -1536,8 +1536,10 @@
     const variableText=Compatibility?.textResolver(ast,{...options,path},message=>{if(!warnings.includes(message))warnings.push(message);}),variableFields=new Map();
     const page = pageOf(ast, warnings);
     const layerNames = (child(ast, "layers") || []).slice(1).filter(Array.isArray).map((part) => String(value(part[1])));
-    const netNames=new Map(children(ast,'net').filter(n=>typeof value(n[1])==='number'&&typeof value(n[2])==='string').map(n=>[value(n[1]),value(n[2])]));
-    function netMeta(node){const declaration=child(node,'net'),id=value(declaration?.[1]);if(typeof id==='number'&&Number.isSafeInteger(id)&&id>=0)return{netId:id,netCode:String(id),netName:String(value(declaration?.[2])??netNames.get(id)??'')};if(Number(field(ast,'version'))>=20260206&&declaration?.length===2&&typeof id==='string'&&id)return{netId:id,netCode:'name:'+id,netName:id};return{};}
+    const netNames=new Map(children(ast,'net').filter(n=>typeof value(n[1])==='number'&&typeof value(n[2])==='string').map(n=>[value(n[1]),value(n[2])])),modernNamedNets=Number(field(ast,'version'))>=20260206;
+    // Format metadata belongs to the board, not each generated primitive. In
+    // large boards most graphics have no net declaration at all.
+    function netMeta(node){const declaration=child(node,'net');if(!declaration)return{};const id=value(declaration[1]);if(typeof id==='number'&&Number.isSafeInteger(id)&&id>=0)return{netId:id,netCode:String(id),netName:String(value(declaration[2])??netNames.get(id)??'')};if(modernNamedNets&&declaration.length===2&&typeof id==='string'&&id)return{netId:id,netCode:'name:'+id,netName:id};return{};}
     const push = (primitive) => {
       if (primitives.length >= 250000) throw new Error("PCB has too many render primitives.");
       primitives.push(primitive);

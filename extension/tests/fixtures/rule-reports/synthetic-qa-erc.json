@@ -1,0 +1,25 @@
+{
+  "$schema": "https://schemas.kicad.org/erc.v1.json",
+  "coordinate_units": "mm",
+  "date": "2026-11-04T00:00:00Z",
+  "kicad_version": "synthetic QA fixture, not a native ERC run",
+  "source": "custom_fields.kicad_sch",
+  "sheets": [{
+    "path": "/",
+    "uuid_path": "/",
+    "violations": [
+      {
+        "type": "pin_not_connected",
+        "severity": "error",
+        "description": "Synthetic QA example: inspect the connector pin and its saved location. This demonstrates imported ERC markers; it is not a claim that KiCad found this error.",
+        "items": [{"uuid": "ebd12d3c-779b-42b9-beee-e5481760d2bb", "description": "Synthetic connector pin example · J1 pin 1", "pos": {"x": 142.24, "y": 92.71}}]
+      },
+      {
+        "type": "unconnected_wire_endpoint",
+        "severity": "warning",
+        "description": "Synthetic QA warning: inspect this saved wire endpoint. Toggle warnings to hide this marker independently from errors.",
+        "items": [{"description": "Synthetic resistor wire endpoint example", "pos": {"x": 125.73, "y": 90.17}}]
+      }
+    ]
+  }]
+}
