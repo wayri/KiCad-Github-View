@@ -77,6 +77,12 @@ class ReleaseTests(unittest.TestCase):
             (root / 'docs/images/draftsman/walkthrough.webm').write_bytes(b'fixture video')
             (root / 'docs/using-github-integration/README.md').write_text('![Example](../images/example.jpg)')
             (root / 'docs/images/example.jpg').write_bytes(b'fixture pixels')
+            (root / 'docs/SCREENSHOT-GALLERY-0.12.83.html').write_text('<img src="images/example.jpg">')
+            (root / 'docs/SCREENSHOT-GALLERY-secrets.html').write_text('excluded')
+            evidence = root / 'docs/images/0.12.83/capabilities'
+            evidence.mkdir(parents=True)
+            (evidence / 'collection-manifest.json').write_text('{"schemaVersion":1,"release":"0.12.83","records":[]}')
+            (evidence / 'unrelated.json').write_text('{"excluded":true}')
             first = release.package_guides(root / 'first.zip', root)
             second = release.package_guides(root / 'second.zip', root)
             self.assertEqual(first.read_bytes(), second.read_bytes())
@@ -85,6 +91,10 @@ class ReleaseTests(unittest.TestCase):
                 self.assertEqual(archive.read('USER-GUIDE.md'), b'Illustrated walkthrough')
                 self.assertEqual(archive.read('docs/images/draftsman/walkthrough.webm'), b'fixture video')
                 self.assertIn('docs/chrome-privacy.html', archive.namelist())
+                self.assertEqual(archive.read('docs/SCREENSHOT-GALLERY-0.12.83.html'), b'<img src="images/example.jpg">')
+                self.assertIn('docs/images/0.12.83/capabilities/collection-manifest.json', archive.namelist())
+                self.assertNotIn('docs/SCREENSHOT-GALLERY-secrets.html', archive.namelist())
+                self.assertNotIn('docs/images/0.12.83/capabilities/unrelated.json', archive.namelist())
                 self.assertIn('docs/using-github-integration/README.md', archive.namelist())
 
     def test_tag_binding_and_dirty_checkout_rejection(self):

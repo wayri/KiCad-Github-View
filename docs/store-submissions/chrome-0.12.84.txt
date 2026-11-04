@@ -1,0 +1,5 @@
+What's new in 0.12.84
+
+Documentation and distribution refresh: new 123-image capability gallery, searchable offline index and coverage/limitations matrix. Engineering viewer behavior is unchanged from 0.12.83. The Altium experiment remains a separate local beta and is not part of this extension update. No new permissions.
+
+Experimental Fast PI remains fixed-temperature single-net DC screening; saved ERC/DRC reports are displayed, not executed. Browser and organization policies still apply.

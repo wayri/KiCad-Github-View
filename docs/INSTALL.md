@@ -1,12 +1,12 @@
 # Install Pocket KiView
 
-Current prepared preview: **extension 0.12.83 / Android 1.86**. Store submission
+Current prepared preview: **extension 0.12.84 / Android 1.87**. Store submission
 and approval are separate from GitHub downloads. See [release status](RELEASE-STATUS.md).
 
-Download `kicad-visual-review-chrome-edge-brave-opera-vivaldi-chromium-0.12.83.zip`,
-`kicad-visual-review-firefox-0.12.83.zip`, `kicad-visual-review-vscode-0.12.83.vsix`,
-or `pocket-kivi-android-phone-tablet-1.86-development.apk` from
-[GitHub Releases](https://github.com/wayri/KiCad-Github-View/releases/tag/v0.12.83).
+Download `kicad-visual-review-chrome-edge-brave-opera-vivaldi-chromium-0.12.84.zip`,
+`kicad-visual-review-firefox-0.12.84.zip`, `kicad-visual-review-vscode-0.12.84.vsix`,
+or `pocket-kivi-android-phone-tablet-1.87-development.apk` from
+[GitHub Releases](https://github.com/wayri/KiCad-Github-View/releases/tag/v0.12.84).
 GitHub's automatic Source code archives are source checkouts, not installable extensions.
 
 The browser and VS Code editions support Windows, Linux and macOS. Ordinary
@@ -40,7 +40,7 @@ code --install-extension wayri.kicad-visual-review
 For a downloaded VSIX, replace the filename with the actual package:
 
 ```sh
-code --install-extension ./kicad-visual-review-vscode-0.12.83.vsix
+code --install-extension ./kicad-visual-review-vscode-0.12.84.vsix
 ```
 
 On macOS, VS Code's **Shell Command: Install 'code' command in PATH** enables this optional terminal route. The Extensions UI does not need it.

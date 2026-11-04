@@ -168,7 +168,7 @@ def package_guides(output: Path, root: Path = ROOT):
                root / 'docs/chrome-privacy.html']
     # Only established public evidence names at version/ or version/feature/.
     # Never collect arbitrary docs configuration, credentials or scratch JSON.
-    evidence_names = {'capture-manifest.json', 'browser-worker-benchmark.json',
+    evidence_names = {'capture-manifest.json', 'collection-manifest.json', 'browser-worker-benchmark.json',
                       'solver-benchmark.json', 'interaction-observation.json'}
     images = root / 'docs/images'
     candidates = [*images.glob('*/*.json'), *images.glob('*/*/*.json')]
@@ -186,9 +186,13 @@ def package_guides(output: Path, root: Path = ROOT):
         document = json.loads(manifest.read_text(encoding='utf-8'))
         if not isinstance(document, dict):
             raise ValueError('Guide evidence JSON must be an object; capture version/schema cannot be inferred.')
-        if manifest.name == 'capture-manifest.json' and (document.get('schemaVersion') != 1 or document.get('release') != version):
+        if manifest.name in {'capture-manifest.json', 'collection-manifest.json'} and (document.get('schemaVersion') != 1 or document.get('release') != version):
             raise ValueError('Guide capture manifest version/schema differs from its directory.')
         paths.append(manifest)
+    # Preserve the searchable gallery beside its Markdown and relative images.
+    # Only versioned gallery names are eligible, never arbitrary repository HTML.
+    paths.extend(path for path in sorted((root / 'docs').glob('SCREENSHOT-GALLERY-*.html'))
+                 if re.fullmatch(r'SCREENSHOT-GALLERY-(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)\.html', path.name))
     paths.extend(sorted((root / 'docs/play-store/assets').glob('*.png')))
     paths.extend(sorted((root / 'docs/play-store').glob('*.html')))
     with zipfile.ZipFile(output, 'w', compression=zipfile.ZIP_DEFLATED, compresslevel=9) as archive:
