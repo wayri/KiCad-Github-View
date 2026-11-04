@@ -135,6 +135,18 @@ test('floating saved copper layer selector isolates, shows all and restores the 
 });
 
 
+test('sheet tree floats below the drawing, minimizes, closes, reopens from settings and focuses a page',async()=>{
+ const v=await revision('',[{path:'sub/power.kicad_sch',content:'(kicad_sch)'}],{android:true});
+ const miniature=v.get('drawingHost').children.find(node=>node.className==='sheet-tree-miniature'),heading=miniature.children[0],body=miniature.children[1];
+ assert.equal(miniature.hidden,false);assert.equal(heading.children[1].attributes['aria-expanded'],'true');
+ heading.children[1].click();assert.equal(body.hidden,true);heading.children[1].click();assert.equal(body.hidden,false);
+ heading.children[2].click();assert.equal(miniature.hidden,true);
+ v.get('viewerSettings').children.find(node=>node.id==='showSheetTree').click();assert.equal(miniature.hidden,false);assert.equal(body.hidden,false);assert.equal(v.get('viewerSettings').hidden,true);
+ await v.context.KiCadSheetOverview.open();
+ const svg=body.children[0],node=svg.children.find(node=>node.attributes.role==='button'&&node.attributes['aria-label']==='Go to Power supply');
+ assert.ok(node);const before={...v.camera.bbox};node.click();assert.notDeepEqual(v.camera.bbox,before);assert.equal(v.context.KiCadSheetOverview.isOpen(),true);
+ v.context.KiCadSheetOverview.close();
+});
 test('Android all-sheet overview composes every loaded page on a single canvas',async()=>{
  const v=await revision('',[{path:'sub/power.kicad_sch',content:'(kicad_sch)'}],{android:true});
  await v.context.KiCadSheetOverview.open();

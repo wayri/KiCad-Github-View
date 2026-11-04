@@ -1,5 +1,20 @@
 const test=require('node:test'),assert=require('node:assert/strict');
 const {create}=require('../github-project-buffer.js'),repo='owner/project',sha='a'.repeat(40),sha2='b'.repeat(40),tick=()=>new Promise(r=>setImmediate(r));
+test('literal hash in a model filename does not abort foreground project discovery or asset reads',async()=>{
+ const path='local/part/IC#PBF.STEP',reads=[],api=create({foregroundOnly:true,fetch:()=>{throw Error('No background reads');},readSession:async(repository,ref,action,directory)=>{
+  reads.push({action,path:directory});if(action==='asset')return {sha,base64:'AAEC'};
+  return {sha,items:directory===''?[{path:'board.kicad_pro',type:'file'},{path:'local',type:'directory'}]:directory==='local'?[{path:'local/part',type:'directory'}]:[{path,type:'file'}]};
+ }});
+ const inventory=await api.inventory(repo,sha);assert.ok(inventory.files.some(file=>file.path==='board.kicad_pro'));assert.ok(inventory.files.some(file=>file.path===path));
+ assert.deepEqual(await api.asset(repo,sha,path,100),{base64:'AAEC'});assert.equal(reads.at(-1).path,path);api.dispose();
+});
+test('public hash filenames are encoded as path data and URL fragment redirects are rejected',async()=>{
+ const path='models/IC#PBF.STEP',url='https://raw.githubusercontent.com/'+repo+'/'+sha+'/models/IC%23PBF.STEP';
+ const api=create({readSession:async()=>null,fetch:async actual=>{assert.equal(actual,url);assert.equal(new URL(actual).hash,'');const response=new Response('model');Object.defineProperty(response,'url',{value:url});return response;}});
+ assert.deepEqual(await api.asset(repo,sha,path,100),{base64:Buffer.from('model').toString('base64')});api.dispose();
+ const wrong=create({readSession:async()=>null,fetch:async()=>{const response=new Response('wrong');Object.defineProperty(response,'url',{value:url+'#other'});return response;}});
+ await assert.rejects(wrong.asset(repo,sha,path,100),/different source/);assert.equal(wrong.stats().bytes,0);wrong.dispose();
+});
 function setup({session,fetcher}={}){const calls=[],reads=[];let time=0,checks=0;const api=create({now:()=>time,assertNetwork:()=>{checks++;},readSession:async(...args)=>{reads.push(args.slice(0,5));return session?session(...args):{sha,items:[]};},fetch:async(...args)=>{calls.push(args);assert.equal(new URL(args[0]).hostname,'raw.githubusercontent.com');return fetcher?fetcher(...args):new Response('board');}});return {api,calls,reads,get checks(){return checks;},advance:ms=>time+=ms};}
 test('pinned public files reuse successful bytes across file and asset with no API requests or credentials',async()=>{const h=setup();assert.equal(await h.api.file(repo,sha,'pcb/board.kicad_pcb',100),'board');assert.deepEqual(await h.api.asset(repo,sha,'pcb/board.kicad_pcb',100),{base64:'Ym9hcmQ='});assert.equal(h.calls.length,1);const [url,init]=h.calls[0];assert.equal(url,`https://raw.githubusercontent.com/${repo}/${sha}/pcb/board.kicad_pcb`);assert.equal(init.credentials,'omit');assert.equal(init.redirect,'error');assert.equal(init.headers,undefined);assert.equal(h.reads.length,0);assert.equal(h.checks,3);});
 test('concurrent callers share raw reader and cancellation affects only one consumer',async()=>{let release;const response=new Promise(r=>release=r),h=setup({fetcher:()=>response}),controller=new AbortController();const first=h.api.file(repo,sha,'board',100,controller.signal),second=h.api.file(repo,sha,'board',100),asset=h.api.asset(repo,sha,'board',100);await tick();assert.equal(h.calls.length,1);controller.abort();await assert.rejects(first,/cancelled/);assert.equal(h.calls[0][1].signal.aborted,false);release(new Response('abc'));assert.equal(await second,'abc');assert.deepEqual(await asset,{base64:'YWJj'});});
@@ -65,4 +80,45 @@ test('missing private website session explains same-profile recovery without cha
  const calls=[],reads=[],api=create({readSession:async(...args)=>{reads.push(args);return null;},fetch:async(url,init)=>{calls.push({url,init});return new Response('Not Found',{status:404});}});
  await assert.rejects(api.resolve(repo,sha),error=>error.status===404&&error.source==='github-website'&&/same browser profile/.test(error.message)&&/click the extension icon again/.test(error.message)&&/also uses HTTP 404/.test(error.message)&&error.accessIssue.message===error.message);
  assert.equal(calls.length,1);assert.equal(calls[0].url,'https://github.com/'+repo+'/tree/'+sha);assert.equal(calls[0].init.credentials,'omit');assert.equal(reads.length,1);assert.equal(reads[0][1],sha);assert.equal(api.stats().entries,0);api.dispose();
+});
+
+
+test('foreground-only context, tree, source, model and history reads never fetch from the background',async()=>{
+ let fetched=0;const reads=[],api=create({foregroundOnly:true,fetch:async()=>{fetched++;throw Error('Background fetch forbidden');},readSession:async(repository,ref,action,path,limit)=>{
+  reads.push({repository,ref,action,path,limit});
+  if(action==='context')return{repository,ref:'main',directory:'',sha,items:[{path:'hw',type:'directory'}]};
+  if(action==='resolve')return{sha,items:[{path:'hw',type:'directory'}]};
+  if(action==='directory')return{sha,items:path==='hw'?[{path:'hw/board.kicad_pcb',type:'file'},{path:'hw/model.step',type:'file'}]:[{path:'hw',type:'directory'}]};
+  if(action==='file')return{sha,content:'(kicad_pcb)'};
+  if(action==='asset')return{sha,base64:'AAEC'};
+  if(action==='history')return{ref,content:'<feed xmlns="http://www.w3.org/2005/Atom"><entry><id>tag:github.com,2008:Grit::Commit/'+sha+'</id><link href="https://github.com/'+repository+'/commit/'+sha+'"/><title>Saved board</title><updated>2026-11-03T00:00:00Z</updated><author><name>Tester</name></author></entry></feed>'};
+  throw Error('Unexpected action');
+ }});
+ assert.equal((await api.context('https://github.com/'+repo)).sha,sha);
+ assert.equal((await api.resolve(repo,'main')).sha,sha);
+ assert.deepEqual((await api.inventory(repo,sha)).files.map(item=>item.path),['hw/board.kicad_pcb','hw/model.step']);
+ assert.ok((await api.modelInventory(repo,sha,'hw/board.kicad_pcb')).files.some(item=>item.path==='hw/model.step'));
+ assert.equal(await api.file(repo,sha,'hw/board.kicad_pcb',100),'(kicad_pcb)');assert.deepEqual(await api.asset(repo,sha,'hw/model.step',100),{base64:'AAEC'});
+ assert.equal((await api.history(repo,sha)).commits.length,1);assert.equal(fetched,0);assert.ok(reads.every(item=>item.repository===repo));assert.ok(reads.filter(item=>!['context','history'].includes(item.action)).every(item=>item.ref===sha||item.action==='resolve'));api.dispose();
+});
+
+test('foreground-only private bytes share bounded temporary cache across source and asset reads',async()=>{
+ let time=0,reads=0;const api=create({foregroundOnly:true,now:()=>time,readSession:async(repository,ref,action,path)=>{reads++;return action==='file'?{sha,content:'private'}:{sha,base64:'AAEC'};}});
+ assert.equal(await api.file(repo,sha,'private.kicad_pcb',100),'private');assert.deepEqual(await api.asset(repo,sha,'private.kicad_pcb',100),{base64:Buffer.from('private').toString('base64')});
+ assert.deepEqual(await api.asset(repo,sha,'model.step',100),{base64:'AAEC'});assert.deepEqual(await api.asset(repo,sha,'model.step',100),{base64:'AAEC'});assert.equal(reads,2);assert.equal(api.stats().bytes,10);
+ await assert.rejects(api.file(repo,sha,'private.kicad_pcb',3),/byte limit/);assert.equal(reads,2);
+ time=1800000;assert.equal(await api.file(repo,sha,'private.kicad_pcb',100),'private');assert.equal(reads,3);api.clear();assert.equal(api.stats().bytes,0);api.dispose();
+});
+
+test('foreground-only missing context and history need a website session and missing source is never cached',async()=>{
+ let fetched=0,reads=0;const api=create({foregroundOnly:true,fetch:async()=>{fetched++;throw Error('Forbidden background fallback');},readSession:async()=>{reads++;return null;}});
+ for(const work of [()=>api.context('https://github.com/'+repo),()=>api.resolve(repo,sha),()=>api.history(repo,sha)])await assert.rejects(work(),error=>error.code==='GITHUB_WEBSITE_SESSION_REQUIRED'&&error.status===0&&error.accessIssue.kind==='website-session-missing'&&/same signed-in browser profile/.test(error.message));
+ for(let i=0;i<2;i++){assert.equal(await api.file(repo,sha,'missing.kicad_pcb',100),null);assert.equal(await api.asset(repo,sha,'missing.step',100),null);}
+ assert.equal(reads,7);assert.equal(fetched,0);assert.equal(api.stats().entries,0);api.dispose();
+});
+
+test('foreground-only cancelled private source and invalid identity never enter the shared cache',async()=>{
+ let done;const controller=new AbortController(),api=create({foregroundOnly:true,readSession:async()=>new Promise(resolve=>{done=resolve;})});
+ const pending=api.file(repo,sha,'private.kicad_pcb',100,controller.signal);await tick();controller.abort();await assert.rejects(pending,/cancelled/);done({sha,content:'private'});await tick();assert.equal(api.stats().bytes,0);api.dispose();
+ const invalid=create({foregroundOnly:true,readSession:async()=>({sha:'b'.repeat(40),content:'private'})});await assert.rejects(invalid.file(repo,sha,'private.kicad_pcb',100),/Invalid/);assert.equal(invalid.stats().entries,0);invalid.dispose();
 });

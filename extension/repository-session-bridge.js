@@ -1,7 +1,7 @@
 /* Installed only after the user invokes the extension on a repository tab. */
 ((root)=>{'use strict';
  if(root.KiCadRepositorySessionBridge)return;root.KiCadRepositorySessionBridge=true;
- const loads=new Map();let reservedBytes=0;
+ const loads=new Map();let reservedBytes=0,reviewLoads=0;
  const failures={GITLAB_SAML_REQUIRED:'GitLab requires SSO/SAML verification in the matching project tab.',GITLAB_LOGIN_REQUIRED:'Sign in to this GitLab project in its website tab.',GITLAB_UNEXPECTED_HTML:'GitLab returned a login or access page instead of project data.',MANAGED_POLICY:'Administrator policy prevents this project read.'};
  function failure(error){const code=Object.hasOwn(failures,error?.code||'')?error.code:null;return{ok:false,error:code?failures[code]:'Repository website read failed. Open this project tab and complete any sign-in/SSO requirement; browser policy may restrict access.',...(code?{code}:{})};}
 
@@ -12,6 +12,12 @@
    const parse=root.KiCadGitHub,options={gitlabHosts:location.origin!=='https://github.com'?[location.origin]:[]},route=parse?.route(location.href,options),repo=parse?.repositoryRoute(location.href,options);
    const scripts=[...document.querySelectorAll('script[type="application/json"]')].map(n=>n.textContent),app=document.querySelector('#js-view-blob-app,#js-repository-blob-header-app,#js-repository-tree');
    reply(route?.kind==='blob'?parse.embeddedBlobData(scripts,route):repo?{ref:parse.repositoryRef(repo,scripts,app?.dataset)}:null);return false;
+  }
+  if(message.type==='github-session-review'&&location.origin==='https://github.com'){
+   if(['prepare','verify','commit'].includes(message.action)&&![root.chrome.runtime.getURL('background.js'),root.chrome.runtime.getURL('_generated_background_page.html')].includes(sender.url))return false;
+   if(!root.KiCadGitHubSessionReview){reply({ok:false,error:'Reload this repository tab and invoke the extension again.'});return false;}
+   if(reviewLoads>=2){reply({ok:false,error:'Wait for the current website review request.'});return false;}reviewLoads++;
+   Promise.resolve().then(()=>root.KiCadGitHubSessionReview.create().dispatch(message)).then(result=>reply({ok:true,result}),error=>reply({ok:false,error:error?.code==='WEBSITE_REVIEW_UNAVAILABLE'||error?.code==='WEBSITE_REVIEW_UNCERTAIN'?String(error.message).slice(0,500):'GitHub website review access is unavailable. Keep the matching signed-in repository tab open.'})).finally(()=>{reviewLoads--;});return true;
   }
   const reader=message.type==='github-session-read'&&location.origin==='https://github.com'?root.KiCadGitHubSessionReader:message.type==='gitlab-session-read'&&location.origin!=='https://github.com'?root.KiCadGitLabSessionReader:null;
   if(!reader)return false;const id=message.requestId,bytes=message.limit??8*1024*1024;

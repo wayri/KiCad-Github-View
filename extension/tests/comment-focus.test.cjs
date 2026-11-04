@@ -3,6 +3,16 @@ const test = require('node:test'), assert = require('node:assert/strict');
 const focus = require('../comment-focus.js');
 const close = (a, b) => assert.ok(Math.abs(a - b) < 1e-9, `${a} differs from ${b}`);
 
+test('area projection preserves four rotated corners and uses saved point before area center',()=>{
+ const area={x:2,y:3,width:4,height:6};
+ assert.deepEqual(focus.projectArea(area,p=>({x:-p.y,y:p.x})),[{x:-3,y:2},{x:-3,y:6},{x:-9,y:6},{x:-9,y:2}]);
+ assert.deepEqual(focus.anchorPosition({area}),{x:4,y:6});
+ assert.deepEqual(focus.anchorPosition({area,position:{x:9,y:8}}),{x:9,y:8});
+ for(const bad of [{...area,width:0},{...area,x:999999},{...area,height:NaN}])assert.equal(focus.projectArea(bad,p=>p),null);
+ assert.equal(focus.projectArea(area,()=>null),null);
+ assert.equal(focus.projectArea(area,p=>({...p,visible:false})),null);
+});
+
 test('comment camera centers the saved point at phone and desktop aspect ratios', () => {
   for (const [width, height] of [[360, 720], [1600, 800], [720, 360], [1, 1]]) {
     for (const pcb of [true, false]) {

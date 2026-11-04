@@ -31,3 +31,23 @@ test('stacked canvas preserves front-copy picking identity and routes airwires t
  assert.ok(result.airwires[0].points.length>=2,'relationship is routed through page gutters while preserving its source-instance anchor');
  assert.ok(result.design.primitives.some(p=>p.text==='Root / Left'));
 });
+const page=(path,placements=[])=>({path,label:path,placements,design:{page:{width:297,height:210},primitives:[]},groups:[]});
+test('overview lays parents above descendants and centers branches without overlapping pages',()=>{
+ const entries=[page('z-root',[{id:'root'}]),page('a-left',[{id:'left',parentId:'root'}]),page('b-right',[{id:'right',parentId:'root'}]),page('c-grandchild',[{id:'grandchild',parentId:'left'}])];
+ const pages=composeSheetOverview(entries).pages,byPath=new Map(pages.map(p=>[p.path,p]));
+ assert.ok(byPath.get('z-root').y<byPath.get('a-left').y);assert.ok(byPath.get('a-left').y<byPath.get('c-grandchild').y);
+ assert.equal(byPath.get('a-left').y,byPath.get('b-right').y);
+ assert.equal(byPath.get('z-root').x,(byPath.get('a-left').x+byPath.get('b-right').x)/2);
+ for(const a of pages)for(const b of pages)if(a!==b)assert.ok(a.x+a.w<=b.x||b.x+b.w<=a.x||a.y+a.h<=b.y||b.y+b.h<=a.y);
+ const reordered=composeSheetOverview([...entries].reverse()).pages;
+ for(const p of reordered)assert.deepEqual([p.x,p.y],[byPath.get(p.path).x,byPath.get(p.path).y]);
+});
+test('shared sheets stay below every resolved parent, and malformed ancestry remains visible',()=>{
+ const entries=[page('root',[{id:'root'}]),page('branch',[{id:'branch',parentId:'root'}]),page('shared',[{id:'one',parentId:'root'},{id:'two',parentId:'branch'}]),page('missing',[{id:'missing',parentId:'absent'}]),page('cycle-a',[{id:'a',parentId:'b'}]),page('cycle-b',[{id:'b',parentId:'a'}]),page('duplicate',[{id:'root'}])];
+ // The duplicate invalidates only relationships involving its ambiguous identity.
+ let pages=composeSheetOverview(entries.slice(0,-1)).pages;
+ assert.ok(pages[2].y>pages[1].y);assert.ok(pages[1].y>pages[0].y);
+ pages=composeSheetOverview(entries).pages;assert.equal(pages.length,entries.length);
+ assert.ok(pages.every(p=>Number.isFinite(p.x)&&Number.isFinite(p.y)));
+ assert.deepEqual(entries[2].placements,[{id:'one',parentId:'root'},{id:'two',parentId:'branch'}]);
+});

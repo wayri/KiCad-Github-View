@@ -4,6 +4,18 @@ global.KiCadBrowserData=require('../browser-data.js');global.KiCadGitHub=require
 const api=require('../gitlab-provider.js'),sha='a'.repeat(40);
 function transport(t,handler){const previous=global.fetch;global.fetch=handler;t.after(()=>global.fetch=previous);}
 const json=(value,headers={})=>new Response(JSON.stringify(value),{headers:{'content-type':'application/json',...headers}});
+
+test('foreground-only GitLab viewing uses the website session and never retries through background fetch',async t=>{
+ let fetches=0,reads=0;transport(t,async()=>{fetches++;throw Error('Background access is forbidden');});
+ const source=Buffer.from('(kicad_pcb)');
+ const foreground=api.forHost('https://gitlab.com',{foregroundOnly:true,sessionRead:async url=>{reads++;assert.ok(url.startsWith('https://gitlab.com/api/v4/projects/org%2Fboard/'));return {bytes:new Uint8Array(source),next:'',link:''};}});
+ assert.equal(await foreground.file('org/board','a'.repeat(40),'board.kicad_pcb'),'(kicad_pcb)');
+ const missing=api.forHost('https://gitlab.com',{foregroundOnly:true,sessionRead:async()=>null});
+ await assert.rejects(missing.file('org/board','main','board.kicad_pcb'),/same signed-in browser profile/);
+ const denied=api.forHost('https://gitlab.com',{foregroundOnly:true,sessionRead:async()=>{throw Object.assign(Error('Organization SSO'),{code:'GITLAB_SAML_REQUIRED'});}});
+ await assert.rejects(denied.file('org/board','main','board.kicad_pcb'),/SSO|SAML/);
+ assert.equal(reads,1);assert.equal(fetches,0);
+});
 test('GitLab subgroup and slash refs stay encoded on an unauthenticated fixed host',async t=>{
  transport(t,async(url,options)=>{assert.equal(url,'https://gitlab.com/api/v4/projects/group%2Fsubgroup%2Fboard/repository/files/design%2Fboard.kicad_pcb/raw?ref=feature%2Fpcb');assert.equal(options.credentials,'omit');assert.equal(options.redirect,'error');assert.equal(options.headers,undefined);return new Response('(kicad_pcb)');});
  assert.equal(await api.file('group/subgroup/board','feature/pcb','design/board.kicad_pcb'),'(kicad_pcb)');

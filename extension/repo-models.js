@@ -14,7 +14,7 @@
     return item ? [number(item[1], NaN), number(item[2], NaN), number(item[3], NaN)] : [...fallback];
   };
   const isPath = path => typeof path === "string" && path.length > 0 && path.length <= MAX_PATH &&
-    !/[\\\u0000-\u001f\u007f?#%]/.test(path) && !/^[a-z][a-z\d+.-]*:/i.test(path) && !path.startsWith("/");
+    !/[\\\u0000-\u001f\u007f?%]/.test(path) && !/^[a-z][a-z\d+.-]*:/i.test(path) && !path.startsWith("/");
 
   function resolveModelPath(boardPath, modelPath) {
     // KiCad projects authored on Windows can save relative model separators as

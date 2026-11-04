@@ -237,3 +237,31 @@ document.getElementById('testRepositoryAccess').addEventListener('click', async 
   } catch (error) { status.textContent = error.message; await refresh().catch(() => {}); }
   finally { button.disabled = demoPage; }
 });
+
+// Viewing mode is independent of review credentials and never grants site access.
+const projectViewerMode = document.getElementById('projectViewerMode');
+const projectViewerModeStatus = document.getElementById('projectViewerModeStatus');
+if (projectViewerMode && projectViewerModeStatus) {
+  if (demoPage) {
+    projectViewerMode.disabled = true;
+    projectViewerModeStatus.textContent = 'Change viewer mode in the installed extension’s settings.';
+  } else {
+    projectViewerMode.disabled = true;
+    request('viewer-preferences-get').then(result => {
+      projectViewerMode.value = result?.mode === 'inline' ? 'inline' : 'tab';
+      projectViewerMode.disabled = false;
+    }).catch(error => { projectViewerModeStatus.textContent = error.message; });
+    projectViewerMode.addEventListener('change', async () => {
+      const mode = projectViewerMode.value;
+      if (!['tab', 'inline'].includes(mode)) { projectViewerModeStatus.textContent = 'Choose a supported viewer mode.'; return; }
+      projectViewerMode.disabled = true;
+      projectViewerModeStatus.textContent = '';
+      try {
+        const result = await request('viewer-preferences-set', {mode});
+        projectViewerMode.value = result?.mode === 'inline' ? 'inline' : 'tab';
+        projectViewerModeStatus.textContent = projectViewerMode.value === 'inline' ? 'The next icon click opens an in-page viewer.' : 'The next icon click opens a separate viewer tab.';
+      } catch (error) { projectViewerModeStatus.textContent = error.message; }
+      finally { projectViewerMode.disabled = false; }
+    });
+  }
+}

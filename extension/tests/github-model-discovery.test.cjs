@@ -1,6 +1,22 @@
 const test=require('node:test'),assert=require('node:assert/strict'),fs=require('node:fs');
 const {create}=require('../github-project-buffer.js'),{create:createView}=require('../github-project-view.js'),data=require('../browser-data.js'),paths=require('../parsing.js');
 global.KiCadGitHubSessionReader=require('../github-session-reader.js');
+test('owned viewer asset dispatch preserves literal hash filenames and rejects encoded or query paths',async()=>{
+ const calls=[],sha='a'.repeat(40),view=createView({buffer:{asset:async(...args)=>{calls.push(args);return{base64:'AAEC'};}},data,paths});
+ const file='local/part/IC#PBF.STEP',result=await view.read({type:'repo-asset',repository:'owner/project',ref:sha,file});
+ assert.equal(result.mediaType,'model/step');assert.equal(calls[0][2],file);
+ for(const path of ['local/part/IC%23PBF.STEP','local/part/IC?other.STEP','../IC#PBF.STEP'])await assert.rejects(view.read({type:'repo-asset',repository:'owner/project',ref:sha,file:path}),/Invalid/);
+ assert.equal(calls.length,1);
+});
+test('repository-root boards discover shared models without crawling unrelated source and output folders',async()=>{
+ const repo='owner/project',sha='a'.repeat(40),reads=[];
+ const api=create({foregroundOnly:true,readSession:async(repository,ref,action,path)=>{
+  reads.push(path);assert.equal(repository,repo);assert.equal(ref,sha);
+  return {sha,items:path===''?[{path:'board.kicad_pcb',type:'file'},{path:'packages3D',type:'directory'},{path:'root.step',type:'file'},...Array.from({length:70},(_,i)=>({path:'unrelated'+i,type:'directory'}))]:[{path:'packages3D/IC#PBF.step',type:'file'}]};
+ }});
+ const result=await createView({buffer:api,data,paths}).read({type:'repo-model-index',repository:repo,ref:sha,file:'board.kicad_pcb'});
+ assert.deepEqual(reads,['','packages3D']);assert.deepEqual(result.paths.sort(),['packages3D/IC#PBF.step','root.step']);assert.ok(!result.warnings.some(w=>/incomplete/.test(w)));api.dispose();
+});
 const fixture=JSON.parse(fs.readFileSync(require.resolve('./fixtures/github-model-discovery/olimex-m2-index.json'),'utf8')),folder=fixture.boardPath.split('/').slice(0,-1).join('/');
 function setup({missing,extra=[]}={}){const reads=[],all=[fixture.boardPath,...fixture.paths,...extra],api=create({readSession:async(repo,ref,action,path)=>{reads.push({repo,ref,action,path});assert.equal(repo,fixture.repository);assert.equal(ref,fixture.sha);if(path===missing)throw Error('Website folder access unavailable');const entries=new Map(),prefix=path?path+'/':'';for(const file of all){if(!file.startsWith(prefix))continue;const rest=file.slice(prefix.length),head=rest.split('/')[0];if(!head)continue;entries.set(prefix+head,{path:prefix+head,type:rest.includes('/')?'directory':'file'});}return{sha:fixture.sha,items:[...entries.values()]};},fetch:async()=>{throw Error('No API, tokens or anonymous source requests required for scoped metadata');}});return {api,reads,view:createView({buffer:api,data,paths})};}
 

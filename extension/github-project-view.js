@@ -33,7 +33,7 @@
       if(type==='project-file'){const content=await get(file);if(content===null)throw Error('Project file is unavailable at this commit.');return {path:file,content,snapshotRef:sha};}
       if(type==='repo-asset'||type==='pdf-file'){
         const pdf=type==='pdf-file',path=message.file;
-        if(!root.KiCadGitHubSessionReader.safePath(path)||!(pdf?/\.pdf$/i:/\.(?:step|stp|wrl|vrml|glb)$/i).test(path)||/[?#%]/.test(path))throw Error('Invalid repository asset path.');
+        if(!root.KiCadGitHubSessionReader.safePath(path)||!(pdf?/\.pdf$/i:/\.(?:step|stp|wrl|vrml|glb)$/i).test(path)||/[?%]/.test(path))throw Error('Invalid repository asset path.');
         const asset=await buffer.asset(repository,sha,path,pdf?24*1024*1024:8*1024*1024,signal);
         if(!asset)throw Error('Repository asset is unavailable at this commit.');
         const extension=path.split('.').pop().toLowerCase();return {...asset,mediaType:pdf?'application/pdf':extension==='glb'?'model/gltf-binary':['step','stp'].includes(extension)?'model/step':'model/vrml'};

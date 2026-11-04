@@ -227,6 +227,7 @@
       $('engineNotice').textContent=canvas.design.warnings?.join(' ')||'';$('engineNotice').hidden=!$('engineNotice').textContent;updateDiagnostics();
 
       if(position)focus(position);
+      sheetOverview?.refreshTree?.();
 
     }
 
@@ -364,6 +365,25 @@
       const clearOverviewSelection=()=>{if(overviewView){overviewView.selected=null;overviewView.draw();}};
       $('unselect').addEventListener('click',clearOverviewSelection);$('clearHighlights').addEventListener('click',clearOverviewSelection);
       const fitOverview=()=>{if(!overviewView||!composition)return;overviewFitted=true;overviewView.resize();overviewView.viewport.camera.bbox={x:-12,y:-4,w:composition.design.page.width+12,h:composition.design.page.height+4};overviewView.draw();};
+      const miniature=document.createElement('section'),miniHeading=document.createElement('header'),miniTitle=document.createElement('strong'),miniMinimize=document.createElement('button'),miniClose=document.createElement('button'),miniBody=document.createElement('div'),miniShow=document.createElement('button');
+      miniature.className='sheet-tree-miniature';miniature.setAttribute('aria-label','Sheet tree navigator');miniTitle.textContent='Sheet tree';miniMinimize.type=miniClose.type=miniShow.type='button';miniMinimize.textContent='−';miniMinimize.setAttribute('aria-label','Minimize sheet tree');miniMinimize.setAttribute('aria-expanded','true');miniClose.textContent='×';miniClose.setAttribute('aria-label','Close sheet tree');miniBody.className='sheet-tree-miniature-body';miniHeading.append(miniTitle,miniMinimize,miniClose);miniature.append(miniHeading,miniBody);host.append(miniature);
+      miniMinimize.onclick=()=>{miniBody.hidden=!miniBody.hidden;miniMinimize.textContent=miniBody.hidden?'+':'−';miniMinimize.setAttribute('aria-expanded',String(!miniBody.hidden));miniMinimize.setAttribute('aria-label',miniBody.hidden?'Expand sheet tree':'Minimize sheet tree');};
+      miniClose.onclick=()=>{miniature.hidden=true;};miniShow.id='showSheetTree';miniShow.textContent='Show sheet tree';miniShow.onclick=()=>{miniature.hidden=false;miniBody.hidden=false;miniMinimize.textContent='−';miniMinimize.setAttribute('aria-expanded','true');miniMinimize.setAttribute('aria-label','Minimize sheet tree');$('viewerSettings').hidden=true;};$('viewerSettings')?.append(miniShow);
+      const renderMiniature=()=>{
+        const entries=(workspace.overviewSheets?.()||[]).filter(entry=>entry.sheet).map(entry=>({path:entry.sheet.path,label:entry.sheet.label||entry.sheet.path,placements:entry.placements||[],design:{page:{width:297,height:210},primitives:[]},groups:[]}));
+        const mini=KiCadReviewWorkspace.composeSheetOverview(entries),svg=document.createElementNS('http://www.w3.org/2000/svg','svg'),width=mini.design.page.width,height=mini.design.page.height;
+        svg.setAttribute('viewBox',`-12 -4 ${width+24} ${height+8}`);svg.setAttribute('width',String(Math.max(250,width*.22)));svg.setAttribute('height',String(Math.max(80,height*.22)));svg.setAttribute('aria-label','All sheets, parents above children');
+        const graph=globalThis.KiCadSheetHierarchyLinks?.build(mini.pages);
+        for(const link of graph?.links||[]){const line=document.createElementNS('http://www.w3.org/2000/svg','path'),points=link.points||[link.from,{x:link.from.x,y:(link.from.y+link.to.y)/2},{x:link.to.x,y:(link.from.y+link.to.y)/2},link.to];line.setAttribute('d',points.map((point,index)=>`${index?'L':'M'} ${point.x} ${point.y}`).join(' '));line.setAttribute('class','sheet-tree-miniature-link');svg.append(line);}
+        for(const page of mini.pages){
+          const node=document.createElementNS('http://www.w3.org/2000/svg','g'),rect=document.createElementNS('http://www.w3.org/2000/svg','rect'),label=document.createElementNS('http://www.w3.org/2000/svg','text'),tooltip=document.createElementNS('http://www.w3.org/2000/svg','title'),selection=workspace.overviewSelection?.(page.path);
+          node.setAttribute('role','button');node.setAttribute('tabindex','0');node.setAttribute('aria-label',`Go to ${page.label}`);node.setAttribute('class','sheet-tree-miniature-node'+(selection?.netIds?.length?' highlighted':'')+(page.path===currentFile()?' current':''));rect.setAttribute('x',page.x);rect.setAttribute('y',page.y);rect.setAttribute('width',page.w);rect.setAttribute('height',page.h);rect.setAttribute('rx','15');label.setAttribute('x',page.x+page.w/2);label.setAttribute('y',page.y+page.h/2);label.textContent=page.label.length>12?page.label.slice(0,9)+'…':page.label;tooltip.textContent=page.path;
+          const navigate=()=>{const target=opened&&composition?.pages.find(p=>p.path===page.path);if(target&&overviewView){overviewFitted=false;overviewView.viewport.camera.bbox={x:target.x-12,y:target.y-14,w:target.w+24,h:target.h+28};overviewView.draw();}else{if(opened)close();workspace.followSheet?.(page.path);}};
+          node.onclick=navigate;node.addEventListener('keydown',event=>{if(event.key==='Enter'||event.key===' '){event.preventDefault();navigate();}});node.append(rect,label,tooltip);svg.append(node);
+        }
+        miniBody.replaceChildren();miniBody.append(svg);
+      };
+      renderMiniature();
       const rebuild=async()=>{
         const generation=++ticket,allEntries=workspace.overviewSheets(),entries=allEntries.filter(entry=>entry.sheet);
         const active=entries.some(entry=>workspace.overviewSelection(entry.sheet.path).netActive);
@@ -382,6 +402,7 @@
         if(!opened||generation!==ticket)return;
         composition=KiCadReviewWorkspace.composeSheetOverview(rendered,workspace.overviewNetLinks?.()||[],dark);
         hierarchyGraph=globalThis.KiCadSheetHierarchyLinks?.build(composition.pages)||null;
+        renderMiniature();
         const missingTargets=allEntries.filter(entry=>entry.unavailable).length;
         help.textContent+=(hierarchyGraph?' · Teal arrows: saved parent → child sheets.':' · Hierarchy links unavailable.')+' Gold dashed links: highlighted nets, routed outside pages.'+
           (hierarchyGraph&&!hierarchyGraph.links.length&&shown.length>1?' No resolved parent → child link among shown sheets.':'')+
@@ -409,7 +430,7 @@
       const toggle=document.createElement('button');toggle.id='allSheetPagesButton';toggle.type='button';toggle.textContent='All sheets';toggle.title='See every loaded schematic page on one canvas';toggle.setAttribute('aria-pressed','false');toggle.onclick=()=>opened?close():open();
       ($('sheetHome')?.parentElement||$('frameControls')).append(toggle);back.onclick=close;fitAll.onclick=fitOverview;
       const resizeOverview=()=>{if(opened&&overviewFitted)requestAnimationFrame(()=>{if(opened&&overviewFitted)fitOverview();});};globalThis.addEventListener?.('resize',resizeOverview);
-      sheetOverview={setTerminalNumbers(visible){if(overviewView){overviewView.showTerminalNumbers=Boolean(visible);overviewView.draw();}},open,close,isOpen:()=>opened,toggle:()=>opened?close():open(),refresh(){if(opened)return rebuild();},dispose(){globalThis.removeEventListener?.('resize',resizeOverview);close();$('unselect').removeEventListener('click',clearOverviewSelection);$('clearHighlights').removeEventListener('click',clearOverviewSelection);gallery.remove();toggle.remove();}};globalThis.KiCadSheetOverview=sheetOverview;
+      sheetOverview={setTerminalNumbers(visible){if(overviewView){overviewView.showTerminalNumbers=Boolean(visible);overviewView.draw();}},open,close,isOpen:()=>opened,toggle:()=>opened?close():open(),refreshTree:renderMiniature,refresh(){renderMiniature();if(opened)return rebuild();},dispose(){globalThis.removeEventListener?.('resize',resizeOverview);close();$('unselect').removeEventListener('click',clearOverviewSelection);$('clearHighlights').removeEventListener('click',clearOverviewSelection);gallery.remove();toggle.remove();miniature.remove();miniShow.remove();}};globalThis.KiCadSheetOverview=sheetOverview;
       addEventListener('keydown',event=>{if(event.key==='Escape'&&opened){event.preventDefault();close();}});
     }
 

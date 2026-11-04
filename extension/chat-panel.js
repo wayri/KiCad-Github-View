@@ -143,7 +143,7 @@
     const approved=await options.confirmSend({thread:targetThread,action:payload.action,replyTo:state.reply,hasContext:!!payload.annotation,hasCapture:!!state.capture});
     if(!approved||disposed||key!==scopeKey||state.text!==body||state.mutation!==payload.clientMutationId)return;
     const now=options.getScope();if(scopeIdentity(now)!==scopeIdentity(payload))throw Error('Source changed during confirmation. Review the destination again before sending.');
-    const receipt=await options.request('chat-message-write',payload);sent=true;Object.assign(state,blank());if(key===scopeKey&&scopeIdentity()===scopeIdentity(payload))acceptMessage(receipt,payload,state);if(key===scopeKey){syncComposer();message('Message sent. Refreshing conversation…');}
+    const receipt=await options.request('chat-message-write',{...payload,confirmedSend:true});sent=true;Object.assign(state,blank());if(key===scopeKey&&scopeIdentity()===scopeIdentity(payload))acceptMessage(receipt,payload,state);if(key===scopeKey){syncComposer();message('Message sent. Refreshing conversation…');}
     if(key===scopeKey&&scopeIdentity()===scopeIdentity(payload)&&conversationVisible()){if(readPromise)await readPromise;if(disposed||key!==scopeKey||scopeIdentity()!==scopeIdentity(payload))return;if(!await readCurrent(true))throw Error('Refresh failed after posting.');message(receipt?.receiptWarning||'Message sent.');}
    }catch(error){if(!disposed&&key===scopeKey)message(sent?'Message sent, but refresh failed. Refresh the conversation to confirm the latest provider view.':error.message||'Sending failed. Your draft was kept. Inspect the thread before retrying an uncertain result.',!sent);}
    finally{sending=false;if(!disposed)syncComposer();}

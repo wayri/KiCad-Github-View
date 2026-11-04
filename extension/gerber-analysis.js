@@ -5,9 +5,10 @@
  const disclaimer='Geometry screening only. Bounds include dark and clear operations before polarity subtraction. Stroke widths are rendered aperture widths, not measured trace widths or clearances. Operation areas are summed before overlap removal and polarity subtraction; omitted geometry is excluded. Envelope area is an extent rectangle, not board area. This is not a full DFM check.';
  function role(path,model){
   const f=model.attributes?.FileFunction;
+  if(!f&&model.jobFile?.fileFunction)return {name:model.jobFile.fileFunction,source:'job',fileFunction:model.jobFile.fileFunction};
   if(typeof f==='string'&&f.trim())return {name:f,source:'x2',fileFunction:f};
   const name=String(path).split(/[\\/]/).pop().toLowerCase();
-  const names={gtl:'Top copper',gbl:'Bottom copper',gts:'Top solder mask',gbs:'Bottom solder mask',gto:'Top silkscreen',gbo:'Bottom silkscreen',gtp:'Top paste',gbp:'Bottom paste',gko:'Board outline',drl:'Drill',xln:'Drill'};
+  const names={gtl:'Top copper',gbl:'Bottom copper',gts:'Top solder mask',gbs:'Bottom solder mask',gto:'Top silkscreen',gbo:'Bottom silkscreen',gtp:'Top paste',gbp:'Bottom paste',gko:'Board outline',drl:'Drill',xln:'Drill',xnc:'Drill',exc:'Drill',nc:'Drill'};
   const ext=name.split('.').pop();let inferred=names[ext];
   if(!inferred){const m=/(?:^|[-_.])(f|b)[-_.]?(cu|mask|silks|silkscreen|paste)(?:[-_.]|$)/.exec(name);if(m)inferred=(m[1]==='f'?'Top':'Bottom')+' '+({cu:'copper',mask:'solder mask',silks:'silkscreen',silkscreen:'silkscreen',paste:'paste'}[m[2]]);else if(/(?:^|[-_.])in(\d+)[-_.]?cu(?:[-_.]|$)/.test(name))inferred='Inner copper '+/(?:^|[-_.])in(\d+)[-_.]?cu(?:[-_.]|$)/.exec(name)[1];else if(/edge[-_.]?cuts|outline/.test(name))inferred='Board outline';else if(model.format==='excellon')inferred='Drill';}
   return {name:inferred||'Unknown layer',source:inferred?'filename':'unknown'};
@@ -69,26 +70,27 @@
    const path=String(entry?.path||entry?.model?.path||'Unnamed layer'),model=entry?.model;
    if(!model||!Array.isArray(model.primitives)||model.units!=='mm')throw Error('Analysis requires parsed geometry in mm: '+path);
    if(result.totals.primitives+model.primitives.length>LIMITS.primitives)throw Error('Fabrication analysis primitive limit exceeded.');
-   const warnings=Array.isArray(model.warnings)?model.warnings.slice(0,100).map(String):[],layer={path,role:role(path,model),bounds:null,counts:{primitives:model.primitives.length,dark:0,clear:0,drillHits:0,drillSlots:0},minStroke:null,drillDiameters:[],objects:{line:0,arc:0,circle:0,polygon:0},usedTools:[],metrics:{envelopeArea:null,pathLength:0,darkOperationArea:0,clearOperationArea:0,computedAreaOperations:0,omittedAreaOperations:0},warnings,coverage:warnings.some(w=>/omitt|unsupported|ignored/i.test(w))?'partial':'parsed'};
+   const warnings=Array.isArray(model.warnings)?model.warnings.slice(0,100).map(String):[],layer={path,role:role(path,model),bounds:null,counts:{primitives:model.primitives.length,dark:0,clear:0,drillHits:0,drillSlots:0},minStroke:null,drillDiameters:[],objects:{line:0,arc:0,circle:0,polygon:0},usedTools:[],fileAttributes:{...model.attributes},objectAttributeExamples:[],objectAttributeExamplesTruncated:false,metrics:{envelopeArea:null,pathLength:0,darkOperationArea:0,clearOperationArea:0,computedAreaOperations:0,omittedAreaOperations:0},warnings,coverage:warnings.some(w=>/omitt|unsupported|ignored/i.test(w))?'partial':'parsed'};
    if(layer.coverage==='partial')result.coverage='partial';for(const warning of warnings)diagnostic({severity:'warning',code:'parser-warning',path,message:warning});
-   const b=blank(),diameters=new Map(),hits=new Map(),tools=new Map();
+   const b=blank(),diameters=new Map(),hits=new Map(),tools=new Map(),attributeExamples=new Set();
    for(const p of model.primitives){
     primitiveBounds(p,(x,y)=>{merge(b,x,y);merge(totalBounds,x,y);});const polarity=p.polarity==='clear'?'clear':'dark';layer.counts[polarity]++;layer.objects[p.type]++;
+    if(p.objectAttributes&&Object.keys(p.objectAttributes).length){const key=JSON.stringify(p.objectAttributes);if(!attributeExamples.has(key)){if(attributeExamples.size<64){attributeExamples.add(key);layer.objectAttributeExamples.push({...p.objectAttributes});}else layer.objectAttributeExamplesTruncated=true;}}
     const measured=measurements(p);layer.metrics.pathLength+=measured.pathLength;
     if(measured.area===null)layer.metrics.omittedAreaOperations++;else{layer.metrics.computedAreaOperations++;layer.metrics[polarity+'OperationArea']+=measured.area;}
     if(typeof p.reference==='string'&&/^[DT]\d+$/.test(p.reference)){
      const item=tools.get(p.reference)||{reference:p.reference,operations:0,dark:0,clear:0};item.operations++;item[polarity]++;tools.set(p.reference,item);
     }
-    if(polarity==='dark'&&!p.fill&&finite(p.width)&&p.width>0){layer.minStroke=layer.minStroke===null?p.width:Math.min(layer.minStroke,p.width);if(criteria.minTrack!==null&&p.width<criteria.minTrack)diagnostic({severity:'warning',code:'stroke-below-criterion',path,primitiveId:p.uuid,message:'Rendered stroke '+p.width+' mm is below the '+criteria.minTrack+' mm criterion; this does not measure etched trace width.'});}
+    if(p.kind!=='drill'&&polarity==='dark'&&!p.fill&&finite(p.width)&&p.width>0){layer.minStroke=layer.minStroke===null?p.width:Math.min(layer.minStroke,p.width);if(criteria.minTrack!==null&&p.width<criteria.minTrack)diagnostic({severity:'warning',code:'stroke-below-criterion',path,primitiveId:p.uuid,message:'Rendered stroke '+p.width+' mm is below the '+criteria.minTrack+' mm criterion; this does not measure etched trace width.'});}
     if(p.kind==='drill'){
-     const slot=p.type==='line',diameter=slot?p.width:p.r*2;if(!finite(diameter)||diameter<=0)throw Error('Invalid drill diameter.');layer.counts[slot?'drillSlots':'drillHits']++;const key=diameter.toPrecision(12);diameters.set(key,{diameter,count:(diameters.get(key)?.count||0)+1});
+     const slot=p.type==='line'||p.type==='arc'||p.routeCircle===true,diameter=slot?p.width:p.r*2;if(!finite(diameter)||diameter<=0)throw Error('Invalid drill diameter.');layer.counts[slot?'drillSlots':'drillHits']++;const key=diameter.toPrecision(12);diameters.set(key,{diameter,count:(diameters.get(key)?.count||0)+1});
      if(criteria.minDrill!==null&&diameter<criteria.minDrill)diagnostic({severity:'warning',code:'drill-below-criterion',path,primitiveId:p.uuid,message:'Drill tool diameter '+diameter+' mm is below the '+criteria.minDrill+' mm criterion.'});
      if(!slot){const coordinate=p.x+','+p.y;if(hits.has(coordinate))diagnostic({severity:'warning',code:'duplicate-drill-hit',path,primitiveId:p.uuid,x:p.x,y:p.y,message:'Repeated drill hit at the same coordinate; tools '+hits.get(coordinate)+' and '+(p.reference||'unknown')+'.'});else hits.set(coordinate,p.reference||'unknown');}
     }
    }
    layer.bounds=finish(b);layer.metrics.envelopeArea=layer.bounds?layer.bounds.width*layer.bounds.height:null;if(Object.values(layer.metrics).some(v=>v!==null&&!finite(v)))throw Error('Geometry measurements exceed finite bounds.');layer.usedTools=[...tools.values()].sort((a,b)=>a.reference[0].localeCompare(b.reference[0])||Number(a.reference.slice(1))-Number(b.reference.slice(1)));layer.drillDiameters=[...diameters.values()].sort((a,b)=>a.diameter-b.diameter);result.layers.push(layer);
    for(const key of Object.keys(layer.counts))result.totals[key]+=layer.counts[key];
-   if(layer.role.source==='x2'){const functionKey=layer.role.fileFunction.toLowerCase();if(roles.has(functionKey))diagnostic({severity:'warning',code:'duplicate-layer-role',path,message:'The X2 FileFunction matches '+roles.get(functionKey)+'. Check whether both files belong in this set.'});else roles.set(functionKey,path);}
+   if(layer.role.source==='x2'||layer.role.source==='job'){const functionKey=layer.role.fileFunction.toLowerCase();if(roles.has(functionKey))diagnostic({severity:'warning',code:'duplicate-layer-role',path,message:'The saved fabrication FileFunction matches '+roles.get(functionKey)+'. Check whether both files belong in this set.'});else roles.set(functionKey,path);}
    if(!layer.counts.primitives)diagnostic({severity:'warning',code:'empty-layer',path,message:'No geometry was parsed from this layer.'});
   }
   result.bounds=finish(totalBounds);if(suppressed)result.diagnostics.push({severity:'warning',code:'diagnostics-truncated',message:suppressed+' additional diagnostics were suppressed.'});return result;

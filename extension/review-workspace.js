@@ -82,12 +82,39 @@
   }
   // Logical intersheet airwires join only connectivity resolved by the net model.
   // One representative saved connection point per sheet avoids a dense mesh.
+  function sheetOverviewLayout(entries,cellWidth,cellHeight) {
+    const instances=new Map(),duplicates=new Set();
+    entries.forEach((entry,index)=>{for(const placement of entry.placements||[]){if(typeof placement.id!=='string')continue;if(instances.has(placement.id))duplicates.add(placement.id);else instances.set(placement.id,{placement,index});}});
+    const parents=entries.map(()=>new Set()),children=entries.map(()=>new Set());
+    // Only saved, unambiguous instance ancestry establishes layout relationships.
+    for(const {placement,index}of instances.values()){
+      if(placement.unresolved||duplicates.has(placement.id)||placement.parentId==null)continue;
+      const seen=new Set([placement.id]);let ancestor=placement,valid=true;
+      while(ancestor.parentId!=null){const parent=instances.get(ancestor.parentId);if(!parent||duplicates.has(ancestor.parentId)||parent.placement.unresolved||seen.has(ancestor.parentId)){valid=false;break;}seen.add(ancestor.parentId);ancestor=parent.placement;}
+      const parent=instances.get(placement.parentId);
+      if(valid&&parent.index!==index){parents[index].add(parent.index);children[parent.index].add(index);}
+    }
+    const compare=(a,b)=>String(entries[a].path).localeCompare(String(entries[b].path),'en');
+    const pending=parents.map(p=>p.size),depth=entries.map(()=>0),queue=entries.map((_,i)=>i).filter(i=>!pending[i]).sort(compare),order=[];
+    for(let cursor=0;cursor<queue.length;cursor++){const index=queue[cursor];order.push(index);for(const child of [...children[index]].sort(compare)){depth[child]=Math.max(depth[child],depth[index]+1);if(!--pending[child])queue.push(child);}}
+    const resolved=new Set(order),tree=entries.map(()=>[]),roots=[];
+    for(const index of order){const candidates=[...parents[index]].filter(p=>resolved.has(p)).sort((a,b)=>depth[b]-depth[a]||compare(a,b));if(candidates.length)tree[candidates[0]].push(index);else roots.push(index);}
+    // A corrupt file-level cycle is displayed as independent pages, never hidden.
+    entries.forEach((_,index)=>{if(!resolved.has(index)){roots.push(index);depth[index]=0;}});
+    const spans=entries.map(()=>1);
+    for(const index of [...order].reverse()){tree[index].sort(compare);spans[index]=Math.max(1,tree[index].reduce((sum,child)=>sum+spans[child],0));}
+    const positions=entries.map(()=>null),stack=[];let offset=0;
+    for(const index of roots.sort(compare)){stack.push({index,left:offset});offset+=spans[index];}
+    while(stack.length){const {index,left}=stack.pop();positions[index]={x:(left+(spans[index]-1)/2)*cellWidth,y:depth[index]*cellHeight+14};let childLeft=left;for(const child of tree[index]){stack.push({index:child,left:childLeft});childLeft+=spans[child];}}
+    return {positions,width:Math.max(1,offset)*cellWidth,height:(Math.max(0,...depth)+1)*cellHeight};
+  }
   function composeSheetOverview(entries,links=[],dark=false) {
-    const primitives=[],pages=[],highlighted=[],columns=Math.max(1,Math.ceil(Math.sqrt(entries.length)));
+    const primitives=[],pages=[],highlighted=[];
     const cellWidth=Math.max(297,...entries.map(e=>e.design.page?.width||297))+35;
     const cellHeight=Math.max(210,...entries.map(e=>e.design.page?.height||210))+40;
+    const layout=sheetOverviewLayout(entries,cellWidth,cellHeight);
     entries.forEach((entry,index)=>{
-      const x=index%columns*cellWidth,y=Math.floor(index/columns)*cellHeight+14,w=entry.design.page?.width||297,h=entry.design.page?.height||210;
+      const {x,y}=layout.positions[index],w=entry.design.page?.width||297,h=entry.design.page?.height||210;
       const shift=p=>({...p,x:p.x+x,y:p.y+y});
       const instanceCount=entry.instanceCount||1;
       // A reused source is rendered once; backing pages show its placements.
@@ -110,7 +137,7 @@
       const endpoint=end=>{const page=pages.find(p=>p.path===end.path);if(!page)return null;const layer=end.instanceId?page.placements.findIndex(p=>p.id===end.instanceId):0;if(end.instanceId&&page.placements.length&&layer<0)return null;const offset=end.instanceId===page.instanceId?0:Math.min(3,Math.max(0,layer))*3;return {x:page.x+offset+(end.position?.x??page.w/2),y:page.y+offset+(end.position?.y??page.h/2)};};
       const from=endpoint(link.from),to=endpoint(link.to);if(from&&to)airwires.push({type:'line',points:[from,to],fromAnchor:from,toAnchor:to,fromPath:link.from.path,toPath:link.to.path,color:'#edc14b',width:.35,pick:false,name:link.name});
     }
-    const router=root.KiCadOverviewRouting||(typeof module==='object'&&module.exports?require('./overview-routing.js'):null),routed=router?.route(pages,airwires);return {design:{primitives,layers:[...new Set(entries.flatMap(e=>e.design.layers||[]))],page:{width:columns*cellWidth,height:Math.ceil(entries.length/columns)*cellHeight}},pages,highlighted,airwires:routed?routed.links:airwires,routing:routed};
+    const router=root.KiCadOverviewRouting||(typeof module==='object'&&module.exports?require('./overview-routing.js'):null),routed=router?.route(pages,airwires);return {design:{primitives,layers:[...new Set(entries.flatMap(e=>e.design.layers||[]))],page:{width:layout.width,height:layout.height}},pages,highlighted,airwires:routed?routed.links:airwires,routing:routed};
   }
   function sheetOverviewEntries(sheets,links){
     const entries=sheetEntries(sheets,links),byPath=new Map(entries.filter(e=>e.sheet).map(e=>[e.sheet.path,e]));
@@ -351,6 +378,7 @@
     const variantKey = JSON.stringify(["kicad-review-variants", ...(provider==='gitlab'?['gitlab',host]:[]),repository, rootFile]);
     function notice(message) { $("reviewNotice").textContent = message; $("reviewNotice").hidden = !message; options.updateDiagnostics?.(); }
     function commentStatus(message, error = false) { $("commentStatus").textContent = message; $("commentStatus").classList.toggle("error", error); $("githubStatus").textContent=message; $("githubStatus").classList.toggle("error",error); }
+    const websiteHandoffAvailable=remoteAvailable&&!root.KiCadVSCodeContext&&!root.KiCadAndroidRuntime&&!root.KiCadLocalRuntime;
     const localCollaborationMessage=root.KiCadAndroidRuntime?'This project uses local review notes. To collaborate on GitHub or GitLab, connect your account in Library and accounts, then open the repository through that provider.':root.KiCadLocalRuntime?'Notes stay in this browser. Export a portable review to retain or transfer them.':`This VS Code viewer saves review notes in your workspace. Open a trusted Git checkout with a supported remote to connect ${providerName}.`;
     async function refreshCommentPolicy() {if(!remoteAvailable){policyStatus={allowed:false};$('commentPolicyStatus').textContent=localCollaborationMessage;return;}
       $("commentPolicyStatus").textContent="Checking repository comment policy…";
@@ -501,6 +529,7 @@
     const catalogKind=make('select');catalogKind.id='commentConversationKind';catalogKind.setAttribute('aria-label','Conversation category');for(const [value,label]of (provider==='gitlab'?[['issue','Issues']]:[['all','All'],['issue','Issues'],['discussion','Discussions']])){const option=make('option',label);option.value=value;catalogKind.append(option);}catalogKind.value=provider==='gitlab'?'issue':'all';
     const newConversation=button('+',()=>{catalogMore.open=false;editComment();const kind=catalogKind.value==='discussion'?'discussion':'issue';$('editorThreadType').value=kind;$('editorThreadType').onchange();editorDestinationChanged();});newConversation.className='chat-new-conversation';newConversation.id='newConversation';newConversation.title='New comment';newConversation.setAttribute('aria-label','New comment');
     const catalogMore=make('details');catalogMore.className='chat-catalog-more';const catalogSummary=make('summary','⋯');catalogSummary.setAttribute('aria-label','Conversation list options');const catalogMenu=make('div');catalogMenu.className='chat-catalog-menu';catalogMenu.append(conversationSearch,browseConversations,button('Comment settings',()=>{catalogMore.open=false;commentGear.click();}));catalogMore.append(catalogSummary,catalogMenu);
+    if(remoteAvailable&&provider==='github'&&!root.KiCadVSCodeContext&&!root.KiCadAndroidRuntime&&!root.KiCadLocalRuntime){const sessionReviews=button('Browser-session conversation',()=>{catalogMore.open=false;return request('open-website-reviews',{repository:options.pullRepository||repository,number:loadedThread?.kind==='issue'?loadedThread.number:null}).catch(error=>{threadStatus.textContent=error.message;});});sessionReviews.id='openWebsiteReviews';catalogMenu.append(sessionReviews);}
     const catalogActions=make('div');catalogActions.className='chat-catalog-actions';const catalogState=make('select');catalogState.id='commentConversationState';catalogState.setAttribute('aria-label','Filter comment state');for(const [value,label]of [['all','All states'],['open','Open'],['closed','Closed'],['skipped','Skipped reviews']]){const option=make('option',label);option.value=value;catalogState.append(option);}catalogState.value='all';
     catalogState.onchange=()=>{$('stateFilter').value=catalogState.value;unreadCursor=-1;renderConversations();renderComments();draw();};catalogActions.append(catalogKind,catalogState,newConversation,catalogMore);
     conversationCatalog.append(catalogActions,conversationRows,moreConversations);threadReader.insertBefore(conversationCatalog,threadControls);
@@ -577,7 +606,7 @@
       if(!bounds&&net&&!a.position)bounds=root.KiCadOwnedCanvas?.bounds(net.primitives.filter(p=>!p.hidden&&!p.frame))||null;
       const position=a.position||(a.area?{x:a.area.x+a.area.width/2,y:a.area.y+a.area.height/2}:object?.position)||(bounds?{x:bounds.x+bounds.w/2,y:bounds.y+bounds.h/2}:net?.members?.find(m=>m.position)?.position);
       if(!position){notice('This comment has no saved point, area or unambiguous object location.');return false;}
-      const side=String(object?.properties?.Layer||object?.layer||'').startsWith('B.')?'back':'front';
+      const side=a.side||(String(object?.properties?.Layer||object?.layer||'').startsWith('B.')?'back':'front');
       if(scene){if(!scene.focusPosition?.(position,{bounds,side}))return false;}
       else{
         canvas?.resize?.();const rect=canvas?.canvas?.getBoundingClientRect?.(),box=root.KiCadCommentFocus?.viewBox(position,bounds,{width:rect?.width,height:rect?.height,pcb});
@@ -604,7 +633,7 @@
       let count=0;for(const message of messages){if(isBlocked(message.author))continue;const time=Date.parse(message.createdAt);if(time<range.from||time>=range.until)continue;const item=make('article');item.className='thread-message'+(message.replyTo?' thread-reply':'');item.append(make('strong',`@${message.author||'unknown'}`),make('small',`${message.createdAt} · ${message===loadedThread?loadedThread.state:message.replyTo?'Reply':'Comment'}`));const text=make('p',message.body);text.className='thread-message-body';item.append(text);if(message.replyTo)item.append(make('small',`Reply to ${parents.get(message.replyTo)?.author?'@'+parents.get(message.replyTo).author:message.replyTo}`));item.append(safetyActions(message.author,message.url||loadedThread.url));threadMessages.append(item);count++;}
       if(!count)threadMessages.append(make('p','No messages within the selected creation dates.'));
     }
-    async function readThread(kind,number){if(!remoteAvailable)return;if(provider==='gitlab')kind='issue';if(!['issue','discussion'].includes(kind)||!Number.isSafeInteger(number)||number<1){threadStatus.textContent='Enter a positive Issue or Discussion number.';return;}const ticket=++threadTicket,file=currentFile();threadKind.value=kind;threadNumber.value=String(number);threadLoad.disabled=true;if(!chatPanel){loadedThread=null;threadMessages.replaceChildren();}threadStatus.classList.toggle('error',false);threadStatus.textContent='Loading '+providerName+' thread…';inspector('comments','view');try{const result=await request('github-thread-read',{...scope(),repository:options.pullRepository||repository,kind,number,includeCapabilities:true});if(ticket!==threadTicket||file!==currentFile())return;loadedThread=result;if(repository!=='local/workspace'){const target=scope(),imported=KiCadReviewComments.threadAnnotations(result,target,{repository:options.pullRepository||repository}),prefix=result.url,complete=!(result.warnings||[]).some(w=>/truncat|pagination|incomplete|omitted|missing/i.test(w));remoteNotes=KiCadReviewComments.mergeAnnotations(remoteNotes.filter(note=>!complete||note.anchor?.repository!==target.repository||note.anchor?.ref!==target.ref||note.anchor?.file!==target.file||note.github?.url!==prefix&&!note.github?.url?.startsWith(prefix+'#')),imported); }reviewThreadStates.remember(providerStateScope(),result);renderComments();draw();setCommentCategory(kind,false);renderThread();threadStatus.textContent=[`${result.comments.length} comments loaded.`,...(result.warnings||[])].join(' ');return result;}catch(error){if(ticket===threadTicket){threadStatus.classList.toggle('error',true);threadStatus.textContent=error.message;}return false;}finally{if(ticket===threadTicket)threadLoad.disabled=false;}}
+    async function readThread(kind,number){if(!remoteAvailable)return;if(provider==='gitlab')kind='issue';if(!['issue','discussion'].includes(kind)||!Number.isSafeInteger(number)||number<1){threadStatus.textContent='Enter a positive Issue or Discussion number.';return;}const ticket=++threadTicket,file=currentFile();threadKind.value=kind;threadNumber.value=String(number);threadLoad.disabled=true;if(!chatPanel){loadedThread=null;threadMessages.replaceChildren();}threadStatus.classList.toggle('error',false);threadStatus.textContent='Loading '+providerName+' thread…';inspector('comments','view');try{const result=await request('github-thread-read',{...scope(),repository:options.pullRepository||repository,kind,number,includeCapabilities:true});if(ticket!==threadTicket||file!==currentFile())return;loadedThread=result;if(repository!=='local/workspace'){const target=scope(),imported=KiCadReviewComments.threadAnnotations(result,target,{repository:options.pullRepository||repository}),prefix=result.url,complete=!(result.warnings||[]).some(w=>/truncat|pagination|incomplete|omitted|missing|not included/i.test(w));remoteNotes=KiCadReviewComments.mergeAnnotations(remoteNotes.filter(note=>!complete||note.anchor?.repository!==target.repository||note.anchor?.ref!==target.ref||note.anchor?.file!==target.file||note.github?.url!==prefix&&!note.github?.url?.startsWith(prefix+'#')),imported); }reviewThreadStates.remember(providerStateScope(),result);renderComments();draw();setCommentCategory(kind,false);renderThread();threadStatus.textContent=[`${result.comments.length} comments loaded.`,...(result.warnings||[])].join(' ');return result;}catch(error){if(ticket===threadTicket){threadStatus.classList.toggle('error',true);threadStatus.textContent=error.message;}return false;}finally{if(ticket===threadTicket)threadLoad.disabled=false;}}
     let inlineToken=null,inlineIndex=-1,pasteGeneration=0,pasteBusy=false;
     function closeInlineMentions(){inlineMentions.hidden=true;inlineToken=null;inlineIndex=-1;$('commentText').setAttribute('aria-expanded','false');$('commentText').removeAttribute?.('aria-activedescendant');}
     function chooseInlineMention(login){const box=$('commentText'),edit=root.KiCadCommentCompose?.insertMention(box.value,box.selectionStart??box.value.length,login);if(!edit)return;box.value=edit.text;box.setSelectionRange?.(edit.cursor,edit.cursor);closeInlineMentions();box.focus();$('editorTitle').value=root.KiCadCommentCompose.titleFromText(box.value);}
@@ -1123,7 +1152,7 @@
       const sourceFile=files.find(entry=>entry.path===file);if(sourceFile&&!commentSheetIds.has(sourceFile))commentSheetIds.set(sourceFile,KiCadReviewComments.sourceSheetUuid(sourceFile.content));const sheetUuid=sourceFile?commentSheetIds.get(sourceFile):null;
       const value = {...scope(file),...(sheetUuid?{sheetUuid}:{}),sheetName:sheet?.label||file.split('/').at(-1),...(instancePath?{instancePath}:{}), variant, ...(net?{kind:"net",netName:net.name,...(net.id?.length<=200?{objectId:net.id}:{})}:{}), ...(object?.uuid ? {uuid:object.uuid} : {}),
         ...(object?.id && object.id.length <= 200 ? {objectId:object.id} : {}), ...(object?.reference ? {reference:object.reference} : {}),
-        ...(object?.kind ? {kind:object.kind} : {}), ...(position || object?.position ? {position:position || object.position} : {})};
+        ...(object?.kind ? {kind:object.kind} : {}), ...(pcb?{side:String(object?.layer||object?.properties?.Layer||'').startsWith('B.')?'back':'front'}:{}), ...(position || object?.position ? {position:position || object.position} : {})};
       return KiCadReviewComments.normalizeAnchor(value);
     }
     function anchorLabel(value) { return `${value.reference || value.netName || value.kind || "Drawing"} · ${value.file}${value.position ? ` · ${value.position.x.toFixed(2)}, ${value.position.y.toFixed(2)} mm` : ""}${value.variant && value.variant !== "default" ? ` · ${value.variant}` : ""}`; }
@@ -1196,7 +1225,7 @@
         const number=value==="pull-request"?options.pullNumber:value.startsWith("existing-")?Number(publication?.number||$("threadNumber").value):undefined;
         if(!destination||(destination==="issue"||destination==="discussion")&&(!Number.isSafeInteger(number)||number<=0))throw new Error(`Choose a valid ${providerName} issue or discussion number.`);
         recoveryMessage={comment:note,destination,repository:options.pullRepository||repository,...(publication?.title?{title:publication.title}:{}),...(provider==='gitlab'&&note.threadType==='discussion'?{discussion:true}:{}),...(number?{number}:{}),...(destination==="new-discussion"?{categoryId:publication?.category||$("discussionCategory").value}:{})};
-        const result=await request(recoveryNumber!==null?'github-recover-publication':provider==='gitlab'?'comment-publish':'github-publish-comment',{...recoveryMessage,...(recoveryNumber!==null?{recoveryNumber}:{})});
+        const result=await request(recoveryNumber!==null?'github-recover-publication':provider==='gitlab'?'comment-publish':'github-publish-comment',{...recoveryMessage,confirmedSend:true,...(recoveryNumber!==null?{recoveryNumber}:{})});
         acceptedRef=result.remoteRef;const refs=[...(note.remoteRefs||[])];if(!refs.some(ref=>ref.url===result.remoteRef.url))refs.push(result.remoteRef);
         await request("comment-save",{comment:KiCadReviewComments.validateComment({...note,remoteRefs:refs,...(result.attachments?.length?{attachments:result.attachments}:{}),updatedAt:new Date(Math.max(Date.now(),Date.parse(note.updatedAt||note.createdAt)+1)).toISOString()}),expectedUpdatedAt:note.updatedAt||note.createdAt});await refreshComments();options.onCommentsChanged?.();$("githubCommentType").value=provider==="gitlab"?(note.threadType||"issue"):result.remoteRef.kind;chooseCommentType();$("commentDestination").value=provider==="gitlab"||result.remoteRef.kind==="issue"?"existing-issue":"existing-discussion";$("threadNumber").value=String(result.remoteRef.number);destinationChanged();await loadGitHub();if(result.recovered)action.closest('.publication-recovery')?.remove();commentStatus(`${result.recovered?'Recovered link to':'Posted to'} ${providerName} ${result.remoteRef.kind} #${result.remoteRef.number}. The linked conversation is saved below.`);if(loadedThread?.number===result.remoteRef.number)await readThread(loadedThread.kind,loadedThread.number);return true;
       }catch(error){if(acceptedRef){const refs=[...(note.remoteRefs||[])];if(!refs.some(ref=>ref.url===acceptedRef.url))refs.push(acceptedRef);const linked={...note,remoteRefs:refs};notes=notes.map(n=>n.id===note.id?linked:n);try{renderComments();}catch{}try{options.onCommentsChanged?.();}catch{}try{commentStatus(`Posted to ${providerName} ${acceptedRef.kind} #${acceptedRef.number}. Local linkage or readback needs retry: ${error.message}`);}catch{}return true;}commentStatus(error.message+` Your draft remains saved. If ${providerName} accepted the post but local saving failed, retry Publish to recover its confirmed link.`,true);
@@ -1238,7 +1267,7 @@
         if(note.github){actions.append(safetyActions(note.github.author,note.github.url));const link=make("a",`Open ${providerName} thread`);link.href=note.github.url;link.target="_blank";link.rel="noopener noreferrer";actions.append(link);if(remoteAvailable)actions.append(button('View thread',()=>readThread(note.github.source.startsWith('discussion')?'discussion':'issue',note.github.number)));
           if(remoteAvailable)actions.append(button('Reply',()=>{const type=provider==='gitlab'||note.github.source.startsWith('discussion')?'discussion':'issue';editComment({id:crypto.randomUUID(),createdAt:new Date().toISOString(),text:'',severity:'info',state:'open',threadType:type,anchor:{...note.anchor}});$("editorDestination").value=provider==='gitlab'||type==='issue'?'existing-issue':'existing-discussion';$("editorThreadNumber").value=String(note.github.number);editorDestinationChanged();commentStatus(`Reply draft for ${providerName} ${type} #${note.github.number}. Enter your text, then Comment.`);}));
         }
-        else if(!note.remoteRefs?.length) {const draft=button(`Open ${providerName} composer`,async()=>{try{await request("open-comment-draft",draftOptions(note));commentStatus("GitHub composer opened with the annotation and severity. Review and submit it there.");}catch(error){commentStatus(error.message,true);}});draft.className="github-draft-action";draft.hidden=!remoteAvailable||provider==='gitlab'||Boolean(root.KiCadVSCodeContext&&!root.KiCadAndroidRuntime);actions.append(button("Edit",()=>editComment(note)),draft,
+        else if(!note.remoteRefs?.length) {const draft=button(`Open ${providerName} composer`,async()=>{try{editComment(note);await prepareWebsiteHandoff();}catch(error){commentStatus(error.message,true);}});draft.className="github-draft-action";draft.hidden=!websiteHandoffAvailable;actions.append(button("Edit",()=>editComment(note)),draft,
           button("Delete",async()=>{try{await request("comment-delete",{...scope(note.anchor.file),id:note.id});await refreshComments();options.onCommentsChanged?.();commentStatus("Local comment deleted.");}catch(error){commentStatus(error.message,true);}}));
         }
         if(!note.github&&!note.remoteRefs?.length){for(const [state,label] of [["open","Open"],["closed","Close"],["skipped","Skip"],["resolved","Resolve"]])if((note.state||"open")!==state)actions.append(button(label,()=>setNoteState(note,state)));}
@@ -1261,8 +1290,13 @@
       const run=++remoteLoad,target=scope();$("refreshGitHub").disabled=true;
       try{const result=await request(provider==='gitlab'?"comment-remote-list":"github-annotations",{...target,includeDiscussions:$("commentDestination").value.includes("discussion"),...(options.pullNumber?{pullNumber:options.pullNumber,pullRepository:options.pullRepository}:{}),
           ...(['existing-issue','existing-discussion'].includes($("commentDestination").value)&&Number.isSafeInteger(Number($("threadNumber").value))&&Number($("threadNumber").value)>0?{[$("commentDestination").value==='existing-discussion'?'discussionNumber':'issueNumber']:Number($("threadNumber").value)}:{})});
-        if(run!==remoteLoad||target.file!==scope().file)return;if(!apply)return{...result,syncFile:target.file};remoteNotes=result.notes;renderComments();draw();commentStatus(`Loaded ${remoteNotes.length} ${providerName} annotations. ${result.warnings.join(" ")}`);
+        if(run!==remoteLoad||target.file!==scope().file)return;if(!apply)return{...result,syncFile:target.file};applyRemoteAnnotations(result);renderComments();draw();commentStatus(`Loaded ${remoteNotes.length} ${providerName} annotations. ${result.warnings.join(" ")}`);
       }catch(error){if(!apply)throw error;if(run===remoteLoad)commentStatus(error.message,true);}finally{if(run===remoteLoad)$("refreshGitHub").disabled=false;}
+    }
+    function applyRemoteAnnotations(result){
+      if((result.warnings||[]).some(w=>/truncat|pagination|incomplete|omitted|missing|not included/i.test(w))){remoteNotes=KiCadReviewComments.mergeAnnotations(remoteNotes,result.notes);return;}
+      if(result.coverage?.kind==='thread'){const prefix=result.coverage.url;if(typeof prefix!=='string'||!prefix){remoteNotes=KiCadReviewComments.mergeAnnotations(remoteNotes,result.notes);return;}remoteNotes=KiCadReviewComments.mergeAnnotations(remoteNotes.filter(note=>note.github?.url!==prefix&&!note.github?.url?.startsWith(prefix+'#')),result.notes);return;}
+      remoteNotes=result.notes;
     }
     function point(event) {
       const canvas = getCanvas(); if (!canvas?.viewport?.camera || !canvas.canvas) return null;
@@ -1279,13 +1313,15 @@
     function svg(tag, attrs) { const node = document.createElementNS("http://www.w3.org/2000/svg",tag); for (const [key,value] of Object.entries(attrs)) node.setAttribute(key,String(value)); return node; }
     const populationOverlays=populationOverlayCache();
     let fastPISession=null;
-    function drawCommentPins(project){const pins=$('commentPins'),notes=visibleNotes();pins.setAttribute('aria-label',scene&&notes.length>64?'First 64 visible 3D comment anchors':'Comment anchors');(scene?notes.slice(0,64):notes).forEach((note,index) => {const p = project(note);if(!p)return;const pin=button(String(index+1),()=>{inspector("comments","view");if(root.KiCadAndroidRuntime){const card=[...$('commentList').querySelectorAll('[data-note-id]')].find(n=>n.getAttribute('data-note-id')===note.id);card?.scrollIntoView({block:'start',behavior:'smooth'});if(remoteAvailable&&note.github)readThread(note.github.source.startsWith('discussion')?'discussion':'issue',note.github.number);}else commentStatus(note.text);});pin.className="pin"+(root.KiCadAndroidRuntime?' android-comment-pin '+(KiCadReviewComments.commentType(note)==='discussion'?'discussion':'issue'):'');pin.setAttribute('data-severity',note.severity||'info');pin.title=note.text.split(/\r\n|\r|\n/)[0];pin.style.background=severityColors[note.severity||"info"];pin.setAttribute("aria-label",`Comment ${index+1}: ${note.text.slice(0,60)}`);pin.style.left=p.x+"px";pin.style.top=p.y+"px";pins.append(pin);});}
+    function drawingNotes(){return visibleNotes().filter(note=>note.anchor.file===(currentFile()||rootFile));}
+    function drawCommentArea(area,color,project,noteId){const points=root.KiCadCommentFocus.projectArea(area,project);if(points)$('reviewOverlay').append(svg('polygon',{points:points.map(p=>`${p.x},${p.y}`).join(' '),fill:color+'18',stroke:color,'stroke-width':2,'stroke-dasharray':'6 3',...(noteId?{'data-note-id':noteId}:{})}));}
+    function drawCommentPins(project){const pins=$('commentPins'),notes=drawingNotes();pins.setAttribute('aria-label',scene&&notes.length>64?'First 64 visible 3D comment anchors':'Comment anchors');(scene?notes.slice(0,64):notes).forEach((note,index) => {const p = project(note);if(!p)return;const pin=button(String(index+1),()=>{inspector("comments","view");const card=[...$('commentList').querySelectorAll('[data-note-id]')].find(n=>n.getAttribute('data-note-id')===note.id);card?.scrollIntoView({block:'start',behavior:'smooth'});commentStatus(note.text);if(remoteAvailable&&note.github)void readThread(note.github.source.startsWith('discussion')?'discussion':'issue',note.github.number);});pin.className="pin"+(root.KiCadAndroidRuntime?' android-comment-pin '+(KiCadReviewComments.commentType(note)==='discussion'?'discussion':'issue'):'');pin.setAttribute('data-note-id',note.id);pin.setAttribute('data-severity',note.severity||'info');pin.title=note.text.split(/\r\n|\r|\n/)[0];pin.style.background=severityColors[note.severity||"info"];pin.setAttribute("aria-label",`Comment ${index+1}: ${note.text.slice(0,60)}`);pin.style.left=p.x+"px";pin.style.top=p.y+"px";pins.append(pin);});}
     function draw() {
       netQuickView?.refreshLinks?.();
       fastPISession?.draw();
       if(locatedComment?.file!==currentFile()){locatedComment=null;commentFocus?.hide();}else commentFocus?.refresh();
       const overlay = $("reviewOverlay"), pins = $("commentPins"); overlay.replaceChildren(); pins.replaceChildren();
-      if(scene){const rect=$('drawingHost').getBoundingClientRect?.();if(rect)drawCommentPins(note=>{const anchor=note.anchor,point=scene.projectAnchor?.(anchor.uuid?{uuid:anchor.uuid}:anchor.reference?{reference:anchor.reference}:{position:anchor.position});return point?{x:point.x-rect.left,y:point.y-rect.top}:null;});return;}
+      if(scene){const rect=$('drawingHost').getBoundingClientRect?.();if(rect){const project=(position,side,clip=true)=>{const p=scene.projectAnchor?.({position,side,clip});return p?{x:p.x-rect.left,y:p.y-rect.top}:null;};for(const note of drawingNotes().slice(0,64))if(note.anchor.area)drawCommentArea(note.anchor.area,severityColors[note.severity||'info'],p=>project(p,note.anchor.side,false),note.id);drawCommentPins(note=>{const anchor=note.anchor,position=root.KiCadCommentFocus.anchorPosition(anchor);if(position)return project(position,anchor.side);const p=scene.projectAnchor?.(anchor.uuid?{uuid:anchor.uuid}:anchor.reference?{reference:anchor.reference}:{});return p?{x:p.x-rect.left,y:p.y-rect.top}:null;});}return;}
       const active = currentFile() || rootFile;if(!pcb)sheetVisits.visit(active);refreshNets();applyNetColors();
       if(showRatsnest&&pcb&&root.KiCadRatsnest){if(ratsnestSource!==netSource){ratsnestSource=netSource;ratsnestResult=root.KiCadRatsnest.build(netModel.nets.filter(n=>n.path===active));}for(const line of ratsnestResult.lines){if(selectedNet&&line.netId!==selectedNet.id)continue;const a=screen(line.a),b=screen(line.b);if(a&&b)overlay.append(svg('line',{x1:a.x,y1:a.y,x2:b.x,y2:b.y,stroke:'#53a9d1','stroke-width':1,'stroke-dasharray':'5 4',opacity:.8}));}}
       if (active !== lastFile) {
@@ -1338,14 +1374,14 @@
         $('measurementStatus').textContent=(boardMeasure?'Board extents - ':measurePoints.length===1?'Live - ':'Pinned - ')+result.text;
       }}
       if(measureMode&&rulerSnap&&measurePoints.length<required){const p=screen(rulerSnap.point);if(p){overlay.append(svg('circle',{cx:p.x,cy:p.y,r:6,fill:'none',stroke:rulerSnap.kind==='free'?'#28a3cf':'#d48100','stroke-width':2}));}}
-      function areaRect(value,color){const a=screen({x:value.x,y:value.y}),b=screen({x:value.x+value.width,y:value.y+value.height});if(a&&b)overlay.append(svg('rect',{x:Math.min(a.x,b.x),y:Math.min(a.y,b.y),width:Math.abs(b.x-a.x),height:Math.abs(b.y-a.y),fill:color+'18',stroke:color,'stroke-width':2,'stroke-dasharray':'6 3'}));}
-      for(const note of visibleNotes())if(note.anchor.area)areaRect(note.anchor.area,severityColors[note.severity||'info']);
+      function areaRect(value,color,noteId){drawCommentArea(value,color,screen,noteId);}
+      for(const note of drawingNotes())if(note.anchor.area)areaRect(note.anchor.area,severityColors[note.severity||'info'],note.id);
       if(editor?.anchor.area&&editor.anchor.file===active&&!$('commentEditor').hidden)areaRect(editor.anchor.area,'#218bd0');
       if(areaStart&&areaEnd){try{areaRect(KiCadReviewTools.area(areaStart,areaEnd),'#218bd0');}catch{}}
 
       if(activeConnection?.position){const p=screen(activeConnection.position);if(p)overlay.append(svg('circle',{cx:p.x,cy:p.y,r:12,fill:'none',stroke:'#39bce5','stroke-width':3}),svg('path',{d:`M ${p.x-18} ${p.y} h 36 M ${p.x} ${p.y-18} v 36`,stroke:'#39bce5','stroke-width':1}));}
       navigation?.draw(overlay,pins,screen,svg);
-      drawCommentPins(note=>screen(note.anchor.position));
+      drawCommentPins(note=>{const position=root.KiCadCommentFocus.anchorPosition(note.anchor);return position?screen(position):null;});
     }
     function menu(event) {
       event.preventDefault(); if (scene || rightDown?.moved) return;
@@ -1602,6 +1638,34 @@
     }
     function editorDestinationChanged(){const value=$("editorDestination").value;$("editorNumberLabel").hidden=!value.startsWith("existing-");$("editorTitleLabel").hidden=true;$("editorCategoryLabel").hidden=$("editorLoadCategories").hidden=value!=="discussion";$("editorThreadNumber").placeholder=value.includes("discussion")?"Discussion number":"Issue number";if(remoteAvailable&&provider==='github'&&value==='discussion')void loadDiscussionCategories('editor');}
     const changeDestination=button('Destination…',()=>reviewPost(true));changeDestination.className='quiet-button';changeDestination.setAttribute('aria-label','Choose comment destination');composerMenuBody.append(changeDestination);
+    const websiteHandoff=button('Continue on '+providerName+' website…',prepareWebsiteHandoff);websiteHandoff.id='commentWebsiteHandoff';websiteHandoff.title='Save a local draft, then copy or open the website composer. No review account required.';websiteHandoff.hidden=!websiteHandoffAvailable;composerMenuBody.append(websiteHandoff);
+    async function prepareWebsiteHandoff(){
+      if(!websiteHandoffAvailable){commentStatus('Website handoff is available in the browser extension viewer.',true);return;}
+      if(pasteBusy){commentStatus('Wait for the pasted screenshot to finish preparing.',true);return;}
+      const active=editor,source=JSON.stringify(scope());websiteHandoff.disabled=true;
+      try{
+        const saved=editorNote(),value=$('editorDestination').value,number=Number($('editorThreadNumber').value);
+        if(value.startsWith('existing-')&&(!Number.isSafeInteger(number)||number<=0))throw Error('Enter a positive '+providerName+' thread number.');
+        const draft={websiteHandoff:true,comment:collaboration?{...saved,anchor:{...saved.anchor,repository:collaboration.repository,ref:collaboration.ref,file:collaboration.prefix?collaboration.prefix+'/'+saved.anchor.file:saved.anchor.file}}:saved,targetRepository};
+        if(value.startsWith('existing-'))Object.assign(draft,{targetType:value.slice(9),targetNumber:number});
+        else Object.assign(draft,{destination:value,...(value==='pull-request'?{pullNumber:options.pullNumber,pullRepository:targetRepository}:{})});
+        await request('comment-save',{comment:saved,...(active.updatedAt?{expectedUpdatedAt:active.updatedAt}:{})});
+        if(editor!==active||JSON.stringify(scope())!==source)throw Error('The source or draft changed. Open the saved draft again.');
+        editor=saved;
+        const prepared=await request('open-comment-draft',draft);
+        if(editor!==saved||JSON.stringify(scope())!==source)throw Error('The source or draft changed. Open the saved draft again.');
+        const url=new URL(prepared.url);if(url.origin!==host||url.username||url.password||!url.pathname.startsWith('/'+targetRepository+'/'))throw Error('Unexpected website draft URL.');
+        document.getElementById('commentWebsiteReview')?.remove();
+        const dialog=make('dialog');dialog.className='comment-post-review';dialog.id='commentWebsiteReview';dialog.setAttribute('aria-label','Website comment handoff');
+        const text=make('textarea');text.id='websiteCommentMarkdown';text.value=prepared.body;text.readOnly=true;text.rows=12;text.style.width='100%';text.style.boxSizing='border-box';text.setAttribute('aria-label','Complete comment Markdown to copy');
+        const status=make('p','Draft saved locally. Nothing has been posted. Screenshots and attachments are not uploaded; attach them manually on the website. Website posting uses your browser website session. In-viewer reading and sync still require provider API access; a website post is not confirmed here.');status.id='websiteCommentStatus';status.setAttribute('role','status');
+        const copy=button('Copy Markdown',async()=>{try{if(!root.navigator?.clipboard?.writeText)throw Error('Clipboard unavailable');await root.navigator.clipboard.writeText(text.value);status.textContent='Markdown copied. Paste it on the website and submit there. Nothing posted here.';}catch{text.focus();text.select?.();status.textContent='Select and copy the Markdown below, then paste it on the website.';}});copy.id='copyWebsiteComment';
+        const open=make('a',prepared.prefilled?'Open prefilled website composer':'Open website and paste Markdown');open.id='openWebsiteComment';open.href=url.href;open.target='_blank';open.rel='noopener noreferrer';
+        dialog.append(make('strong','Continue on '+providerName+' website'),status,make('p',prepared.prefilled?'The new issue text is included in the link. Review it and submit on the website.':'Copy the complete Markdown, open the website, then paste and submit it there.'),copy,text,open,button('Close',()=>{dialog.close?.();dialog.remove();}));document.body.append(dialog);if(dialog.showModal)dialog.showModal();else dialog.open=true;
+        composerMenu.open=false;commentStatus('Local draft saved. Continue on the provider website to post; no remote link recorded.');
+        notes=KiCadReviewComments.mergeAnnotations(notes,[saved]);renderComments();draw();
+      }catch(error){commentStatus(error.message,true);}finally{websiteHandoff.disabled=false;}
+    }
     let postReview=null;
     function reviewPost(force=false){force=force===true;
       try{
@@ -1999,7 +2063,7 @@
     root.KiCadUIIcons?.decorate();$("schematicLayersHint").hidden=pcb;showNavigator(false);variants();
     const workspaceChrome=root.KiCadWorkspaceChrome?.install(document,root);if(workspaceChrome)resizeCleanups.push(()=>workspaceChrome.dispose());
     if(chrome.storage?.local)chrome.storage.local.get(variantKey).then((saved)=>{if(saved[variantKey])installConfig(saved[variantKey]);}).catch((error)=>notice(error.message));
-    if(remoteAvailable&&root.KiCadReviewSync){annotationSync=root.KiCadReviewSync.create({load:async()=>{if(loadedThread)return null;if(Date.now()-lastCatalogSync>12000){await loadConversations(false,true);lastCatalogSync=Date.now();}return loadGitHub({apply:false});},onUpdate:result=>{if(result&&result.syncFile===currentFile()){remoteNotes=result.notes;renderComments();draw();}},isVisible:()=>!document.hidden&&sidebarState.comments&&commentTab==='view'&&!loadedThread,isOnline:()=>root.navigator?.onLine!==false});annotationSync.start(scope());const resumeSync=()=>annotationSync.visibilityChanged();document.addEventListener('visibilitychange',resumeSync);root.addEventListener?.('online',resumeSync);resizeCleanups.push(()=>{annotationSync.dispose();document.removeEventListener('visibilitychange',resumeSync);root.removeEventListener?.('online',resumeSync);});}
+    if(remoteAvailable&&root.KiCadReviewSync){annotationSync=root.KiCadReviewSync.create({load:async()=>{if(loadedThread)return null;if(Date.now()-lastCatalogSync>12000){await loadConversations(false,true);lastCatalogSync=Date.now();}return loadGitHub({apply:false});},onUpdate:result=>{if(result&&result.syncFile===currentFile()){applyRemoteAnnotations(result);renderComments();draw();}},isVisible:()=>!document.hidden&&sidebarState.comments&&commentTab==='view'&&!loadedThread,isOnline:()=>root.navigator?.onLine!==false});annotationSync.start(scope());const resumeSync=()=>annotationSync.visibilityChanged();document.addEventListener('visibilitychange',resumeSync);root.addEventListener?.('online',resumeSync);resizeCleanups.push(()=>{annotationSync.dispose();document.removeEventListener('visibilitychange',resumeSync);root.removeEventListener?.('online',resumeSync);});}
     if(provider!=='github')refreshCommentPolicy();else $('commentPolicyStatus').textContent='GitHub is contacted only when you refresh reviews or post a comment.';if(netColorsEnabled)loadNetColors();if(root.innerWidth>=1100&&!root.KiCadAndroidRuntime&&!root.KiCadLocalRuntime)navigate('files');
     if(root.KiCadWorkspaceSearch&&new URLSearchParams(root.KiCadVSCodeContext?.search||root.location?.search||'').get('headerSearch')!=='1'){
       const holder=make('div');holder.className='workspace-search-holder';$('frameControls').insertBefore(holder,searchBox);searchBox.hidden=true;

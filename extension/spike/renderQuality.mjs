@@ -41,7 +41,7 @@ export const physicalColors=Object.freeze({coatedCopper:0x164631,exposedCopper:0
 export function boardClipRange(distance, radius) {
   const d = Number.isFinite(distance) && distance > 0 ? distance : 1;
   const r = Number.isFinite(radius) && radius > 0 ? radius : 1;
-  return { near: Math.max(.005, d / 200), far: Math.max(10, d + r * 4) };
+  return { near: Math.max(.005, d / 20), far: Math.max(10, d + r * 4) };
 }
 
 // Neutral studio lighting is paired about the board plane, so turning a PCB

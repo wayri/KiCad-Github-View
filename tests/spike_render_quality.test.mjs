@@ -94,8 +94,9 @@ test('normal board view improves depth precision and close inspection lowers the
   const range = boardClipRange(2, 50);
   // Distance-scaled near plane preserves depth precision; only extreme
   // close inspection reaches the minimum clip distance.
-  assert.equal(range.near, .01);
-  assert.equal(boardClipRange(.2, 50).near, .005);
+  assert.equal(range.near, .1);
+  assert.equal(boardClipRange(.2, 50).near, .01);
+  assert.equal(boardClipRange(.05, 50).near, .005);
   assert.equal(range.far, 202);
   for (const d of [NaN, Infinity, -1]) {
     const fallback = boardClipRange(d, d);

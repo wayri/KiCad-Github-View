@@ -15,7 +15,8 @@ FILES = {'analysis-data.js', 'analysis-viewer.html', 'analysis-viewer.css', 'ana
          'schematic-renderer.js', 'pcb-renderer.js', 'vendor/spike-board3d.bundle.js',
          'vendor/SPIKE-ENGINE-NOTICE.md', 'vendor/THREE-LICENSE', 'credential-vault.js',
          'credential-vault-host.html', 'credential-vault-host.js', 'credential-vault-worker.js'}
-FILES.update({'net-quick-view.js','github-website-history.js','github-session-reader.js','gitlab-session-reader.js','parsing.js','repository-session-bridge.js'})
+FILES.update({'repository-sessions.js','inline-project-view.js','net-quick-view.js','github-website-history.js','github-session-reader.js','gitlab-session-reader.js','parsing.js','repository-session-bridge.js'})
+FILES.update({'github-session-review.js','github-website-reviews.js','session-reviews.html','session-reviews.js','session-reviews.css'})
 FILES.update({'window-link.js','detached-view.js','github-project-buffer.js','github-project-view.js','workspace-search.js'})
 FILES.update({'fast-pi.js','fast-pi-worker.js','fast-pi-workspace.js','fast-pi-workspace.css'})
 FILES.update({'draftsman-model.js','draftsman-mechanical.js','draftsman-snap.js','draftsman-export.js','draftsman-workspace.js','draftsman-workspace.css','draftsman-repository.js'})

@@ -10,7 +10,13 @@
     h1 { font-size: 1.6rem; } h2 { font-size: 1.25rem; }
     section { border: 1px solid #8886; border-radius: .6rem; padding: 1.2rem; margin: 1.3rem 0; }
     label { display: block; font-weight: 600; margin: 1rem 0 .35rem; }
-    input, select { box-sizing: border-box; width: 100%; font: inherit; padding: .55rem; }
+    input:not([type="checkbox"]):not([type="radio"]), select { box-sizing: border-box; width: 100%; font: inherit; padding: .55rem; }
+    body label.check-option { display:flex; align-items:center; gap:.5rem; margin:.75rem 0; font-weight:500; }
+    body .check-option input[type="checkbox"] { width:16px; height:16px; flex:0 0 16px; margin:0; padding:0; }
+    body .github-account-tools { display:flex; flex-wrap:wrap; align-items:center; gap:.5rem; margin:1rem 0 .4rem; }
+    body .github-account-tools button { display:inline-flex; align-items:center; justify-content:center; gap:.35rem; width:auto; min-height:34px; margin:0; padding:.4rem .7rem; border:1px solid #8886; border-radius:.35rem; font-size:.875rem; line-height:1.3; }
+    body .github-account-tools button[hidden] { display:none; }
+    @media(max-width:600px){body .github-account-tools button{min-height:40px}body label.check-option{min-height:36px}}
     button { font: inherit; padding: .5rem .85rem; margin: .75rem .5rem .25rem 0; cursor: pointer; }
     #connectGitHub { background: #238636; border: 1px solid #238636; color: white; border-radius: .35rem; font-weight: 600; }
     #connectGitHub[data-connected="true"] { background: #b42318; border-color: #b42318; }
@@ -23,18 +29,26 @@
   <p><a href="local-viewer.html" target="_blank" rel="noopener">Open local KiCad workspace</a> — read saved schematics and PCBs, or drop a project folder.</p>
   <h1>KiCad Visual Review settings</h1>
   <p><a href="dashboard.html">Project dashboard · recent projects</a></p>
+  <section aria-label="Project viewer"><h2>Project viewer</h2>
+    <label for="projectViewerMode">When clicking the extension icon</label>
+    <select id="projectViewerMode" aria-describedby="projectViewerModeHelp"><option value="tab">Open a separate viewer tab (default)</option><option value="inline">Open a viewer inside the repository page</option></select>
+    <p id="projectViewerModeHelp">Both choices start only when you click the icon. In-page viewing preserves the repository page and provides Close and Open in tab controls. Keep the signed-in repository tab open for private files.</p>
+    <p id="projectViewerModeStatus" role="status"></p>
+  </section>
   <section aria-label="Administrator controls"><h2>Administrator controls</h2><p id="managedPolicyStatus" role="status">Checking enforced policy…</p><p>Administrators can disable extension network access or provider writes. Local imported drawings and draft notes remain available. Browser-wide network restrictions must be configured separately.</p></section>
   <section>
     <h2>GitHub account</h2>
     <p>Account connection is optional and used for review comments, Issues and Discussions. Public and private project files load through your open repository website session without a review token. Saving a note never posts it automatically.</p>
     <label for="githubAccess">Connected review access (optional)</label>
     <select id="githubAccess" aria-describedby="scopeHelp"><option value="public_repo">Public review OAuth</option><option value="repo">Private review OAuth (broad legacy scope)</option></select>
-    <label><input id="githubProjectsAccess" type="checkbox"> Include GitHub Projects boards</label>
+    <label class="check-option"><input id="githubProjectsAccess" type="checkbox"> Include GitHub Projects boards</label>
     <p id="scopeHelp">Public access requests GitHub's <code>public_repo</code> scope. Tokens stay in this browser session.</p>
+    <div class="github-account-tools" role="group" aria-label="GitHub account actions">
     <button id="connectGitHub" type="button">Sign in with GitHub</button>
     <button id="clearToken" type="button" hidden>Sign out</button>
     <button id="resetAuth" type="button">Reset GitHub connection</button>
     <button id="cancelGitHub" type="button" hidden>Cancel sign-in</button>
+    </div>
     <p id="signinAvailability" role="status"></p>
     <div id="deviceInstructions" hidden>
       <p>Open <a id="verificationLink" href="https://github.com/login/device" target="_blank" rel="noopener noreferrer">GitHub device verification</a> and enter this code:</p>
@@ -42,10 +56,10 @@
     </div>
     <p id="deviceStatus" role="status" aria-live="polite"></p>
     <p id="tokenStatus" role="status" aria-live="polite"></p>
-    <label for="accessRepository">Check repository access</label>
+    <label for="accessRepository">Check connected review access</label>
     <input id="accessRepository" placeholder="owner/repository or https://github.com/owner/repository" autocomplete="off" spellcheck="false">
-    <button id="testRepositoryAccess" type="button">Test repository access</button>
-    <p id="repositoryAccessStatus" role="status" aria-live="polite">Checks the connected account and repository through GitHub's API. It does not publish or change files.</p>
+    <button id="testRepositoryAccess" type="button">Test review access</button>
+    <p id="repositoryAccessStatus" role="status" aria-live="polite">Checks review-account permissions through GitHub's API. Project viewing instead uses the repository tab's website session; this check is not required to view files.</p>
     <p>Tokens are encrypted with a temporary key held only in background memory. Sign out clears credentials and pending sign-in. A background restart, extension reload or browser restart requires sign-in again. Removing the extension clears its browser storage; it does not revoke GitHub authorization.</p>
     <p><a href="https://github.com/settings/applications" target="_blank" rel="noopener noreferrer">Manage or revoke GitHub app access</a> · <a href="https://github.com/settings/tokens" target="_blank" rel="noopener noreferrer">Manage manual tokens</a></p>
     <details id="advancedAuth"><summary>Advanced connection settings</summary>
@@ -67,11 +81,11 @@
     <label for="gitlabHost">GitLab server</label><select id="gitlabHost"><option value="https://gitlab.com">https://gitlab.com</option></select>
     <p>Private projects and issue posting use credentials for the selected server. GitHub credentials are never sent to GitLab. Review notes post only when you choose Publish.</p>
     <label for="gitlabNewHost">Add a self-hosted server (HTTPS origin)</label><input id="gitlabNewHost" type="url" placeholder="https://gitlab.example.com" autocomplete="off">
-    <button id="gitlabAddHost" type="button">Grant server access</button><button id="gitlabRemoveHost" type="button">Remove server</button>
+    <button id="gitlabAddHost" type="button">Add server</button><button id="gitlabRemoveHost" type="button">Remove server</button>
     <button id="gitlabOAuth" type="button">Sign in with GitLab</button><p>Use your normal GitLab account. Users do not need to register an application.</p>
     <details><summary>Advanced server connection</summary>
     <label for="gitlabToken">GitLab access token</label><input id="gitlabToken" type="password" autocomplete="new-password" spellcheck="false">
-    <p>Use an expiring token with access to your project. Reading needs <code>read_api</code>; posting issues and discussions needs <code>api</code>. Tokens use encrypted session storage and a background-memory key.</p>
+    <p>Use an expiring token with access to your project. Project viewing uses the open website session and needs no token. Connected issue/discussion review actions need <code>api</code>; provider scopes may cover more than comments. Tokens use encrypted session storage and a background-memory key.</p>
     <button id="gitlabSaveToken" type="button">Connect with token</button><button id="gitlabSignOut" type="button">Sign out of GitLab</button><button id="gitlabReset" type="button">Reset GitLab connection</button>
 
       <p>For server administrators: configure a non-confidential OAuth application with <code>api</code> scope and the exact browser redirect below. Publisher configuration is supplied with the build; users do not need to register their own application. Never enter a client secret.</p>

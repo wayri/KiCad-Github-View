@@ -35,3 +35,12 @@ test('nested folder without an injected content-script hint asks the worker to r
 test('partial empty inventory is distinct from no project and offers a cache-refresh retry',async()=>{
  const view=await ui({ok:true,result:{sha:'a'.repeat(40),projects:[],truncated:true,warnings:['Organization policy blocked an ancillary directory.']}});assert.equal(view.nodes.get('launchTitle').textContent,'Project discovery incomplete');assert.equal(view.nodes.get('launchRetry').hidden,false);assert.match(view.nodes.get('launchDetails').textContent,/Organization policy/);assert.equal(view.requests[0].refresh,false);await view.nodes.get('launchRetry').click();assert.equal(view.requests[1].refresh,true);
 });
+
+test('denied website reads offer local rendering without requesting account authorization',async()=>{
+ const view=await ui({ok:false,error:'Website access unavailable'});
+ const children=view.nodes.get('launchDetails').children;
+ assert.match(children.find(n=>n.className==='launch-access-help').textContent,/does not require GitHub\/GitLab app authorization/);
+ assert.match(children.find(n=>n.className==='launch-access-help').textContent,/organization permits downloads/);
+ assert.equal(children.find(n=>n.className==='launch-local-alternative').href,'moz-extension://test/local-viewer.html');
+ assert.deepEqual(view.requests.map(r=>r.type),['repository-detect']);
+});

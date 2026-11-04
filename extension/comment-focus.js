@@ -4,6 +4,19 @@ const KiCadCommentFocus = (() => {
   const coordinate = value => typeof value === 'number' && Number.isFinite(value) && Math.abs(value) <= 1e6;
   const point = value => value && coordinate(value.x) && coordinate(value.y);
 
+  function areaCorners(area){
+    if(!area||![area.x,area.y,area.width,area.height].every(coordinate)||area.width<=0||area.height<=0||!coordinate(area.x+area.width)||!coordinate(area.y+area.height))return null;
+    return [{x:area.x,y:area.y},{x:area.x+area.width,y:area.y},{x:area.x+area.width,y:area.y+area.height},{x:area.x,y:area.y+area.height}];
+  }
+  function anchorPosition(anchor){
+    if(point(anchor?.position))return {x:anchor.position.x,y:anchor.position.y};
+    const corners=areaCorners(anchor?.area);return corners?{x:(corners[0].x+corners[2].x)/2,y:(corners[0].y+corners[2].y)/2}:null;
+  }
+  function projectArea(area,project){
+    const corners=areaCorners(area);if(!corners||typeof project!=='function')return null;
+    const pixels=corners.map(project);return pixels.every(p=>p&&Number.isFinite(p.x)&&Number.isFinite(p.y)&&p.visible!==false)?pixels:null;
+  }
+
   function viewBox(position, bounds, options = {}) {
     const {width, height, pcb = false} = options || {};
     if (!point(position) || !coordinate(width) || !coordinate(height) || width <= 0 || height <= 0) return null;
@@ -97,7 +110,7 @@ const KiCadCommentFocus = (() => {
     }
     return {show, refresh, hide, dispose};
   }
-  return {viewBox, create};
+  return {viewBox, create,areaCorners,anchorPosition,projectArea};
 })();
 if (typeof globalThis === 'object') globalThis.KiCadCommentFocus = KiCadCommentFocus;
 if (typeof module === 'object' && module.exports) module.exports = KiCadCommentFocus;

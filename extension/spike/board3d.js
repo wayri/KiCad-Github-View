@@ -37,7 +37,7 @@ import { createResultOverlay } from "./result3d.js";
 import { sourceZoneGeometry,drillLoopInsideBoard } from "./sourceGeometry.mjs";
 import { padSourceDetails } from "./padGeometry.mjs";
 import {sourceSelectionRecords} from './sourceSelection.mjs';
-import {drillWallGeometry,copperStrokeBatches,smoothPadOutline,smoothDrillOutline,outerCopperPlacement,substrateEnvelope,refineCopperTracks} from './copperGeometry.mjs';
+import {drillWallGeometry,copperStrokeBatches,smoothPadOutline,smoothDrillOutline,outerCopperPlacement,zoneSurfaceZ,substrateEnvelope,refineCopperTracks} from './copperGeometry.mjs';
 import {createProbeRegistry,createSharedProbeViewport} from './probeViewport.mjs';
 import {createTerminalAnnotations,createTerminalLabelController} from './terminalLabels.mjs';
 import { MeasurementSession,distanceLabel,snapProjectedEdges } from "./measurement3d.mjs";
@@ -356,7 +356,7 @@ export function mountBoard3D(container, source, options = {}) {
       });
       const mesh = new THREE.Mesh(new THREE.ShapeGeometry(zoneShape),
         new THREE.MeshStandardMaterial({ color,...studioMaterials.copper,side:THREE.DoubleSide,depthWrite:true,...copperDepthPolicy('zone') }));
-      mesh.position.z = layer==='F.Cu'?placement.base+placement.thickness-.0005:placement.base+.0005; mesh.userData.record = { ...zone, type: "Zone" };
+      mesh.position.z = zoneSurfaceZ(layer,placement); mesh.userData.record = { ...zone, type: "Zone" };
       groupFor(layer).add(mesh);visibilityRecord(mesh,'fills',layer); pickables.push(mesh);
       appearanceRecords.push({mesh,role:'zone',layer});
     }
@@ -369,7 +369,7 @@ export function mountBoard3D(container, source, options = {}) {
     const wallMaterial=viaMaterial.clone();wallMaterial.side=THREE.DoubleSide;
     // Render the saved bore wall, not a solid annulus through the dielectric.
     const mesh=makeInstanced(boardGroup,geometry,wallMaterial,batch.vias,(object,via)=>{const[x,y]=world(via.at);object.position.set(x,y,batch.span.zMin);},viewportSceneIdentity('via-barrel',batch.span.from+'-'+batch.span.to,key));if(mesh){visibilityRecord(mesh,'vias',batch.span.through?'through':batch.span.from+'-'+batch.span.to);pickables.push(mesh);}}
-  geometryDiagnostics.push('Outer copper uses saved plan centers/thickness (or the disclosed stackup fallback) with a 0.001 mm outward display offset; the substrate spans the outer copper inner faces. Saved zone fills are opaque zero-height display films 0.0005 mm below the outer copper face. Via bodies show the saved drill wall; plating thickness is not inferred.');
+  geometryDiagnostics.push('Outer copper uses saved plan centers/thickness (or the disclosed stackup fallback) with a 0.001 mm outward display offset; the substrate spans the outer copper inner faces. Saved zone fills are opaque zero-height display films inset by the smaller of 0.005 mm or one quarter of the copper thickness. Via bodies show the saved drill wall; plating thickness is not inferred.');
   // Surface annuli remain on the ordinary outer copper planes; blind/buried
   // barrel endpoints still follow their saved internal spans.
   for(const layer of ['F.Cu','B.Cu'])for(const [key,batch]of viaBatches){

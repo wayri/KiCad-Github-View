@@ -60,6 +60,13 @@ export function outerCopperPlacement(layer,boardDepth,copperThickness=.035,layer
  const sign=layer==='F.Cu'?1:-1,displayOffset=.001,sourceCenter=layerZ??sign*(boardDepth/2-copperThickness/2),center=sourceCenter+sign*displayOffset;
  return {center,sourceCenter,base:center-copperThickness/2,thickness:copperThickness,displayOffset};
 }
+/** Display-only zone surface; pad and component interfaces stay unchanged. */
+export function zoneSurfaceZ(layer,placement){
+ if(!['F.Cu','B.Cu'].includes(layer)||!finite(placement?.base)||!finite(placement?.thickness)||placement.thickness<=0)throw Error('Invalid zone display placement.');
+ // Separate overlapping zone films from exposed pad caps, within the foil.
+ const inset=Math.min(.005,placement.thickness/4);
+ return layer==='F.Cu'?placement.base+placement.thickness-inset:placement.base+inset;
+}
 /** Substrate envelope between the outer copper inner faces. Internal copper
  * remains embedded; this is not a separately meshed dielectric stack model. */
 export function substrateEnvelope(boardDepth,byLayer){

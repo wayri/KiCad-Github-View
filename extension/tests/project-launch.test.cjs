@@ -1,5 +1,13 @@
 const test=require('node:test'),assert=require('node:assert/strict');
 global.KiCadGitHub=require('../parsing.js');const launch=require('../project-launch.js');
+
+test('fabrication blob links open the dedicated saved-source viewer, including jobs and Excellon',()=>{
+ for(const file of ['fabrication/board.gbrjob','fabrication/board.drl','fabrication/board.xln','fabrication/board.xnc','fabrication/board.exc','fabrication/board.nc','fabrication/top.gbr']){
+  const sha='f'.repeat(40),info=launch.context('https://github.com/org/board/blob/'+sha+'/'+file,{repository:'org/board',file,head:sha});
+  assert.equal(info.kind,'drawing');const url=new URL(launch.viewerURL(info,file,p=>'chrome-extension://test/'+p));
+  assert.equal(url.pathname,'/gerber-viewer.html');assert.equal(url.searchParams.get('ref'),sha);assert.equal(url.searchParams.get('file'),file);
+ }
+});
 test('repository launch preserves root, branch, nested namespace and explicit blob identity',()=>{
  assert.equal(launch.context('https://github.com/owner/repo').ref,'HEAD');
  assert.equal(launch.context('https://github.com/owner/repo/tree/release/design/folder',{ref:'release/design'}).ref,'release/design');

@@ -93,3 +93,15 @@ test('retained fabrication fixture has a complete used-aperture and extent inven
  assert.equal(Object.values(l.objects).reduce((a,b)=>a+b,0),m.primitives.length);assert.ok(l.usedTools.length>0);assert.equal(l.usedTools.reduce((n,t)=>n+t.operations,0),m.primitives.filter(p=>/^[DT]\d+$/.test(p.reference||'')).length);
  assert.ok(l.metrics.envelopeArea>0);assert.equal(l.metrics.computedAreaOperations+l.metrics.omittedAreaOperations,m.primitives.length);
 });
+
+
+test('curved drill routes remain slots with tool diameter and path length, not drill hits or trace warnings',()=>{
+ const parsed=build('M48\nMETRIC\nT1C0.4\n%\nT1\nG00X0Y0\nM15\nG02X1Y1A1\nG03X1Y1I1J0\nM16\nM30','holes.xnc');
+ const a=analyze([{path:'holes.xnc',model:parsed}],{minTrack:1,minDrill:.5});
+ assert.equal(a.totals.drillSlots,2);assert.equal(a.totals.drillHits,0);assert.deepEqual(a.layers[0].drillDiameters,[{diameter:.4,count:2}]);close(a.layers[0].metrics.pathLength,Math.PI/2+2*Math.PI);assert.equal(a.diagnostics.filter(x=>x.code==='stroke-below-criterion').length,0);assert.equal(a.diagnostics.filter(x=>x.code==='drill-below-criterion').length,2);
+});
+
+test('job roles and bounded X2 object attribute examples are reported without inferring connectivity',()=>{
+ const primitives=Array.from({length:70},(_,i)=>({type:'circle',x:i,y:0,r:.1,fill:true,objectAttributes:{N:'NET'+i,C:'U1'}})),m=model(primitives);m.jobFile={fileFunction:'Copper,L2,Inr'};
+ const a=analyze([{path:'inner.gbr',model:m}]);assert.equal(a.layers[0].role.source,'job');assert.equal(a.layers[0].role.name,'Copper,L2,Inr');assert.equal(a.layers[0].objectAttributeExamples.length,64);assert.equal(a.layers[0].objectAttributeExamplesTruncated,true);assert.equal(a.layers[0].objectAttributeExamples[0].N,'NET0');
+});

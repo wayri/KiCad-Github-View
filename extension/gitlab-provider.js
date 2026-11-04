@@ -3,7 +3,7 @@
  * Public fallback omits credentials. Review/account APIs remain separate. */
 ((root) => {
   'use strict';
-  function forHost(host='https://gitlab.com',{sessionRead,signal}={}){
+  function forHost(host='https://gitlab.com',{sessionRead,signal,foregroundOnly=false}={}){
     const parsed=new URL(host);if(parsed.protocol!=='https:'||parsed.username||parsed.password||parsed.search||parsed.hash||parsed.pathname!=='/')throw new Error('Invalid GitLab host.');host=parsed.origin;
   const MIB=1024*1024, SHA=/^[a-f0-9]{40}$/i;
   const validRepository=value=>typeof value==='string'&&value.length<=300&&/^[A-Za-z0-9_.-]+(?:\/[A-Za-z0-9_.-]+)+$/.test(value)&&value.split('/').every(p=>p!=='.'&&p!=='..');
@@ -60,6 +60,7 @@
       try{const session=await readSession(target.href,limit);await permit();if(session){if(!(session.bytes instanceof Uint8Array)||session.bytes.byteLength>limit||typeof session.next!=='string'||session.next&&!/^[1-9][0-9]{0,3}$/.test(session.next)||!['','<next>; rel="next"'].includes(session.link))throw Object.assign(Error('Invalid or oversized GitLab website session response.'),{definitive:true});checkBytes(session.bytes,target);return session;}}
       catch(error){if(['GITLAB_SAML_REQUIRED','GITLAB_LOGIN_REQUIRED','GITLAB_UNEXPECTED_HTML'].includes(error?.code))throw contentError(error.code);if(signal?.aborted||error?.code==='MANAGED_POLICY'||error?.definitive)throw error;sessionFailure=error;}
     }
+    if(foregroundOnly)throw sessionFailure||Object.assign(Error('Open this GitLab repository in the same signed-in browser profile and click the extension icon again. Project files are read only through that website tab.'),{code:'GITLAB_LOGIN_REQUIRED',definitive:true});
     await permit();const controller=new AbortController(),abort=()=>controller.abort(),timer=setTimeout(()=>controller.abort(),60000);
     signal?.addEventListener('abort',abort,{once:true});
     try{

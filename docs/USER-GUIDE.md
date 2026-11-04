@@ -220,6 +220,15 @@ viewer and project preview retain their left file tree; narrow screens can hide
 it with the file/menu control. Explicit hide/show preferences are preserved.
 
 **All sheets** displays pages on one pan-and-zoom canvas with names above them.
+Pages are organized as a hierarchy tree, with parents above their children and
+branches spaced apart. Reused sheets retain their stacked instance identities;
+unresolved ancestry remains visible without inventing parent relationships.
+
+The compact **Sheet tree** box at the bottom of the schematic viewer provides an
+interactive overview. Click a node to focus that page in All sheets, or navigate
+to it from a single-sheet view. Blue marks the current sheet; gold marks sheets
+containing the highlighted net. Use **−** to minimize or **×** to close it. Reopen
+it through the spanner **More tools → Setup → Show sheet tree**.
 Select a part or net, or double-click a sheet to enter it. Reused files retain
 their placement stack. **Hierarchy links** and **Net links** can be toggled
 independently. Relationship paths use the page gutters rather than running

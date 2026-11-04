@@ -54,3 +54,4 @@ body[data-ui-theme=light] .project-warnings{color:#8c551b}
 .project-app.focus-drawing .project-details-menu{display:none}.project-app.project-home #overviewContent{display:block}.project-app #drawingPreview[hidden]{display:none!important}
 
 .project-app.project-home .project-active{display:none}.project-app.project-home #projectStatus:empty{display:none}.project-app.project-home #overviewContent>h2{font-size:18px;margin:4px 0 8px}.project-app.project-home .project-home-tools{margin:8px 0 14px}.project-home-files button{display:flex;align-items:center;gap:8px}.project-home-files button::before{content:"";width:7px;height:7px;border-radius:2px;background:var(--accent);opacity:.75}
+.repository-local-help{display:block;margin:.5rem 0;max-width:70ch;font-size:.85em;opacity:.85}

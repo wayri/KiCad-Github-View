@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "KiCad Visual Review for GitHub and GitLab",
-  "version": "0.12.81",
+  "version": "0.12.82",
   "description": "Browser-only KiCad schematic and PCB review on GitHub, GitLab.com and configured GitLab servers, with issue comments.",
   "host_permissions": [],
   "background": {
@@ -12,7 +12,19 @@
     "managed_schema": "managed-policy-schema.json"
   },
   "content_scripts": [],
-  "web_accessible_resources": [],
+  "web_accessible_resources": [
+    {
+      "resources": [
+        "project-launcher.html",
+        "project-viewer.html",
+        "browser-viewer.html",
+        "gerber-viewer.html"
+      ],
+      "matches": [
+        "https://*/*"
+      ]
+    }
+  ],
   "action": {
     "default_title": "KiCad Visual Review",
     "default_icon": {

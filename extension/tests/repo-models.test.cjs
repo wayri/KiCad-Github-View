@@ -26,6 +26,15 @@ test('resolves only same-repository model references', () => {
   }
 });
 
+test('literal hash model names resolve from saved paths and repository inventory', () => {
+  const path='local/part/IC#PBF.STEP';
+  assert.equal(resolveModelPath('board.kicad_pcb', '${KIPRJMOD}/'+path),path);
+  const source='(kicad_pcb (footprint "Demo" (layer "F.Cu") (at 0 0) (property "Reference" "U1") (model "${KIPRJMOD}/'+path+'")))';
+  const result=collect(source,'board.kicad_pcb',undefined,[path]);
+  assert.equal(result.models.length,1);assert.equal(result.models[0].path,path);assert.deepEqual(result.diagnostics,[]);
+  assert.equal(resolveModelPath('board.kicad_pcb','local/part/IC%23PBF.STEP'),null);
+});
+
 test('collects every supported model with per-model transforms and footprint side', () => {
   const { models, diagnostics } = collect(board, 'hardware/board.kicad_pcb');
   assert.equal(models.length, 4);

@@ -116,6 +116,7 @@ const KiCadReviewComments = (() => {
   }
   function normalizeAnchor(anchor) {
     const result = normalizeScope(anchor);
+    if(anchor.side!==undefined){if(!['front','back'].includes(anchor.side))throw new Error('Invalid comment board side.');result.side=anchor.side;}
     for (const [name, limit] of [["uuid", 200], ["objectId", 200], ["reference", 100], ["netName", 500], ["kind", 80], ["variant", 100], ["sheetUuid", 200], ["sheetName", 500], ["instancePath", 2000]]) {
       const value = optional(anchor[name], name, limit);
       if (value !== undefined) result[name] = value;

@@ -12,7 +12,7 @@ test('overlapping copper has deterministic depth precedence on both board faces'
  }
  for(const bad of ['unknown','toString','constructor'])assert.throws(()=>copperDepthPolicy(bad),/Unknown/);
 });
-test('millimetre board clipping keeps sub-micron depth resolution at board-scale distances',async()=>{
+test('millimetre board clipping bounds relative depth error at board-scale distances',async()=>{
  const {boardClipRange}=await quality();
  for(const [distance,radius] of [[2,1],[20,10],[200,100],[2000,1000]]){
   const {near,far}=boardClipRange(distance,radius);assert.ok(near>0&&far>near);assert.ok(far>distance+radius);
@@ -22,4 +22,24 @@ test('millimetre board clipping keeps sub-micron depth resolution at board-scale
   assert.ok(far/near<2000);
  }
  for(const bad of [NaN,Infinity,-1,0]){const clip=boardClipRange(bad,bad);assert.ok(clip.near>0&&clip.far>clip.near);}
+});
+test('zone films stay inside both copper faces and separate exposed caps at board scale',async()=>{
+ const {outerCopperPlacement,zoneSurfaceZ}=await import('../spike/copperGeometry.mjs');
+ const {boardClipRange}=await quality();
+ for(const thickness of [.001,.018,.035,.07])for(const layer of ['F.Cu','B.Cu']){
+  const placement=outerCopperPlacement(layer,1.6,thickness),before={...placement};
+  const z=zoneSurfaceZ(layer,placement),outer=layer==='F.Cu'?placement.base+thickness:placement.base;
+  assert.ok(z>placement.base&&z<placement.base+thickness);
+  assert.ok(Math.abs(z-outer)<=thickness/4+1e-12);
+  assert.deepEqual(placement,before);
+  if(thickness>=.018){
+   const {near,far}=boardClipRange(200,150),depth=350;
+   const step=depth**2*(far-near)/(far*near*(2**24-1));
+   assert.ok(Math.abs(z-outer)>6*step,'film must exceed six depth units at far board edge');
+   // A shallow ray increases view-depth separation between parallel planes.
+   for(const normalDotRay of [1,.5,.1])assert.ok(Math.abs(z-outer)/normalDotRay>6*step);
+  }
+ }
+ for(const layer of ['F.Cu','B.Cu'])for(const thickness of [0,-1,NaN,Infinity])assert.throws(()=>zoneSurfaceZ(layer,{base:0,thickness}),/Invalid/);
+ assert.throws(()=>zoneSurfaceZ('In1.Cu',{base:0,thickness:.035}),/Invalid/);
 });

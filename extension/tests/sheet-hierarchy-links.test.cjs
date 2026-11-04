@@ -20,7 +20,8 @@ test('saved ancestry draws directional page-edge links with exact parent and chi
     ['root.kicad_sch', 'child.kicad_sch', 'Controller'],
     ['child.kicad_sch', 'leaf.kicad_sch', 'Power']]);
   const first = graph.links[0];
-  assert.ok(first.from.x < first.to.x);
+  assert.equal(first.from.x, first.to.x);
+  assert.ok(first.from.y < first.to.y, 'tree connectors point from a parent down to its child');
   assert.equal(first.count, 1);
   assert.deepEqual(first.parentIds, [JSON.stringify(['root.kicad_sch'])]);
   assert.equal(first.childIds.length, 1);

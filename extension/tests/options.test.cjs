@@ -4,7 +4,7 @@ const vm = require('node:vm');
 const fs = require('node:fs');
 const path = require('node:path');
 
-function optionsHarness(respond, protocol = 'chrome-extension:', permission = true) {
+function optionsHarness(respond, protocol = 'chrome-extension:', permission = true, viewerOptions = false) {
   const elements = new Map();
   for (const id of ['token', 'tokenStatus', 'saveToken', 'clearToken', 'resetAuth', 'clientId',
     'connectGitHub', 'cancelGitHub', 'deviceInstructions', 'deviceCode', 'verificationLink', 'deviceStatus', 'githubAccess', 'scopeHelp', 'signinAvailability',
@@ -13,6 +13,7 @@ function optionsHarness(respond, protocol = 'chrome-extension:', permission = tr
       setAttribute(name,value) {this.attributes.set(name,value);},
       addEventListener(type, fn) { this.listeners.set(type, fn); } });
   }
+  if(viewerOptions)for(const id of ['projectViewerMode','projectViewerModeStatus'])elements.set(id,{value:'',textContent:'',disabled:false,listeners:new Map(),addEventListener(type,fn){this.listeners.set(type,fn);}});
   const permissions = [], requests = [], timers = [], windowEvents = new Map(), documentEvents = new Map();
   let storageListener;
   const context = { URL, location: { protocol }, document: { getElementById: (id) => elements.get(id),
@@ -175,3 +176,16 @@ test('unconfigured release explains publisher setup and advanced fields are coll
 
 
 test('GitHub commenting site grants are opt-in and denial never starts account authorization',async()=>{const h=optionsHarness(undefined,'chrome-extension:',false);await new Promise(setImmediate);assert.equal(h.permissions.length,0);await h.elements.get('connectGitHub').listeners.get('click')();assert.equal(h.permissions.length,1);assert.equal(h.requests.some(m=>m.type==='github-device-start'),false);assert.match(h.elements.get('deviceStatus').textContent,/viewing remains available/);});
+
+test('viewer mode defaults to a separate tab and saves inline only after an explicit choice', async()=>{
+ const h=optionsHarness(request=>request.type==='viewer-preferences-get'?{}:request.type==='viewer-preferences-set'?{mode:request.mode}:request.type==='github-auth-status'?{configured:false}:{active:false},'chrome-extension:',true,true);
+ await new Promise(setImmediate);const mode=h.elements.get('projectViewerMode'),status=h.elements.get('projectViewerModeStatus');assert.equal(mode.value,'tab');assert.equal(mode.disabled,false);assert.equal(h.requests.some(r=>r.type==='viewer-preferences-set'),false);
+ mode.value='inline';await mode.listeners.get('change')();assert.equal(h.requests.at(-1).type,'viewer-preferences-set');assert.equal(h.requests.at(-1).mode,'inline');assert.match(status.textContent,/in-page viewer/);assert.equal(h.permissions.length,0);
+ mode.value='tab';await mode.listeners.get('change')();assert.match(status.textContent,/separate viewer tab/);
+ mode.value='unsafe';const before=h.requests.length;await mode.listeners.get('change')();assert.equal(h.requests.length,before);assert.match(status.textContent,/supported viewer mode/);
+});
+test('viewer mode settings explain save failure and are unavailable in a website preview',async()=>{
+ const h=optionsHarness(request=>{if(request.type==='viewer-preferences-get')return{mode:'inline'};if(request.type==='viewer-preferences-set')throw Error('Settings unavailable');return request.type==='github-auth-status'?{configured:false}:{active:false};},'chrome-extension:',true,true);await new Promise(setImmediate);const mode=h.elements.get('projectViewerMode');assert.equal(mode.value,'inline');mode.value='tab';await mode.listeners.get('change')();assert.equal(mode.disabled,false);assert.match(h.elements.get('projectViewerModeStatus').textContent,/Settings unavailable/);
+ const local=optionsHarness(undefined,'https:',true,true);await new Promise(setImmediate);assert.equal(local.elements.get('projectViewerMode').disabled,true);assert.equal(local.requests.some(r=>r.type==='viewer-preferences-get'),false);assert.match(local.elements.get('projectViewerModeStatus').textContent,/installed extension/);
+ const html=fs.readFileSync(path.join(__dirname,'../options.html'),'utf8');assert.match(html,/value="tab">Open a separate viewer tab \(default\)/);assert.match(html,/value="inline">Open a viewer inside the repository page/);
+});

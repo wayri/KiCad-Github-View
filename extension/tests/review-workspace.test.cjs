@@ -1481,6 +1481,49 @@ test('new schematic notes persist the native root sheet UUID with exact source m
  const uuid='11111111-2222-3333-4444-555555555555';let saved;const view=workspaceRuntime(async m=>{if(m.type==='comment-save'){saved=m.comment;return saved;}return[];},{pcb:false,files:[{path:'root.kicad_sch',content:`(kicad_sch (uuid "${uuid}") (paper "A4"))`}]});view.load();view.get('newComment').click();view.get('commentText').value='Root sheet note';await view.get('saveComment').click();assert.equal(saved.anchor.sheetUuid,uuid);assert.equal(saved.anchor.sheetName,'root.kicad_sch');assert.equal(saved.anchor.file,'root.kicad_sch');view.workspace.dispose();
 });
 
+test('targeted annotation refresh updates and deletes only that Issue while retaining other Issue markers',async()=>{
+ const scope={repository:'wayri/fixture',ref:'main',file:'board.kicad_pcb'},at='2026-11-01T00:00:00Z',makeNote=(id,number)=>({id,text:id,createdAt:at,anchor:{...scope,position:{x:30,y:40}},github:{source:'issue-comment',number,url:`https://github.com/wayri/fixture/issues/${number}#issuecomment-${number}`,state:'open',author:'alice'}}),a=makeNote('issue-a',51),b=makeNote('issue-b',52);
+ let result={notes:[a,b],warnings:[]};const view=workspaceRuntime(async m=>m.type==='github-annotations'?result:[]);view.load();await view.get('refreshGitHub').click();
+ const ids=()=>view.get('commentPins').children.map(n=>n.attributes['data-note-id']).sort();assert.deepEqual(ids(),['issue-a','issue-b']);
+ result={notes:[{...a,text:'Updated issue A'}],warnings:[],coverage:{kind:'thread',url:'https://github.com/wayri/fixture/issues/51'}};await view.get('refreshGitHub').click();assert.deepEqual(ids(),['issue-a','issue-b']);assert.match(view.get('commentList').textContent,/Updated issue A/);
+ result={...result,notes:[]};await view.get('refreshGitHub').click();assert.deepEqual(ids(),['issue-b']);
+ result={notes:[],warnings:['Incomplete annotation scan']};await view.get('refreshGitHub').click();assert.deepEqual(ids(),['issue-b']);view.workspace.dispose();
+});
+
+test('3D Locate respects the saved back side even without a matching component',()=>{
+ const chat=captureChat(),view=workspaceRuntime(undefined,{chatPanel:chat.panel});view.load();const calls=[];
+ view.workspace.setScene({setPopulation(){},setSelection(){},focusPosition(position,options){calls.push({position,options});return true;},projectAnchor(){return{x:100,y:100};}});
+ assert.equal(chat.options.onLocate({...chat.options.getScope(),position:{x:30,y:40},side:'back'}),true);
+ assert.equal(calls[0].options.side,'back');view.workspace.dispose();
+});
+
+test('a website snapshot missing older comments retains their known drawing areas until a complete read',async()=>{
+ const comments=require('../review-comments.js'),chat=captureChat(),scope={repository:'wayri/fixture',ref:'main',file:'board.kicad_pcb'},note={id:'retained-area',text:'Known remote area',createdAt:'2026-11-01T00:00:00Z',anchor:{...scope,area:{x:25,y:35,width:10,height:10}}};
+ let body=comments.toMarkdown(note),warnings=[];const view=workspaceRuntime(async m=>m.type==='github-thread-read'?{kind:'issue',number:51,state:'open',url:'https://github.com/wayri/fixture/issues/51',body,comments:[],warnings}:[],{chatPanel:chat.panel});view.load();await chat.options.onRead('issue',51);assert.equal(view.get('commentPins').children.length,1);
+ body='Description without locations';warnings=['Some issue comments were not included in the website snapshot.'];await chat.options.onRead('issue',51);assert.equal(view.get('commentPins').children.length,1);
+ warnings=[];await chat.options.onRead('issue',51);assert.equal(view.get('commentPins').children.length,0);view.workspace.dispose();
+});
+
+test('GitHub area readback projects all four PCB corners in 3D and follows camera changes without changing source anchors',async()=>{
+ const chat=captureChat(),comments=require('../review-comments.js'),scope={repository:'wayri/fixture',ref:'main',file:'board.kicad_pcb'},createdAt='2026-11-01T00:00:00Z';
+ const note={id:'area-3d',text:'Back-side review area',createdAt,anchor:{...scope,uuid:'fp',side:'back',position:{x:26,y:36},area:{x:25,y:35,width:10,height:10}}};
+ const thread={kind:'issue',number:51,title:'Area',state:'open',url:'https://github.com/wayri/fixture/issues/51',body:comments.toMarkdown(note),comments:[],capabilities:{create:true}};
+ const view=workspaceRuntime(async m=>m.type==='github-thread-read'?thread:[],{chatPanel:chat.panel});view.load();await chat.options.onRead('issue',51);
+ let offset=0;const calls=[];view.workspace.setScene({setPopulation(){},setSelection(){},projectAnchor(a){calls.push(JSON.parse(JSON.stringify(a)));return a.position?{x:a.position.x*2+offset,y:a.position.y*3}:null;}});view.workspace.draw();
+ let area=view.get('reviewOverlay').children.find(n=>n.attributes['data-note-id']==='area-3d');assert.ok(area);assert.equal(area.tagName.toLowerCase(),'polygon');assert.equal(area.attributes.points.split(' ').length,4);
+ assert.ok(calls.some(a=>a.clip===false&&a.side==='back'&&a.position.x===35&&a.position.y===45));
+ const pin=view.get('commentPins').children.find(n=>n.attributes['data-note-id']==='area-3d');assert.ok(pin);assert.ok(calls.some(a=>a.position?.x===26&&a.position?.y===36&&!a.uuid));
+ const before=area.attributes.points;offset=50;view.workspace.sceneViewChanged();area=view.get('reviewOverlay').children.find(n=>n.attributes['data-note-id']==='area-3d');assert.notEqual(area.attributes.points,before);
+ assert.equal(note.anchor.position.x,26);view.get('commentList').querySelectorAll=()=>[];let reopened=0;chat.options.onRead=()=>{reopened++;};await pin.click();assert.equal(view.get('commentStatus').textContent,note.text);view.workspace.dispose();
+});
+
+test('area-only GitHub annotations create pins and never place another file or revision on the active drawing',async()=>{
+ const comments=require('../review-comments.js'),scope={repository:'wayri/fixture',ref:'main',file:'board.kicad_pcb'},createdAt='2026-11-01T00:00:00Z',chat=captureChat();
+ const notes=[{id:'area-only',text:'Native area',createdAt,anchor:{...scope,area:{x:25,y:35,width:10,height:10}}},{id:'foreign-file',text:'Other sheet',createdAt,anchor:{...scope,file:'other.kicad_sch',position:{x:30,y:40}}},{id:'foreign-ref',text:'Other revision',createdAt,anchor:{...scope,ref:'other',position:{x:30,y:40}}}];
+ const view=workspaceRuntime(async m=>m.type==='github-thread-read'?{kind:'issue',state:'open',number:51,url:'https://github.com/wayri/fixture/issues/51',body:notes.map(n=>comments.toMarkdown(n)).join('\n'),comments:[]}:[],{chatPanel:chat.panel});view.load();await chat.options.onRead('issue',51);
+ const ids=view.get('commentPins').children.map(n=>n.attributes['data-note-id']);assert.deepEqual(ids,['area-only']);assert.ok(view.get('reviewOverlay').children.some(n=>n.attributes['data-note-id']==='area-only'&&n.tagName.toLowerCase()==='polygon'));view.workspace.dispose();
+});
+
 
 test('3D part, net and terminal Locate focus saved source geometry only and ordinary picks never move camera',()=>{
  const view=workspaceRuntime();view.load();const calls=[],cameraBefore=JSON.stringify(view.canvas.viewport.camera.bbox);view.canvas.primitives.push(
@@ -1532,4 +1575,25 @@ test('D opens only a selected component safe datasheet; C anchors selection; R r
  view.key('c');assert.match(view.get('commentAnchor').textContent,/R1/);
  const turns=[];view.canvas.rotateDegrees=n=>turns.push(n);view.key('r');view.key('R',{shiftKey:true});view.get('rotateViewCW').click();view.get('rotateViewCCW').click();assert.deepEqual(turns,[15,-15,15,-15]);view.key('r',{composedPath:()=>[{isContentEditable:true}]});assert.equal(turns.length,4);
  const rotations=[];view.workspace.setScene({setPopulation(){},setSelection(){},rotate:d=>rotations.push(d)});view.key('r');view.key('R',{shiftKey:true});assert.deepEqual(rotations,[15,-15]);view.workspace.dispose();
+});
+
+test('website handoff saves signed-out draft and opens only an explicit manual website link',async()=>{
+ const calls=[];let notes=[];const C=require('../review-comments.js');const view=workspaceRuntime(async m=>{calls.push(m);if(m.type==='comment-list')return notes;if(m.type==='comment-policy-status')return{allowed:false,reason:'Signed out'};if(m.type==='comment-save'){notes=[m.comment];return m.comment;}if(m.type==='open-comment-draft')return{url:'https://github.com/wayri/fixture/issues/new?title=Review',body:C.toMarkdown(m.comment),prefilled:true};return[];},{unacceptedRules:true});view.load();await new Promise(setImmediate);
+ view.get('newComment').click();view.get('commentText').value='Manual website review @reviewer';const before=calls.length;await view.get('commentWebsiteHandoff').click();
+ assert.deepEqual(calls.slice(before).map(m=>m.type),['comment-save','open-comment-draft']);assert.equal(notes.length,1);assert.equal(notes[0].text,'Manual website review @reviewer');assert.equal(notes[0].remoteRefs.length,0);assert.equal(view.get('commentWebsiteReview').open,true);assert.equal(view.get('commentPostReview').open,undefined);assert.equal(view.receipts.has('kivi:content-rules'),false);
+ assert.equal(calls.filter(m=>m.type==='open-comment-draft').length,1);const prepared=calls.find(m=>m.type==='open-comment-draft');assert.equal(prepared.websiteHandoff,true);assert.equal(prepared.destination,'issue');assert.ok(calls.findIndex(m=>m.type==='comment-save')<calls.findIndex(m=>m.type==='open-comment-draft'));
+ assert.match(view.get('websiteCommentMarkdown').value,/kicad-review:v1/);assert.match(view.get('websiteCommentStatus').textContent,/Nothing has been posted/);assert.match(view.get('websiteCommentStatus').textContent,/not uploaded/);assert.match(view.get('websiteCommentStatus').textContent,/sync still require provider API access/);assert.equal(view.get('openWebsiteComment').target,'_blank');assert.equal(view.get('openWebsiteComment').rel,'noopener noreferrer');
+ await view.get('copyWebsiteComment').click();assert.match(view.get('websiteCommentStatus').textContent,/Select and copy/);assert.equal(calls.some(m=>/publish|chat-post|auth/.test(m.type)),false);
+});
+test('website handoff rejects unsaved drafts and unexpected destination links',async()=>{
+ for(const failure of ['save','url']){const calls=[];const view=workspaceRuntime(async m=>{calls.push(m);if(m.type==='comment-save'&&failure==='save')throw Error('Local storage unavailable');if(m.type==='open-comment-draft')return{url:'https://evil.example/wayri/fixture/issues/new',body:'text',prefilled:false};return[];});view.load();view.get('newComment').click();view.get('commentText').value='Keep draft';await view.get('commentWebsiteHandoff').click();assert.equal(view.get('commentWebsiteReview').open,undefined);assert.match(view.get('commentStatus').textContent,failure==='save'?/Local storage unavailable/:/Unexpected website/);assert.equal(calls.some(m=>m.type==='open-comment-draft'),failure!=='save');assert.equal(view.get('commentEditor').hidden,false);}
+});
+test('website handoff does not attach a delayed preparation to a different editor',async()=>{
+ let finish;const pending=new Promise(resolve=>finish=resolve);const view=workspaceRuntime(async m=>{if(m.type==='open-comment-draft')return pending;return[];});view.load();view.get('newComment').click();view.get('commentText').value='Original';const handoff=view.get('commentWebsiteHandoff').click();await new Promise(setImmediate);view.get('cancelComment').click();view.get('newComment').click();view.get('commentText').value='Replacement';finish({url:'https://github.com/wayri/fixture/issues/new',body:'Original',prefilled:false});await handoff;assert.equal(view.get('commentWebsiteReview').open,undefined);assert.equal(view.get('commentText').value,'Replacement');assert.match(view.get('commentStatus').textContent,/draft changed/);
+});
+
+test('website handoff stays hidden in connected native viewers without changing direct publication',async()=>{
+ for(const hooks of [{vscode:{collaboration:{provider:'github',repository:'wayri/fixture',ref:'main'}}},{android:true,androidOnline:true}]){
+  const calls=[];let notes=[];const view=workspaceRuntime(async m=>{calls.push(m);if(m.type==='comment-save'){notes=[m.comment];return m.comment;}if(m.type==='comment-list')return notes;return[];},hooks);view.load();view.get('newComment').click();view.get('commentText').value='Native draft';assert.equal(view.get('commentWebsiteHandoff').hidden,true);assert.equal(view.get('commentPublishSettings').hidden,false);const before=calls.length;await view.get('commentWebsiteHandoff').click();assert.equal(calls.length,before);await view.get('saveComment').click();const cardAction=descendants(view.get('commentList')).find(n=>n.className==='github-draft-action');assert.ok(cardAction);assert.equal(cardAction.hidden,true);
+ }
 });

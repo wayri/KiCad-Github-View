@@ -144,3 +144,11 @@ test('failed inventory retains an explicit commit without claiming its branch is
  const sha='c'.repeat(40),view=runtime(async()=> '{}',null,'Website HTTP404',{ref:sha});await tick();
  assert.match(view.get('inventoryNote').textContent,/requested commit is retained/);assert.doesNotMatch(view.get('inventoryNote').textContent,/not been pinned/);assert.equal(view.requests.find(r=>r.type==='project-file').ref,sha);assert.equal(view.get('projectRevision').textContent,sha);
 });
+
+test('failed repository files offer local folder rendering without connecting a review account',async()=>{
+ const view=runtime(async()=>{throw Error('Website access unavailable');});await tick();
+ assert.match(view.get('projectStatus').textContent,/needs no GitHub\/GitLab app authorization/);
+ assert.equal(view.get('projectStatus').children.find(n=>n.href).href,'local-viewer.html');
+ assert.ok(view.requests.every(r=>['project-inventory','project-file'].includes(r.type)));
+ const native=runtime(async()=>{throw Error('Unavailable');},null,null,{vscode:true});await tick();assert.equal(native.get('projectStatus').children.some(n=>n.href),false);
+});

@@ -48,7 +48,7 @@ test('decimal Excellon drill tools, coordinates and modal axes',()=>{
 test('integer drills require explicit format and slots never silently disappear',()=>{
  const d=build('M48\n;FILE_FORMAT=3:3\nMETRIC,TZ\nT01C0.8\n%\nT01\nX2500Y3500\nM30','board.drl');assert.equal(d.primitives[0].x,2.5);
  assert.throws(()=>build('M48\nMETRIC\nT01C0.8\n%\nT01\nX2500Y3500\nM30','board.drl'),/explicit/);
- assert.throws(()=>build('M48\nMETRIC\nT01C0.8\n%\nT01\nG85X2.5Y3.5\nM30','board.drl'),/slots/);
+ assert.throws(()=>build('M48\nMETRIC\nT01C0.8\n%\nT01\nG85X2.5Y3.5\nM30','board.drl'),/slot requires a known start/);
 });
 
 
@@ -56,4 +56,45 @@ test('retained KiCad 10.0.6 exports retain native outline and pad landmarks',()=
  const fs=require('node:fs'),path=require('node:path'),renderer=require('../gerber-renderer.js'),bounds=require('../owned-canvas.js').bounds;
  const folder=path.join(__dirname,'fixtures/gerbers'),outline=renderer.build(fs.readFileSync(path.join(folder,'sensor-Edge_Cuts.gbr'),'utf8'),'sensor-Edge_Cuts.gbr');assert.deepEqual(outline.warnings,[]);assert.equal(outline.primitives.length,4);const box=bounds(outline.primitives);assert.ok(Math.abs(box.x-79.95)<1e-8);assert.ok(Math.abs(box.y-64.95)<1e-8);assert.ok(Math.abs(box.w-70.1)<1e-8);assert.ok(Math.abs(box.h-50.1)<1e-8);
  const copper=renderer.build(fs.readFileSync(path.join(folder,'sensor-F_Cu.gbr'),'utf8'),'sensor-F_Cu.gbr');assert.deepEqual(copper.warnings,[]);assert.ok(copper.primitives.some(p=>p.type==='circle'&&Math.abs(p.x-95)<1e-8&&Math.abs(p.y-84)<1e-8));
+});
+
+
+test('G85 slots and XNC routed line preserve physical tool width and source positions',()=>{
+ const slot=build('M48\nMETRIC\nT01C0.8\n%\nT01\nX1.0Y2.0G85X4.0Y2.0\nM30','board.exc');
+ assert.equal(slot.primitives.length,1);assert.equal(slot.primitives[0].type,'line');assert.equal(slot.primitives[0].width,.8);assert.deepEqual(slot.primitives[0].points,[{x:1,y:-2},{x:4,y:-2}]);
+ const route=build('M48\nMETRIC\nT01C0.8\n%\nT01\nG00X1Y2\nM15\nG01X4Y2\nM16\nG05\nX8Y9\nM30','board.xnc');
+ assert.deepEqual(route.primitives.map(p=>p.type),['line','circle']);assert.equal(route.primitives[1].x,8);assert.equal(route.primitives[0].sourceLine,8);
+ assert.throws(()=>build('M48\nMETRIC\nT01C1\n%\nT01\nG01X1.0Y2.0\nM30','bad.drl'),/requires G00/);
+});
+
+test('Gerber jobs resolve only bounded relative nonrecursive declared layer paths',()=>{
+ const {parseJob,isFabricationPath}=require('../gerber-renderer.js');
+ const job=parseJob(JSON.stringify({FilesAttributes:[{Path:'./top.gtl',FileFunction:'Copper,L1,Top'},{Path:'holes.xnc'}],GeneralSpecs:{LayerNumber:2}}),'fab/board.gbrjob');
+ assert.deepEqual(job.files.map(f=>f.path),['fab/top.gtl','fab/holes.xnc']);assert.equal(job.files[0].fileFunction,'Copper,L1,Top');assert.equal(job.metadata.GeneralSpecs.LayerNumber,2);assert.equal(job.readOnly,true);
+ for(const name of ['../secret','https://evil/x','/abs','a\\b','foo.gbrjob','a%2fb.gbr'])assert.throws(()=>parseJob(JSON.stringify({FilesAttributes:[{Path:name}]}),'fab/board.gbrjob'),/Unsafe/);
+ assert.throws(()=>parseJob(JSON.stringify({FilesAttributes:[{Path:'a.gbr'},{Path:'a.gbr'}]})),/Duplicate/);
+ assert.equal(build('{"FilesAttributes":[]}','empty.gbrjob').kind,'gerber-job');for(const path of ['board.xnc','board.exc','board.nc','board.gbrjob'])assert.equal(isFabricationPath(path),true);
+});
+
+
+test('X2 file, aperture and object attributes retain their correct modal scope',()=>{
+ const d=build('%FSLAX24Y24*%%MOMM*%%TF.FileFunction,Copper,L1,Top*%%TA.AperFunction,ComponentPad*%%ADD10C,1*%%TD*%D10*%TO.N,+3V3*%%TO.C,U1*%%TO.P,U1,4*%X0Y0D03*%TD.N*%X10000Y0D03*M02*','board.gbr');
+ assert.equal(d.format,'gerber-x2');assert.equal(d.attributes.FileFunction,'Copper,L1,Top');assert.equal(d.primitives[0].apertureAttributes.AperFunction,'ComponentPad');assert.equal(d.primitives[0].objectAttributes.N,'+3V3');assert.equal(d.primitives[0].objectAttributes.P,'U1,4');assert.equal(d.primitives[1].objectAttributes.N,undefined);assert.equal(d.primitives[1].objectAttributes.C,'U1');assert.equal(d.primitives[0].objectAttributes.N,'+3V3');
+ assert.throws(()=>layer('%TO.N,'+'x'.repeat(2049)+'*%X0Y0D03*'),/oversized/);
+});
+
+test('routed CW/CCW arcs use source radius and I/J offsets, including full circles',()=>{
+ const setup='M48\nMETRIC\nT01C0.8\n%\nT01\nG00X0Y0\nM15\n',end='\nM16\nM30';
+ const cw=build(setup+'G02X1Y1A1'+end,'board.xnc').primitives[0];assert.equal(cw.type,'arc');assert.ok(Math.abs(cw.mid.x-(1-Math.SQRT1_2))<1e-9);assert.ok(Math.abs(cw.mid.y+Math.SQRT1_2)<1e-9);
+ const ccw=build(setup+'G03X1Y1A1'+end,'board.xnc').primitives[0];assert.ok(Math.abs(ccw.mid.x-Math.SQRT1_2)<1e-9);assert.ok(Math.abs(ccw.mid.y+(1-Math.SQRT1_2))<1e-9);
+ const offsets=build(setup+'G02X1Y1I1J0'+end,'board.xnc').primitives[0];assert.ok(Math.hypot(offsets.mid.x-cw.mid.x,offsets.mid.y-cw.mid.y)<1e-12);
+ const circle=build(setup+'G02X0Y0I1J0'+end,'board.xnc').primitives[0];assert.equal(circle.type,'circle');assert.equal(circle.r,1);assert.equal(circle.width,.8);assert.equal(circle.fill,false);assert.equal(circle.routeCircle,true);
+ for(const operation of ['G02X3Y3A1','G02X1Y1A1I1J0','G02X0Y0A1','G01X1Y1A1'])assert.throws(()=>build(setup+operation+end,'bad.xnc'),/radius|fields/);
+ assert.throws(()=>build(setup+'G01X1Y1\nM30','bad.xnc'),/tool down/);assert.throws(()=>build('M48\nMETRIC,0000000.000\nT1C1\n%\nM30','bad.exc'),/format/);
+});
+
+
+test('Excellon routed interpolation remains modal while omitted coordinates keep the prior axis',()=>{
+ const d=build('M48\nMETRIC\nT1C1.0\n%\nT1\nG00X1.0Y2.0\nM15\nG01X4.0Y2.0\nY5.0\nM16\nM30','board.drl');
+ assert.equal(d.primitives.length,2);assert.deepEqual(d.primitives[1].points,[{x:4,y:-2},{x:4,y:-5}]);
 });

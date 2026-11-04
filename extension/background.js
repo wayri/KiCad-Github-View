@@ -1,6 +1,6 @@
 "use strict";
 
-importScripts("github-website-history.js", "github-session-reader.js", "github-project-buffer.js", "github-project-view.js", "draftsman-model.js", "draftsman-export.js", "draftsman-repository.js", "managed-policy.js", "parsing.js", "project-launch.js", "legacy-kicad.js", "browser-data.js", "review-comments.js", "review-file-store.js", "credential-vault.js", "provider-oauth.js", "revision-fork.js", "github-review-api.js", "gitlab-provider.js", "gitlab-review-api.js", "gitlab-hosts.js", "mention-users.js", "environment-diagnostics.js", "project-recents.js", "native-kicad.js");
+importScripts("gerber-renderer.js", "repository-sessions.js", "github-website-reviews.js", "github-website-history.js", "github-session-reader.js", "github-project-buffer.js", "github-project-view.js", "draftsman-model.js", "draftsman-export.js", "draftsman-repository.js", "managed-policy.js", "parsing.js", "project-launch.js", "legacy-kicad.js", "browser-data.js", "review-comments.js", "review-file-store.js", "credential-vault.js", "provider-oauth.js", "revision-fork.js", "github-review-api.js", "gitlab-provider.js", "gitlab-review-api.js", "gitlab-hosts.js", "mention-users.js", "environment-diagnostics.js", "project-recents.js", "native-kicad.js");
 globalThis.KiCadManagedPolicy?.installFetch();
 
 let mentionService=null;
@@ -59,8 +59,10 @@ function linkedReadController(signal){
   signal?.addEventListener('abort',abort,{once:true});
   return {controller,dispose:()=>signal?.removeEventListener('abort',abort)};
 }
-let githubProjectBuffer=null,githubProjectView=null;
-function projectBuffer(){return githubProjectBuffer||=(KiCadGitHubProjectBuffer.create({readSession:(...args)=>githubSessionRead(...args),fetch:(...args)=>fetch(...args),assertNetwork:()=>globalThis.KiCadManagedPolicy?.assertNetwork()}));}
+let githubProjectBuffer=null,githubProjectView=null,repositorySessionStore=null;
+function repositorySessions(){const api=globalThis.KiCadRepositorySessions||(typeof require==='function'?require('./repository-sessions.js'):null);return repositorySessionStore||=api.create(chrome);}
+async function viewerPreferences(){const value=await chrome.storage.local.get('project-viewer-mode');return {mode:value['project-viewer-mode']==='inline'?'inline':'tab'};}
+function projectBuffer(){return githubProjectBuffer||=(KiCadGitHubProjectBuffer.create({foregroundOnly:true,readSession:(...args)=>githubSessionRead(...args),fetch:(...args)=>fetch(...args),assertNetwork:()=>globalThis.KiCadManagedPolicy?.assertNetwork()}));}
 function projectView(){return githubProjectView||=(KiCadGitHubProjectView.create({buffer:projectBuffer()}));}
 async function cancellableProject(message,signal){return projectView().read(message,signal);}
 // Reads remain in an isolated content script on the already-open repository tab.
@@ -75,12 +77,10 @@ async function sessionLoadMessage(tabId,message,signal){
 }
 async function githubSessionRead(repository,ref,action,path='',limit=8*1024*1024,signal) {
   checkLoad(signal);if(!validRepository(repository)||!KiCadBrowserData.validRef(ref))throw Error('Invalid GitHub session location.');
-  if(!chrome.tabs?.query)return null;
-  const tabs=await chrome.tabs.query({url:[`https://github.com/${repository}`,`https://github.com/${repository}/*`]});
+  const tabs=await repositorySessions().candidates('github','https://github.com',repository);
   let accessError=null;
-  for(const tab of tabs.slice(0,8)) {
-    let url;try{url=new URL(tab.url);}catch{continue;}
-    if(url.origin!=='https://github.com'||url.pathname.split('/').slice(1,3).join('/').toLowerCase()!==repository.toLowerCase())continue;
+  for(const tab of tabs) {
+    if(!tab.bound){let url;try{url=new URL(tab.url);}catch{continue;}if(url.origin!=='https://github.com'||url.pathname.split('/').slice(1,3).join('/').toLowerCase()!==repository.toLowerCase())continue;}
     let reply;try{reply=await sessionLoadMessage(tab.id,{type:'github-session-read',repository,ref,action,path,limit:Math.min(limit,action==='file'?64*1024*1024:32*1024*1024)},signal);}catch{checkLoad(signal);continue;}
     if(!reply?.ok){if(typeof reply?.error==='string')accessError=Error(reply.error.slice(0,1000));continue;}
     const result=reply.result;
@@ -704,7 +704,7 @@ function senderAllowed(sender) {
 }
 
 function viewerSender(sender) {
-  if (sender?.id !== chrome.runtime.id) return false;
+  if (sender?.id !== chrome.runtime.id || !repositorySessions().frameAllowed(sender)) return false;
   const page = sender.url?.split(/[?#]/, 1)[0];
   return page === chrome.runtime.getURL("revision-viewer.html") ||
     page === chrome.runtime.getURL("browser-viewer.html") ||
@@ -718,9 +718,48 @@ function analysisSender(sender) {
   return sender?.id === chrome.runtime.id && sender.url?.split(/[?#]/, 1)[0] === chrome.runtime.getURL("analysis-viewer.html");
 }
 
+function fabricationSender(sender) {
+  return sender?.id === chrome.runtime.id && repositorySessions().frameAllowed(sender) && sender.url?.split(/[?#]/, 1)[0] === chrome.runtime.getURL('gerber-viewer.html');
+}
+
 function optionsSender(sender) {
   return sender?.id === chrome.runtime.id &&
     sender.url?.split(/[?#]/, 1)[0] === chrome.runtime.getURL("options.html");
+}
+
+function sessionReviewSender(sender){
+ if(sender?.id!==chrome.runtime.id||(sender.frameId??0)!==0)return false;
+ return sender.url?.split(/[?#]/,1)[0]===chrome.runtime.getURL('session-reviews.html');
+}
+async function websiteReviewCall(message){
+ if(!validRepository(message.repository)||message.action!=='list'&&(!Number.isSafeInteger(message.number)||message.number<1)||!['inspect','read','list','prepare','verify','commit'].includes(message.action))throw Error('Invalid website review request.');
+ if(['prepare','verify','commit'].includes(message.action))await KiCadManagedPolicy.assertWrites();else await globalThis.KiCadManagedPolicy?.assertNetwork();
+ const candidates=(await repositorySessions().candidates('github','https://github.com',message.repository)).filter(tab=>tab.bound);
+  let readFailure;
+ for(const tab of candidates){
+  if(message.action==='inspect')await chrome.scripting.executeScript({target:{tabId:tab.id,frameIds:[0]},files:['github-session-review.js']}).catch(()=>{});
+  if(['prepare','verify','commit'].includes(message.action))await KiCadManagedPolicy.assertWrites();
+  const reply=await chrome.tabs.sendMessage(tab.id,{...message,type:'github-session-review'},{frameId:0}).catch(()=>null);
+  if(reply?.ok)return reply.result;
+   if(typeof reply?.error==='string')readFailure=reply.error.slice(0,500);
+  // Never repeat a mutation in another tab after an uncertain response.
+  if(['prepare','verify','commit'].includes(message.action))throw Error(reply?.error||'GitHub website did not confirm the review operation.');
+ }
+  throw Error(readFailure||'Open this repository on GitHub and click the extension icon to connect its website session.');
+}
+let websiteReviewsInstance;
+function websiteReviews(){return websiteReviewsInstance||=KiCadGitHubWebsiteReviews.create({call:websiteReviewCall,storage:chrome.storage.local,assertWrites:()=>KiCadManagedPolicy.assertWrites(),reserve:()=>KiCadReviewComments.reservePublication(chrome.storage.local,JSON.stringify(['github','website-session']),Date.now()),comments:KiCadReviewComments});}
+function ownedWebsiteReviewSender(sender,repository){
+ if(!sessionReviewSender(sender)&&!viewerSender(sender))return false;
+ try{const own=new URL(chrome.runtime.getURL('')),page=new URL(sender.url),parent=new URL(sender.tab?.url||sender.url);return parent.protocol===own.protocol&&parent.host===own.host&&page.searchParams.get('repository')===repository;}catch{return false;}
+}
+async function websiteReview(message,sender){
+ if(!ownedWebsiteReviewSender(sender,message.repository))throw Error('Website reviews require the matching owned extension project page.');
+ if(message.action==='send')return websiteReviews().send(message);
+ if(message.action==='read')return websiteReviews().read(message.repository,message.number,message.force===true);
+ if(message.action==='list')return websiteReviewCall({repository:message.repository,action:'list'});
+ if(message.action!=='inspect')throw Error('Unsupported website review operation.');
+ return websiteReviewCall(message);
 }
 
 function authorizeHostRead(message, sender) {
@@ -825,6 +864,28 @@ async function stagedDraft(repository, destination, number, title, body) {
 }
 async function openCommentDraft(value, options = {}) {
   const note = KiCadReviewComments.validateComment(value);
+
+  if(options.websiteHandoff===true){
+    const scope=KiCadReviewComments.normalizeScope(note.anchor),provider=scope.provider||'github',host=provider==='gitlab'?scope.host:'https://github.com';
+    const repository=options.targetRepository||options.pullRepository||scope.repository;
+    KiCadReviewComments.normalizeScope({...scope,repository});
+    const destination=options.destination||options.targetType||(options.pullNumber?'pull-request':'issue');
+    if(!['issue','discussion','pull-request'].includes(destination)||provider==='gitlab'&&destination!=='issue')throw Error('Invalid website draft destination.');
+    const number=options.targetNumber??(destination==='pull-request'?options.pullNumber:undefined);
+    if(options.targetType&&!validNumber(number)||destination==='pull-request'&&!validNumber(number)||number!==undefined&&!validNumber(number))throw Error('Enter a positive website thread number.');
+    if(options.targetNumber!==undefined&&!options.targetType)throw Error('Existing thread type is required.');
+    const {attachments,capture,...metadata}=note;
+    const body=KiCadReviewComments.toMarkdown({...metadata,...(capture?{capture}:{} )})+(attachments?.length?'\n\nAttachments are saved locally. Attach them manually on the provider website.':'');
+    const title='KiCad review: '+note.text.split(/\r?\n/)[0].slice(0,180);
+    let url=host+'/'+repository+(number?(provider==='gitlab'?'/-/issues/':destination==='discussion'?'/discussions/':destination==='pull-request'?'/pull/':'/issues/')+number:provider==='gitlab'?'/-/work_items/new':destination==='discussion'?'/discussions/new':'/issues/new');
+    let prefilled=false;
+    if(!number&&destination==='issue'){
+      // Official website composers accept URL-encoded title/body; keep long drafts in the copy field.
+      const query=provider==='gitlab'?'issue[title]='+encodeURIComponent(title)+'&issue[description]='+encodeURIComponent(body):'title='+encodeURIComponent(title)+'&body='+encodeURIComponent(body);
+      if((url+'?'+query).length<=7500){url+='?'+query;prefilled=true;}
+    }
+    return {url,body,prefilled,destination,repository};
+  }
   const body = KiCadReviewComments.toMarkdown(note);
   const title = `[${KiCadReviewComments.severityInfo(note.severity).label}] KiCad review: ${note.anchor.file}`;
   const { pullNumber, pullRepository, targetType, targetNumber, targetRepository } = options;
@@ -972,22 +1033,27 @@ async function cacheProviderAnnotations(scope,result,{sourceUrl=null,complete=fa
   return result;
 }
 
-function launcherSender(sender){return sender?.id===chrome.runtime.id&&(sender.frameId??0)===0&&sender.url?.split(/[?#]/,1)[0]===chrome.runtime.getURL('project-launcher.html');}
+function launcherSender(sender){return sender?.id===chrome.runtime.id&&sender.url?.split(/[?#]/,1)[0]===chrome.runtime.getURL('project-launcher.html');}
 async function openFromAction(tab) {
   const open=params=>chrome.tabs.create({url:chrome.runtime.getURL('project-launcher.html')+'?'+new URLSearchParams(params)});
   if(!Number.isInteger(tab?.id)||typeof tab.url!=='string')return open({});
   let page;try{page=new URL(tab.url);}catch{return open({});}
   if(page.protocol!=='https:'||page.origin!=='https://github.com'&&!(await globalThis.KiCadGitLabHosts?.allowed(page.origin)))return open({});
   if(chrome.scripting?.executeScript){
-    try{const firefox=chrome.runtime.getManifest?.()?.browser_specific_settings?.gecko;await chrome.scripting.executeScript({target:{tabId:tab.id},files:[...(firefox?['firefox/browser-api.js']:[]),'parsing.js','github-session-reader.js','gitlab-session-reader.js','repository-session-bridge.js']});}
+    try{const firefox=chrome.runtime.getManifest?.()?.browser_specific_settings?.gecko;await chrome.scripting.executeScript({target:{tabId:tab.id},files:[...(firefox?['firefox/browser-api.js']:[]),'parsing.js','github-session-reader.js','github-session-review.js','gitlab-session-reader.js','repository-session-bridge.js']});}
     catch{return open({error:'Browser site access was not granted or is blocked by policy. Click the extension on the repository tab again, or use Open local files.'});}
   }
   let hint;try{hint=await chrome.tabs.sendMessage(tab.id,{type:'projectLaunchContext'},{frameId:0});}catch{}
   try{
     const context=KiCadProjectLaunch.context(tab.url,{...hint,allowUnresolved:true});
     if(!context)return open({});
-    if(context.kind==='drawing')return chrome.tabs.create({url:KiCadProjectLaunch.viewerURL(context,context.file,p=>chrome.runtime.getURL(p))});
-    return open({source:context.source,...(context.ref?{ref:context.ref}:{})});
+    const preferences=await viewerPreferences();
+    await repositorySessions().remember(tab,context,preferences.mode==='inline');
+    const url=context.kind==='drawing'?KiCadProjectLaunch.viewerURL(context,context.file,p=>chrome.runtime.getURL(p)):chrome.runtime.getURL('project-launcher.html')+'?'+new URLSearchParams({source:context.source,...(context.ref?{ref:context.ref}:{})});
+    if(preferences.mode==='inline'){
+      try{await chrome.scripting.executeScript({target:{tabId:tab.id},files:['inline-project-view.js']});const result=await chrome.tabs.sendMessage(tab.id,{type:'inline-project-open',url,sourceUrl:tab.url},{frameId:0});if(result?.ok)return result.result;}catch{}
+    }
+    return chrome.tabs.create({url});
   }catch(error){return open({error:error.message});}
 }
 
@@ -1018,18 +1084,16 @@ async function gitlabAnnotations(scope){
   return cacheProviderAnnotations(normalized,{notes:[...new Map(notes.map(note=>[note.id,note])).values()],warnings},{sourceUrl:issueUrl,complete:!warnings.length&&notes.length<100});
 }
 async function gitlabSessionResponse(host,contextRepository,url,limit,signal) {
-  if(!chrome.tabs?.query)return null;
   if(globalThis.KiCadGitLabHosts?!await KiCadGitLabHosts.allowed(host):host!=='https://gitlab.com')throw Object.assign(Error('GitLab host permission is no longer available.'),{definitive:true});
   const target=new URL(url),match=target.pathname.match(/^\/api\/v4\/projects\/([^/]+)/);
   if(target.origin!==host||!match)throw Object.assign(Error('Invalid GitLab session endpoint.'),{definitive:true});
   const project=decodeURIComponent(match[1]),repository=/^[1-9][0-9]*$/.test(project)?contextRepository:project;
   if(!globalThis.KiCadGitLabProvider.forHost(host).validRepository(repository))return null;
-  const tabs=await chrome.tabs.query({url:[`${host}/${repository}`,`${host}/${repository}/-/*`]});
+  const tabs=await repositorySessions().candidates('gitlab',host,repository);
   limit=Math.min(limit,64*1024*1024);
   let sessionError=null;
-  for(const tab of tabs.slice(0,8)) {
-    let page;try{page=new URL(tab.url);}catch{continue;}
-    if(page.origin!==host||!(page.pathname===`/${repository}`||page.pathname.startsWith(`/${repository}/-/`)))continue;
+  for(const tab of tabs) {
+    if(!tab.bound){let page;try{page=new URL(tab.url);}catch{continue;}if(page.origin!==host||!(page.pathname===`/${repository}`||page.pathname.startsWith(`/${repository}/-/`)))continue;}
     let reply;try{reply=await sessionLoadMessage(tab.id,{type:'gitlab-session-read',host,repository,url,limit},signal);}catch{checkLoad(signal);continue;}
     if(!reply?.ok){if(typeof reply?.error==='string')sessionError=Object.assign(Error(reply.error.slice(0,1000)),{...(['GITLAB_SAML_REQUIRED','GITLAB_LOGIN_REQUIRED','GITLAB_UNEXPECTED_HTML','MANAGED_POLICY'].includes(reply.code)?{code:reply.code}:{})});continue;}
     if(globalThis.KiCadGitLabHosts?!await KiCadGitLabHosts.allowed(host):host!=='https://gitlab.com')throw Object.assign(Error('GitLab host permission was removed during retrieval.'),{definitive:true});
@@ -1050,7 +1114,7 @@ async function gitlabDispatch(message, sender,signal) {
   }
   const host=message.host||'https://gitlab.com';
   if (globalThis.KiCadGitLabHosts ? !await KiCadGitLabHosts.allowed(host) : host!=='https://gitlab.com')throw new Error('Configure and grant access to this GitLab host first.');
-  const api=globalThis.KiCadGitLabProvider.forHost(host,{signal,sessionRead:(url,limit)=>gitlabSessionResponse(host,message.repository,url,limit,signal)});
+  const api=globalThis.KiCadGitLabProvider.forHost(host,{foregroundOnly:true,signal,sessionRead:(url,limit)=>gitlabSessionResponse(host,message.repository,url,limit,signal)});
   const {repository,ref,file}=message;
   if(['gitlab-auth-status','gitlab-auth-set','gitlab-auth-clear','gitlab-auth-reset','gitlab-client-set','gitlab-oauth-start'].includes(message.type)){
     if(!optionsSender(sender)&&!(message.type==='gitlab-auth-status'&&viewerSender(sender)))throw new Error('Only extension settings can change GitLab authentication.');
@@ -1061,7 +1125,7 @@ async function gitlabDispatch(message, sender,signal) {
     if(message.type==='gitlab-client-set')return auth.setClientId(host,message.clientId);
     return auth.startOAuth(host);
   }
-  if (!viewerSender(sender) && !(pdfSender(sender)&&['pdf-file','project-inventory'].includes(message.type)) && !(analysisSender(sender)&&['project-inventory','project-file'].includes(message.type)) && !['project','gitlab-merge-request'].includes(message.type)) throw new Error('Only extension viewers can use GitLab repository tools.');
+  if (!viewerSender(sender) && !(pdfSender(sender)&&['pdf-file','project-inventory'].includes(message.type)) && !((analysisSender(sender)||fabricationSender(sender))&&['project-inventory','project-file'].includes(message.type)) && !['project','gitlab-merge-request'].includes(message.type)) throw new Error('Only extension viewers can use GitLab repository tools.');
   if (optionsSender(sender)) throw new Error('Options cannot load GitLab projects.');
   switch(message.type) {
     case 'repository-fork-revision': return auth.forkRevision({...message,host});
@@ -1154,6 +1218,7 @@ async function gitlabDispatch(message, sender,signal) {
 
 async function repositoryDetection(message,sender){
   const launcher=launcherSender(sender);
+  if(launcher&&(sender.frameId??0)>0&&!repositorySessions().frameAllowed(sender))throw Error('Unbound in-page project launcher.');
   if(!launcher&&(sender?.id!==chrome.runtime.id||!Number.isInteger(sender.tab?.id)||(sender.frameId??0)!==0))throw Error('Repository discovery requires its top-level host page.');
   const host=message.provider==='gitlab'?(message.host||'https://gitlab.com'):'https://github.com';
   const route=KiCadGitHub.repositoryRoute(launcher?message.source:sender.url,{gitlabHosts:message.provider==='gitlab'?[host]:[]});
@@ -1164,7 +1229,7 @@ async function repositoryDetection(message,sender){
   let listing;
   if(message.provider==='gitlab'){
     if(globalThis.KiCadGitLabHosts?!await KiCadGitLabHosts.allowed(host):host!=='https://gitlab.com')throw Error('Configure and grant access to this GitLab host first.');
-    const api=KiCadGitLabProvider.forHost(host,{sessionRead:(url,limit)=>gitlabSessionResponse(host,message.repository,url,limit)});
+    const api=KiCadGitLabProvider.forHost(host,{foregroundOnly:true,sessionRead:(url,limit)=>gitlabSessionResponse(host,message.repository,url,limit)});
     if(ref==='HEAD'){
       const response=await api.response(api.endpoint(message.repository).replace(/\/repository$/,''),1024*1024);
       const metadata=response&&JSON.parse(new TextDecoder().decode(response.bytes));ref=metadata?.default_branch;
@@ -1182,7 +1247,8 @@ async function repositoryDetection(message,sender){
     const snapshot=await projectBuffer().inventory(message.repository,contextSnapshot||ref,undefined,{directory,refresh:message.refresh===true});
     listing={sha:snapshot.snapshotRef,entries:snapshot.files.map(item=>({path:item.path,type:'blob'})),warnings:snapshot.warnings,truncated:snapshot.warnings.some(warning=>/incomplete|limited|limit reached/i.test(warning))};
   }
-  const projects=KiCadGitHub.detectedProjects(listing.entries);
+  let projects=KiCadGitHub.detectedProjects(listing.entries);
+  if(!projects.length){const fabrication=globalThis.KiCadGerberRenderer||(typeof require==='function'?require('./gerber-renderer.js'):null),files=listing.entries.filter(item=>['blob','file'].includes(item.type)&&fabrication.isFabricationPath(item.path)).map(item=>item.path);projects=(files.some(path=>fabrication.isJobPath(path))?files.filter(path=>fabrication.isJobPath(path)):files).slice(0,100);}
   return {repository:message.repository,ref,sha:listing.sha,projects,truncated:Boolean(listing.truncated||listing.hasMore||projects.length===100),warnings:[...new Set(listing.warnings||[])]};
 }
 
@@ -1191,8 +1257,20 @@ function nativeKiCad(){const api=globalThis.KiCadNativeKiCad||(typeof require===
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   const customHostSender=sender?.id===chrome.runtime.id&&typeof sender.url==='string'&&sender.url.startsWith('https://')&&message?.provider==='gitlab';
-  if (!(senderAllowed(sender) || pdfSender(sender) || analysisSender(sender) || optionsSender(sender)||dashboardSender(sender)||localWorkspaceSender(sender)||launcherSender(sender)||customHostSender) || !message || typeof message !== "object") return false;
+  if (!(senderAllowed(sender) || pdfSender(sender) || analysisSender(sender) || fabricationSender(sender) || optionsSender(sender)||dashboardSender(sender)||localWorkspaceSender(sender)||launcherSender(sender)||sessionReviewSender(sender)||customHostSender||sender?.id===chrome.runtime.id&&message?.type==='inline-project-open-tab') || !message || typeof message !== "object") return false;
   (async () => {
+    await repositorySessions().ready;
+    if(message.type==='github-session-review')return websiteReview(message,sender);
+    if(sessionReviewSender(sender))throw Error('This page only uses website review operations.');
+    if((sender.frameId??0)>0&&!repositorySessions().messageAllowed(sender,message))throw Error('In-page viewer was not opened for this repository by the extension icon.');
+    if(message.type==='viewer-preferences-get'||message.type==='viewer-preferences-set'){
+      if(!optionsSender(sender)||(sender.frameId??0)!==0)throw Error('Only extension settings can choose the project viewer location.');
+      if(message.type==='viewer-preferences-set'){if(!['tab','inline'].includes(message.mode))throw Error('Invalid project viewer location.');await chrome.storage.local.set({'project-viewer-mode':message.mode});}return viewerPreferences();
+    }
+    if(message.type==='inline-project-open-tab'){
+      if(!repositorySessions().inlineSource(sender,message.url))throw Error('In-page viewer does not match the invoked repository.');
+      return chrome.tabs.create({url:message.url});
+    }
     if(message.type==='native-kicad-cancel')return nativeKiCad().cancel(message,sender);
     if(message.type?.startsWith('project-recents-')||message.type?.startsWith('dashboard-'))return dashboardDispatch(message,sender);
     if(dashboardSender(sender)||localWorkspaceSender(sender))throw Error('This project page only uses its scoped dashboard operations.');
@@ -1210,6 +1288,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     }
     if (message.provider !== undefined && !['github','gitlab'].includes(message.provider)) throw new Error('Unsupported repository provider.');
     if(pdfSender(sender)&&!['pdf-file','project-inventory'].includes(message.type))throw new Error('PDF viewer only reads PDF files and project inventory.');
+    if(fabricationSender(sender)&&!['project-inventory','project-file'].includes(message.type))throw new Error('Fabrication viewers can only read project inventory and source files.');
     if(analysisSender(sender)&&!['project-inventory','project-file'].includes(message.type))throw new Error('Analysis viewers can only read project inventory and source files.');
     let senderOrigin;try{senderOrigin=new URL(sender.url).origin;}catch{}
     if(senderOrigin?.startsWith('https://')&&senderOrigin!=='https://github.com'&&message.provider!=='gitlab')throw new Error('GitLab pages must specify the GitLab provider.');
@@ -1236,13 +1315,44 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       globalThis.draftsmanRepository ||= KiCadDraftsmanRepository.create({fetch:(...args)=>fetch(...args),headers:(p,h)=>p==='github'?KiCadGitHubReviewApi.authorizationHeaders():KiCadGitLabReviewApi.authorizationHeaders(h),assertWrites:()=>KiCadManagedPolicy.assertWrites()});
       return draftsmanRepository.save({...message,provider,host});
     }
+    if(message.type==='open-comment-draft'&&message.websiteHandoff===true){if(!viewerSender(sender))throw Error('Only extension viewers can prepare website drafts.');return openCommentDraft(message.comment,message);}
+    if(message.type==='open-website-reviews'){
+     if(!viewerSender(sender)||!validRepository(message.repository))throw Error('Only extension viewers can open repository conversations.');
+     const params=new URLSearchParams({repository:message.repository});if(Number.isSafeInteger(message.number)&&message.number>0)params.set('number',String(message.number));
+     return chrome.tabs.create({url:chrome.runtime.getURL('session-reviews.html')+'?'+params});
+    }
     if(message.provider==='gitlab'){const host=message.host||'https://gitlab.com';if(senderOrigin?.startsWith('https://')&&senderOrigin!==host)throw new Error('GitLab host does not match the sender.');return gitlabDispatch(message,sender);}
     if(message.comment?.anchor?.provider==='gitlab')throw new Error('GitLab annotations must use the GitLab provider.');
+    const websiteTypes=new Set(['github-thread-read','chat-thread-list','chat-message-write','github-annotations','comment-policy-status','github-publish-comment']),reviewRepository=message.pullRepository||message.repository||message.scope?.repository||message.comment?.anchor?.repository;
+    if(websiteTypes.has(message.type)&&viewerSender(sender)&&validRepository(reviewRepository)&&(await repositorySessions().candidates('github','https://github.com',reviewRepository)).some(tab=>tab.bound)){
+      const repository=reviewRepository;
+      if(new URL(sender.url).searchParams.get('repository')!==repository)throw Error('Website review repository does not match this viewer.');
+      if(message.type==='github-thread-read'){
+       if(message.kind!=='issue')throw Error('Browser-session readback currently supports Issues; Discussions require the website.');
+       return websiteReviews().read(repository,message.number,message.force===true);
+      }
+      if(message.type==='chat-thread-list'){
+       if(message.kind!=='issue')return {threads:[],hasMore:false,warnings:['Browser-session Discussion readback is not available in this beta.']};
+       return websiteReviews().list(repository);
+      }
+      if(message.type==='github-annotations'){
+       return websiteReviews().annotations(message.scope||message,{repository,number:message.issueNumber});
+      }
+      if(message.type==='comment-policy-status'){const result=await websiteReviewCall({repository,action:'list'});return {allowed:true,login:result.account,transport:'website-session',reason:'Website-session permissions are checked again on the selected Issue before sending.'};}
+      if(!ownedWebsiteReviewSender(sender,repository))throw Error('Website-session Send requires the matching standalone extension viewer.');
+      if(message.type==='chat-message-write')return websiteReviews().chat(message);
+      const args=KiCadGitHubReviewApi.publishArgs(message);
+      if(args.repository!==repository)throw Error('Review destination does not match this website session.');
+      if(args.destination!=='issue')throw Error('Browser-session direct posting currently replies to an existing Issue. Select an Issue conversation, or use the website to create a new thread.');
+      if(args.note.capture)throw Error('Attach screenshots on the GitHub website; browser-session screenshot uploads are not enabled.');
+      const result=await websiteReviews().send({repository,number:args.number,body:KiCadReviewComments.toMarkdown(args.note),clientMutationId:args.note.id,confirmedSend:message.confirmedSend});
+      return {remoteRef:{kind:'issue',repository,number:args.number,url:result.url,publishedAt:result.createdAt},...(result.receiptWarning?{receiptWarning:result.receiptWarning}:{})};
+    }
     if(KiCadGitHubProjectView.types.has(message.type)){
       if(message.type==='project'){
         if(optionsSender(sender))throw Error('Options cannot load KiCad projects.');
         authorizeHostRead(message,sender);
-      }else if(!viewerSender(sender)&&!pdfSender(sender)&&!analysisSender(sender))throw Error('Only extension viewers can read project snapshots.');
+      }else if(!viewerSender(sender)&&!pdfSender(sender)&&!analysisSender(sender)&&!fabricationSender(sender))throw Error('Only extension viewers can read project snapshots.');
       return projectView().read(message);
     }
     switch (message.type) {
@@ -1341,7 +1451,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         const content=await githubFile(message.repository,message.ref,path);if(content===null)throw new Error("Report was not found at this revision.");if(new TextEncoder().encode(content).byteLength>4*1024*1024)throw new Error("Rule report exceeds 4 MiB.");return {content,path};
       }
       case "project-inventory":
-        if(!viewerSender(sender)&&!pdfSender(sender)&&!analysisSender(sender))throw new Error('Only extension viewers can inspect project files.');return projectInventory(message.repository,message.ref,message.file);
+        if(!viewerSender(sender)&&!pdfSender(sender)&&!analysisSender(sender)&&!fabricationSender(sender))throw new Error('Only extension viewers can inspect project files.');return projectInventory(message.repository,message.ref,message.file);
       case 'repository-branches':
         if(!viewerSender(sender))throw Error('Only extension viewers can browse repository branches.');return repositoryBranches(message.repository,message.ref);
       case 'repository-tree':
@@ -1355,7 +1465,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       case 'revision-resolve':
         if(!viewerSender(sender))throw new Error('Only extension viewers can resolve revisions.');return revisionResolve(message.repository,message.ref,message.file);
       case "project-file":
-        if(!viewerSender(sender)&&!pdfSender(sender)&&!analysisSender(sender))throw new Error('Only extension viewers can read project settings.');return projectFile(message.repository,message.ref,message.file);
+        if(!viewerSender(sender)&&!pdfSender(sender)&&!analysisSender(sender)&&!fabricationSender(sender))throw new Error('Only extension viewers can read project settings.');return projectFile(message.repository,message.ref,message.file);
       case "open-project-overview":
         if(!viewerSender(sender))throw new Error('Only extension viewers can open projects.');return openProjectWindow(message.repository,message.ref,message.file);
       case "project-search-files":

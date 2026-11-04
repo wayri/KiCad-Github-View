@@ -1,5 +1,11 @@
 # Install Pocket KiView
 
+The **0.12.82 release candidate** is being verified. Its prepared package names are
+`kicad-visual-review-chrome-edge-brave-opera-vivaldi-chromium-0.12.82.zip`,
+`kicad-visual-review-firefox-0.12.82.zip`, `kicad-visual-review-vscode-0.12.82.vsix`
+and `pocket-kivi-android-phone-tablet-1.82-development.apk`. Publication is pending;
+the published preview described below remains available meanwhile.
+
 Current GitHub preview: extension 0.12.81 and Android 1.81. Download the packages below; store availability is separate from GitHub release availability.
 
 Release 0.12.81 includes [API-free GitHub project buffering](GITHUB-WEBSITE-VIEWING.md), interactive probe views and renderer/export refinements.

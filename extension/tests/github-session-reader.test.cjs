@@ -32,12 +32,26 @@ test('HEAD discovery reuses embedded repository page data without any network re
  assert.equal(calls,1);
 });
 
+test('signed-in hash model filenames remain encoded path data, not URL fragments',async()=>{
+ const path='models/IC#PBF.STEP',suffix='/'+repo+'/'+sha+'/models/IC%23PBF.STEP',calls=[];
+ const api=create({location:{href:'https://github.com/'+repo},fetch:async(url,init)=>{calls.push(url);assert.equal(init.credentials,'same-origin');return response(new Uint8Array([0,1,2]),'https://raw.githubusercontent.com'+suffix);}});
+ assert.deepEqual(await api.read({repository:repo,ref:sha,action:'asset',path,limit:16}),{base64:'AAEC',sha});assert.deepEqual(calls,['https://github.com/'+repo+'/raw/'+sha+'/models/IC%23PBF.STEP']);
+});
 test('session binary assets preserve exact bytes and reject unrelated redirect destinations',async()=>{
  const bytes=new Uint8Array([0,255,128,10]);
  const api=create({location:{href:'https://github.com/owner/private'},fetch:async()=>response(bytes,'https://raw.githubusercontent.com/owner/private/'+sha+'/model.step')});
  assert.deepEqual(await api.read({repository:repo,ref:sha,action:'asset',path:'model.step',limit:16}),{base64:'AP+ACg==',sha});
  const wrong=create({location:{href:'https://github.com/owner/private'},fetch:async()=>response(bytes,'https://evil.example/model.step')});
  await assert.rejects(wrong.read({repository:repo,ref:sha,action:'asset',path:'model.step',limit:16}),/download/);
+});
+
+test('LFS media redirects are asset-only and bound to the exact immutable repository path',async()=>{
+ const path='models/IC#PBF.STEP',suffix='/media/'+repo+'/'+sha+'/models/IC%23PBF.STEP',url='https://media.githubusercontent.com'+suffix+'?token=test-only';
+ const bytes=new Uint8Array([0,1,2]),make=final=>create({location:{href:'https://github.com/'+repo},fetch:async()=>response(bytes,final)});
+ assert.deepEqual(await make(url).read({repository:repo,ref:sha,action:'asset',path,limit:16}),{base64:'AAEC',sha});
+ for(const final of [url.replace('/'+repo+'/', '/other/repo/'),url.replace(sha,'b'.repeat(40)),url.replace('IC%23PBF','different'),url.replace('media.githubusercontent.com','evil.example'),url.replace('media.githubusercontent.com','media.githubusercontent.com:444'),url.replace('https:','http:'),url.replace('/media/','/mediaevil/'),url.replace('/media/','/other/'),url+'#fragment',url.replace('https://','https://user:password@')])await assert.rejects(make(final).read({repository:repo,ref:sha,action:'asset',path,limit:16}),/download/);
+ await assert.rejects(make(url).read({repository:repo,ref:sha,action:'file',path,limit:16}),/download/);
+ await assert.rejects(make(url).read({repository:repo,ref:sha,action:'asset',path,limit:2}),/limit/);
 });
 
 test('HEAD never reuses a feature-branch tab as the default branch',async()=>{

@@ -3,6 +3,15 @@ const project=path.resolve(__dirname,'../..'),roots=[project];
 const gitFile=path.join(project,'.git');if(fs.existsSync(gitFile)&&fs.statSync(gitFile).isFile()){const value=/^gitdir:\s*(.+)/.exec(fs.readFileSync(gitFile,'utf8'))?.[1];if(value)roots.push(path.resolve(project,value,'../../..'));}
 const threePath=roots.flatMap(root=>[path.join(root,'extension/node_modules/three/build/three.module.js'),path.join(root,'.vizdiff/build-deps/node_modules/three/build/three.module.js')]).find(fs.existsSync);
 const helper=()=>import('../spike/probeViewport.mjs');
+
+test('PCB annotation corners may project outside the screen for SVG clipping but never behind the camera',{skip:!threePath},async()=>{
+ const THREE=await import(pathToFileURL(threePath).href),{createAnchorProjector}=await import('../spike/projectAnchor.mjs');
+ const camera=new THREE.PerspectiveCamera(60,1,.1,100);camera.position.set(0,0,10);camera.lookAt(0,0,0);camera.updateMatrixWorld();
+ let side;const project=createAnchorProjector(THREE,{objects:()=>[],camera,rect:()=>({left:20,top:30,width:200,height:200}),positionToWorld:(p,s)=>{side=s;return new THREE.Vector3(p.x,p.y,s==='back'?-1:0);}});
+ assert.equal(project({position:{x:100,y:0}}),null);const offscreen=project({position:{x:100,y:0},side:'back',clip:false});assert.ok(offscreen.x>220);assert.equal(side,'back');
+ assert.equal(project({position:{x:0,y:0},side:'invalid',clip:false}),null);
+ camera.position.set(0,0,-10);camera.lookAt(0,0,-20);camera.updateMatrixWorld();assert.equal(project({position:{x:0,y:0},clip:false}),null);
+});
 test('probe registry budgets one extra context and releases before parent resources',async()=>{
  const {createProbeRegistry}=await helper(),registry=createProbeRegistry(1),events=[];
  const first=registry.create(()=>({dispose(){events.push('probe');},sourceAdded(node){events.push(node);}}));

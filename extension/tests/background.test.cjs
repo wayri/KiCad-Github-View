@@ -49,6 +49,10 @@ test('remote fork requests are viewer-only and preserve their selected-commit sc
  for(const sender of [options,githubTab(1,'/owner/repo/blob/main/board.kicad_pcb')])assert.equal((await message(request,sender)).ok,false);
  assert.equal(received,undefined);assert.equal((await message(request)).ok,true);assert.deepEqual(received,request);
 });
+test('website review transport rejects host, embedded, foreign and cross-repository page senders',async()=>{
+ const request={type:'github-session-review',action:'send',repository:'owner/repo',number:1,body:'Test',clientMutationId:'12345678-1234-1234-1234-123456789abc',confirmedSend:true};
+ for(const sender of [githubTab(1,'/owner/repo/issues/1'),options,{id:'test-id',url:extensionOrigin+'session-reviews.html?repository=other/repo'}, {id:'test-id',url:extensionOrigin+'session-reviews.html?repository=owner/repo',frameId:2,tab:{url:'https://github.com/owner/repo'}},{id:'other',url:extensionOrigin+'session-reviews.html?repository=owner/repo'}])assert.notEqual((await message(request,sender)).ok,true);
+});
 
 test('dashboard history is owned-page-only and imported local entries contain no source content',async()=>{
  const R=require('../project-recents.js'),dashboard={id:'test-id',url:extensionOrigin+'dashboard.html'},local={id:'test-id',url:extensionOrigin+'local-viewer.html'};await message({type:'project-recents-clear',confirmed:true},dashboard);
@@ -98,10 +102,10 @@ test('host-page project and pull reads cannot cross repository, pull, or frame b
  for(const type of ['project','githubPull','githubFiles']){
   const input={type,repository:'private/other',ref:'main',file:'board.kicad_pcb',number:7};
   const result=await message(input,githubTab(2,'/owner/repo/pull/7/files'));
-  assert.equal(result.ok,false);assert.match(result.error,/host page/);
+  assert.equal(result.ok,false);assert.match(result.error,/host page|In-page viewer/);
  }
  for(const type of ['githubPull','githubFiles'])assert.match((await message({type,repository:'owner/repo',number:8},githubTab(2,'/owner/repo/pull/7/files'))).error,/host page/);
- assert.match((await message({type:'project',repository:'owner/repo',ref:'main',file:'board.kicad_pcb'},{...githubTab(2,'/owner/repo/blob/main/board.kicad_pcb'),frameId:3})).error,/host page/);
+ assert.match((await message({type:'project',repository:'owner/repo',ref:'main',file:'board.kicad_pcb'},{...githubTab(2,'/owner/repo/blob/main/board.kicad_pcb'),frameId:3})).error,/host page|In-page viewer/);
  assert.equal(reads,0);
 });
 
@@ -138,11 +142,20 @@ test('legacy SHA media validation and website snapshots reject mismatched pinned
 });
 function websiteFeed(repository,commit){return `<feed xmlns="http://www.w3.org/2005/Atom"><entry><id>tag:github.com,2008:Grit::Commit/${commit}</id><link href="https://github.com/${repository}/commit/${commit}"/><title>Saved revision</title><updated>2026-10-30T01:00:00Z</updated><author><name>Designer</name></author></entry></feed>`;}
 function withWebsite(t,repository,sources={},options={}) {
- const previousQuery=chrome.tabs.query,previousSend=chrome.tabs.sendMessage,session=[],raw=[],files=new Map(Object.entries(sources));
+ const previousQuery=chrome.tabs.query,previousSend=chrome.tabs.sendMessage,session=[],raw=[],files=new Map(Object.entries(sources)),controllers=new Map();
  const entries=directory=>{if(options.entries)return options.entries(directory);const rows=new Map();for(const path of files.keys()){const prefix=directory?directory+'/':'';if(!path.startsWith(prefix))continue;const tail=path.slice(prefix.length),name=prefix+tail.split('/')[0];rows.set(name,{path:name,type:tail.includes('/')?'directory':'file'});}return [...rows.values()];};
+ const websiteFetch=async(url,init)=>{raw.push({url,init});assert.equal(init.credentials,'same-origin');assert.equal(init.headers?.Authorization,undefined);assert.equal(new URL(url).hostname,'github.com');let response;
+  if(url.includes('/commits/'))response=new Response(websiteFeed(repository,options.sha||sha('a')),{headers:{'content-type':'application/atom+xml'}});
+  else if(options.raw)response=await options.raw(url,init);
+  else{const prefix='https://github.com/'+repository+'/raw/'+(options.sha||sha('a'))+'/';assert.ok(url.startsWith(prefix),url);const content=files.get(decodeURIComponent(url.slice(prefix.length)));response=content===undefined?new Response('',{status:404}):new Response(content);}
+  Object.defineProperty(response,'url',{value:url});return response;
+ };
  chrome.tabs.query=async()=>[{id:51,url:'https://github.com/'+repository+'/tree/main'}];
- chrome.tabs.sendMessage=async(id,request)=>{session.push(request);if(request.type==='repository-session-cancel')return {ok:true};if(options.readSession)return options.readSession(request);if(request.action==='resolve'||request.action==='directory')return {ok:true,result:{sha:options.sha||sha('a'),items:entries(request.action==='resolve'?'':request.path)}};if(request.action==='asset'){const source=files.get(request.path);return {ok:true,result:source===undefined?null:{sha:options.sha||sha('a'),base64:Buffer.from(source).toString('base64')}};}const content=files.get(request.path);return {ok:true,result:content===undefined?null:{sha:options.sha||sha('a'),content}};};
- withFetch(t,async(url,init)=>{raw.push({url,init});assert.equal(init.credentials,'omit');assert.equal(init.headers?.Authorization,undefined);if(new URL(url).hostname==='github.com'){assert.match(url,new RegExp('^https://github.com/'+repository+'/commits/'));return new Response(websiteFeed(repository,options.sha||sha('a')),{headers:{'content-type':'application/atom+xml'}});}assert.equal(new URL(url).hostname,'raw.githubusercontent.com','default viewing must not request GitHub API');if(options.raw)return options.raw(url,init);if(options.private)return new Response('',{status:404});const prefix='https://raw.githubusercontent.com/'+repository+'/'+(options.sha||sha('a'))+'/';assert.ok(url.startsWith(prefix),url);const content=files.get(decodeURIComponent(url.slice(prefix.length)));return content===undefined?new Response('',{status:404}):new Response(content);});
+ chrome.tabs.sendMessage=async(id,request)=>{session.push(request);if(request.type==='repository-session-cancel'){controllers.get(request.requestId)?.abort();return {ok:true};}if(options.readSession)return options.readSession(request);if(request.action==='resolve'||request.action==='directory')return {ok:true,result:{sha:options.sha||sha('a'),items:entries(request.action==='resolve'?'':request.path)}};
+  const controller=new AbortController();if(request.requestId)controllers.set(request.requestId,controller);
+  try{return {ok:true,result:await KiCadGitHubSessionReader.create({fetch:websiteFetch,location:{href:'https://github.com/'+repository},signal:controller.signal}).read(request)};}catch(error){return {ok:false,error:error.message};}finally{controllers.delete(request.requestId);}
+ };
+ withFetch(t,async()=>{throw Error('Project viewing attempted a forbidden background fetch.');});
  t.after(()=>{chrome.tabs.query=previousQuery;chrome.tabs.sendMessage=previousSend;background.projectBuffer().clear();});return {session,raw,files};
 }
 
@@ -221,11 +234,11 @@ test('global website search discloses bounded drawing count',async t=>{
 });
 test('website search skips an oversized drawing with a visible warning and never allocates its advertised body',async t=>{
  const fixture=withWebsite(t,'owner/oversized-search',{'large.kicad_pcb':'unused','small.kicad_sch':'(kicad_sch)'},{raw:async url=>url.endsWith('/large.kicad_pcb')?new Response('unused',{headers:{'content-length':String(64*1024*1024+1)}}):new Response('(kicad_sch)')});
- const reply=await message({type:'project-search-files',repository:'owner/oversized-search',ref:'main',file:'large.kicad_pcb'});assert.equal(reply.ok,true,reply.error);assert.deepEqual(reply.result.files.map(f=>f.path),['small.kicad_sch']);assert.match(reply.result.warnings.join(' '),/large\.kicad_pcb.*byte limit/);assert.equal(fixture.raw.length,2);
+ const reply=await message({type:'project-search-files',repository:'owner/oversized-search',ref:'main',file:'large.kicad_pcb'});assert.equal(reply.ok,true,reply.error);assert.deepEqual(reply.result.files.map(f=>f.path),['small.kicad_sch']);assert.match(reply.result.warnings.join(' '),/large\.kicad_pcb.*(?:byte limit|size limit)/);assert.equal(fixture.raw.length,2);
 });
 
 test('saved report reads stay on repository revision and reject traversal and non-viewer callers',async t=>{
- const fixture=withWebsite(t,'wayri/board',{'reports/board-drc.json':'{"coordinate_units":"mm"}'});const request={type:'rule-report',repository:'wayri/board',ref:sha('a'),file:'board.kicad_pcb',reportPath:'reports/board-drc.json'};const reply=await message(request);assert.equal(reply.ok,true,reply.error);assert.match(reply.result.content,/coordinate_units/);assert.equal((await message({...request,reportPath:'../token.json'})).ok,false);assert.equal((await message(request,githubTab(1,'/wayri/board'))).ok,false);assert.equal(fixture.raw.length,1);assert.equal(fixture.raw[0].url,'https://raw.githubusercontent.com/wayri/board/'+sha('a')+'/reports/board-drc.json');
+ const fixture=withWebsite(t,'wayri/board',{'reports/board-drc.json':'{"coordinate_units":"mm"}'});const request={type:'rule-report',repository:'wayri/board',ref:sha('a'),file:'board.kicad_pcb',reportPath:'reports/board-drc.json'};const reply=await message(request);assert.equal(reply.ok,true,reply.error);assert.match(reply.result.content,/coordinate_units/);assert.equal((await message({...request,reportPath:'../token.json'})).ok,false);assert.equal((await message(request,githubTab(1,'/wayri/board'))).ok,false);assert.equal(fixture.raw.length,1);assert.equal(fixture.raw[0].url,'https://github.com/wayri/board/raw/'+sha('a')+'/reports/board-drc.json');
 });
 
 test('pull metadata uses GitHub merge base and permits a public fork', async (t) => {
@@ -775,20 +788,14 @@ test('discussion categories and both discussion publication operations use Graph
 });
 
 test('3D model retrieval stays on the same GitHub revision and rejects unsafe paths', async (t) => {
-  const urls = [];
-  withFetch(t, async (url, init) => {
-    urls.push({ url, init });
-    return new Response(new Uint8Array([0x67, 0x6c, 0x54, 0x46]), {
-      status: 200, headers: { 'content-type': 'application/octet-stream' }
-    });
-  });
+  const fixture=withWebsite(t,'owner/board',{'models/part.glb':new Uint8Array([0x67,0x6c,0x54,0x46])});const urls=fixture.raw;
   const request = { type: 'repo-asset', repository: 'owner/board', ref: 'a'.repeat(40),
     file: 'models/part.glb' };
   assert.match((await message(request, githubTab(2, '/owner/board'))).error, /Only extension viewers/);
   const result = await message(request);
   assert.equal(result.result.base64, 'Z2xURg==');
   assert.equal(result.result.mediaType, 'model/gltf-binary');
-  assert.equal(urls[0].url, `https://raw.githubusercontent.com/owner/board/${'a'.repeat(40)}/models/part.glb`);
+  assert.equal(urls[0].url, `https://github.com/owner/board/raw/${'a'.repeat(40)}/models/part.glb`);
   assert.equal(urls[0].init.headers?.Authorization, undefined);
   for (const file of ['../escape.glb', '/absolute.wrl', 'models/evil.obj', 'models/../part.wrl',
     'models\\part.glb', 'https://evil.test/model.glb']) {
@@ -798,7 +805,7 @@ test('3D model retrieval stays on the same GitHub revision and rejects unsafe pa
 });
 
 test('3D model retrieval accepts bounded private session assets and rejects oversized raw payloads',async t=>{
- const fixture=withWebsite(t,'owner/models',{'models/part.wrl':'VRML'},{private:true,sha:sha('b')});const request={type:'repo-asset',repository:'owner/models',ref:sha('b'),file:'models/part.wrl'};const result=await message(request);assert.equal(result.ok,true,result.error);assert.equal(result.result.base64,btoa('VRML'));assert.ok(fixture.session.some(r=>r.action==='asset'));global.fetch=async()=>new Response(new Uint8Array(8*1024*1024+1),{headers:{'content-type':'application/octet-stream'}});assert.match((await message({...request,file:'models/too-big.glb'})).error,/byte limit|size limit/);
+ const fixture=withWebsite(t,'owner/models',{'models/part.wrl':'VRML'},{private:true,sha:sha('b')});const request={type:'repo-asset',repository:'owner/models',ref:sha('b'),file:'models/part.wrl'};const result=await message(request);assert.equal(result.ok,true,result.error);assert.equal(result.result.base64,btoa('VRML'));assert.ok(fixture.session.some(r=>r.action==='asset'));fixture.files.set('models/too-big.glb',new Uint8Array(8*1024*1024+1));assert.match((await message({...request,file:'models/too-big.glb'})).error,/byte limit|size limit/);
 });
 
 test('drawing pairing lists only same-directory KiCad files and opens a validated extension popup', async (t) => {
@@ -967,7 +974,7 @@ test('branch browsing explains manual selection without token or API requests',a
  const fixture=withWebsite(t,'owner/board',{'board.kicad_pcb':'(kicad_pcb)'});const reply=await message({type:'revision-branches',repository:'owner/board',ref:'main',file:'board.kicad_pcb'});assert.equal(reply.ok,true,reply.error);assert.deepEqual(reply.result.branches,[]);assert.match(reply.result.warnings.join(' '),/API-free/);assert.equal(fixture.raw.length,0);assert.ok(fixture.session.every(r=>!r.token&&!r.Authorization));
 });
 test('revision endpoints reject malformed website snapshot identities',async t=>{
- withWebsite(t,'owner/board',{}, {readSession:async()=>({ok:true,result:{sha:'invalid',items:[]}}),sha:'invalid'});for(const type of ['revision-resolve','revision-commits']){const reply=await message({type,repository:'owner/board',ref:'main',file:'board.kicad_pcb'});assert.equal(reply.ok,false);assert.match(reply.error,/session|snapshot|valid commits/i);}
+ withWebsite(t,'owner/board',{}, {readSession:async()=>({ok:true,result:{sha:'invalid',items:[]}}),sha:'invalid'});for(const type of ['revision-resolve','revision-commits']){const reply=await message({type,repository:'owner/board',ref:'main',file:'board.kicad_pcb'});assert.equal(reply.ok,false);assert.match(reply.error,/session|snapshot|valid commits|website history/i);}
 });
 test('project inventory and raw JSON settings use safe immutable repository paths and exact viewers',async t=>{
  const fixture=withWebsite(t,'owner/board',{'design/board.kicad_pcb':'(kicad_pcb)','design/board.kicad_pro':'{"net_settings":{}}'});const request={repository:'owner/board',ref:'main',file:'design/board.kicad_pcb'};const inventory=await message({...request,type:'project-inventory'});assert.equal(inventory.ok,true,inventory.error);assert.equal(inventory.result.snapshotRef,sha('a'));const settings=await message({...request,type:'project-file',ref:sha('a'),file:'design/board.kicad_pro'});assert.equal(settings.ok,true,settings.error);assert.match(settings.result.content,/net_settings/);for(const sender of [options,githubTab(1,'/owner/board')])assert.equal((await message({...request,type:'project-inventory'},sender)).ok,false);assert.equal((await message({...request,type:'project-file',file:'../escape.kicad_pro'})).ok,false);assert.equal(fixture.raw.length,1);
@@ -1078,16 +1085,16 @@ test('trusted analysis page is read-only and only accepts exact extension sender
  const sender={id:'test-id',url:extensionOrigin+'analysis-viewer.html?repository=owner/board&ref='+sha('a')+'&file=analysis.csv'};
  assert.equal(background.analysisSender(sender),true);assert.equal(background.viewerSender(sender),false);
  assert.equal(background.analysisSender({...sender,url:extensionOrigin+'analysis-viewer.html.evil'}),false);assert.equal(background.analysisSender({...sender,id:'other'}),false);
- const reads=[];withFetch(t,async url=>{reads.push(url);return new Response('time,V\n0,1');});
- const read=await message({type:'project-file',repository:'owner/board',ref:sha('a'),file:'analysis.csv'},sender);assert.equal(read.ok,true,read.error);assert.equal(read.result.content,'time,V\n0,1');assert.ok(reads.every(url=>url.startsWith('https://raw.githubusercontent.com/owner/board/'+sha('a')+'/')));
+ const fixture=withWebsite(t,'owner/board',{'analysis.csv':'time,V\n0,1'});const reads=fixture.raw;
+ const read=await message({type:'project-file',repository:'owner/board',ref:sha('a'),file:'analysis.csv'},sender);assert.equal(read.ok,true,read.error);assert.equal(read.result.content,'time,V\n0,1');assert.ok(reads.every(({url})=>url.startsWith('https://github.com/owner/board/raw/'+sha('a')+'/')));
  for(const type of ['comment-save','comment-delete','github-publish-comment','github-auth-set','open-viewer-window','project']){const response=await message({type,repository:'owner/board',ref:sha('a'),file:'analysis.csv'},sender);assert.equal(response.ok,false);assert.match(response.error,/only read/);}
  assert.equal((await message({type:'project-file',repository:'owner/board',ref:sha('a'),file:'../analysis.csv'},sender)).ok,false);
 });
 
 test('PDF page reads bounded binary on the pinned repository revision and cannot write reviews',async t=>{
- const calls=[];withFetch(t,async(url,init)=>{calls.push({url,init});return new Response(new Uint8Array([37,80,68,70,45,49,46,55,10,0,255]),{headers:{'content-type':'application/pdf'}});});
+ const fixture=withWebsite(t,'owner/pdfboard',{'reports/board.pdf':new Uint8Array([37,80,68,70,45,49,46,55,10,0,255])},{sha:'c'.repeat(40)});const calls=fixture.raw;
  const sender={id:'test-id',url:extensionOrigin+'pdf-viewer.html?file=reports/board.pdf'},request={type:'pdf-file',repository:'owner/pdfboard',ref:'c'.repeat(40),file:'reports/board.pdf'};
- const reply=await message(request,sender);assert.equal(reply.ok,true);assert.equal(reply.result.mediaType,'application/pdf');assert.deepEqual(Array.from(Buffer.from(reply.result.base64,'base64')),[37,80,68,70,45,49,46,55,10,0,255]);assert.equal(calls[0].url,'https://raw.githubusercontent.com/owner/pdfboard/'+'c'.repeat(40)+'/reports/board.pdf');
+ const reply=await message(request,sender);assert.equal(reply.ok,true);assert.equal(reply.result.mediaType,'application/pdf');assert.deepEqual(Array.from(Buffer.from(reply.result.base64,'base64')),[37,80,68,70,45,49,46,55,10,0,255]);assert.equal(calls[0].url,'https://github.com/owner/pdfboard/raw/'+'c'.repeat(40)+'/reports/board.pdf');
  assert.equal((await message({...request,type:'comment-save'},sender)).ok,false);assert.equal((await message({...request,file:'../board.pdf'},sender)).ok,false);assert.equal((await message({...request,type:'repo-asset'},sender)).ok,false);assert.equal(calls.length,1);
 });
 
@@ -1146,7 +1153,7 @@ test('repository branch metadata works without a drawing file and retains sender
 });
 const nextTurn=()=>new Promise(resolve=>setImmediate(resolve));
 test('Stop cancels only the exact viewer subscriber while a shared website read still serves another window',async t=>{
- let release;const fixture=withWebsite(t,'owner/cancel',{}, {readSession:async()=>new Promise(resolve=>release=resolve)});const request={type:'revision-resolve',repository:'owner/cancel',ref:'main',file:'board.kicad_pcb',loadId:'cancel-test'},senderA={...viewer,tab:{id:81},frameId:0,documentId:'a'},senderB={...senderA,documentId:'b'};const a=message(request,senderA),b=message(request,senderB);await nextTurn();assert.equal((await message({type:'load-cancel',loadId:'cancel-test'},{...senderA,frameId:1})).result.cancelled,false);assert.equal((await message({type:'load-cancel',loadId:'cancel-test'},options)).ok,false);assert.equal((await message({type:'load-cancel',loadId:'cancel-test'},senderA)).result.cancelled,true);assert.match((await a).error,/cancelled/);release({ok:true,result:{sha:sha('a'),items:[]}});const completed=await b;assert.equal(completed.ok,true,completed.error);assert.equal(completed.result.sha,sha('a'));assert.equal(fixture.session.filter(m=>m.type==='github-session-read').length,1,'shared transport does not duplicate work');assert.equal((await message({type:'load-cancel',loadId:'cancel-test'},senderA)).result.cancelled,false);
+ let release;const fixture=withWebsite(t,'owner/cancel',{}, {readSession:async()=>new Promise(resolve=>release=resolve)});const request={type:'revision-resolve',repository:'owner/cancel',ref:'main',file:'board.kicad_pcb',loadId:'cancel-test'},senderA={...viewer,tab:{id:81},frameId:0,documentId:'a'},senderB={...senderA,documentId:'b'};const a=message(request,senderA),b=message(request,senderB);await nextTurn();assert.equal((await message({type:'load-cancel',loadId:'cancel-test'},{...senderA,frameId:1})).ok,false);assert.equal((await message({type:'load-cancel',loadId:'cancel-test'},options)).ok,false);assert.equal((await message({type:'load-cancel',loadId:'cancel-test'},senderA)).result.cancelled,true);assert.match((await a).error,/cancelled/);release({ok:true,result:{sha:sha('a'),items:[]}});const completed=await b;assert.equal(completed.ok,true,completed.error);assert.equal(completed.result.sha,sha('a'));assert.equal(fixture.session.filter(m=>m.type==='github-session-read').length,1,'shared transport does not duplicate work');assert.equal((await message({type:'load-cancel',loadId:'cancel-test'},senderA)).result.cancelled,false);
 });
 test('cancellable reads reject malformed identifiers, duplicates and auth/write tagging',async t=>{
  let release;const fixture=withWebsite(t,'owner/duplicate',{}, {readSession:async()=>new Promise(resolve=>release=resolve)});const request={type:'revision-resolve',repository:'owner/duplicate',ref:'main',file:'board.kicad_pcb',loadId:'one'};const first=message(request);await nextTurn();assert.equal((await message(request)).ok,false);for(const change of [{loadId:'bad space'},{loadId:''},{type:'github-auth-clear'},{type:'github-publish-comment'}])assert.equal((await message({...request,...change})).ok,false);assert.equal(fixture.session.length,1);await message({type:'load-cancel',loadId:'one'});assert.match((await first).error,/cancelled/);release({ok:true,result:{sha:sha('a'),items:[]}});await nextTurn();
@@ -1209,7 +1216,7 @@ test('Draftsman repository writes require owned viewers and explicitly allowed G
 
 
 test('owned launcher discovery is read-only, source-bound and distinct from website injection',async t=>{
- const launcher={id:'test-id',frameId:0,tab:{id:7},url:extensionOrigin+'project-launcher.html'},request={type:'repository-detect',source:'https://github.com/owner/board',repository:'owner/board',ref:'HEAD'};const fixture=withWebsite(t,'owner/board',{'board.kicad_pro':'{}'});const reply=await message(request,launcher);assert.equal(reply.ok,true,reply.error);assert.deepEqual(reply.result.projects,['board.kicad_pro']);const before=fixture.session.length;for(const change of [{source:'https://evil.example/owner/board'},{repository:'owner/other'},{ref:'other'}])assert.equal((await message({...request,...change},launcher)).ok,false);assert.equal(fixture.session.length,before);assert.equal((await message({type:'github-thread-read'},launcher)).ok,false);assert.equal((await message(request,{...launcher,frameId:1})).ignored,true);
+ const launcher={id:'test-id',frameId:0,tab:{id:7},url:extensionOrigin+'project-launcher.html'},request={type:'repository-detect',source:'https://github.com/owner/board',repository:'owner/board',ref:'HEAD'};const fixture=withWebsite(t,'owner/board',{'board.kicad_pro':'{}'});const reply=await message(request,launcher);assert.equal(reply.ok,true,reply.error);assert.deepEqual(reply.result.projects,['board.kicad_pro']);const before=fixture.session.length;for(const change of [{source:'https://evil.example/owner/board'},{repository:'owner/other'},{ref:'other'}])assert.equal((await message({...request,...change},launcher)).ok,false);assert.equal(fixture.session.length,before);assert.equal((await message({type:'github-thread-read'},launcher)).ok,false);assert.equal((await message(request,{...launcher,frameId:1})).ok,false);
 });
 
 
@@ -1221,15 +1228,11 @@ test('dashboard and icon open owned project workspaces even before a repository 
  await background.openFromAction({id:42,url:'https://github.com/BerkeleyLab/Marble/tree/main/design'});const action=new URL(calls.created.at(-1).url);assert.equal(action.pathname,'/project-launcher.html');assert.equal(action.searchParams.get('source'),'https://github.com/BerkeleyLab/Marble/tree/main/design');assert.equal(action.searchParams.has('error'),false);assert.equal(calls.created.length,start+4);
 });
 
-test('owned launcher discovers retained public Marble and VNA pages without any open GitHub tab',async t=>{
- const previousFetch=global.fetch,previousQuery=chrome.tabs.query;t.after(()=>{global.fetch=previousFetch;chrome.tabs.query=previousQuery;});chrome.tabs.query=async()=>[];const fs=require('node:fs'),path=require('node:path'),base=path.join(__dirname,'fixtures/github-public-discovery'),requests=[];
- const cases=[{repo:'BerkeleyLab/Marble',ref:'main',sha:'a426777d92c0f22a546d4740b419a3937e0c1f90',directory:'design',root:'marble-root',tree:'marble-design',project:'design/Marble.kicad_pro'},{repo:'Ttl/vna2',ref:'master',sha:'2cf0efb22da56a168a7f07bf5e2c30631343997b',directory:'hw',root:'vna2-root',tree:'vna2-hw',project:'hw/vna2.pro'}];
- global.fetch=async(url,init)=>{requests.push(url);assert.equal(new URL(url).hostname,'github.com');assert.equal(init.credentials,'omit');let body='<html><title>Blocked by your organization policy</title></html>',status=403;
-  for(const c of cases){if([`https://github.com/${c.repo}`,`https://github.com/${c.repo}/tree/${c.ref}`,`https://github.com/${c.repo}/tree/${c.sha}`].includes(url)){body=fs.readFileSync(path.join(base,c.root+'.html'),'utf8');status=200;break;}if([`https://github.com/${c.repo}/tree/${c.ref}/${c.directory}`,`https://github.com/${c.repo}/tree/${c.sha}/${c.directory}`].includes(url)){body=fs.readFileSync(path.join(base,c.tree+'.html'),'utf8');status=200;break;}}
-  const response=new Response(body,{status,headers:{'content-type':'text/html'}});Object.defineProperty(response,'url',{value:url});return response;};
+test('owned launcher without a website tab fails explicitly and performs zero background requests',async t=>{
+ const previousQuery=chrome.tabs.query;t.after(()=>chrome.tabs.query=previousQuery);chrome.tabs.query=async()=>[];let reads=0;withFetch(t,async()=>{reads++;throw Error('Forbidden background request');});
  const sender={id:'test-id',url:extensionOrigin+'project-launcher.html'};
- for(const c of cases)for(const source of [`https://github.com/${c.repo}`,`https://github.com/${c.repo}/tree/${c.ref}/${c.directory}`]){const reply=await message({type:'repository-detect',source,repository:c.repo,ref:source.endsWith(c.directory)?null:'HEAD'},sender);assert.equal(reply.ok,true,reply.error);assert.equal(reply.result.sha,c.sha);assert.ok(reply.result.projects.includes(c.project));assert.equal(reply.result.truncated,true);assert.ok(reply.result.warnings.some(w=>/organization policy/.test(w)));}
- assert.ok(requests.length>0);assert.ok(requests.every(url=>!url.includes('api.github.com')));
+ for(const repository of ['BerkeleyLab/Marble','Ttl/vna2']){const reply=await message({type:'repository-detect',source:'https://github.com/'+repository,repository,ref:'HEAD'},sender);assert.equal(reply.ok,false);assert.match(reply.error,/same signed-in browser profile|website session/);}
+ assert.equal(reads,0);
 });
 
 
@@ -1248,4 +1251,70 @@ test('icon invocation installs only isolated read bridge after explicit click an
  await background.openFromAction({id:79,url:'https://github.com/owner/private'});assert.equal(injected.length,1);assert.equal(injected[0].target.tabId,79);assert.equal(injected[0].files.at(-1),'repository-session-bridge.js');assert.equal(injected[0].files.includes('content.js'),false);
  const before=injected.length;await background.openFromAction({id:80,url:'https://unrelated.example/'});assert.equal(injected.length,before);
  chrome.scripting.executeScript=async()=>{throw Error('SECRET POLICY DETAIL');};await background.openFromAction({id:79,url:'https://github.com/owner/private'});const result=new URL(calls.created.at(-1).url);assert.match(result.searchParams.get('error'),/blocked by policy/);assert.doesNotMatch(result.href,/SECRET/);
+});
+
+
+test('inline launch is opt-in, bound to the clicked repository and cannot become an unscoped website frame',async t=>{
+ const fixture=withWebsite(t,'org/inline',{'board.kicad_pro':'{}','board.kicad_sch':'(kicad_sch)'}),oldScripting=chrome.scripting,send=chrome.tabs.sendMessage,commands=[],injections=[];
+ t.after(()=>{chrome.scripting=oldScripting;localStore.delete('project-viewer-mode');});
+ chrome.scripting={executeScript:async request=>{injections.push(request);return [];}};
+ chrome.tabs.sendMessage=async(id,request,opts)=>{if(request.type==='projectLaunchContext')return null;if(request.type==='inline-project-open'){commands.push(request);return {ok:true,result:{opened:true,mode:'inline'}};}return send(id,request,opts);};
+ assert.equal((await message({type:'viewer-preferences-set',mode:'inline'},viewer)).ok,false);
+ assert.equal((await message({type:'viewer-preferences-set',mode:'unsafe'},options)).ok,false);
+ assert.equal((await message({type:'viewer-preferences-set',mode:'inline'},options)).ok,true);
+ assert.equal((await message({type:'viewer-preferences-get'},options)).result.mode,'inline');
+ const before=calls.created.length;await background.openFromAction({id:71,url:'https://github.com/org/inline'});assert.equal(calls.created.length,before);assert.equal(commands.length,1);assert.ok(injections.some(x=>x.files.includes('inline-project-view.js')));
+ const frame={id:'test-id',frameId:2,tab:{id:71,url:'https://github.com/org/inline'},url:commands[0].url};
+ const request={type:'repository-detect',source:'https://github.com/org/inline',repository:'org/inline',ref:'HEAD'};
+ assert.equal((await message(request,frame)).ok,true);
+ assert.equal((await message(request,{...frame,tab:{id:999,url:'https://github.com/org/inline'}})).ok,false);
+ assert.equal((await message({...request,repository:'org/other'},frame)).ok,false);
+ const viewerFrame={...frame,url:extensionOrigin+'browser-viewer.html?repository=org/inline&head='+sha('a')};
+ assert.equal((await message({type:'project-file',repository:'org/inline',ref:sha('a'),file:'board.kicad_pro'},viewerFrame)).ok,true);
+ assert.equal((await message({type:'project-file',repository:'org/other',ref:sha('a'),file:'board.kicad_pro'},viewerFrame)).ok,false);
+ const popout={type:'inline-project-open-tab',url:commands[0].url};assert.equal((await message(popout,githubTab(71,'/org/inline'))).ok,true);assert.equal((await message({...popout,url:extensionOrigin+'project-viewer.html?repository=org/other'},githubTab(71,'/org/inline'))).ok,false);
+ assert.ok(fixture.raw.every(x=>x.init.credentials==='same-origin'));
+});
+
+test('fabrication-only repositories choose Gerber jobs and keep declared source reads in the website session',async t=>{
+ withWebsite(t,'org/fabrication',{'fab/board.gbrjob':'{}','fab/top.gbr':'M02*','fab/drills.xnc':'M48\n%\nM30'});
+ const request={type:'repository-detect',source:'https://github.com/org/fabrication',repository:'org/fabrication',ref:'HEAD'},launcher={id:'test-id',url:extensionOrigin+'project-launcher.html'};
+ const reply=await message(request,launcher);assert.equal(reply.ok,true,reply.error);assert.deepEqual(reply.result.projects,['fab/board.gbrjob']);
+});
+
+
+test('dedicated fabrication viewer reads pinned files and rejects review writes and unbound frames',async t=>{
+ const fixture=withWebsite(t,'org/fab-view',{'fab/board.gbrjob':'{}','fab/top.gbr':'M02*','fab/drill.xnc':'M48\n%\nM30'});
+ const sender={id:'test-id',url:extensionOrigin+'gerber-viewer.html?repository=org/fab-view',frameId:0};
+ const scope={repository:'org/fab-view',ref:sha('a'),file:'fab/board.gbrjob'};
+ const inventory=await message({type:'project-inventory',...scope},sender);assert.equal(inventory.ok,true,inventory.error);assert.ok(inventory.result.files.some(f=>f.path==='fab/drill.xnc'));
+ const source=await message({type:'project-file',...scope,file:'fab/top.gbr'},sender);assert.equal(source.ok,true,source.error);assert.equal(source.result.content,'M02*');assert.ok(fixture.raw.every(x=>x.init.credentials==='same-origin'));
+ for(const type of ['github-post','github-auth-status','chat-write','draftsman-save','repository-tree'])assert.equal((await message({type,...scope},sender)).ok,false);
+ const embedded={...sender,frameId:4,tab:{id:901,url:'https://github.com/org/fab-view'}};assert.notEqual((await message({type:'project-file',...scope},embedded)).ok,true);
+});
+
+test('website handoff prepares metadata without auth, tabs, receipts or network writes',async t=>{
+ const oldFetch=global.fetch;global.fetch=async()=>{throw Error('No network allowed');};t.after(()=>global.fetch=oldFetch);
+ const before={created:calls.created.length,updated:calls.updated.length,session:sessionStore.size};
+ const note=sampleComment();note.anchor.position={x:12,y:24};note.anchor.area={x:10,y:20,width:4,height:8};note.anchor.sheetUuid='11111111-2222-4333-8444-555555555555';note.anchor.sheetName='Power';note.anchor.instancePath='/root/power';
+ const result=await message({type:'open-comment-draft',websiteHandoff:true,comment:note});assert.equal(result.ok,true);assert.equal(result.result.prefilled,true);
+ const url=new URL(result.result.url);assert.equal(url.origin,'https://github.com');assert.equal(url.pathname,'/owner/board/issues/new');assert.equal(url.searchParams.get('body'),result.result.body);
+ const roundtrip=KiCadReviewComments.fromMarkdown(result.result.body)[0];assert.deepEqual(roundtrip.anchor,note.anchor);assert.match(result.result.body,/End \(mm\)/);
+ assert.deepEqual({created:calls.created.length,updated:calls.updated.length,session:sessionStore.size},before);
+ for(const [targetType,path]of [['issue','issues'],['discussion','discussions'],['pull-request','pull']]){
+  const draft=await message({type:'open-comment-draft',websiteHandoff:true,comment:note,targetType,targetNumber:31,targetRepository:'base/board'});assert.equal(draft.result.url,'https://github.com/base/board/'+path+'/31');assert.equal(draft.result.prefilled,false);
+ }
+ const discussion=await message({type:'open-comment-draft',websiteHandoff:true,comment:note,destination:'discussion'});assert.equal(discussion.result.url,'https://github.com/owner/board/discussions/new');
+ const long=await message({type:'open-comment-draft',websiteHandoff:true,comment:{...note,text:'Large draft '.repeat(300)}});assert.equal(long.result.prefilled,false);assert.equal(new URL(long.result.url).search,'');assert.ok(long.result.body.length>5000);
+ assert.equal((await message({type:'open-comment-draft',websiteHandoff:true,comment:note,targetType:'issue',targetNumber:0})).ok,false);
+ assert.equal((await message({type:'open-comment-draft',websiteHandoff:true,comment:note,targetRepository:'../other'})).ok,false);
+ assert.equal((await message({type:'open-comment-draft',websiteHandoff:true,comment:note},githubTab(1,'/owner/board'))).ok,false);
+});
+test('GitLab website handoff uses documented prefill and keeps local attachments out of website metadata',async()=>{
+ const note=sampleComment();note.anchor={...note.anchor,provider:'gitlab',host:'https://gitlab.example.com',repository:'group/sub/project'};
+ note.attachments=[{provider:'gitlab',host:note.anchor.host,repository:note.anchor.repository,projectId:9,mime:'image/png',width:30,height:20,url:note.anchor.host+'/group/sub/project/uploads/'+'a'.repeat(32)+'/kicad-review-'+'b'.repeat(20)+'.png'}];
+ const prepared=await message({type:'open-comment-draft',websiteHandoff:true,provider:'gitlab',host:note.anchor.host,comment:note});assert.equal(prepared.ok,true);const url=new URL(prepared.result.url);assert.equal(url.origin,note.anchor.host);assert.equal(url.pathname,'/group/sub/project/-/work_items/new');assert.equal(url.searchParams.get('issue[description]'),prepared.result.body);
+ assert.equal(KiCadReviewComments.fromMarkdown(prepared.result.body)[0].attachments,undefined);assert.equal(prepared.result.body.includes(note.attachments[0].url),false);assert.match(prepared.result.body,/Attach them manually/);
+ const reply=await message({type:'open-comment-draft',websiteHandoff:true,provider:'gitlab',host:note.anchor.host,comment:note,targetType:'issue',targetNumber:42});assert.equal(reply.result.url,note.anchor.host+'/group/sub/project/-/issues/42');
+ assert.equal((await message({type:'open-comment-draft',websiteHandoff:true,provider:'gitlab',comment:note,destination:'discussion'})).ok,false);
 });

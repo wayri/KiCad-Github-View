@@ -142,7 +142,11 @@
           const response=await fetcher(`https://github.com/${repository}/raw/${ref}/${path.split('/').map(encodeURIComponent).join('/')}`,{credentials:'same-origin',redirect:'follow',cache:'no-store',signal:controller.signal});
           if(response.status===404)return null;
           const final=new URL(response.url);
-          if(!response.ok||!(final.origin==='https://raw.githubusercontent.com'&&final.pathname===suffix||final.origin==='https://github.com'&&final.pathname===`/${repository}/raw/${ref}/${path.split('/').map(encodeURIComponent).join('/')}`)||/html/i.test(response.headers.get('content-type')||''))throw Error('GitHub session could not download this file. Open this repository on GitHub and complete website sign-in or organization access.');
+          // GitHub serves repository LFS assets through its media host. Bind the
+          // redirect to this exact repository, immutable revision and encoded
+          // filename; signed query strings remain in the page's fetch only.
+          const lfsAsset=action==='asset'&&final.origin==='https://media.githubusercontent.com'&&final.pathname==='/media'+suffix;
+          if(!response.ok||final.username||final.password||final.hash||!(final.origin==='https://raw.githubusercontent.com'&&final.pathname===suffix||final.origin==='https://github.com'&&final.pathname===`/${repository}/raw/${ref}/${path.split('/').map(encodeURIComponent).join('/')}`||lfsAsset)||/html/i.test(response.headers.get('content-type')||''))throw Error('GitHub session could not download this file. Open this repository on GitHub and complete website sign-in or organization access.');
           if(action==='asset') {
             const bytes=await bounded(response,limit,controller.signal,true),pieces=[];
             for(let i=0;i<bytes.length;i+=8192)pieces.push(String.fromCharCode(...bytes.subarray(i,i+8192)));
