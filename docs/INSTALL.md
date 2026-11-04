@@ -1,22 +1,17 @@
 # Install Pocket KiView
 
-The **0.12.82 release candidate** is being verified. Its prepared package names are
-`kicad-visual-review-chrome-edge-brave-opera-vivaldi-chromium-0.12.82.zip`,
-`kicad-visual-review-firefox-0.12.82.zip`, `kicad-visual-review-vscode-0.12.82.vsix`
-and `pocket-kivi-android-phone-tablet-1.82-development.apk`. Publication is pending;
-the published preview described below remains available meanwhile.
+Current prepared preview: **extension 0.12.83 / Android 1.86**. Store submission
+and approval are separate from GitHub downloads. See [release status](RELEASE-STATUS.md).
 
-Current GitHub preview: extension 0.12.82 and Android 1.82. Download the packages below; store availability is separate from GitHub release availability.
+Download `kicad-visual-review-chrome-edge-brave-opera-vivaldi-chromium-0.12.83.zip`,
+`kicad-visual-review-firefox-0.12.83.zip`, `kicad-visual-review-vscode-0.12.83.vsix`,
+or `pocket-kivi-android-phone-tablet-1.86-development.apk` from
+[GitHub Releases](https://github.com/wayri/KiCad-Github-View/releases/tag/v0.12.83).
+GitHub's automatic Source code archives are source checkouts, not installable extensions.
 
-Release 0.12.82 includes [API-free GitHub project buffering](GITHUB-WEBSITE-VIEWING.md), interactive probe views and renderer/export refinements.
-Its browser filenames are `kicad-visual-review-chrome-edge-brave-opera-vivaldi-chromium-0.12.82.zip`
-and `kicad-visual-review-vscode-0.12.82.vsix`. Store submission and approval are separate from these GitHub downloads.
-
-Choose a prepared package from the [README download buttons](../README.md#downloads) or [GitHub Releases](https://github.com/wayri/KiCad-Github-View/releases). GitHub's automatic **Source code** archives are source checkouts, not installable extensions. The source repository and release downloads are public.
-
-The browser and VS Code editions run on Windows, Linux and macOS. There is no standalone Windows `.exe`, Linux `.deb`/AppImage or macOS `.dmg` installer in the published release. Ordinary viewing does not require KiCad, Python or a rendering server. The optional local Python launcher has separate requirements.
-
-Browser/desktop 0.12.82 assets (Android 1.82 is included in release 0.12.82): `kicad-visual-review-chrome-edge-brave-opera-vivaldi-chromium-0.12.82.zip`, `kicad-visual-review-firefox-0.12.82.zip`, `kicad-visual-review-vscode-0.12.82.vsix`, and `pocket-kivi-android-phone-tablet-1.82-development.apk`.
+The browser and VS Code editions support Windows, Linux and macOS. Ordinary
+viewing does not require KiCad, Python or a rendering server. No standalone
+desktop installer or Google Play installation is included in this preview.
 
 ## Choose your platform
 
@@ -45,7 +40,7 @@ code --install-extension wayri.kicad-visual-review
 For a downloaded VSIX, replace the filename with the actual package:
 
 ```sh
-code --install-extension ./kicad-visual-review-vscode-0.12.82.vsix
+code --install-extension ./kicad-visual-review-vscode-0.12.83.vsix
 ```
 
 On macOS, VS Code's **Shell Command: Install 'code' command in PATH** enables this optional terminal route. The Extensions UI does not need it.
