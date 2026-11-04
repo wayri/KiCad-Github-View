@@ -1,9 +1,9 @@
 # Distribution status
 
-**0.12.83 / Android 1.86 (prepared 4 November 2026):** preview release adds faster
+**0.12.83 / Android 1.86 (4 November 2026):** [GitHub preview published](https://github.com/wayri/KiCad-Github-View/releases/tag/v0.12.83) with 23 SHA-256-verified assets. This release adds faster
 large-board rendering, searchable Fast PI contacts, masked smooth result fields,
 mechanical Draftsman optimization, Android document exports and corrected saved
-DRC/ERC report ingestion. See [release notes](releases/v0.12.83.md). Store upload
+DRC/ERC report ingestion. The full gate passed 149 Python checks (one environment skip) and 2,383 JavaScript checks (one skip); Android assemble/lint and exact package/source audits passed. See [release notes](releases/v0.12.83.md). Store upload
 and approval are separate; no new Chrome, Marketplace or Mozilla approval is
 claimed by this entry. The last full-Marble phone run predates the final added
 picker/field/export changes; the final added UI checks remain pending.
