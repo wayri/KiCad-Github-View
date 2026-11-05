@@ -25,30 +25,30 @@ Explore schematics and PCB layouts, follow nets, measure geometry, work through 
 
 These links open the official installation pages. Store approvals and versions can lag the GitHub preview; see [channel status](docs/RELEASE-STATUS.md).
 
-**Release 0.12.85 / Android 1.88:** the fresh **KiCad Online** branding update across browsers, VS Code, Android and the web viewer, with a Firefox Android internal-tab fallback. Existing installation identities/settings and the license are retained. Local/offline projects remain supported. [Release notes and known limits](docs/releases/v0.12.85.md). The Altium beta remains separate and excluded. [Actual channel status](docs/RELEASE-STATUS.md). Android preview is development-signed and non-debuggable; its unsigned AAB is not Play upload-ready.
+**Release 0.12.86 / Android 1.88 unchanged:** updated **KiCad Online Source-Available License 1.0**, current comment/Draftsman screenshots in the VS Code README, and Firefox packages containing the project license and static Terms. Permissions and license usage terms are unchanged. [Release notes and limits](docs/releases/v0.12.86.md) · [Actual channel status](docs/RELEASE-STATUS.md). Chrome's 0.12.85 store review remains running; store approvals can lag GitHub. Android 1.88 remains in v0.12.85 and is not rebuilt. The Altium beta stays separate.
 
 The live counter above totals GitHub release-asset downloads, including downloads initiated by KiCad PCM **when its package URL points to a GitHub release asset in this repository**. GitHub does not expose a browser-versus-PCM breakdown or unique install count. No PCM package/repository is currently configured here, and downloads hosted elsewhere are not included. [What the counter measures](docs/DOWNLOAD-STATS.md).
 
 [![Download Android APK](https://img.shields.io/badge/Android-Download%20APK%201.88-3DDC84?logo=android&logoColor=white)](https://github.com/wayri/KiCad-Online/releases/download/v0.12.85/pocket-kivi-android-phone-tablet-1.88-development.apk)
-[![Download Chromium extension](https://img.shields.io/badge/Chrome%20%2F%20Chromium-Download%20ZIP-4285F4?logo=googlechrome&logoColor=white)](https://github.com/wayri/KiCad-Online/releases/download/v0.12.85/kicad-visual-review-chrome-edge-brave-opera-vivaldi-chromium-0.12.85.zip)
-[![Download VS Code VSIX](https://img.shields.io/badge/VS%20Code-Download%20VSIX%200.12.85-007ACC)](https://github.com/wayri/KiCad-Online/releases/download/v0.12.85/kicad-visual-review-vscode-0.12.85.vsix)
+[![Download Chromium extension](https://img.shields.io/badge/Chrome%20%2F%20Chromium-Download%20ZIP-4285F4?logo=googlechrome&logoColor=white)](https://github.com/wayri/KiCad-Online/releases/download/v0.12.86/kicad-visual-review-chrome-edge-brave-opera-vivaldi-chromium-0.12.86.zip)
+[![Download VS Code VSIX](https://img.shields.io/badge/VS%20Code-Download%20VSIX%200.12.86-007ACC)](https://github.com/wayri/KiCad-Online/releases/download/v0.12.86/kicad-visual-review-vscode-0.12.86.vsix)
 
 | Edition | Download / install | Availability |
 | --- | --- | --- |
 | Android | APK button above | Android 8+; 1.88 preview, development-signed; manual installation and updates |
-| Chrome, Edge, Brave, Opera, Vivaldi, Chromium | [Chrome Web Store](https://chromewebstore.google.com/detail/klfdjlbngpoopegjmbajaidgodpmjaoc) / Chromium ZIP button above | GitHub 0.12.85 preview: extract and load unpacked; store version may differ; candidate browsers have differing validation coverage |
-| VS Code | [Marketplace](https://marketplace.visualstudio.com/items?itemName=wayri.kicad-visual-review) / [offline VSIX 0.12.85](https://github.com/wayri/KiCad-Online/releases/download/v0.12.85/kicad-visual-review-vscode-0.12.85.vsix) | Windows, Linux and macOS; VS Code 1.95+; Marketplace and GitHub versions may differ |
-| Firefox / compatible derivatives | [Mozilla Add-ons](https://addons.mozilla.org/en-US/firefox/addon/pocket-kiview-kicad-review/) / [Development ZIP 0.12.85](https://github.com/wayri/KiCad-Online/releases/download/v0.12.85/kicad-visual-review-firefox-0.12.85.zip) | Firefox desktop 140+ / Android 142+ declared for 0.12.85; store version may differ; newer ZIP unsigned; Zen/LibreWolf/Waterfox candidates unverified; [install, signing and Mozilla publishing](docs/FIREFOX.md) |
+| Chrome, Edge, Brave, Opera, Vivaldi, Chromium | [Chrome Web Store](https://chromewebstore.google.com/detail/klfdjlbngpoopegjmbajaidgodpmjaoc) / Chromium ZIP button above | GitHub 0.12.86 preview: extract and load unpacked; store version may differ; candidate browsers have differing validation coverage |
+| VS Code | [Marketplace](https://marketplace.visualstudio.com/items?itemName=wayri.kicad-visual-review) / [offline VSIX 0.12.86](https://github.com/wayri/KiCad-Online/releases/download/v0.12.86/kicad-visual-review-vscode-0.12.86.vsix) | Windows, Linux and macOS; VS Code 1.95+; Marketplace and GitHub versions may differ |
+| Firefox / compatible derivatives | [Mozilla Add-ons](https://addons.mozilla.org/en-US/firefox/addon/pocket-kiview-kicad-review/) / [Development ZIP 0.12.86](https://github.com/wayri/KiCad-Online/releases/download/v0.12.86/kicad-visual-review-firefox-0.12.86.zip) | Firefox desktop 140+ / Android 142+ declared for 0.12.86; store version may differ; newer ZIP unsigned; Zen/LibreWolf/Waterfox candidates unverified; [install, signing and Mozilla publishing](docs/FIREFOX.md) |
 | Safari | [Development ZIP 0.12.85](https://github.com/wayri/KiCad-Online/releases/download/v0.12.85/kicad-visual-review-safari-0.12.85.zip) | macOS Safari 16.4+; requires Xcode conversion/signing; native verification pending; [instructions](docs/SAFARI.md) |
 
-Browser/desktop downloads above are the [v0.12.85 GitHub preview](https://github.com/wayri/KiCad-Online/releases/tag/v0.12.85). Android 1.88 is included in the same release. Store channels are updated separately. The source repository and GitHub downloads are public.
+Browser/desktop downloads above are the [v0.12.86 GitHub preview](https://github.com/wayri/KiCad-Online/releases/tag/v0.12.86). Android 1.88 remains in v0.12.85; Safari remains at 0.12.85 in the table. Store channels are updated separately. The source repository and GitHub downloads are public.
 
 <details>
 <summary>Release versions, checksums and Android signing</summary>
 
 Release packages are built from the tagged source; screenshots show several retained development versions and may differ from the packaged UI. The Chrome Store link above is the existing public listing; its approved version can lag GitHub. No Google Play installation is advertised here.
 
-Compare preview downloads with [SHA256SUMS.txt](https://github.com/wayri/KiCad-Online/releases/download/v0.12.85/SHA256SUMS.txt). An AAB is a Play upload bundle, not a directly installable Android app. Preserve/export projects and review state before changing signing channels; do not uninstall merely to bypass a signature mismatch. [Installation and updates](docs/INSTALL.md).
+Compare 0.12.86 downloads with [SHA256SUMS.txt](https://github.com/wayri/KiCad-Online/releases/download/v0.12.86/SHA256SUMS.txt); Android 1.88 and the retained Safari package use [0.12.85 checksums](https://github.com/wayri/KiCad-Online/releases/download/v0.12.85/SHA256SUMS.txt). An AAB is a Play upload bundle, not a directly installable Android app. Preserve/export projects and review state before changing signing channels; do not uninstall merely to bypass a signature mismatch. [Installation and updates](docs/INSTALL.md).
 
 </details>
 

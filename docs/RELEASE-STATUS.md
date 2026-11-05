@@ -1,10 +1,21 @@
 # Distribution status
 
-**0.12.86 preparation (5 November 2026):** license naming and public screenshot
-update for VS Code and Firefox. Firefox packaging now includes the project license
-and static Terms page. Upload and approval are not yet claimed. Chrome's pending
-0.12.85 review remains running; Android 1.88 is unchanged. Mozilla's public icon,
-license metadata and three new screenshots were saved and verified separately.
+**0.12.86 (5 November 2026):** [GitHub preview published](https://github.com/wayri/KiCad-Online/releases/tag/v0.12.86)
+with 20 assets (123,247,941 bytes); every remote asset size and SHA-256 matches
+the audited local output. Exact clean source/tag: `9f05e418d1d7551c1d40a2de8348192858443115`.
+License naming and public screenshot update; Firefox now includes the project
+license and static Terms. 150 Python checks: 148 passed, two environment skips
+(Java policy runtime unavailable; Windows symbolic-link privilege unavailable).
+JavaScript: 2,388 passed, one skipped. Readable Mozilla companion is prepared
+(91,901,852 bytes; SHA-256 `2b4f853c21571a81bd3691e01b2d2063daf0122440825a669290391bac309ba7`);
+the bundled rendering source rebuilt byte-identically. Native OCCT was not rebuilt.
+
+| Channel | 0.12.86 handoff |
+| --- | --- |
+| VS Code | Verified VSIX selected in Marketplace; owner must complete the CAPTCHA-protected Upload action. Submission is not yet confirmed. Last public version: 0.12.85. |
+| Mozilla | Verified Firefox ZIP and matching readable source ready; automated file chooser timed out twice. Owner file selection is pending; no 0.12.86 validation/submission is claimed. 0.12.85 remains Awaiting Review; public version is 0.12.66. Icon, renamed license metadata and three new screenshots were saved and verified separately. |
+| Chrome | Pending **0.12.85** review intentionally left running. No store upload, withdrawal or listing modification for 0.12.86. |
+| Android | 1.88 unchanged; no Android build or installation in this release. |
 
 **KiCad Online 0.12.85 / Android 1.88 (4 November 2026):**
 [GitHub preview published](https://github.com/wayri/KiCad-Online/releases/tag/v0.12.85)
