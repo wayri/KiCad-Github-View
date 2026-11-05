@@ -129,9 +129,9 @@
   // Phone tools are overlays: expanding a control group never reduces the sheet
   // to a few pixels, and Properties never takes a permanent column from it.
   const narrow=root.matchMedia('(max-width:700px), (max-height:500px) and (pointer:coarse)'),toolsDisclosure=el('details'),exportDisclosure=el('details');
-  toolsDisclosure.className='draftsman-tools-disclosure';toolsDisclosure.append(el('summary','Tools'),toolbar);dialog.insertBefore(toolsDisclosure,body);
+  const topControls=el('div');topControls.className='draftsman-top-controls';toolsDisclosure.className='draftsman-tools-disclosure';toolsDisclosure.append(el('summary','Tools'),toolbar);dialog.insertBefore(topControls,body);topControls.append(toolsDisclosure);
   if(narrow.matches){dialog.classList.add('draftsman-properties-hidden');propertiesButton.setAttribute('aria-pressed','false');}
-  exportDisclosure.className='draftsman-export-disclosure';exportDisclosure.append(el('summary','Save & export'),exports,downloadLinks);footer.append(exportDisclosure);
+  exportDisclosure.className='draftsman-export-disclosure';exportDisclosure.append(el('summary','Save & export'),exports,downloadLinks);topControls.append(exportDisclosure);
   const documentGroup=el('div');documentGroup.className='draftsman-control-group';documentGroup.setAttribute('role','group');documentGroup.setAttribute('aria-label','Document');documentGroup.append(templateChoice,...['+ Sheet','Undo','Redo'].map(label=>header.querySelector('button[aria-label="'+label+'"]')));toolbar.prepend(documentGroup);
   const closeDrawers=event=>{if(!narrow.matches)return;for(const drawer of [toolsDisclosure,exportDisclosure])if(!drawer.contains(event.target))drawer.open=false;};
   const syncResponsive=()=>{toolsDisclosure.open=exportDisclosure.open=!narrow.matches;layoutPreview();};syncResponsive();narrow.addEventListener?.('change',syncResponsive);dialog.addEventListener('pointerdown',closeDrawers);

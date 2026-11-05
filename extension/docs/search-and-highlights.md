@@ -51,3 +51,7 @@ Up to four probes can be open, including two interactive 3D probes alongside the
 In the PCB highlight controls, choose **Net color → Layer colors** to keep each selected track, arc, pad and copper fill in its layer's color instead of the single accent. The selection glow and existing Bright, Dim context and Isolate options still apply. The choice is remembered and shared with other viewer windows on the same host. **Accent** restores the single highlight color. Schematic highlights retain their contrasting schematic accent.
 
 The choice also applies to 2D and 3D probe windows and the full-net 3D overlay, including saved internal copper and via annuli. Via barrels use their saved entry-layer color. Switching colors reuses the existing 3D overlay geometry and does not fetch or parse the project again.
+
+### Orthographic 3D inspection
+
+Use **View → Top** (or **Z**) and enable **Ortho** beside the 3D view selector for a parallel projection without perspective distortion. The toggle preserves target-plane framing when switching back to perspective. Pad annotations, picking and comment/probe links follow the active camera. A 3D probe has its own **Orthographic projection** toggle in its view tools; changing it does not change the main camera.

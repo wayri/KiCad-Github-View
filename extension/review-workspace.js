@@ -1793,7 +1793,8 @@
     }
     function engineeringExport(name,text,mime){let native;try{native=root.top.AndroidKiCad||root.top.KiViewIOS;}catch{}if(native?.exportText){if(new TextEncoder().encode(text).length>4*1024*1024)throw Error('Export exceeds 4 MiB.');native.exportText(name,text,mime.split(';')[0]);return true;}const a=make('a');a.href=URL.createObjectURL(new Blob([text],{type:mime}));a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000);}
     const revisionScope=()=>({repository,provider,host,file:currentFile()});
-    if(!root.KiCadAndroidRuntime&&!root.KiCadVSCodeContext&&['chrome-extension:','moz-extension:'].includes(root.location?.protocol)){const home=button('Projects',()=>root.open(chrome.runtime.getURL('dashboard.html'),'_blank','noopener'));home.id='openProjectDashboard';home.setAttribute('data-icon','dashboard');home.title='Project dashboard and recently accessed projects';$('drawingTools').append(home);}
+    let hasDashboardHeader=false;try{hasDashboardHeader=root.parent!==root&&Boolean(root.parent.document.getElementById('workspaceTabs'));}catch{}
+    if(!hasDashboardHeader&&!root.KiCadAndroidRuntime&&!root.KiCadVSCodeContext&&['chrome-extension:','moz-extension:'].includes(root.location?.protocol)){const home=button('Projects',()=>root.open(chrome.runtime.getURL('dashboard.html'),'_blank','noopener'));home.id='openProjectDashboard';home.setAttribute('data-icon','dashboard');home.setAttribute('aria-label','Project dashboard');home.title='Project dashboard and recently accessed projects';document.querySelector('#frameControls .frame-actions').prepend(home);}
     let nativeOpenBusy=false;
     const cancelNativeOpen=()=>{if(nativeOpenBusy)chrome.runtime.sendMessage({type:'native-kicad-cancel'}).catch(()=>{});};
     if(!root.KiCadLocalRuntime&&!root.KiCadAndroidRuntime&&!root.KiCadVSCodeContext&&['chrome-extension:','moz-extension:'].includes(root.location?.protocol)){

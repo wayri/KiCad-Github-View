@@ -1,3 +1,4 @@
+import {projectionPixelsPerMm} from './cameraProjection.mjs';
 /** Read-only saved terminal annotations, shared by main and probe cameras. */
 const safe=value=>typeof value==='string'&&value.length<=160&&!/[\x00-\x1f\x7f-\x9f\u2028-\u202e\u2066-\u2069]/.test(value)?value.trim():'';
 export function terminalNumber(pad){return safe(pad?.pinNumber!==undefined?pad.pinNumber:pad?.name);}
@@ -44,7 +45,7 @@ export function createTerminalAnnotations(THREE,{scene,camera,host,records=[],wo
   const signature=JSON.stringify([camera.matrixWorld.elements,camera.projectionMatrix.elements,width,height,visible,layer,flags]);if(signature===lastSignature)return report();lastSignature=signature;stats={shown:0,readable:0,overlap:0,budget:0,sourceOmitted,layer};inFrame.clear();
   if(visible){const grid=labelCollisionGrid(),project=(x,y,z)=>{projected.set(x,y,z).project(camera);return {x:(projected.x+1)*width/2,y:(1-projected.y)*height/2,z:projected.z};};
    for(const pad of pads){if(!terminalOnLayer(pad,layer)||![pad.width,pad.height,...(pad.at||[])].every(Number.isFinite)||!(pad.width>0&&pad.height>0)||pad.at?.length!==2)continue;
-    const[x,y]=world(pad.at),z=surfaceZ(layer);centerWorld.set(x,y,z);cameraSpace.copy(centerWorld).applyMatrix4(camera.matrixWorldInverse);const depth=-cameraSpace.z;if(!(depth>0))continue;const pxPerMm=height/(2*Math.tan(camera.fov*Math.PI/360)*depth);if(Math.min(pad.width,pad.height)*pxPerMm<13)continue;
+    const[x,y]=world(pad.at),z=surfaceZ(layer);centerWorld.set(x,y,z);cameraSpace.copy(centerWorld).applyMatrix4(camera.matrixWorldInverse);const depth=-cameraSpace.z;if(!(depth>0))continue;const pxPerMm=projectionPixelsPerMm(camera,height,depth);if(Math.min(pad.width,pad.height)*pxPerMm<13)continue;
     const center=project(x,y,z);if(center.x<0||center.x>width||center.y<0||center.y>height||center.z< -1||center.z>1)continue;
     const radians=(pad.shape==='circle'?0:pad.rotation||0)*Math.PI/180,c=Math.cos(radians),s=Math.sin(radians),factor=['circle','oval','roundrect'].includes(pad.shape)?Math.SQRT1_2:1,w=pad.width/2*factor,h=pad.height/2*factor,corners=[[-w,-h],[w,-h],[w,h],[-w,h]].map(([dx,dy])=>project(x+c*dx-s*dy,y+s*dx+c*dy,z)),fit=projectedTerminalFit(center,corners);if(!fit)continue;
     const label=layout({number:terminalNumber(pad),pinName:flags.numbers?pad.pinName:'',net:flags.nets?pad.net:'',showNumbers:flags.numbers,showNetNames:flags.nets,widthPx:fit.width,heightPx:fit.height,minPadPx:13});if(!label)continue;
@@ -56,5 +57,5 @@ export function createTerminalAnnotations(THREE,{scene,camera,host,records=[],wo
   }
   for(let i=stats.shown;i<pool.length;i++)pool[i].visible=false;return report();
  }
- return {group,update,setNets(value){lastSignature='';return state.setNets(value);},setNumbers(value){lastSignature='';return state.setNumbers(value);},getState:report,dispose(){if(disposed)return;disposed=true;scene.remove(group);for(const mesh of pool)mesh.material.dispose();for(const value of cache.values())value.texture.dispose();cache.clear();pixels=0;geometry.dispose();group.clear();pads.length=0;pool.length=0;}};
+ return {group,update,setCamera(value){camera=value;lastSignature='';},setNets(value){lastSignature='';return state.setNets(value);},setNumbers(value){lastSignature='';return state.setNumbers(value);},getState:report,dispose(){if(disposed)return;disposed=true;scene.remove(group);for(const mesh of pool)mesh.material.dispose();for(const value of cache.values())value.texture.dispose();cache.clear();pixels=0;geometry.dispose();group.clear();pads.length=0;pool.length=0;}};
 }

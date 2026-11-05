@@ -32,7 +32,7 @@ function viewportHarness(THREE){
  const rendered=[],queue=new Map();let seq=0,disposed=0,loss=0;
  class Canvas{constructor(){this.style={};this.events=new Map();this.parentNode=null;}setAttribute(){}addEventListener(name,fn){this.events.set(name,fn);}removeEventListener(name){this.events.delete(name);}getBoundingClientRect(){return {left:0,top:0,width:320,height:240};}remove(){this.parentNode=null;}}
  class Renderer{constructor(){this.domElement=new Canvas();this.shadowMap={};this.renderLists={dispose(){}};}setPixelRatio(value){this.ratio=value;}setSize(w,h){this.w=w;this.h=h;}render(scene,camera){rendered.push({scene,camera});}dispose(){disposed++;}forceContextLoss(){loss++;}}
- class Controls{constructor(camera){this.camera=camera;this.target=new THREE.Vector3();}addEventListener(){}removeEventListener(){}update(){this.camera.lookAt(this.target);this.camera.updateMatrixWorld();}dispose(){}}
+ class Controls{constructor(camera){this.object=camera;this.target=new THREE.Vector3();}addEventListener(){}removeEventListener(){}update(){this.object.lookAt(this.target);this.object.updateMatrixWorld();}dispose(){}}
  const host={clientWidth:320,clientHeight:240,children:[],append(canvas){this.children.push(canvas);canvas.parentNode=this;}},source=new THREE.Group(),sourceScene=new THREE.Scene(),geometry=new THREE.BoxGeometry(8,6,1),material=new THREE.MeshBasicMaterial({color:'green'}),mesh=new THREE.Mesh(geometry,material);mesh.userData.record={type:'Component',ref:'U1',uuid:'u1'};source.add(mesh);sourceScene.add(source,new THREE.AmbientLight(0xffffff,1));
  return {args:{THREE:{...THREE,WebGLRenderer:Renderer},OrbitControls:Controls,host,source,sourceScene,sourceRenderer:{outputColorSpace:THREE.SRGBColorSpace,toneMapping:THREE.NoToneMapping,toneMappingExposure:1},board:{},raf:fn=>{queue.set(++seq,fn);return seq;},caf:id=>queue.delete(id),Observer:class{observe(){}disconnect(){}}},source,mesh,geometry,material,host,rendered,disposed:()=>disposed,loss:()=>loss,flush(){const pending=[...queue.values()];queue.clear();for(const fn of pending)fn();}};
 }
@@ -60,6 +60,7 @@ test('default GPU budget permits popupfrompopup in3D and rejects a third extra c
 test('3D probes render saved BGA terminal annotations with independent local flags and smaller budgets',{skip:!threePath},async()=>{
  const THREE=await import(pathToFileURL(threePath).href),{createSharedProbeViewport}=await helper(),h=viewportHarness(THREE),drawn=[],pad={pinNumber:'A1',name:'A1',at:[0,0],width:4,height:4,shape:'circle',layers:['F.Cu'],net:'GND'},source={records:[pad],world:p=>p,top:.8,bottom:-.8,layout:require('../pad-labels.js').layout,createCanvas:()=>({width:0,height:0,getContext:()=>({scale(){},strokeText(){},fillText(text){drawn.push(text);}})})},preferences={showTerminalNumbers:true,showNetNames:false},probe=createSharedProbeViewport({...h.args,terminalSource:source,...preferences});
  h.flush();assert.ok(drawn.includes('A1'));assert.equal(probe.getTerminalLabelState().shown,1);assert.equal(probe.getTerminalLabelState().maxLabels,512);assert.equal(probe.getTerminalLabelState().maxTexturePixels,524288);
+ probe.setOrthographic(true);probe.setView('top');h.flush();assert.equal(probe.getTerminalLabelState().shown,1);assert.ok(drawn.includes('A1'));probe.setOrthographic(false);
  probe.setTerminalNumbers(false);h.flush();assert.equal(probe.getTerminalLabelState().shown,0);probe.setTerminalLabels(true);h.flush();assert.ok(drawn.includes('GND'));assert.equal(probe.getTerminalLabelState().numbers,false);assert.deepEqual(preferences,{showTerminalNumbers:true,showNetNames:false});assert.equal(source.records[0],pad);
  probe.dispose();h.geometry.dispose();h.material.dispose();
 });
@@ -137,4 +138,19 @@ test('3D probe layer/accent choice changes existing copper without reparse, requ
  const THREE=await import(pathToFileURL(threePath).href),{createSharedProbeViewport}=await helper(),h=viewportHarness(THREE),source=await savedNetSource();
  const probe=createSharedProbeViewport({...h.args,board:source.board,netInspectionSource:source,selection:{netNames:['SIGNAL']},netHighlightColor:'accent'});h.flush();assert.equal(probe.getStats().netInspection.colorMode,'accent');
  const scene=h.rendered.at(-1).scene,group=scene.children.find(o=>o.name==='Probe selected net — all copper layers'),meshes=[...group.children[0].children],geometry=meshes.map(m=>m.geometry);assert.ok(meshes.every(m=>m.material.color.getHex()===0xffe18b));probe.setNetHighlightColor('layer');h.flush();assert.equal(probe.getStats().netInspection.colorMode,'layer');assert.deepEqual(group.children[0].children.map(m=>m.geometry),geometry);assert.equal(probe.getStats().sourceParses,0);assert.equal(probe.getStats().modelRequests,0);probe.dispose();h.geometry.dispose();h.material.dispose();
+});
+
+ test('orthographic projection preserves target scale, remains depth-independent and restores perspective', {skip:!threePath},async()=>{
+ const THREE=await import(pathToFileURL(threePath).href),{projectionCamera,resizeProjection,fitProjection,projectionPixelsPerMm}=await import('../spike/cameraProjection.mjs');
+ let camera=new THREE.PerspectiveCamera(45,2,.1,1000);camera.position.set(0,0,100);camera.lookAt(0,0,0);camera.updateMatrixWorld();const controls={object:camera,target:new THREE.Vector3()};
+ const before=new THREE.Vector3(10,0,0).project(camera).x;camera=projectionCamera(THREE,camera,controls,true);assert.equal(camera.isOrthographicCamera,true);assert.equal(controls.object,camera);assert.ok(Math.abs(new THREE.Vector3(10,0,0).project(camera).x-before)<1e-10);
+ assert.ok(Math.abs(new THREE.Vector3(10,0,20).project(camera).x-before)<1e-10);assert.equal(projectionPixelsPerMm(camera,400,20),projectionPixelsPerMm(camera,400,100));
+ const height=camera.top-camera.bottom;resizeProjection(camera,1);assert.equal(camera.top-camera.bottom,height);assert.equal(camera.right-camera.left,height);
+ camera.zoom=2;const zoomed=new THREE.Vector3(10,0,0);camera.updateProjectionMatrix();const expected=zoomed.clone().project(camera).x;camera=projectionCamera(THREE,camera,controls,false);assert.equal(camera.isPerspectiveCamera,true);assert.ok(Math.abs(zoomed.project(camera).x-expected)<1e-10);
+ camera=projectionCamera(THREE,camera,controls,true);fitProjection(camera,50,2);assert.equal(camera.zoom,1);assert.equal(camera.right-camera.left,2*(camera.top-camera.bottom));
+ });
+
+test('orthographic probe retains fit, anchors, resize and independent perspective state',{skip:!threePath},async()=>{
+ const THREE=await import(pathToFileURL(threePath).href),{createSharedProbeViewport}=await helper(),h=viewportHarness(THREE),probe=createSharedProbeViewport({...h.args,selection:{references:['R1']}});
+ probe.setOrthographic(true);assert.equal(probe.isOrthographic(),true);assert.equal(probe.setView('top'),true);h.flush();const rendered=h.rendered.at(-1);assert.equal(rendered.camera.isOrthographicCamera,true);assert.ok(Number.isFinite(rendered.camera.left));const before=rendered.camera.top-rendered.camera.bottom;h.host.clientWidth=640;probe.fit('top');h.flush();assert.ok(h.rendered.at(-1).camera.right>0);assert.ok(before>0);probe.setOrthographic(false);h.flush();assert.equal(h.rendered.at(-1).camera.isPerspectiveCamera,true);probe.dispose();h.geometry.dispose();h.material.dispose();
 });

@@ -1,10 +1,10 @@
 /** Project only saved source identities or bounded file-space PCB positions. */
-export function createAnchorProjector(THREE,{objects,camera,rect,positionToWorld}){
+export function createAnchorProjector(THREE,{objects,camera,getCamera=()=>camera,rect,positionToWorld}){
   const body=record=>record?.type==='Component'||typeof record?.library==='string';
   return function projectAnchor(anchor){
     if(!anchor||typeof anchor!=='object')return null;
     const box=rect();if(!(box.width>0&&box.height>0))return null;
-    const project=point=>{point.project(camera);if(![point.x,point.y,point.z].every(Number.isFinite)||anchor.clip!==false&&(Math.abs(point.x)>1||Math.abs(point.y)>1)||point.z< -1||point.z>1)return null;return {x:box.left+(point.x+1)*box.width/2,y:box.top+(1-point.y)*box.height/2,visible:true};};
+    const project=point=>{point.project(getCamera());if(![point.x,point.y,point.z].every(Number.isFinite)||anchor.clip!==false&&(Math.abs(point.x)>1||Math.abs(point.y)>1)||point.z< -1||point.z>1)return null;return {x:box.left+(point.x+1)*box.width/2,y:box.top+(1-point.y)*box.height/2,visible:true};};
     if(anchor.position){const {x,y}=anchor.position;if(![x,y].every(v=>typeof v==='number'&&Number.isFinite(v)&&Math.abs(v)<=1e6)||!['front','back',undefined].includes(anchor.side))return null;return project(positionToWorld({x,y},anchor.side));}
     const text=value=>typeof value==='string'&&value.length>0&&value.length<=500&&!/[\x00-\x1f\x7f]/.test(value);
     if(!['uuid','reference','pinNumber','net'].some(key=>text(anchor[key])))return null;

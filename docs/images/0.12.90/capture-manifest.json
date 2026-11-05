@@ -1,0 +1,22 @@
+{
+  "schemaVersion": 1,
+  "release": "0.12.90",
+  "surface": "Integrated browser production components, bounded synthetic/public repository fixtures",
+  "captures": [
+    {
+      "file": "draftsman-top-desktop.jpg",
+      "bytes": 77103,
+      "sha256": "60267c13d9f11c0f6cfa56fbfea9c1b5268afaee43b823b264c2d4a2577c1684"
+    },
+    {
+      "file": "draftsman-top-phone.jpg",
+      "bytes": 33654,
+      "sha256": "34e68aabaa593ad3720db0932f9521dd123b57dd63744531f4f8ebf29be2ea5a"
+    },
+    {
+      "file": "orthographic-top.jpg",
+      "bytes": 44375,
+      "sha256": "062a09323a6154c9a12b64516efd74cd002186d4bf3496bbd7388c717dd8d76f"
+    }
+  ]
+}

@@ -1,12 +1,12 @@
 # Install KiCad Online
 
-Latest GitHub preview: **extension 0.12.89 / Android 1.91**. Store submission
+Latest GitHub preview: **extension 0.12.90 / Android 1.92**. Store submission
 and approval are separate from GitHub downloads. See [release status](RELEASE-STATUS.md).
 
-Download `kicad-visual-review-chrome-edge-brave-opera-vivaldi-chromium-0.12.89.zip`,
-or `kicad-visual-review-firefox-0.12.89.zip` / `kicad-visual-review-vscode-0.12.89.vsix`
-from [the 0.12.89 GitHub release](https://github.com/wayri/KiCad-Online/releases/tag/v0.12.89).
-Android: `pocket-kivi-android-phone-tablet-1.91-development.apk` is included in the matching release.
+Download `kicad-visual-review-chrome-edge-brave-opera-vivaldi-chromium-0.12.90.zip`,
+or `kicad-visual-review-firefox-0.12.90.zip` / `kicad-visual-review-vscode-0.12.90.vsix`
+from [the 0.12.90 GitHub release](https://github.com/wayri/KiCad-Online/releases/tag/v0.12.90).
+Android: `pocket-kivi-android-phone-tablet-1.92-development.apk` is included in the matching release.
 GitHub's automatic Source code archives are source checkouts, not installable extensions.
 
 The browser and VS Code editions support Windows, Linux and macOS. Ordinary
@@ -40,7 +40,7 @@ code --install-extension wayri.kicad-visual-review
 For a downloaded VSIX, replace the filename with the actual package:
 
 ```sh
-code --install-extension ./kicad-visual-review-vscode-0.12.89.vsix
+code --install-extension ./kicad-visual-review-vscode-0.12.90.vsix
 ```
 
 On macOS, VS Code's **Shell Command: Install 'code' command in PATH** enables this optional terminal route. The Extensions UI does not need it.

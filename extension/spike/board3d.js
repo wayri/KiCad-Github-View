@@ -41,6 +41,7 @@ import {drillWallGeometry,copperStrokeBatches,smoothPadOutline,smoothDrillOutlin
 import {createProbeRegistry,createSharedProbeViewport} from './probeViewport.mjs';
 import {createTerminalAnnotations,createTerminalLabelController} from './terminalLabels.mjs';
 import { MeasurementSession,distanceLabel,snapProjectedEdges } from "./measurement3d.mjs";
+import {projectionCamera,resizeProjection,fitProjection} from "./cameraProjection.mjs";
 import { boardViewPresets,boardViewPreset } from "./viewPresets.mjs";
 export { mountResultScene } from "./result3d.js";
 
@@ -204,7 +205,7 @@ export function mountBoard3D(container, source, options = {}) {
   const top = thickness / 2, bottom = -top;
   const copperPlan=sourceCopperPlan(board,sourceAST,thickness);
   const scene = new THREE.Scene(); scene.background = new THREE.Color(initialDark ? 0x151820 : mechanical ? 0xffffff : 0xe7ebf1);
-  const camera = new THREE.PerspectiveCamera(45, 1, 0.1, Math.max(3000, extent * 30));
+  let camera = new THREE.PerspectiveCamera(45, 1, 0.1, Math.max(3000, extent * 30));
   // OrbitControls captures its up basis at construction. Use the board's
   // thickness axis consistently for orbiting and all fitted camera presets.
   camera.up.set(0,0,1);
@@ -548,7 +549,7 @@ export function mountBoard3D(container, source, options = {}) {
     const viewportWidth = Math.max(1, canvasHost.clientWidth), viewportHeight = Math.max(1, canvasHost.clientHeight);
     const plan=qualityViewport(viewportWidth,viewportHeight,globalThis.devicePixelRatio,graphics.maxDimension,quality,graphics),ratio=plan.ratio;
     if (renderer.getPixelRatio() !== ratio) renderer.setPixelRatio(ratio);
-    renderer.setSize(viewportWidth, viewportHeight, false); camera.aspect = viewportWidth / viewportHeight;
+    renderer.setSize(viewportWidth, viewportHeight, false); resizeProjection(camera,viewportWidth / viewportHeight);
     if(pipeline){pipeline.composer.setPixelRatio(ratio);pipeline.composer.setSize(viewportWidth,viewportHeight);pipeline.fxaa?.material.uniforms.resolution.value.set(1/plan.width,1/plan.height);}
     camera.updateProjectionMatrix();
     const sampling=plan.width+' × '+plan.height+' px · '+(pipeline?.fxaa?'FXAA':pipeline?'SMAA':gl.getContextAttributes()?.antialias?'native MSAA':'driver antialiasing unavailable');if(qualityStats.textContent!==sampling)qualityStats.textContent=sampling;
@@ -561,7 +562,8 @@ export function mountBoard3D(container, source, options = {}) {
     const radius = Number.isFinite(sphere.radius) && sphere.radius > 0 ? sphere.radius : Math.hypot(width, height, thickness + 5) / 2;
     const center = sphere.radius > 0 ? sphere.center : new THREE.Vector3();
     const preset=boardViewPreset(view),direction = new THREE.Vector3(...preset.direction).normalize();
-    const distance = boxFitDistance(bounds.getSize(new THREE.Vector3()).toArray(),direction.toArray(),camera.fov,camera.aspect,.85,preset.up)||sphereFitDistance(radius, camera.fov, camera.aspect) || extent * 3;
+    const distance = boxFitDistance(bounds.getSize(new THREE.Vector3()).toArray(),direction.toArray(),45,camera.aspect,.85,preset.up)||sphereFitDistance(radius, 45, camera.aspect) || extent * 3;
+    fitProjection(camera,distance);
     fittedRadius = radius;
     controls.maxDistance = Math.max(extent * 8, distance * 4);
     camera.position.copy(center).addScaledVector(direction, distance);
@@ -570,6 +572,8 @@ export function mountBoard3D(container, source, options = {}) {
   action("Fit", () => {userAdjustedCamera=true;fit();},'M8 3H3v5M16 3h5v5M21 16v5h-5M8 21H3v-5M8 8h8v8H8Z','Fit board to viewport');
   const viewSelect=document.createElement('select');viewSelect.className='view-select';viewSelect.title='Choose a board viewing side';viewSelect.setAttribute('aria-label','3D camera view');const viewPrompt=document.createElement('option');viewPrompt.value='';viewPrompt.disabled=true;viewPrompt.textContent='View';viewSelect.append(viewPrompt);
   for(const {id,label}of boardViewPresets){const item=document.createElement('option');item.value=id;item.textContent=label;viewSelect.append(item);}viewSelect.value='';viewSelect.onchange=()=>{userAdjustedCamera=true;fit(viewSelect.value);viewSelect.value='';};bar.append(viewSelect);
+  const projectionButton=action('Ortho',()=>setOrthographic(!camera.isOrthographicCamera),'M4 4h16v16H4z M4 10h16 M10 4v16','Orthographic projection');projectionButton.setAttribute('aria-pressed','false');projectionButton.title='Orthographic projection: parallel edges and undistorted top views';
+  function setOrthographic(enabled){camera=projectionCamera(THREE,camera,controls,Boolean(enabled));terminalAnnotations.setCamera(camera);projectionButton.setAttribute('aria-pressed',String(Boolean(camera.isOrthographicCamera)));createPipeline();sizeViewport();controls.update();invalidate();return Boolean(camera.isOrthographicCamera);}
   const divider=document.createElement('span');divider.className='divider';divider.setAttribute('aria-hidden','true');bar.append(divider);
   const measureButton=action('Measure',()=>setMeasurementMode(!measuring),'M3 17 17 3l4 4L7 21ZM7 13l3 3M10 10l2 2M13 7l3 3','Measure distance between 3D surfaces');measureButton.setAttribute('aria-pressed','false');
   const displayButton=action('Display',()=>setDisplayOpen(visibilityOptions.hidden),'M3 6h18M3 12h18M3 18h18M7 3v6M17 9v6M10 15v6','3D display settings');displayButton.setAttribute('aria-expanded','false');displayButton.setAttribute('aria-controls',visibilityOptions.id);
@@ -802,7 +806,7 @@ export function mountBoard3D(container, source, options = {}) {
   const observer = new ResizeObserver(resize); observer.observe(canvasHost); resize();
   let analysisOverlay = null;
   const layoutFrame = requestAnimationFrame(() => { if (active) { resize(); fit(); } });
-  const projectAnchor=createAnchorProjector(THREE,{objects:()=>pickables,camera,rect:()=>renderer.domElement.getBoundingClientRect(),positionToWorld:(position,side)=>{const [x,y]=world([position.x,position.y]);return new THREE.Vector3(x,y,side==='back'?bottom:top);}});
+  const projectAnchor=createAnchorProjector(THREE,{objects:()=>pickables,getCamera:()=>camera,rect:()=>renderer.domElement.getBoundingClientRect(),positionToWorld:(position,side)=>{const [x,y]=world([position.x,position.y]);return new THREE.Vector3(x,y,side==='back'?bottom:top);}});
   let activeAnchor=null,anchorSignature='',viewSignature='';
   function notifyAnchor(){if(!activeAnchor)return;const point=projectAnchor(activeAnchor),signature=JSON.stringify(point);if(signature!==anchorSignature){anchorSignature=signature;options.onAnchor?.({anchor:activeAnchor,point});}}
   function notifyView(){const rect=renderer.domElement.getBoundingClientRect(),signature=JSON.stringify([camera.matrixWorld.elements,camera.projectionMatrix.elements,rect.left,rect.top,rect.width,rect.height]);if(signature!==viewSignature){viewSignature=signature;options.onViewChange?.();}notifyAnchor();}
@@ -866,7 +870,7 @@ export function mountBoard3D(container, source, options = {}) {
       return probeRegistry.create(()=>createSharedProbeViewport({THREE,OrbitControls,host:probeHost,source:boardGroup,sourceScene:scene,sourceRenderer:renderer,board,
         materialFor:object=>probeMaterials.get(object)||object.material,instanceColorFor:object=>probeInstanceColors.has(object)?probeInstanceColors.get(object):object.instanceColor,
         netInspectionSource:{board:{...board,tracks:refinedTracks.tracks},plan:copperPlan,zones:savedZones.records,sourceLimited:savedZones.truncated,pads:nativePads,world,colorForLayer:layerThreeColor},
-        netHighlightColor,dark:host.dataset.theme!=='light',terminalSource,showNetNames:terminalAnnotations.getState().nets,showTerminalNumbers:terminalAnnotations.getState().numbers,...probeOptions}));
+        orthographic:Boolean(camera.isOrthographicCamera),netHighlightColor,dark:host.dataset.theme!=='light',terminalSource,showNetNames:terminalAnnotations.getState().nets,showTerminalNumbers:terminalAnnotations.getState().numbers,...probeOptions}));
     },
     objectVisibilityCapabilities(){return {supportedTypes:[...objectVisibility.supportedTypes],unsupportedTypes:['graphics','texts','regions','dimensions','rooms','footprints']};},
     setObjectVisibility(input={}) {
@@ -901,6 +905,7 @@ export function mountBoard3D(container, source, options = {}) {
     setAnalysisProbes(probes) { analysisOverlay?.setProbes(probes);invalidate(); },
     setAnalysisOpacity(value) { analysisOverlay?.setOpacity(value);invalidate(); },
     setSelection,
+    setOrthographic,isOrthographic:()=>Boolean(camera.isOrthographicCamera),
     projectAnchor,
     setAnchor(anchor){activeAnchor=anchor&&typeof anchor==='object'?anchor:null;anchorSignature='';if(activeAnchor)notifyAnchor();else options.onAnchor?.({anchor:null,point:null});},
     setNetHighlightColor(value){const next=value==='layer'?'layer':'accent';if(next===netHighlightColor)return;netHighlightColor=next;netInspection.setColorMode(next);probeRegistry.forEach(probe=>probe.setNetHighlightColor?.(next));setSelection(externalSelection);},
@@ -916,7 +921,7 @@ export function mountBoard3D(container, source, options = {}) {
       sizeViewport();const [x,y]=world([position.x,position.y]),target=new THREE.Vector3(x,y,side==='back'?bottom:top),direction=camera.position.clone().sub(controls.target);
       if(direction.lengthSq()<1e-10)direction.set(.45,-.38,1);direction.normalize();direction.z=(side==='back'?-1:1)*Math.abs(direction.z||.3);direction.normalize();
       const w=Number.isFinite(bounds?.w)?Math.max(8,Math.min(1e6,bounds.w*1.3)):8,h=Number.isFinite(bounds?.h)?Math.max(8,Math.min(1e6,bounds.h*1.3)):8;
-      const distance=boxFitDistance([w,h,thickness+4],direction.toArray(),camera.fov,camera.aspect,.8,camera.up.toArray());if(!distance)return false;
+      const distance=boxFitDistance([w,h,thickness+4],direction.toArray(),45,camera.aspect,.8,camera.up.toArray());if(!distance)return false;
       userAdjustedCamera=true;controls.maxDistance=Math.max(controls.maxDistance,distance*2);camera.position.copy(target).addScaledVector(direction,Math.max(controls.minDistance,distance));controls.target.copy(target);controls.update();updateClipping();invalidate();return true;
     },
     fit(topView=false){if(active)fit(topView);},
