@@ -133,3 +133,9 @@ A linked comment follows the provider issue/discussion's last fetched Open/Close
 Use the conversation **⋯ → Close issue/discussion** or **Reopen issue/discussion** action to control the provider state. The action requires provider permission, current repository policy and an explicit confirmation; a stale provider revision blocks the write. Confirmed changes update the displayed linked state. Changing a local review dropdown or filter never silently closes a shared issue.
 
 For a linked comment, **Skip review** records a reader/profile-specific local override; **Follow issue state** resumes inference. Skipped is not a native provider issue state. Unlinked notes save their selected review state normally. Published state banners describe the annotation at posting time; the provider's own issue status remains authoritative. Exact-source local/provider copies of the same annotation are displayed once.
+
+### Comments on properties and BoM fields
+
+In the drawing Properties table, use the small comment icon beside a field. In **Assembly / BoM**, the same icon beside a cell starts a review of that field; grouped rows retain their reference list (up to 100 references; ungroup larger groups first). The compact BoM explorer also offers a comment action per part.
+
+The draft carries the saved file/revision, part UUID/reference and position, field name and a snapshot of its reviewed value. These details appear in the comment and provider Markdown and survive local export/import and provider readback. The existing Locate action returns to the saved object or position. Saving stays local; posting still requires an explicit send through the configured review connection. Design values are not changed. This applies to the drawing-linked BoM, rather than standalone imported report tables.

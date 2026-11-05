@@ -42,3 +42,21 @@ test('column presets, filtering and storage failures preserve a usable selectabl
   dialog.close();
  }finally{h.restore();}
 });
+
+test('BoM cell comments carry the exact source object and visible field without changing the design',()=>{
+ const h=harness(),calls=[];try{
+  const dialog=api.open({objects,scope:'comment-cells',onComment:(...args)=>calls.push(args)});
+  const comment=h.byLabel(dialog,'Comment on Value');assert.ok(comment);comment.events.click();
+  assert.equal(calls.length,1);assert.equal(calls[0][0],objects[0]);assert.equal(calls[0][1],'Value');assert.equal(calls[0][2],'10k');assert.deepEqual(calls[0][3],['R1']);
+  assert.equal(objects[0].properties.Value,'10k');dialog.close();
+ }finally{h.restore();}
+});
+
+test('grouped BoM field review includes every displayed reference',()=>{
+ const h=harness(),calls=[],groupObjects=[objects[0],{...objects[0],id:'sch-r2',reference:'R2'}];try{
+  const dialog=api.open({objects:groupObjects,scope:'group-comments',onComment:(...args)=>calls.push(args)});
+  const group=h.find(dialog,n=>n.tag==='input'&&n.attributes['aria-label']==='Group symbols');
+  if(group){group.checked=true;group.events.change();}else{const check=h.find(dialog,n=>n.tag==='input'&&n.type==='checkbox'&&n.parent?.textContent==='Group symbols');assert.ok(check);check.checked=true;check.events.change();}
+  h.byLabel(dialog,'Comment on Value').events.click();assert.deepEqual(calls[0][3],['R1','R2']);dialog.close();
+ }finally{h.restore();}
+});

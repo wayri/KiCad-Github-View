@@ -740,13 +740,19 @@
     function setSelectionIcon(kind){if(root.KiCadUIIcons)$("selectionIcon").replaceChildren(root.KiCadUIIcons.icon(kind));}
     const lookupObjectNets=objectNetLookup();
     function netsForObject(object){return lookupObjectNets(netModel,object);}
+    function commentOnField(surface,field,value,object=selected,references){
+      try{const at=KiCadReviewComments.normalizeAnchor({...anchor(object?.position,object),reviewTarget:{surface,field,value:String(value),...(references?{references}:{})}});editComment(null,at);}catch(error){commentStatus(error.message,true);inspector('comments');}
+    }
+    function fieldCommentButton(surface,field,value,object,references){
+      const action=button('',()=>commentOnField(surface,field,value,object,references));action.className='icon-only field-comment-action';action.setAttribute('data-icon','comment');action.title='Comment on '+field;action.setAttribute('aria-label','Comment on '+field);if(root.KiCadUIIcons)action.append(root.KiCadUIIcons.icon('comment'));else action.textContent='◇';return action;
+    }
     function nativePropertyTable(entries){
       const table=make('table');table.className='kicad-field-table';table.setAttribute('aria-label','KiCad fields and values');
       const head=make('thead'),labels=make('tr');labels.append(make('th','Field'),make('th','Value'));head.append(labels);table.append(head);
       const priority=['Reference','Value','Footprint','Datasheet','Description','Net','Code','File'];
       const fields=Object.entries(entries).filter(([,v])=>v!==undefined&&v!==null);
       fields.sort(([a],[b])=>{const rank=key=>{const index=priority.indexOf(key);return index<0?priority.length:index;};return rank(a)-rank(b);});
-      const body=make('tbody');for(const [key,value]of fields.slice(0,256)){const row=make('tr');row.append(make('th',key),make('td',String(value)));body.append(row);}table.append(body);$('propertyList').append(table);
+      const body=make('tbody');for(const [key,value]of fields.slice(0,256)){const row=make('tr');const cell=make('td'),comment=fieldCommentButton('property',key,String(value),selected);cell.append(make('span',String(value)),comment);row.append(make('th',key),cell);body.append(row);}table.append(body);$('propertyList').append(table);
     }
     function properties() {
       try {
@@ -1096,7 +1102,7 @@
       const query=$("bomSearch").value,rows=$("bomRows");rows.replaceChildren();let shown=0;
       for(const group of all.groups){const matches=group.parts.filter(o=>(!$("bomDnpOnly").checked||!o.populated)&&matchesSearch(o,query));if(!matches.length)continue;if(++shown>300)break;
         const row=make('section');row.className='bom-group';row.append(make('strong',`${matches.length} × ${group.value||'(no value)'} · ${group.populated?'Fitted':'DNP'}`),make('small',group.footprint||'(no footprint)'));
-        for(const object of matches.slice(0,50)){const link=button(object.reference||object.label,()=>selectObject(object,true,true));link.title=object.path;row.append(link);}if(matches.length>50)row.append(make('small','First 50 references shown; narrow the filter.'));rows.append(row);
+        for(const object of matches.slice(0,50)){const link=button(object.reference||object.label,()=>selectObject(object,true,true));link.title=object.path;row.append(link,fieldCommentButton('bom','Part',object.reference||object.label,object));}if(matches.length>50)row.append(make('small','First 50 references shown; narrow the filter.'));rows.append(row);
       }
       $("bomCount").textContent=`${Math.min(shown,300)} groups shown${shown>300?' · first 300; narrow filter':''}. BOM-excluded components are omitted from rows.`;
       const stats=$("boardStats"),zones=$("zoneStats");stats.replaceChildren();zones.replaceChildren();const board=boardAnalytics();
@@ -1155,7 +1161,7 @@
         ...(object?.kind ? {kind:object.kind} : {}), ...(pcb?{side:String(object?.layer||object?.properties?.Layer||'').startsWith('B.')?'back':'front'}:{}), ...(position || object?.position ? {position:position || object.position} : {})};
       return KiCadReviewComments.normalizeAnchor(value);
     }
-    function anchorLabel(value) { return `${value.reference || value.netName || value.kind || "Drawing"} · ${value.file}${value.position ? ` · ${value.position.x.toFixed(2)}, ${value.position.y.toFixed(2)} mm` : ""}${value.variant && value.variant !== "default" ? ` · ${value.variant}` : ""}`; }
+    function anchorLabel(value) { return `${value.reviewTarget?.references?.length>1?value.reviewTarget.references.join(", "):value.reference || value.netName || value.kind || "Drawing"}${value.reviewTarget?` · ${value.reviewTarget.surface==='bom'?'BoM':'Property'}: ${value.reviewTarget.field} = ${value.reviewTarget.value}`:""} · ${value.file}${value.position ? ` · ${value.position.x.toFixed(2)}, ${value.position.y.toFixed(2)} mm` : ""}${value.variant && value.variant !== "default" ? ` · ${value.variant}` : ""}`; }
     function editComment(note = null, at = null) {
       try { editor = note ? {...note} : {id:crypto.randomUUID(), createdAt:new Date().toISOString(), text:"", severity:"info", threadType:commentCategory!=="all"?commentCategory:$("githubCommentType").value||"issue", anchor:at || anchor()}; }
       catch (error) { commentStatus(error.message,true); inspector("comments"); return; }
@@ -1733,7 +1739,7 @@
       $('androidToolsSheet')?.close?.();
       let manager;const onLocate=object=>{manager?.close();pinnedNets.clear();pinnedClasses.clear();highlightObjects=[];selectObject(object,true,true);highlightObjects=[object];updateHighlights();};
       let onEdit,onExport;try{if(root.top.KiCadAndroidPartEditor?.canEdit(root.top.KiCadAndroidProject))onEdit=object=>root.top.KiCadAndroidPartEditor.open(object);if((root.top.AndroidKiCad||root.top.KiViewIOS)?.exportText)onExport=(name,text,mime)=>{if(new TextEncoder().encode(text).length>4*1024*1024)throw Error('BoM export exceeds 4 MiB; narrow the filters.');(root.top.AndroidKiCad||root.top.KiViewIOS).exportText(name,text,mime.split(';')[0]);};}catch{}
-      manager=root.KiCadBomManager.open({objects,selectedId:selected?.id,scope:JSON.stringify([provider,host,repository,ref,rootFile,...(variant==='default'?[]:[variant])]),variants:model.variants,variant,onVariant:id=>{$('variantSelect').value=id;$('variantSelect').onchange();openBomManager();},storage:root.localStorage,onLocate,...(onEdit?{onEdit}:{}),...(onExport?{onExport}:{})});
+      manager=root.KiCadBomManager.open({objects,selectedId:selected?.id,scope:JSON.stringify([provider,host,repository,ref,rootFile,...(variant==='default'?[]:[variant])]),variants:model.variants,variant,onComment:(object,field,value,references)=>{manager?.close();commentOnField('bom',field,value,object,references);},onVariant:id=>{$('variantSelect').value=id;$('variantSelect').onchange();openBomManager();},storage:root.localStorage,onLocate,...(onEdit?{onEdit}:{}),...(onExport?{onExport}:{})});
     }
     function openReviewHandoff(){
       if(!root.KiCadReviewHandoff){notice('Review transfer could not load.');return;}

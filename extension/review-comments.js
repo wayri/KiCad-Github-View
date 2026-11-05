@@ -121,6 +121,13 @@ const KiCadReviewComments = (() => {
       const value = optional(anchor[name], name, limit);
       if (value !== undefined) result[name] = value;
     }
+    if(anchor.reviewTarget!==undefined){
+      const target=anchor.reviewTarget;
+      if(!target||!['property','bom'].includes(target.surface)||typeof target.field!=='string'||!target.field.trim()||target.field.length>200||/[\x00-\x1f\x7f]/.test(target.field)||typeof target.value!=='string'||target.value.length>4000||/[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]/.test(target.value))throw new Error('Invalid property or BoM comment target.');
+      const references=target.references;
+      if(references!==undefined&&(!Array.isArray(references)||references.length>100||references.some(r=>typeof r!=='string'||!r.trim()||r.length>100||/[\x00-\x1f\x7f]/.test(r))))throw new Error('Invalid BoM comment references.');
+      result.reviewTarget={surface:target.surface,field:target.field,value:target.value,...(references?{references:[...new Set(references)]}:{})};
+    }
     if (anchor.position !== undefined && anchor.position !== null) {
       const { x, y } = anchor.position;
       if (!Number.isFinite(x) || !Number.isFinite(y) || Math.abs(x) > 1e6 || Math.abs(y) > 1e6) {
@@ -247,6 +254,7 @@ const KiCadReviewComments = (() => {
       ["Review state", note.state],
       ...(note.threadType ? [["Destination type", note.threadType === "discussion" ? "Discussion" : "Issue"]] : []),
       [targetLabel, targetValue],
+      ...(anchor.reviewTarget ? [['Review surface',anchor.reviewTarget.surface==='bom'?'BoM':'Properties'],['Field',anchor.reviewTarget.field],['Reviewed value',anchor.reviewTarget.value],...(anchor.reviewTarget.references?.length?[['BoM references',anchor.reviewTarget.references.join(', ')]]:[])] : []),
       ...(anchor.position ? [["Position (mm)", `${anchor.position.x}, ${anchor.position.y}`]] : []),
       ...(anchor.area ? [["Area (mm)", `${anchor.area.x}, ${anchor.area.y}; ${anchor.area.width} × ${anchor.area.height}`]] : []),
       ...(anchor.area ? [["Start (mm)", `${anchor.area.x}, ${anchor.area.y}`], ["End (mm)", `${anchor.area.x + anchor.area.width}, ${anchor.area.y + anchor.area.height}`]] : []),

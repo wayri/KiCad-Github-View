@@ -1427,7 +1427,7 @@ test('native field table puts Reference and Value ahead of custom fields saved f
  const view=workspaceRuntime(async()=>[],{source});view.load();view.get('objectList').children[0].click();
  const rows=view.get('propertyList').children[0].children[1].children;
  assert.deepEqual(rows.slice(0,2).map(row=>row.children[0].textContent),['Reference','Value']);
- assert.ok(rows.some(row=>row.children[0].textContent==='Vendor'&&row.children[1].textContent==='Acme'));view.workspace.dispose();
+ assert.ok(rows.some(row=>row.children[0].textContent==='Vendor'&&row.children[1].children[0].textContent==='Acme'));view.workspace.dispose();
 });
 
 test('discussion catalog new-comment action prepares a new Discussion without posting',()=>{
@@ -1596,4 +1596,12 @@ test('website handoff stays hidden in connected native viewers without changing 
  for(const hooks of [{vscode:{collaboration:{provider:'github',repository:'wayri/fixture',ref:'main'}}},{android:true,androidOnline:true}]){
   const calls=[];let notes=[];const view=workspaceRuntime(async m=>{calls.push(m);if(m.type==='comment-save'){notes=[m.comment];return m.comment;}if(m.type==='comment-list')return notes;return[];},hooks);view.load();view.get('newComment').click();view.get('commentText').value='Native draft';assert.equal(view.get('commentWebsiteHandoff').hidden,true);assert.equal(view.get('commentPublishSettings').hidden,false);const before=calls.length;await view.get('commentWebsiteHandoff').click();assert.equal(calls.length,before);await view.get('saveComment').click();const cardAction=descendants(view.get('commentList')).find(n=>n.className==='github-draft-action');assert.ok(cardAction);assert.equal(cardAction.hidden,true);
  }
+});
+
+test('property field action opens a source-bound draft and saves field context only on explicit save',async()=>{
+ const calls=[],view=workspaceRuntime(async m=>{calls.push(m);return [];});view.load();view.get('objectList').children[0].click();
+ const rows=view.get('propertyList').children[0].children[1].children,row=rows.find(r=>r.children[0].textContent==='Value');
+ row.children[1].children[1].click();assert.equal(view.get('commentEditor').hidden,false);assert.match(view.get('commentAnchor').textContent,/Property: Value/);
+ assert.equal(calls.some(m=>m.type==='comment-save'),false);view.get('commentText').value='Check this value';await view.get('saveComment').click();
+ const saved=calls.find(m=>m.type==='comment-save').comment;assert.equal(saved.anchor.reference,'R1');assert.equal(saved.anchor.file,'board.kicad_pcb');assert.equal(saved.anchor.reviewTarget.surface,'property');assert.equal(saved.anchor.reviewTarget.field,'Value');assert.ok(saved.anchor.position);view.workspace.dispose();
 });

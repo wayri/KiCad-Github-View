@@ -1,0 +1,9 @@
+KiCad Online 0.12.87
+
+What's new
+• Comment directly on fields in Properties and the drawing-linked BoM.
+• Attach part identity, saved file/revision, position, field name and reviewed value to the note.
+• Review grouped BoM entries with all included references shown.
+• Save locally or explicitly post through the existing GitHub/GitLab review connection.
+
+No new permissions. Design fields are not modified. Independent viewer, not affiliated with KiCad, GitHub or GitLab. Altium beta is not included. Fast PI remains experimental single-net fixed-temperature DC screening. Reading saved ERC/DRC or simulation results does not execute KiCad's engines.

@@ -12,8 +12,8 @@ the bundled rendering source rebuilt byte-identically. Native OCCT was not rebui
 
 | Channel | 0.12.86 handoff |
 | --- | --- |
-| VS Code | Verified VSIX selected in Marketplace; owner must complete the CAPTCHA-protected Upload action. Submission is not yet confirmed. Last public version: 0.12.85. |
-| Mozilla | Verified Firefox ZIP and matching readable source ready; automated file chooser timed out twice. Owner file selection is pending; no 0.12.86 validation/submission is claimed. 0.12.85 remains Awaiting Review; public version is 0.12.66. Icon, renamed license metadata and three new screenshots were saved and verified separately. |
+| VS Code | **0.12.86 public; verification finished.** Publisher dashboard displays 0.12.86 and Public without a Verifying badge. |
+| Mozilla | **0.12.86 Awaiting Review**, zero validation errors/warnings (version 6667792, file 5211886). Matching readable source is retained: the version form shows View current and Changes successfully saved. Public version remains 0.12.66; icon, renamed license metadata and three new screenshots were saved separately. |
 | Chrome | Pending **0.12.85** review intentionally left running. No store upload, withdrawal or listing modification for 0.12.86. |
 | Android | 1.88 unchanged; no Android build or installation in this release. |
 

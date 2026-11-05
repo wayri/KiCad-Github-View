@@ -239,3 +239,20 @@ test('thread readback imports only exact-source active anchors with provider pro
 test('source sheet identity uses the saved root UUID rather than a symbol UUID or fabricated board identity',()=>{
  const root='11111111-2222-3333-4444-555555555555',symbol='aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee';assert.equal(comments.sourceSheetUuid(`(kicad_sch (uuid "${root}") (symbol (uuid "${symbol}")))`),root);assert.equal(comments.sourceSheetUuid(`(kicad_sch (symbol (uuid "${symbol}")))`),null);assert.equal(comments.sourceSheetUuid(`(kicad_pcb (footprint (uuid "${symbol}")))`),null);assert.equal(comments.sourceSheetUuid('(kicad_sch (uuid "invalid"))'),null);
 });
+
+test('property and BoM review targets survive provider Markdown and local export',()=>{
+ for(const provider of ['github','gitlab'])for(const surface of ['property','bom']){
+  const note=sample();if(provider==='gitlab')Object.assign(note.anchor,{provider,host:'https://gitlab.com'});
+  note.anchor.reviewTarget={surface,field:'Value',value:'10k | <script> & Ω',references:['U3','U4']};
+  const valid=comments.validateComment(note),markdown=comments.toMarkdown(valid);
+  assert.deepEqual(comments.fromMarkdown(markdown)[0].anchor,valid.anchor);
+  assert.deepEqual(comments.parseComments(comments.exportComments([valid]))[0].anchor,valid.anchor);
+  assert.match(markdown,/Reviewed value/);assert.match(markdown,/BoM references/);
+  assert.equal(valid.anchor.uuid,'component-uuid');assert.deepEqual(valid.anchor.position,{x:23.5,y:-4.25});
+ }
+});
+test('review field context is bounded and cannot introduce arbitrary target kinds',()=>{
+ for(const target of [{surface:'url',field:'Value',value:'x'},{surface:'bom',field:'',value:'x'},{surface:'property',field:'Value',value:'x'.repeat(4001)},{surface:'bom',field:'Value',value:'x',references:Array(101).fill('R1')}]){
+  assert.throws(()=>comments.normalizeAnchor({...sample().anchor,reviewTarget:target}),/comment/);
+ }
+});

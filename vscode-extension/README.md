@@ -78,7 +78,7 @@ The GitHub repository is public; browse the source, guides and release downloads
 
 ## Current shared viewer preview
 
-KiCad Online 0.12.86 includes the renamed license and refreshed review screenshots while retaining
+KiCad Online 0.12.87 adds source-bound property and BoM field comments while retaining
 `wayri.kicad-visual-review` for in-place updates. The following screenshot shows
 the shared renderer in a local browser using public OLIMEX M2 files; it is not
 an installed VS Code capture. [Fresh screenshot set and limits](https://github.com/wayri/KiCad-Online/blob/main/docs/BRAND-SCREENSHOTS-0.12.85.md).
