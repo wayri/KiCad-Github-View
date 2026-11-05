@@ -43,3 +43,7 @@ The hosted viewer includes touch pan, pinch zoom, tap selection and long-press c
 Chrome for Android cannot install the desktop extension; use the hosted viewer or Android app. Firefox for Android supports extensions, but this project's unsigned Firefox package has not passed Android-device acceptance or Mozilla signing. Do not describe it as an installable mobile add-on yet. See [Mozilla's Android extension guide](https://extensionworkshop.com/documentation/develop/developing-extensions-for-firefox-for-android/) and [Chrome extension installation](https://support.google.com/chrome/answer/2664769).
 
 Mobile browser acceptance on 2026-10-08: a synthetic schematic rendered at 400×800 CSS pixels, Details opened and closed, and the page had no horizontal overflow. Shared touch tests cover drag/pinch, cancellation, long press, and chooser dispatch. These checks used a Chromium browser viewport and synthetic transport, not installed Android Chrome or Firefox.
+
+## Demo board acknowledgements
+
+Thanks to the authors and contributors of OLIMEX ESP32-PoE, Berkeley Lab Marble, Ttl/FMCW3 and KiCad’s PIC Programmer demo for the public designs used in the shared viewer examples. See [board credits, recorded revisions and capture limits](../docs/DEMO-BOARD-CREDITS.md). Design and model licenses remain with their respective upstream sources; no affiliation or endorsement is implied.

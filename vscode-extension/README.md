@@ -96,3 +96,8 @@ source revisions and limits.
 ![Local comment composer](https://raw.githubusercontent.com/wayri/KiCad-Online/main/docs/images/0.12.85/08-comment-composer.jpg)
 
 ![Mechanical Draftsman document and automatic dimensions](https://raw.githubusercontent.com/wayri/KiCad-Online/main/docs/images/0.12.85/07-draftsman.jpg)
+
+
+## Demo board acknowledgements
+
+Thanks to the KiCad PIC Programmer demo authors, OLIMEX ESP32-PoE contributors, Berkeley Lab Marble contributors and Ttl/FMCW3 contributors for the public designs used in the shared viewer demonstrations. The installed VS Code demo captures use PIC Programmer; shared-browser captures are labelled separately. [Board credits and source revisions](https://github.com/wayri/KiCad-Online/blob/main/docs/DEMO-BOARD-CREDITS.md). Their design/model licenses remain applicable; no endorsement is implied.

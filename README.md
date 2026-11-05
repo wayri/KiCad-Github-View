@@ -490,7 +490,7 @@ Source designs are ordinarily read-only. Explicit conflict-resolution actions in
 
 Thanks to the KiCad developers and community, and to the maintainers and contributors of **Three.js, PDF.js, fzstd, Open CASCADE Technology, occt-import-js and Emscripten**, whose work supports this viewer.
 
-We also thank public example-project authors, including **OLIMEX** and the **Berkeley Lab Marble** contributors, and everyone who tests KiCad Online, reports issues or suggests improvements.
+Our public board demos use **[OLIMEX ESP32-PoE](https://github.com/OLIMEX/ESP32-POE)**, **[Berkeley Lab Marble](https://github.com/BerkeleyLab/Marble)**, **[Ttl/FMCW3](https://github.com/Ttl/fmcw3)** and the **[KiCad PIC Programmer demo](https://github.com/KiCad/kicad-source-mirror/tree/29798a640054e91411a44d230bd3a3425b3166e4/demos/pic_programmer)**. Thank you to their authors and contributors, and everyone who tests KiCad Online, reports issues or suggests improvements. See [demo board credits and recorded source revisions](docs/DEMO-BOARD-CREDITS.md); upstream design and model licenses remain applicable.
 
 Dependency licenses, copyright notices and source information are retained in [Third-party notices](THIRD-PARTY-NOTICES.md) and the accompanying packages. These acknowledgements do not imply affiliation, sponsorship or endorsement.
 

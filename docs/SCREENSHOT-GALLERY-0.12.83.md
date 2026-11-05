@@ -1,5 +1,7 @@
 # Capability screenshot gallery — 0.12.83
 
+[Demo board acknowledgements and source revisions](DEMO-BOARD-CREDITS.md) — thanks to OLIMEX, Berkeley Lab Marble, Ttl/FMCW3 and KiCad demo contributors.
+
 **123 screenshots**: 67 fresh captures plus explicitly versioned historical evidence. Captured 4 November 2026.
 
 [Open the searchable visual gallery](SCREENSHOT-GALLERY-0.12.83.html) · [Every documented capability and gaps](CAPABILITY-SCREENSHOT-COVERAGE-0.12.83.md) · [Fresh capture manifest](images/0.12.83/capabilities/capture-manifest.json)

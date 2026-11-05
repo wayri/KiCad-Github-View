@@ -366,3 +366,7 @@ and portrait/landscape Draftsman fitting. At 2 A the strip returned 8.867 mV dro
 matching the analytical copper resistance within 1 µV. Android build/lint and
 all 2,361 JavaScript tests passed. This does not benchmark large-board solving or
 establish tablet hardware acceptance.
+
+## Demo board acknowledgements
+
+Thanks to the authors and contributors of OLIMEX ESP32-PoE, Berkeley Lab Marble, Ttl/FMCW3 and KiCad’s PIC Programmer demo for the public designs used in the shared viewer examples. See [board credits, recorded revisions and capture limits](../docs/DEMO-BOARD-CREDITS.md). Design and model licenses remain with their respective upstream sources; no affiliation or endorsement is implied.

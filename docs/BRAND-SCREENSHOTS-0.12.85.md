@@ -1,5 +1,7 @@
 # KiCad Online — fresh branding screenshots
 
+[Demo board acknowledgements](DEMO-BOARD-CREDITS.md) — OLIMEX ESP32-PoE M2 and KiCad PIC Programmer are the work of their upstream authors and contributors; their design/model licenses remain applicable.
+
 These images are intended to show the current KiCad Online branding. They are fresh browser captures of the current source, not edited or relabelled screenshots from an earlier release. Package publication and installed-device acceptance are separate checks.
 
 ## Public source and capture method

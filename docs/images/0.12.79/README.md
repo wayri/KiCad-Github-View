@@ -1,5 +1,7 @@
 # Capture provenance · 0.12.79
 
+[Demo board acknowledgements](../../DEMO-BOARD-CREDITS.md): thanks to OLIMEX, Berkeley Lab Marble and Ttl/FMCW3 contributors; design/model licenses remain with their respective upstream sources.
+
 Captured **2 November 2026**. [Workflow gallery](../../SCREENSHOT-GALLERY-0.12.79.md) · [Capture manifest](capture-manifest.json).
 
 The screenshots show production packaged UI served over loopback with a local-project bridge. They do not show an installed Chrome extension, a VS Code installation, a physical Android device or a live authenticated provider workflow. The audited Chrome/Chromium ZIP SHA-256 is `02fdbb2e7387c6a151950b4ac856a2c329eeccb35b4ff3d86e1e5324b75e8789`.

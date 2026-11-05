@@ -1,5 +1,7 @@
 # Screenshot workflows · 0.12.79
 
+[Demo board acknowledgements and source revisions](DEMO-BOARD-CREDITS.md) — thanks to OLIMEX, Berkeley Lab Marble, Ttl/FMCW3 and KiCad demo contributors.
+
 These **2 November 2026** captures use the production UI from the audited Chrome/Chromium **0.12.79** ZIP, served over loopback with the local-project bridge. The drawings, component assets and fabrication files come from real, pinned public repositories. Local review/assembly states and Draftsman documents were created during the demonstration; they are not upstream design records.
 
 This is a workflow gallery, **not installed Chrome, VS Code, physical Android or live-provider acceptance**. No remote comment, fork or repository save is demonstrated. The package SHA-256 is `02fdbb2e7387c6a151950b4ac856a2c329eeccb35b4ff3d86e1e5324b75e8789`.

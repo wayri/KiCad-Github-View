@@ -1,5 +1,7 @@
 # Screenshot provenance
 
+Public board designs are credited to their authors and contributors in [Demo board acknowledgements](../DEMO-BOARD-CREDITS.md). Exact source revisions and capture limits remain recorded below and in the versioned manifests.
+
 ## Latest captures: 0.12.79 · 2 November 2026
 
 See the [real-board interaction gallery](../SCREENSHOT-GALLERY-0.12.79.md) and [versioned image provenance](0.12.79/README.md). These use the exact 0.12.79 Chrome ZIP and immutable public GitHub snapshots through a local project bridge. They are content-only browser screenshots, with no desktop taskbar or Android notification bar. They do not establish installed-store, physical-phone or live-provider acceptance. Per-image captions disclose real-model counts, local demonstration data and unsupported geometry/analysis cases.

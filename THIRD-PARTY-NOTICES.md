@@ -15,3 +15,7 @@ Optional GitHub App authentication uses the separately installed `cryptography` 
 The browser STEP preview bundles occt-import-js 0.0.23 rebuilt from unchanged pinned sources with dynamic JavaScript generation disabled and its Open CASCADE WebAssembly kernel under LGPL-2.1 (OCCT exception included). Licenses, pinned provenance and rebuild/replacement instructions are in `extension/vendor/occt/NOTICE.md`. Releases containing it must include the `kicad-visual-review-step-source-VERSION.zip` corresponding-source companion, produced and checksum-verified by the release builder. Library debugging and replacement remain permitted. The dependency is loaded only when STEP conversion is requested.
 
 The STEP dependency includes Emscripten runtime code under MIT or University of Illinois/NCSA terms. Its complete license is preserved as `extension/vendor/occt/EMSCRIPTEN-LICENSE.txt`.
+
+## Public demonstration designs
+
+Thanks to the public hardware authors whose boards appear in viewer demonstrations. See [Demo board acknowledgements](https://github.com/wayri/KiCad-Online/blob/main/docs/DEMO-BOARD-CREDITS.md) for the credited projects, recorded source revisions and capture provenance. Design and component-model licenses remain separate from this software license; no upstream endorsement is implied.
