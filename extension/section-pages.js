@@ -1,6 +1,6 @@
 /* Full-page section navigation; existing controllers retain their fields and state. */
 ((root)=>{'use strict';
- const selector='#androidOpenProjectPage,#androidProjectSettingsSheet,#appMenuDialog,#androidSettingsDialog,#projectLibraryDialog,#githubDialog,#gitlabDialog,#androidProjectActionsSheet,#androidWorkspaceSheet,#androidToolsSheet,#androidSearchSheet,.android-reader-dialog,dialog.bom-manager,#toolOverflow,#testpointSummaryPage,#viewerSettings';
+ const selector='#androidOpenProjectPage,#androidProjectSettingsSheet,#appMenuDialog,#androidSettingsDialog,#projectLibraryDialog,#githubDialog,#gitlabDialog,#androidProjectActionsSheet,#androidWorkspaceSheet,#androidToolsSheet,#androidSearchSheet,.android-reader-dialog,dialog.bom-manager:not([data-cross-select-panel]),#toolOverflow,#testpointSummaryPage,#viewerSettings';
  function install(doc,host){
   const prepared=new WeakSet(),parents=new WeakMap(),inert=new Map();let active=null,origin=null;
   function isolate(){for(const [node,value]of inert)node.inert=value;inert.clear();if(!active)return;for(const node of doc.body.children||[])if(node!==active&&!node.contains(active)&&!(node.tagName==='DIALOG'&&node.open)){inert.set(node,node.inert);node.inert=true;}}

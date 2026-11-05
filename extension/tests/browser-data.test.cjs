@@ -23,7 +23,7 @@ test('rejects paths that escape the repository and invalid input', async () => {
 
 test('reports a missing root revision', async () => {
   await assert.rejects(data.loadProject('wayri/demo', 'abc123', 'board.kicad_pcb', async () => null),
-    /HTTP 404.*wayri\/demo.*abc123.*board\.kicad_pcb.*access.*Contents read/);
+    /HTTP 404.*wayri\/demo.*abc123.*board\.kicad_pcb.*access.*same browser profile/);
 });
 
 test('opening a leaf discovers its ancestor root and descendants, excluding unrelated siblings', async () => {

@@ -380,7 +380,7 @@ test('BOM reflects saved DNP and exposes counts, safe component navigation and c
  const view=workspaceRuntime(undefined,{source});view.load();view.get('navBom').click();
  assert.match(view.get('bomSummary').textContent,/1 components.*0 fitted.*1 DNP/);
  assert.match(view.get('boardStats').textContent,/Saved board thickness 1.6 mm/);
- view.get('bomRows').children[0].children.find(e=>e.textContent==='R1').click();assert.equal(view.get('selectedName').textContent,'R1');
+ const bomPart=view.get('bomRows').children[0].children.find(e=>e.textContent==='R1');bomPart.click();assert.equal(view.get('selectedName').textContent,'R1');assert.equal(bomPart.attributes['aria-pressed'],'true');view.workspace.select3D(null);assert.equal(bomPart.attributes['aria-pressed'],'false');view.workspace.select3D({uuid:'fp',ref:'R1'});assert.equal(bomPart.attributes['aria-pressed'],'true');
  view.get('highlightDnp').checked=true;view.get('highlightDnp').onchange();assert.ok(view.canvas.netPrimitives.has(view.design.primitives.find(p=>p.ownerUuid==='fp')));
  view.get('clearHighlights').click();assert.equal(view.get('highlightDnp').checked,false);assert.equal(view.canvas.netPrimitives.size,0);
 });
@@ -1604,4 +1604,13 @@ test('property field action opens a source-bound draft and saves field context o
  row.children[1].children[1].click();assert.equal(view.get('commentEditor').hidden,false);assert.match(view.get('commentAnchor').textContent,/Property: Value/);
  assert.equal(calls.some(m=>m.type==='comment-save'),false);view.get('commentText').value='Check this value';await view.get('saveComment').click();
  const saved=calls.find(m=>m.type==='comment-save').comment;assert.equal(saved.anchor.reference,'R1');assert.equal(saved.anchor.file,'board.kicad_pcb');assert.equal(saved.anchor.reviewTarget.surface,'property');assert.equal(saved.anchor.reviewTarget.field,'Value');assert.ok(saved.anchor.position);view.workspace.dispose();
+});
+
+test('keep-context checkbox defaults on and consistently controls 2D and 3D selection appearance',()=>{
+ const view=workspaceRuntime();view.load();assert.equal(view.get('keepContextColors').checked,true);
+ view.get('objectList').children[0].click();assert.equal(view.canvas.highlightMode,'bright');
+ let dim;view.workspace.setScene({setPopulation(){},setSelection(){},setSelectionDim(value){dim=value;}});assert.equal(dim,false);
+ view.get('keepContextColors').checked=false;view.get('keepContextColors').onchange();assert.equal(dim,true);assert.equal(view.canvas.highlightMode,'dim');
+ view.get('keepContextColors').checked=true;view.get('keepContextColors').onchange();assert.equal(dim,false);assert.equal(view.canvas.highlightMode,'bright');
+ view.workspace.setScene(null);assert.equal(view.canvas.highlightMode,'bright');view.workspace.dispose();
 });

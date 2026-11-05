@@ -55,3 +55,16 @@ test('native Marble USB regulator pad meets its saved track endpoint after clock
  assert.equal(accepts({...pad.padCenter,layer:'B.Cu'}),true);assert.equal(accepts({x:156.21,y:122.924,layer:'B.Cu'}),false,'counterclockwise location is not this net');
  const result=solveBoard(ast,{...options(),net:312,layers,sourceVoltageV:1.8,currentA:.1,cellSizeMm:.05,source:{x:155.396,y:119.52,layer:'B.Cu'},sink:{...pad.padCenter,layer:'B.Cu'}});assert.ok(result.dropV>0);assert.ok(result.residualA<=1e-9);near(result.lossW,result.dropV*.1);
 });
+
+test('adaptive solve refines unresolved terminals without changing electrical inputs or acceptance checks',()=>{
+ const {solveAdaptive}=require('../fast-pi.js'),ast=board(copper('F.Cu')),o={...options(),source:{x:.4,y:.5,layer:'F.Cu'},sink:{x:.6,y:.5,layer:'F.Cu'}};
+ assert.throws(()=>solveBoard(ast,o),/same cell/);const result=solveAdaptive(ast,o);
+ assert.equal(result.meshAttempts,2);assert.equal(result.cellSizeMm,.5);assert.equal(result.requestedCellSizeMm,1);
+ const reference=solveBoard(ast,{...o,cellSizeMm:.5});near(result.dropV,reference.dropV);near(result.lossW,result.dropV*o.currentA);assert.equal(o.cellSizeMm,1);assert.match(result.warnings[0],/automatic mesh refinement/);
+});
+test('adaptive solve still rejects disconnected islands, off-copper contacts and missing physical inputs',()=>{
+ const {solveAdaptive}=require('../fast-pi.js'),ast=board(copper('F.Cu')+copper('F.Cu',5));
+ assert.throws(()=>solveAdaptive(ast,{...options(),sink:{x:.5,y:5.5,layer:'F.Cu'}}),/three mesh resolutions.*No result accepted/);
+ assert.throws(()=>solveAdaptive(ast,{...options(),conductivitySm:undefined}),/conductivity/);
+ assert.throws(()=>solveAdaptive(ast,{...options(),source:{x:.5,y:-.1,layer:'F.Cu'}}),/selected net copper/);
+});

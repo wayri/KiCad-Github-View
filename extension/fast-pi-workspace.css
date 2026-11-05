@@ -27,3 +27,7 @@
  .fast-pi-panel.picking .fast-pi-actions{margin:5px 0}
  .fast-pi-panel.picking .fast-pi-status{margin:4px 0;font-size:11px}
 }
+
+.fast-pi-contacts>.fast-pi-choose-pads{grid-column:1 / -1;text-align:center;white-space:normal;min-height:30px}
+
+.fast-pi-inputs>.fast-pi-contacts,.fast-pi-material-note{grid-column:1 / -1}.fast-pi-inputs .fast-pi-contacts{margin:0}.fast-pi-inputs details>.fast-pi-material{width:100%}

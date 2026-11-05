@@ -692,14 +692,14 @@ export function mountBoard3D(container, source, options = {}) {
     const matches = selectionMatcher(externalSelection, board);
     const netState=netInspection.update(externalSelection,fullNet3D);
     netInspectionHelp.hidden=!netState.active;
-    netInspectionHelp.textContent='Full net 3D reveals saved copper on all layers, including hidden layers, through translucent grey context. '+netState.warnings.slice(0,2).join(' ');
+    netInspectionHelp.textContent='Full net 3D reveals saved copper on all layers, including hidden layers, with '+(selectionDim?'translucent grey':'original-color')+' context. '+netState.warnings.slice(0,2).join(' ');
     netInspectionHelp.title=netState.warnings.join('\n');
     hint.textContent=netState.active?'Full net 3D · '+netState.nets.join(', ')+' · '+netState.tracks+' track segments · '+netState.vias+' vias'+(netState.omitted?' · '+netState.omitted+' omitted (see Display)':''):'Drag to orbit · right-drag to pan · wheel to zoom · click to inspect';
     if(netState.active){
       selectionGeometry.clear();
       selectionNotice.hidden=!netState.omitted;selectionNotice.style.display=netState.omitted?'block':'none';
       selectionNotice.textContent=netState.omitted+' selected primitives omitted; see Display for geometry notes.';
-      selectionAppearance.update(matches,true,{translucent:true});
+      selectionAppearance.update(matches,selectionDim,{translucent:selectionDim});
       const visible=netState.tracks+netState.pads+netState.vias+netState.platedPads+netState.fills+netState.boundaries;
       return {highlighted:visible,matched:visible,limited:netState.omitted>0||netState.sourceLimited,fullNet3D:true};
     }

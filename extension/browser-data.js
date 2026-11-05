@@ -144,7 +144,7 @@
         totalBytes -= sizes.get(path) || 0; sizes.delete(path); cache.delete(path); sheetCache.delete(path);
       }
     }
-    if (await read(file) === null) throw new Error(`KiCad file was not returned by ${provider === "gitlab" ? "GitLab" : "GitHub"} (HTTP 404): ${repository}, revision ${ref}, path ${file}. The file may be missing or repository access may be unavailable. ${provider === "gitlab" ? "Sign in to the matching GitLab server in extension settings and check your project access." : "Keep this repository open in a signed-in GitHub tab, or use Sign in with GitHub with private repository access in extension settings. Advanced tokens require this repository's Contents read permission."}`);
+    if (await read(file) === null) throw new Error(`KiCad file was not returned by ${provider === "gitlab" ? "GitLab" : "GitHub"} (HTTP 404): ${repository}, revision ${ref}, path ${file}. The file may be missing or repository access may be unavailable. ${provider === "gitlab" ? "Sign in to the matching GitLab server in extension settings and check your project access." : "Keep this repository open in a signed-in GitHub tab in the same browser profile and complete any organization website sign-in. Project viewing does not require a review-account token."}`);
     let roots = [file];
     let discoveryWarning = null;
     if (/(?:\.kicad_sch|\.sch)$/i.test(file) && (listDirectory || listSchematics)) {
@@ -225,7 +225,10 @@
       await readBatch(batch);
       for (const path of batch) {
         const content = cache.get(path);
-        if (content === null) continue;
+        if (content === null) {
+          discoveryWarning=[discoveryWarning,'Referenced sheet unavailable at this revision: '+path+'.'].filter(Boolean).join(' ');
+          continue;
+        }
         files.push({ path, content });
         for (const child of descendants(path, content)) if (!seen.has(child)) queue.push(child);
       }

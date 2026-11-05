@@ -38,8 +38,28 @@
         if(!asset)throw Error('Repository asset is unavailable at this commit.');
         const extension=path.split('.').pop().toLowerCase();return {...asset,mediaType:pdf?'application/pdf':extension==='glb'?'model/gltf-binary':['step','stp'].includes(extension)?'model/step':'model/vrml'};
       }
+      if(type==='project'){
+        // Follow saved Sheetfile references without first crawling unrelated repository folders.
+        const listDirectory=async(_repo,_sha,directory)=>{
+          const listing=await buffer.directory(repository,sha,directory,signal);
+          return listing.items.filter(item=>item.type==='file'&&/(?:\.kicad_sch|\.sch)$/i.test(item.path)).map(item=>item.path);
+        };
+        await buffer.directory(repository,sha,file.split('/').slice(0,-1).join('/'),signal);
+        let sources=await data.loadProject(repository,sha,file,(_repo,_sha,path)=>get(path),listDirectory,'github');
+        // A leaf may have its parent in a sibling folder. Only that unresolved
+        // case needs wider discovery; opening a saved root follows its links first.
+        if(/(?:\.kicad_sch|\.sch)$/i.test(file)&&sources.length===1&&sources[0].path===file&&!sources[0].discoveryWarning){
+          try{
+            const listing=await buffer.inventory(repository,sha,signal);
+            const incomplete=listing.warnings?.some(warning=>/incomplete|limited|limit reached/i.test(warning));
+            if(!incomplete)sources=await data.loadProject(repository,sha,file,(_repo,_sha,path)=>get(path),null,'github',async()=>listing.files.map(item=>item.path).filter(path=>/(?:\.kicad_sch|\.sch)$/i.test(path)));
+            else sources[0].discoveryWarning='Parent-sheet discovery is incomplete. Open the saved root sheet to follow its full hierarchy.';
+          }catch(error){if(signal?.aborted||/invalid|unsafe|different revision|mismatch/i.test(error.message))throw error;sources[0].discoveryWarning='Parent-sheet discovery is incomplete. Open the saved root sheet to follow its full hierarchy.';}
+        }
+        Object.defineProperty(sources,'recentSnapshotRef',{value:sha});return sources;
+      }
       if(type==='repository-branches'||type==='revision-branches')return {repository,branches:[],warnings:['API-free viewing: select a branch on GitHub or enter its name directly.']};
-      const scopedModels=type==='repo-model-index'&&file!==undefined&&typeof buffer.modelInventory==='function',rawInventory=scopedModels?await buffer.modelInventory(repository,sha,file,signal):await buffer.inventory(repository,sha,signal),normalize=root.KiCadGitHubProjectBuffer?.normalizeInventory||(typeof require==='function'?require('./github-project-buffer.js').normalizeInventory:null),inventory=normalize?normalize(rawInventory,sha):rawInventory,warnings=[...(inventory.warnings||[])];
+      const scopedModels=type==='repo-model-index'&&file!==undefined&&typeof buffer.modelInventory==='function',rawInventory=scopedModels?await buffer.modelInventory(repository,sha,file,signal):await buffer.inventory(repository,sha,signal,['project-inventory','drawing-files','project-search-files'].includes(type)?{directory:file.split('/').slice(0,-1).join('/'),scoped:true}:{}),normalize=root.KiCadGitHubProjectBuffer?.normalizeInventory||(typeof require==='function'?require('./github-project-buffer.js').normalizeInventory:null),inventory=normalize?normalize(rawInventory,sha):rawInventory,warnings=[...(inventory.warnings||[])];
       const files=inventory.files.filter(item=>paths.filePath(item.path));
       if(type==='project-inventory')return {files,snapshotRef:sha,warnings};
       const incomplete=warnings.some(warning=>/incomplete|limited|limit reached/i.test(warning));
@@ -55,10 +75,6 @@
           .map(item=>({path:item.path,type:item.type==='directory'?'tree':item.type==='submodule'?'commit':'blob',mode:item.type==='symlink'?'120000':item.type==='directory'?'040000':item.type==='submodule'?'160000':'100644',size:0}));
         const entries=directory===undefined?all:all.slice((page-1)*100,page*100),hasMore=directory!==undefined&&page*100<all.length;
         return {repository,ref,sha,snapshotRef:sha,directory:directory||'',entries,truncated:incomplete,hasMore,nextPage:hasMore?page+1:null,warnings};
-      }
-      if(type==='project'){
-        const sources=await data.loadProject(repository,sha,file,(_repo,_sha,path)=>get(path),null,'github',async()=>{if(incomplete)throw Error('Repository inventory is incomplete');return files.map(item=>item.path).filter(path=>/(?:\.kicad_sch|\.sch)$/i.test(path));});
-        Object.defineProperty(sources,'recentSnapshotRef',{value:sha});return sources;
       }
       const sources=[],settings=[];let bytes=0;
       for(const item of files.filter(item=>data.validPath(item.path)).sort((a,b)=>(b.path===file?1:0)-(a.path===file?1:0)).slice(0,32)){

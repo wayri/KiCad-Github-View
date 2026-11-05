@@ -446,6 +446,25 @@ Drawing views in exported sheets are raster previews; dimensions, notes and tabl
 
 Contact [support.kivi@sigharmonic.com](mailto:support.kivi@sigharmonic.com) with the app/extension version, operating system, exact steps and a non-confidential minimal example. Do not include account tokens or private project data without authorization.
 
+
+### Selection appearance and BoM cross-selection
+
+**View options → Keep context colors** is enabled by default. Selected parts,
+pins and nets retain their highlight while the surrounding drawing keeps its
+colors. Clear the checkbox for dimmed context, or choose Isolate from Style.
+The preference applies to schematic, layout, 3D and probe windows.
+
+The **BoM / Assembly** panel can remain open beside the drawing. Select a reference
+to cross-select its saved part; selecting a part in a drawing updates the BoM row.
+Filters are preserved, and a hidden selected part is identified rather than silently
+changing your filters. Imported standalone CSV/iBOM data stays source-scoped.
+
+Fast PI starts from the highlighted net when it has an exact match in the current
+PCB. **Choose source + load pads** walks through the two contacts. Review the visible
+nominal copper preset and saved stackup, enter source voltage/load current and Solve.
+Advanced contains mesh and plating inputs. Automatic contact refinement is bounded;
+it does not validate model accuracy or replace a full PI analysis.
+
 ## Compact views and experimental Fast PI
 
 The icon-and-label view strip switches Schematic, Layout, 3D, Draftsman and

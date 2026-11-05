@@ -50,3 +50,16 @@ test('pinned actual VNA legacy root follows saved child links and shares its cac
  for(const file of opened.result){assert.equal(file.legacyLibraries.length,1);assert.equal(file.legacyLibraries[0].path,'hw/vna2-cache.lib');assert.equal(file.legacyLibraries[0].content,library);assert.equal(file.discoveryWarning,undefined);}
  const count=fixture.fetches.length,child=await message({...scope,file:'hw/transmitter.sch',type:'project'},viewer('schematic-viewer.html?detached=1'));assert.equal(child.ok,true,child.error);assert.deepEqual(child.result.map(f=>f.path),opened.result.map(f=>f.path));assert.equal(fixture.fetches.length,count);assert.equal(fixture.fetches.some(r=>r.url.includes('api.github.com')),false);
 });
+
+test('saved hierarchy loads children across folders without crawling unrelated repository directories',async()=>{
+ const scope=setup('buffer/reference-first',{
+  'design/root.kicad_sch':'(kicad_sch (sheet (property "Sheetfile" "../shared/power.kicad_sch")))',
+  'shared/power.kicad_sch':'(kicad_sch)',
+  'archive/old/unused.kicad_sch':'(kicad_sch)'
+ });
+ const tree=fixture.tree;fixture.tree=function(path){if(path.startsWith('archive'))throw Error('Unrelated archive is unavailable');return tree.call(this,path);};
+ const opened=await message({...scope,type:'project',file:'design/root.kicad_sch'});
+ assert.equal(opened.ok,true,opened.error);assert.deepEqual(opened.result.map(f=>f.path),['design/root.kicad_sch','shared/power.kicad_sch']);
+ assert.equal(fixture.session.some(m=>m.action==='directory'&&m.path.startsWith('archive')),false);
+ assert.equal(fixture.fetches.length,0);
+});

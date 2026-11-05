@@ -10,11 +10,22 @@
     if(request.pullNumber)throw new Error('Manual revision comparison is separate from the pull-request review.');
     return params;
   }
+  function panelBounds(anchor,width,height,panelHeight=560){
+    const pad=8,w=Math.max(1,Math.min(580,width-pad*2)),h=Math.max(1,Math.min(panelHeight,height-pad*2));
+    return {left:Math.max(pad,Math.min(anchor.right-w,width-pad-w)),top:Math.max(pad,Math.min(anchor.bottom+4,height-pad-h)),width:w,maxHeight:h};
+  }
   function mount(options){
     const doc=options.holder.ownerDocument,request={...options.request};let epoch=0,disposed=false;
     const make=(tag,text)=>{const n=doc.createElement(tag);if(text!==undefined)n.textContent=text;return n;};
     const detail=make('details');detail.className='revision-picker';const summary=make('summary','History / compare');detail.append(summary);
     const panel=make('div');panel.className='revision-picker-panel';detail.append(panel);
+    const close=make('button','×');close.type='button';close.className='popup-close';close.setAttribute('aria-label','Close history');close.title='Close history';panel.append(close);
+    const host=doc.defaultView||root;
+    const dismiss=()=>{detail.open=false;summary.focus?.();};
+    const position=()=>{if(!detail.open||!summary.getBoundingClientRect||!panel.style)return;const viewport=host.visualViewport,b=panelBounds(summary.getBoundingClientRect(),viewport?.width||host.innerWidth,viewport?.height||host.innerHeight,Math.min(panel.scrollHeight||560,560));for(const [key,value]of Object.entries(b))panel.style[key]=value+'px';};
+    const outside=event=>{if(detail.open&&!detail.contains?.(event.target)&&!event.composedPath?.().includes(detail))detail.open=false;};
+    const escape=event=>{if(event.key==='Escape'&&detail.open){event.preventDefault?.();dismiss();}};
+    close.addEventListener('click',dismiss);detail.addEventListener('toggle',position);doc.addEventListener?.('pointerdown',outside);doc.addEventListener?.('keydown',escape);host.addEventListener?.('resize',position);host.visualViewport?.addEventListener('resize',position);
     const note=make('p','Browse repository history, load a commit, or compare it with the displayed revision. Source files stay unchanged.');panel.append(note);
     const advanced=make('details');advanced.append(make('summary','Manual revision comparison'));panel.append(advanced);
     const rows={};
@@ -42,7 +53,7 @@
       const ticket=++epoch;historyLoad.disabled=true;tell('Loading commit history…');
       try{const result=await send('revision-commits',rows.head,options.getCurrentRef?.()||request.head);if(disposed||ticket!==epoch)return;if(result.file!==request.file||!SHA.test(result.snapshotRef||'')||!Array.isArray(result.commits)||result.commits.length>50||result.commits.some(c=>!SHA.test(c.sha)))throw Error('Invalid bounded commit history.');
         historyList.replaceChildren();for(const commit of result.commits){const row=make('li'),title=make('strong',String(commit.message||'Commit').split('\n')[0].slice(0,240)),meta=make('small',[commit.sha.slice(0,10),commit.author,commit.date].filter(Boolean).join(' · ')),actions=make('div'),open=make('button','Load commit'),compare=make('button','Compare with current');for(const b of [open,compare])b.type='button';open.addEventListener('click',()=>openCommit(commit.sha));compare.addEventListener('click',()=>openCommit(commit.sha,true));actions.append(open,compare);row.append(title,meta,actions);historyList.append(row);}
-        tell(`${result.commits.length} commits shown. ${[...(result.warnings||[]),...(result.hasMore?['More history is available on the repository website.']:[])].join(' ')}`);
+        position();tell(`${result.commits.length} commits shown. ${[...(result.warnings||[]),...(result.hasMore?['More history is available on the repository website.']:[])].join(' ')}`);
       }catch(error){if(!disposed&&ticket===epoch)tell(error.message);}finally{if(!disposed)historyLoad.disabled=false;}
     }
     historyLoad.addEventListener('click',loadHistory);
@@ -70,7 +81,7 @@
       }catch(error){if(!disposed&&ticket===epoch)tell(error.message);}finally{if(ticket===epoch)busy(false);}
     }
     load.addEventListener('click',populate);compare.addEventListener('click',()=>openComparison(true));view.addEventListener('click',()=>openComparison(false));
-    return {populate,openComparison,loadHistory,openCommit,dispose(){disposed=true;epoch++;detail.remove();}};
+    return {populate,openComparison,loadHistory,openCommit,dispose(){disposed=true;epoch++;doc.removeEventListener?.('pointerdown',outside);doc.removeEventListener?.('keydown',escape);host.removeEventListener?.('resize',position);host.visualViewport?.removeEventListener('resize',position);detail.remove();}};
   }
-  const api={comparisonQuery,mount};root.KiCadRevisionPicker=api;if(typeof module==='object'&&module.exports)module.exports=api;
+  const api={comparisonQuery,mount,panelBounds};root.KiCadRevisionPicker=api;if(typeof module==='object'&&module.exports)module.exports=api;
 })(typeof globalThis==='object'?globalThis:this);

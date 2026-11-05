@@ -1,0 +1,11 @@
+KiCad Online 0.12.88
+
+What's new
+• Faster project opening: follow saved subsheets before scanning unrelated repository folders.
+• Dismissible, viewport-bounded menus and corrected ribbon labels.
+• Guided Fast PI source/load pad setup, visible copper preset, bounded mesh recovery and clearer diagnostics.
+• Keep context colors while selecting, enabled by default across schematic, layout, 3D and probe windows.
+• Bidirectional BoM cross-selection while keeping the drawing and BoM available together.
+• Includes property and BoM field comments from 0.12.87.
+
+No new permissions. Repository viewing remains browser-session based. Independent viewer, not affiliated with KiCad, GitHub or GitLab. Altium beta is excluded. Fast PI is experimental single-net fixed-temperature DC screening. Imported ERC/DRC and simulation reports are saved results, not execution of KiCad's engines.

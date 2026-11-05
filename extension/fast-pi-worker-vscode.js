@@ -47,10 +47,10 @@ function solveBoard(ast,options){
  const nodes=[],index=new Map(),key=(l,x,y)=>l+':'+x+':'+y;
  for(let l=0;l<layers.length;l++){const shape=g.shapes.filter(s=>s.layer===layers[l].name),holes=g.holes.filter(h=>h.layer===layers[l].name);for(let y=0;y<ny;y++)for(let x=0;x<nx;x++){const p={x:minX+(x+.5)*step,y:minY+(y+.5)*step};if(shape.some(s=>p.x>=s.box[0]&&p.x<=s.box[2]&&p.y>=s.box[1]&&p.y<=s.box[3]&&s.test(p))&&!holes.some(h=>holeContains(h,p))){index.set(key(l,x,y),nodes.length);nodes.push({...p,layer:layers[l].name,l,gx:x,gy:y});}}}
  if(nodes.length<2)fail('Copper is unresolved at this cell size');const edges=[];for(let i=0;i<nodes.length;i++){const n=nodes[i],conductance=sigma*layers[n.l].thicknessMm*.001;for(const [dx,dy]of [[1,0],[0,1]]){const j=index.get(key(n.l,n.gx+dx,n.gy+dy));if(j!==undefined&&[.25,.5,.75].every(t=>copperAt({x:n.x+dx*step*t,y:n.y+dy*step*t},n.layer)))edges.push({a:i,b:j,g:conductance,areaM2:step*layers[n.l].thicknessMm*1e-6,kind:'sheet'});}}
- const nearest=(p,layer,maxDistance)=>{let id=-1,d=Infinity;for(let i=0;i<nodes.length;i++)if(nodes[i].layer===layer){const dd=Math.hypot(nodes[i].x-p.x,nodes[i].y-p.y);if(dd<d){d=dd;id=i;}}if(d>maxDistance)fail('Terminal or via is unresolved/disconnected at this mesh size');return id;};
+ const nearest=(p,layer,maxDistance,label='Contact')=>{let id=-1,d=Infinity;for(let i=0;i<nodes.length;i++)if(nodes[i].layer===layer){const dd=Math.hypot(nodes[i].x-p.x,nodes[i].y-p.y);if(dd<d){d=dd;id=i;}}if(d>maxDistance)fail(label+' is unresolved at '+p.x.toFixed(4)+', '+p.y.toFixed(4)+' mm on '+layer+' at this mesh size');return id;};
  if(g.vias.reduce((sum,v)=>sum+v.span.length,0)*nodes.length>10000000)fail('Via connection search budget exceeded; choose a coarser mesh');
- if(g.vias.length){const plating=positive(options.viaPlatingMm,'via plating thickness (mm)');for(const via of g.vias){if(via.drill/2+plating>=via.r)fail('Via plating must fit inside the saved annulus');const ids=via.span.map(l=>nearest(via.p,l,via.drill/2+step*1.5));for(let k=1;k<ids.length;k++){const a=ids[k-1],b=ids[k],length=Math.abs(layers[nodes[b].l].zMm-layers[nodes[a].l].zMm)*.001,area=Math.PI*((via.drill/2+plating)**2-(via.drill/2)**2)*1e-6;edges.push({a,b,g:sigma*area/length,areaM2:area,kind:'via'});}}}
- for(const p of [source,sink]){if(!p||!Number.isFinite(p.x)||!Number.isFinite(p.y)||!seen.has(p.layer))fail('Source and sink need board coordinates and an explicit layer');if(!copperAt(p,p.layer)&&!g.vias.some(v=>v.span.includes(p.layer)&&Math.hypot(v.p.x-p.x,v.p.y-p.y)<=v.r))fail('Pick source and load on the selected net copper, pad or plated via.');}const terminal=p=>{const via=g.vias.find(v=>v.span.includes(p.layer)&&Math.hypot(v.p.x-p.x,v.p.y-p.y)<=v.r);return nearest(p,p.layer,via?Math.max(step,via.drill/2+step*1.5):step);};const s=terminal(source),t=terminal(sink);if(s===t)fail('Terminals resolve to the same cell; refine mesh');
+ if(g.vias.length){const plating=positive(options.viaPlatingMm,'via plating thickness (mm)');for(const via of g.vias){if(via.drill/2+plating>=via.r)fail('Via plating must fit inside the saved annulus');const ids=via.span.map(l=>nearest(via.p,l,via.drill/2+step*1.5,'Via'));for(let k=1;k<ids.length;k++){const a=ids[k-1],b=ids[k],length=Math.abs(layers[nodes[b].l].zMm-layers[nodes[a].l].zMm)*.001,area=Math.PI*((via.drill/2+plating)**2-(via.drill/2)**2)*1e-6;edges.push({a,b,g:sigma*area/length,areaM2:area,kind:'via'});}}}
+ for(const p of [source,sink]){if(!p||!Number.isFinite(p.x)||!Number.isFinite(p.y)||!seen.has(p.layer))fail('Source and sink need board coordinates and an explicit layer');if(!copperAt(p,p.layer)&&!g.vias.some(v=>v.span.includes(p.layer)&&Math.hypot(v.p.x-p.x,v.p.y-p.y)<=v.r))fail('Pick source and load on the selected net copper, pad or plated via.');}const terminal=(p,label)=>{const via=g.vias.find(v=>v.span.includes(p.layer)&&Math.hypot(v.p.x-p.x,v.p.y-p.y)<=v.r);return nearest(p,p.layer,via?Math.max(step,via.drill/2+step*1.5):step,label);};const s=terminal(source,'Source contact'),t=terminal(sink,'Load contact');if(s===t)fail('Terminals resolve to the same cell; refine mesh');
  const adjacency=nodes.map(()=>[]);for(const e of edges){adjacency[e.a].push(e.b);adjacency[e.b].push(e.a);}const connected=new Set([s]),queue=[s];for(let k=0;k<queue.length;k++)for(const j of adjacency[queue[k]])if(!connected.has(j)){connected.add(j);queue.push(j);}if(!connected.has(t))fail('Source and sink are disconnected at this mesh resolution');
  for(const e of edges)if(!Number.isFinite(e.g)||e.g<=0||!Number.isFinite(e.areaM2)||e.areaM2<=0)fail('Conductance is outside finite numerical range');if(!Number.isFinite(current*current)||current*current===0)fail('Current is outside numerical range');
  const active=queue.filter(i=>i!==s),remap=new Map(active.map((n,i)=>[n,i])),n=active.length,diagonal=new Float64Array(n),rhs=new Float64Array(n),links=[];rhs[remap.get(t)]=-current;
@@ -63,13 +63,28 @@ function solveBoard(ast,options){
  if(!Number.isFinite(residual)||residual>current*1e-8)fail('DC solver did not converge within its work budget; no result accepted');const offsets=nodes.map((node,i)=>connected.has(i)?(i===s?0:x[remap.get(i)]):null);const solved=nodes.map((node,i)=>({...node,voltageV:connected.has(i)?voltage+offsets[i]:null}));let loss=0;const flows=edges.filter(e=>connected.has(e.a)&&connected.has(e.b)).map(e=>{const drop=offsets[e.a]-offsets[e.b],I=drop*e.g,P=drop*I;loss+=P;return {...e,currentA:I,currentDensityAm2:I/e.areaM2,lossW:P};});const drop=-offsets[t];if(!Number.isFinite(drop)||!Number.isFinite(loss)||solved.some(n=>n.voltageV!==null&&!Number.isFinite(n.voltageV))||flows.some(e=>![e.currentA,e.currentDensityAm2,e.lossW].every(Number.isFinite))||Math.abs(loss-drop*current)>Math.max(loss,Math.abs(drop*current))*1e-6)fail('Result failed finite-value or power-conservation checks; no result accepted');
  return {experimental:true,method:'fixed-temperature 2.5D finite-volume DC',nodes:solved,edges:flows,sourceIndex:s,sinkIndex:t,voltageV:solved[t].voltageV,dropV:drop,resistanceOhm:drop/current,currentA:current,lossW:loss,residualA:residual,iterations,cellSizeMm:step,unconnectedCells:nodes.length-connected.size,warnings:['Screening approximation: perform mesh refinement before relying on extrema. Cell-center sampling can miss narrow gaps, thin traces and thermal-relief spokes; inspect connectivity at multiple resolutions.','Single-net voltage is relative to the supplied ideal source; return-network impedance is not included.','Via barrels use lumped resistance attached to one nearby mesh cell; pad spreading is mesh dependent.','No AC, temperature feedback, dielectric, or physical qualification is provided.']};
 }
+// Recover under-resolved contacts with at most two finer meshes. Every attempt
+// retains the same geometry, explicit inputs, work limits and acceptance checks.
+function solveAdaptive(ast,options){
+ const requested=options?.cellSizeMm;let last;
+ for(let attempt=0;attempt<3;attempt++){
+  try{const result=solveBoard(ast,{...options,cellSizeMm:requested/2**attempt});
+   return {...result,meshAttempts:attempt+1,requestedCellSizeMm:requested,warnings:[...(attempt?['Contacts required automatic mesh refinement from '+requested+' to '+result.cellSizeMm+' mm.']:[]),...result.warnings]};
+  }catch(error){
+   const recoverable=/unresolved|disconnected at this mesh|same cell; refine mesh/.test(error.message);
+   if(!recoverable){if(last&&/budget exceeded/.test(error.message))fail('The contacts need a finer mesh than this net can fit within the solve budget. Choose pads on a smaller connected net, or use the full PI workflow.');throw error;}
+   last=error;
+  }
+ }
+ throw Error(last.message+'. Tried three mesh resolutions. Choose another saved pad/layer pair or inspect the saved copper connectivity. No result accepted.');
+}
 function createContactValidator(ast,net,layers){
  const g=geometry(ast,net,layers);
  return p=>Boolean(p&&Number.isFinite(p.x)&&Number.isFinite(p.y)&&(g.vias.some(v=>v.span.includes(p.layer)&&Math.hypot(v.p.x-p.x,v.p.y-p.y)<=v.r)||(g.shapes.some(s=>s.layer===p.layer&&p.x>=s.box[0]&&p.x<=s.box[2]&&p.y>=s.box[1]&&p.y<=s.box[3]&&s.test(p))&&!g.holes.some(h=>h.layer===p.layer&&holeContains(h,p)))));
 }
-const api={solveBoard,createContactValidator};root.KiCadFastPI=api;if(typeof module==='object'&&module.exports)module.exports=api;
+const api={solveBoard,solveAdaptive,createContactValidator};root.KiCadFastPI=api;if(typeof module==='object'&&module.exports)module.exports=api;
 })(globalThis);
 
 ;
 
-self.onmessage=event=>{try{self.postMessage({ok:true,result:self.KiCadFastPI.solveBoard(event.data.ast,event.data.options)});}catch(error){self.postMessage({ok:false,error:error.message});}};
+self.onmessage=event=>{try{self.postMessage({ok:true,result:self.KiCadFastPI.solveAdaptive(event.data.ast,event.data.options)});}catch(error){self.postMessage({ok:false,error:error.message});}};

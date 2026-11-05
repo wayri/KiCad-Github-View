@@ -145,7 +145,9 @@
       }catch(error){if(epoch===pairEpoch)status(error.message+' Enter a repository-relative companion path.',true);}finally{split.disabled=false;}
     });
     split.id='splitView';split.setAttribute('aria-pressed','false');
-    const chooser=element('span');chooser.id='pairChooser';chooser.hidden=true;const select=element('select');select.id='companionSelect';select.setAttribute('aria-label','Companion drawing');select.addEventListener('change',()=>{if(select.value){tabEpoch++;pairEpoch++;if(chooserMode==='single')displayDrawing(select.value);else openPair(select.value);$('pairChooser').hidden=true;}});const path=element('input');path.id='companionPath';path.placeholder='Repository-relative companion path';path.setAttribute('aria-label','Companion path');const open=element('button','Open pair');open.addEventListener('click',()=>{tabEpoch++;pairEpoch++;const file=path.value.trim()||select.value;if(chooserMode==='single'){if(isDrawing(file)){displayDrawing(file);$('pairChooser').hidden=true;}else status('Enter a valid repository-relative drawing path.',true);}else openPair(file);});chooser.append(select,path,open);$('projectTools').append(chooser);
+    const chooser=element('span');chooser.id='pairChooser';chooser.hidden=true;const select=element('select');select.id='companionSelect';select.setAttribute('aria-label','Companion drawing');select.addEventListener('change',()=>{if(select.value){tabEpoch++;pairEpoch++;if(chooserMode==='single')displayDrawing(select.value);else openPair(select.value);$('pairChooser').hidden=true;}});const path=element('input');path.id='companionPath';path.placeholder='Repository-relative companion path';path.setAttribute('aria-label','Companion path');const open=element('button','Open pair');open.addEventListener('click',()=>{tabEpoch++;pairEpoch++;const file=path.value.trim()||select.value;if(chooserMode==='single'){if(isDrawing(file)){displayDrawing(file);$('pairChooser').hidden=true;}else status('Enter a valid repository-relative drawing path.',true);}else openPair(file);});const close=element('button','×');close.type='button';close.id='closePairChooser';close.title='Close drawing chooser';close.setAttribute('aria-label','Close drawing chooser');const dismissChooser=()=>{tabEpoch++;pairEpoch++;chooser.hidden=true;split.disabled=false;split.focus?.();};close.addEventListener('click',dismissChooser);chooser.append(select,path,open,close);$('projectTools').append(chooser);
+    addEventListener('pointerdown',event=>{if(!chooser.hidden&&!chooser.contains?.(event.target)&&!event.composedPath?.().includes(chooser)&&event.target!==split){tabEpoch++;pairEpoch++;chooser.hidden=true;split.disabled=false;}});
+    addEventListener('keydown',event=>{if(event.key==='Escape'&&!chooser.hidden){event.preventDefault?.();dismissChooser();}});
     const detail=element('details');detail.className='split-options';detail.id='splitOptions';detail.hidden=true;detail.append(element('summary','Split options'));const controls=element('span');controls.id='pairControls';controls.hidden=true;detail.append(controls);
     const add=(text,handler)=>{const node=element('button',text);node.type='button';node.addEventListener('click',handler);controls.append(node);return node;};
     const sync=projectControl('Cross-select',()=>{crossSelectionState(!crossLinked);sendCommand('detach-sync',{enabled:crossLinked});});sync.id='crossSelectToggle';sync.setAttribute('aria-pressed','true');sync.title='Toggle cross-selection across schematic, layout and detached views';sync.setAttribute('data-icon','link');
@@ -354,6 +356,12 @@
         (request.base && !data.validRef(request.base)) || !["added", "removed", "modified", "renamed", "changed", "copied", "unchanged"].includes(request.status)) {
       status("The Git host file location is invalid or incomplete."); return;
     }
+    // Establish the correct surface before a session/ref read can fail.
+    $("filename").textContent=request.file;
+    $("reviewHeader").dataset.compact=String(!request.base);
+    comparison.dataset.blob=String(!request.base);
+    $("reviewFooter").hidden=!request.base;
+    if(!request.base){$("basePanel").hidden=true;$("headPanel").hidden=false;}
     if(provider==='gitlab'||(!globalThis.KiCadVSCodeContext&&[request.head,request.base].some(ref=>ref&&!/^[a-f0-9]{40}$/i.test(ref)))){
       await loadOperation('start','Resolving Git revision',async(read,check)=>{
       for(const side of ['head',...(request.base?['base']:[])]){
@@ -408,5 +416,11 @@
     mountPicker();mountWorkspaceSearch();
     if(request.base){const compare=projectControl(request.pullNumber?'Compare commits':'Comparison controls',()=>{comparison.hidden=false;$('projectWorkspace').hidden=true;toolbar.hidden=!toolbar.hidden;});compare.setAttribute('aria-controls','toolbar');}
   }
-  start().catch(error=>status(error.message,true));
+  start().catch(error=>{
+    status(error.message,true);
+    for(const side of request.base?['base','head']:['head']){
+      const drawing=$(side+'Drawing');
+      if(drawing&&!frames.has(side))drawing.textContent='Drawing could not be loaded. Retry after restoring repository website access.';
+    }
+  });
 })();

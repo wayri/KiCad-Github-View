@@ -40,7 +40,7 @@ function viewer(parameters, read, extras={}) {
     chrome: { runtime: { getURL: (name) => 'chrome-extension://test-id/'+name,
       sendMessage: async (message) => { calls.push(message); return read(message); } } },
     document: { getElementById: get, createElement: (tag) => new Element(tag) },...extras });
-  return { get, calls, parent, parentMessages,expire:()=>{for(const timer of [...timers])timer.fn();},pagehide:()=>listeners.get('pagehide')?.forEach(fn=>fn()), message: (event) => listeners.get('message').forEach(callback=>callback(event)), click: (text) => get('toolbar').children.find((node) => node.textContent === text).click() };
+  return { get, calls, parent, parentMessages,expire:()=>{for(const timer of [...timers])timer.fn();},dispatch:(type,event)=>listeners.get(type)?.forEach(fn=>fn(event)),pagehide:()=>listeners.get('pagehide')?.forEach(fn=>fn()), message: (event) => listeners.get('message').forEach(callback=>callback(event)), click: (text) => get('toolbar').children.find((node) => node.textContent === text).click() };
 }
 const parameters = {repository:'wayri/board', headRepository:'fork/board', file:'new.kicad_sch',
   oldFile:'old.kicad_sch', base:'a'.repeat(40), head:'b'.repeat(40)};
@@ -360,4 +360,19 @@ test('detached cross-select state also controls paired relay and clears pending 
  view.message({origin,source:main.contentWindow,data:{type:'kicad-review:selection',selection}});assert.equal(pair.messages.length,0);
  view.get('crossSelectToggle').click();assert.equal(view.get('crossSelectToggle').getAttribute('aria-pressed'),'true');assert.equal(pair.messages.at(-1).message.command,'detach-sync');
  view.message({origin,source:main.contentWindow,data:{type:'kicad-review:selection',selection}});assert.equal(pair.messages.at(-1).message.command,'highlight-related');
+});
+
+test('empty or failed companion chooser always closes and ignores late lookup',async()=>{
+ let finish;const view=viewer({...parameters,base:''},()=>new Promise(done=>finish=done));
+ view.get('splitView').click();assert.equal(view.get('pairChooser').hidden,false);
+ view.get('closePairChooser').click();assert.equal(view.get('pairChooser').hidden,true);
+ finish({ok:true,result:{files:['board.kicad_pcb']}});await tick();assert.equal(view.get('pairDrawing').children.length,0);assert.equal(view.get('pairChooser').hidden,true);
+ view.get('pairChooser').hidden=false;view.dispatch('keydown',{key:'Escape'});assert.equal(view.get('pairChooser').hidden,true);
+ view.get('pairChooser').hidden=false;view.dispatch('pointerdown',{target:{},composedPath:()=>[]});assert.equal(view.get('pairChooser').hidden,true);
+ view.get('pairChooser').hidden=false;view.dispatch('pointerdown',{target:view.get('companionPath'),composedPath:()=>[view.get('companionPath'),view.get('pairChooser')]});assert.equal(view.get('pairChooser').hidden,false);
+});
+test('failed mutable revision opens a single error pane rather than stale Base and Head loaders',async()=>{
+ const view=viewer({repository:'wayri/board',head:'main',file:'board.kicad_pcb'},()=>({ok:false,error:'Website session unavailable.'}));
+ assert.equal(view.get('basePanel').hidden,true);assert.equal(view.get('comparison').dataset.blob,'true');
+ await tick();assert.equal(view.get('basePanel').hidden,true);assert.match(view.get('headDrawing').textContent,/could not be loaded/);assert.match(view.get('status').textContent,/Website session unavailable/);assert.doesNotMatch(view.get('headDrawing').textContent,/Loading/);
 });

@@ -5,7 +5,7 @@ test('Fast PI setup reads saved net identifiers and copper layers without making
  assert.deepEqual(info,{nets:[{id:2,name:'GND'},{id:4,name:'-12V'}],layers:['F.Cu','B.Cu']});
 });
 test('Fast PI worker returns exact solver result or a visible failure without executing arbitrary scripts',()=>{
- let handler,reply,imported;const context={self:{KiCadFastPI:{solveBoard(ast,options){if(options.fail)throw Error('disconnected');return {voltageV:ast[0],dropV:options.drop};}},postMessage:x=>reply=x},importScripts:path=>imported=path};
+ let handler,reply,imported;const context={self:{KiCadFastPI:{solveAdaptive(ast,options){if(options.fail)throw Error('disconnected');return {voltageV:ast[0],dropV:options.drop};}},postMessage:x=>reply=x},importScripts:path=>imported=path};
  vm.runInNewContext(fs.readFileSync(require.resolve('../fast-pi-worker.js'),'utf8'),context);handler=context.self.onmessage;
  assert.equal(imported,'fast-pi.js');handler({data:{ast:[5],options:{drop:.1}}});assert.equal(reply.ok,true);assert.equal(reply.result.voltageV,5);handler({data:{ast:[],options:{fail:true}}});assert.equal(reply.ok,false);assert.equal(reply.error,'disconnected');
 });
@@ -62,7 +62,7 @@ test('mounted Fast PI picks contacts, passes named nets and reviewed stackup to 
  const fastPI=require('../fast-pi.js'),context={URL,document:doc,setTimeout,clearTimeout,AbortController,Worker:class{postMessage(data){posted=data;queueMicrotask(()=>this.onmessage({data:{ok:true,result:fastPI.solveBoard(data.ast,data.options)}}));}terminate(){terminated++;}},KiCadDesignDiff:{parse(value){parses++;return parse(value);}},KiCadFastPI:{...fastPI,createContactValidator(...args){validators++;return fastPI.createContactValidator(...args);}}};
  vm.runInNewContext(fs.readFileSync(require.resolve('../fast-pi-workspace.js'),'utf8'),context);
  const source=fs.readFileSync(require.resolve('./fixtures/fast-pi/dc-strip.kicad_pcb'),'utf8'),view={canvas,viewport:{camera:{zoom:1,world_to_screen:p=>p,screen_to_world:p=>p}}},session=context.KiCadFastPIWorkspace.mount({files:[{path:'strip.kicad_pcb',content:source}],currentFile:()=> 'strip.kicad_pcb',getCanvas:()=>view}),panel=session.open();
- assert.equal(panel.querySelector('[name=conductivity]').value,'');
+ assert.equal(panel.querySelector('[name=conductivity]').value,'58000000','visible nominal copper preset avoids a manual material entry');
  assert.equal(session.open(),panel);assert.equal(parses,1);
  panel.querySelectorAll('button').find(b=>b.textContent==='Copper · 58 MS/m').onclick();assert.equal(panel.querySelector('[name=conductivity]').value,'58000000');
  for(const [name,value]of Object.entries({conductivity:58000000,voltage:5,current:2,grid:1}))panel.querySelector(`[name=${name}]`).value=value;
@@ -90,7 +90,13 @@ test('mounted Fast PI picks contacts, passes named nets and reviewed stackup to 
  choose.querySelector('.fast-pi-load').onclick();click({target:canvas});assert.equal(body.querySelector('.fast-pi-contact-picker'),undefined,'outside click dismisses without selecting');
  choose.querySelector('.fast-pi-source').onclick();body.querySelector('.fast-pi-contact-picker').querySelector('.fast-pi-contact-repick').onclick();assert.equal(body.querySelector('.fast-pi-contact-picker'),undefined);assert.ok(choose.querySelector('.fast-pi-load').textContent.includes('J1'),'repick retains the other terminal');assert.match(choose.querySelector('.fast-pi-status').textContent,/Tap source copper/);
  choose.querySelector('.fast-pi-clear-source').onclick();assert.equal(choose.querySelector('.fast-pi-clear-source').disabled,true);assert.ok(choose.querySelector('.fast-pi-load').textContent.includes('J1'),'clearing source retains the independently chosen load');choose.querySelector('.fast-pi-solve').onclick();assert.match(choose.querySelector('.fast-pi-status').textContent,/Choose both/);
- choose.querySelectorAll('button').find(b=>b.textContent==='Pick source + load').onclick();pointer('pointerdown',.5,.5);pointer('pointerup',.5,.5);picker=body.querySelector('.fast-pi-contact-picker');assert.ok(picker,'nearby ambiguity asks the user instead of silently choosing');assert.equal(choose.querySelector('.fast-pi-clear-source').disabled,true);picker.querySelector('.fast-pi-contact-option').onclick();chooseSession.dispose();assert.equal(body.querySelector('.fast-pi-contact-picker'),undefined);assert.equal(handlers.size,0);
+ choose.querySelectorAll('button').find(b=>b.textContent==='Pick source + load').onclick();pointer('pointerdown',.5,.5);pointer('pointerup',.5,.5);picker=body.querySelector('.fast-pi-contact-picker');assert.ok(picker,'nearby ambiguity asks the user instead of silently choosing');assert.equal(choose.querySelector('.fast-pi-clear-source').disabled,true);picker.querySelector('.fast-pi-contact-option').onclick();choose.querySelectorAll('button').find(b=>b.textContent==='Cancel / clear').onclick();
+ choose.querySelector('.fast-pi-choose-pads').onclick();picker=body.querySelector('.fast-pi-contact-picker');
+ search=picker.querySelector('input');search.value='U1';search.oninput();picker.querySelector('.fast-pi-contact-option').onclick();
+ picker=body.querySelector('.fast-pi-contact-picker');assert.equal(picker.attributes['aria-label'],'Load contact suggestions','guided source selection immediately offers loads');
+ search=picker.querySelector('input');search.value='J1';search.oninput();picker.querySelector('.fast-pi-contact-option').onclick();
+ assert.equal(body.querySelector('.fast-pi-contact-picker'),undefined);assert.match(choose.querySelector('.fast-pi-status').textContent,/Contacts set/);
+ chooseSession.dispose();assert.equal(body.querySelector('.fast-pi-contact-picker'),undefined);assert.equal(handlers.size,0);
 });
 
 test('contact validator uses saved copper, net and layer before a mesh or electrical assumptions exist',()=>{

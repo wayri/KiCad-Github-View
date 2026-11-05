@@ -1244,7 +1244,7 @@ async function repositoryDetection(message,sender){
     listing.truncated=Boolean(listing.hasMore||listing.warnings.length);
   }else{
     const directory=route.tail?route.tail.join('/').slice(ref.length).replace(/^\//,''):'';
-    const snapshot=await projectBuffer().inventory(message.repository,contextSnapshot||ref,undefined,{directory,refresh:message.refresh===true});
+    const snapshot=await projectBuffer().inventory(message.repository,contextSnapshot||ref,undefined,{directory,scoped:Boolean(directory),refresh:message.refresh===true});
     listing={sha:snapshot.snapshotRef,entries:snapshot.files.map(item=>({path:item.path,type:'blob'})),warnings:snapshot.warnings,truncated:snapshot.warnings.some(warning=>/incomplete|limited|limit reached/i.test(warning))};
   }
   let projects=KiCadGitHub.detectedProjects(listing.entries);

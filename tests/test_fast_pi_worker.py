@@ -14,7 +14,7 @@ class FastPIWorkerTests(unittest.TestCase):
         expected = worker.bundle(ROOT)
         self.assertEqual((ROOT / 'extension/fast-pi-worker-vscode.js').read_bytes(), expected)
         self.assertNotIn(b'importScripts(', expected)
-        self.assertIn(b'KiCadFastPI.solveBoard', expected)
+        self.assertIn(b'KiCadFastPI.solveAdaptive(event.data.ast,event.data.options)', expected)
 
     def test_unexpected_worker_import_contract_is_rejected(self):
         with tempfile.TemporaryDirectory() as directory:

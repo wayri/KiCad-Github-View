@@ -28,3 +28,5 @@ test('confirmation and file-picker dialogs are not included in page routing',()=
  assert.doesNotMatch(selector,/library-confirm|androidQuickStart|exitDraft|dialog:not|dialog\s*$/);
  const f=fixture();const confirmation={open:false,showModal(){this.open=true;this.modal=true;}};install(f.doc,f.host);confirmation.showModal();assert.equal(confirmation.modal,true);
 });
+
+test('linked BoM panels are excluded from full-page isolation',()=>{assert.ok(selector.includes('dialog.bom-manager:not([data-cross-select-panel])'));});

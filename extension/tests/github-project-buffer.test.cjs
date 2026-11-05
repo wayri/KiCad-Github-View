@@ -122,3 +122,16 @@ test('foreground-only cancelled private source and invalid identity never enter 
  const pending=api.file(repo,sha,'private.kicad_pcb',100,controller.signal);await tick();controller.abort();await assert.rejects(pending,/cancelled/);done({sha,content:'private'});await tick();assert.equal(api.stats().bytes,0);api.dispose();
  const invalid=create({foregroundOnly:true,readSession:async()=>({sha:'b'.repeat(40),content:'private'})});await assert.rejects(invalid.file(repo,sha,'private.kicad_pcb',100),/Invalid/);assert.equal(invalid.stats().entries,0);invalid.dispose();
 });
+
+test('scoped pinned inventory stays inside selected project and never requires repository root access',async()=>{
+ const reads=[],api=create({foregroundOnly:true,readSession:async(repository,ref,action,path)=>{
+  reads.push(path);if(path==='design')return {sha,items:[{path:'design/root.kicad_sch',type:'file'},{path:'design/sub',type:'directory'}]};
+  if(path==='design/sub')return {sha,items:[{path:'design/sub/child.kicad_sch',type:'file'}]};
+  throw Error('Unrelated root unavailable');
+ }});
+ const listing=await api.inventory(repo,sha,undefined,{directory:'design',scoped:true});
+ assert.deepEqual(listing.files.map(f=>f.path),['design/root.kicad_sch','design/sub/child.kicad_sch']);
+ assert.deepEqual(reads,['design','design/sub']);
+ await api.inventory(repo,sha,undefined,{directory:'design',scoped:true});assert.equal(reads.length,2);
+ await assert.rejects(api.inventory(repo,sha),/Unrelated root unavailable/);api.dispose();
+});

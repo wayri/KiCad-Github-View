@@ -486,6 +486,14 @@ Source designs are ordinarily read-only. Explicit conflict-resolution actions in
 - [Security and private reports](SECURITY.md)
 - [Historical technical reference](docs/PROJECT-REFERENCE.md) and [release history](docs/releases/)
 
+## Acknowledgements
+
+Thanks to the KiCad developers and community, and to the maintainers and contributors of **Three.js, PDF.js, fzstd, Open CASCADE Technology, occt-import-js and Emscripten**, whose work supports this viewer.
+
+We also thank public example-project authors, including **OLIMEX** and the **Berkeley Lab Marble** contributors, and everyone who tests KiCad Online, reports issues or suggests improvements.
+
+Dependency licenses, copyright notices and source information are retained in [Third-party notices](THIRD-PARTY-NOTICES.md) and the accompanying packages. These acknowledgements do not imply affiliation, sponsorship or endorsement.
+
 ## License and support
 
 Copyright (c) 2026 **Yawar B (wayri)**. Licensed under the [KiCad Online Source-Available License 1.0](LICENSE), **not an OSI-approved open-source license**. Personal and internal professional use are permitted. Paid distribution, paid bundles and monetized hosted access require written permission. Your designs and outputs remain yours under the license. [Licensing details](LICENSING.md) | [Third-party notices](THIRD-PARTY-NOTICES.md).

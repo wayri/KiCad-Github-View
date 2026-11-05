@@ -91,3 +91,14 @@ body:has(#signinAvailability){font-size:14px;max-width:48rem;margin:16px auto;pa
 .kicad-field-table .field-comment-action,.bom-manager .field-comment-action,.bom-group .field-comment-action{display:inline-flex;align-items:center;justify-content:center;vertical-align:middle;min-width:26px;width:26px;min-height:26px;height:26px;padding:4px;margin-inline-start:6px;opacity:.75;float:none}
 .field-comment-action svg{width:16px;height:16px;flex:none}
 .field-comment-action:hover,.field-comment-action:focus-visible{opacity:1}
+
+/* Transient header menus escape narrow action clusters and stay dismissible. */
+body .revision-picker-panel{position:fixed;right:auto;bottom:auto;max-width:calc(100vw - 16px);max-height:calc(100dvh - 16px);min-width:0;box-sizing:border-box;overflow:auto;overscroll-behavior:contain;white-space:normal}
+body .revision-picker-panel :is(label,details,select,input){min-width:0;max-width:100%;box-sizing:border-box}
+body .revision-picker-panel .popup-close{justify-self:end;min-width:26px;min-height:26px;padding:3px 7px;line-height:1}
+body #pairChooser{position:fixed;left:8px;top:42px;right:auto;width:max-content;max-width:calc(100vw - 16px);max-height:calc(100dvh - 50px);padding:8px;overflow:auto;overscroll-behavior:contain;box-sizing:border-box;white-space:normal}
+body #pairChooser :is(select,input){min-width:0;max-width:100%;box-sizing:border-box;flex:1 1 160px}
+body #pairChooser #closePairChooser{flex:none;min-width:26px;min-height:26px;padding:3px 7px}
+/* Vertical dock captions must size along their writing direction rather than clip. */
+body .sidebar-dock{overflow-y:auto;overflow-x:hidden;scrollbar-width:none}
+body .sidebar-dock .dock-tab{box-sizing:border-box;height:max-content;min-height:70px;max-height:none;line-height:14px;white-space:nowrap;text-overflow:clip;overflow:visible;padding:8px 2px;flex:0 0 auto}

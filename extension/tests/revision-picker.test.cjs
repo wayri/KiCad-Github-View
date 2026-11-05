@@ -1,5 +1,5 @@
 const test=require('node:test'),assert=require('node:assert/strict');
-const {comparisonQuery,mount}=require('../revision-picker.js');
+const {comparisonQuery,mount,panelBounds}=require('../revision-picker.js');
 const sha=c=>c.repeat(40),request={repository:'owner/design',headRepository:'fork/design',file:'board.kicad_pcb',oldFile:'old board.kicad_pcb',head:'feature/board'};
 test('comparison keeps fork/base identities, encoded paths and immutable revisions',()=>{
  const params=comparisonQuery(request,sha('a'),sha('b'));assert.equal(params.get('repository'),'owner/design');assert.equal(params.get('headRepository'),'fork/design');assert.equal(params.get('oldFile'),'old board.kicad_pcb');assert.equal(params.get('base'),sha('a'));assert.equal(params.get('head'),sha('b'));assert.equal(params.get('status'),'renamed');
@@ -7,8 +7,8 @@ test('comparison keeps fork/base identities, encoded paths and immutable revisio
  for(const [r,b,h] of [[request,'main',sha('b')],[request,sha('a'),'moving-branch'],[{...request,file:'../bad.kicad_pcb'},sha('a'),sha('b')],[{...request,repository:'../owner'},sha('a'),sha('b')],[{...request,pullNumber:9},sha('a'),sha('b')]])assert.throws(()=>comparisonQuery(r,b,h));
 });
 function harness(send,extra={}){
- const nodes=[];const doc={createElement(tag){const node={tag,ownerDocument:doc,children:[],listeners:{},value:'',textContent:'',append(...items){this.children.push(...items);},replaceChildren(...items){this.children=items;},setAttribute(key,value){this[key]=value;},addEventListener(key,fn){this.listeners[key]=fn;},remove(){this.removed=true;},get firstChild(){return this.children[0];}};nodes.push(node);return node;}};
- const holder=doc.createElement('div'),navigated=[];const picker=mount({holder,request,send,...extra,navigate:p=>navigated.push(p)});return {nodes,holder,navigated,picker};
+ const nodes=[],events={};const doc={defaultView:{innerWidth:1000,innerHeight:700},addEventListener(type,fn){events[type]=fn;},removeEventListener(type){delete events[type];},createElement(tag){const node={tag,ownerDocument:doc,style:{},children:[],listeners:{},value:'',textContent:'',append(...items){this.children.push(...items);},replaceChildren(...items){this.children=items;},setAttribute(key,value){this[key]=value;},addEventListener(key,fn){this.listeners[key]=fn;},remove(){this.removed=true;},get firstChild(){return this.children[0];}};nodes.push(node);return node;}};
+ const holder=doc.createElement('div'),navigated=[];const picker=mount({holder,request,send,...extra,navigate:p=>navigated.push(p)});return {nodes,holder,navigated,picker,events};
 }
 test('picker resolves each immutable source in its own repository before navigation',async()=>{
  const calls=[],h=harness(async message=>{calls.push(message);return {ok:true,result:{repository:message.repository,sha:message.repository==='owner/design'?sha('a'):sha('b')}};});
@@ -43,4 +43,14 @@ test('compare from history preserves the displayed pinned revision despite a mov
 test('history rejects invalid revisions and late response after disposal',async()=>{
  const bad=harness(async m=>({ok:true,result:{repository:m.repository,commits:[{sha:'moving-branch'}]}}));await bad.picker.loadHistory();assert.ok(bad.nodes.some(n=>n.textContent==='Invalid bounded commit history.'));await bad.picker.openCommit('bad');assert.equal(bad.navigated.length,0);
  let finish;const late=harness(()=>new Promise(resolve=>finish=resolve));const work=late.picker.loadHistory();late.picker.dispose();finish({ok:true,result:{repository:'fork/design',commits:[{sha:sha('c')}]}});await work;assert.equal(late.nodes.find(n=>n['aria-label']==='Commit history').children.length,0);
+});
+
+test('history popup stays inside short and narrow viewports and has explicit dismissal',()=>{
+ for(const [width,height]of [[1000,700],[320,220]]){const box=panelBounds({right:width-2,bottom:height-10},width,height);assert.ok(box.left>=8);assert.ok(box.top>=8);assert.ok(box.left+box.width<=width-8);assert.ok(box.top+box.maxHeight<=height-8);}
+ const h=harness(async()=>({ok:false})),detail=h.nodes.find(n=>n.tag==='details');detail.open=true;
+ h.nodes.find(n=>n['aria-label']==='Close history').listeners.click();assert.equal(detail.open,false);
+ detail.open=true;h.events.keydown({key:'Escape'});assert.equal(detail.open,false);
+ detail.open=true;h.events.pointerdown({target:{},composedPath:()=>[]});assert.equal(detail.open,false);
+ detail.open=true;h.events.pointerdown({target:detail,composedPath:()=>[detail]});assert.equal(detail.open,true);
+ h.picker.dispose();assert.equal(Object.keys(h.events).length,0);
 });

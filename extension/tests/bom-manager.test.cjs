@@ -15,7 +15,7 @@ test('drawing field grid toggles custom columns, groups safely, and exports the 
   constructor(tag){this.tag=tag;this.children=[];this.events={};this.dataset={};this.value='';this.textContent='';}
   append(...nodes){for(const n of nodes){if(n instanceof Element){n.remove();n.parent=this;n.parentElement=this;}this.children.push(n);}}
   prepend(n){n.remove();this.children.unshift(n);n.parent=this;n.parentElement=this;}addEventListener(name,fn){this.events[name]=fn;}
-  setAttribute(){}focus(){}showModal(){}replaceChildren(){this.children=[];}
+  setAttribute(){}focus(){}showModal(){this.open=true;this.modal=true;}show(){this.open=true;this.modeless=true;}replaceChildren(){this.children=[];}
   remove(){if(this.parent)this.parent.children=this.parent.children.filter(n=>n!==this);}close(){this.events.close?.();}
  }
  const original=global.document;global.document={createElement:t=>new Element(t),body:new Element('body')};
@@ -134,7 +134,7 @@ test('manager locates unfinished parts without saving progress and keeps whole-s
   constructor(tag){this.tag=tag;this.children=[];this.events={};this.dataset={};this.value='';this.textContent='';}
   append(...nodes){for(const n of nodes){if(n instanceof Element){n.remove();n.parent=this;n.parentElement=this;}this.children.push(n);}}
   prepend(n){n.remove();this.children.unshift(n);n.parent=this;n.parentElement=this;}addEventListener(name,fn){this.events[name]=fn;}
-  setAttribute(){}focus(){}showModal(){}replaceChildren(){this.children=[];}
+  setAttribute(){}focus(){}showModal(){this.open=true;this.modal=true;}show(){this.open=true;this.modeless=true;}replaceChildren(){this.children=[];}
   remove(){if(this.parent)this.parent.children=this.parent.children.filter(n=>n!==this);}close(){this.events.close?.();}
  }
  const original=global.document;global.document={createElement:t=>new Element(t),body:new Element('body')};
@@ -155,6 +155,18 @@ test('manager locates unfinished parts without saving progress and keeps whole-s
   const groupCheck=find(grouped,n=>n.className==='bom-manager-group').children[0];groupCheck.checked=true;groupCheck.events.change();assert.ok(find(grouped,n=>n.textContent==='Group · 2 references'));
   const reference=find(grouped,n=>n.className?.startsWith('bom-manager-reference')&&n.textContent==='R2');reference.events.click();assert.equal(grouped.getSelectedPart(),two[1]);assert.equal(located.at(-1),two[1]);assert.equal(writes,0);
   assert.equal(grouped.selectPart(two[0]),true);assert.equal(grouped.getSelectedPart(),two[0]);assert.equal(grouped.selectPart('foreign'),false);assert.equal(grouped.getSelectedPart(),two[0]);assert.equal(writes,0);grouped.close();
+  const sameRef=[part('R1',{path:'first.kicad_sch'}),part('R1',{path:'second.kicad_sch'}),part('R1',{kind:'footprint',path:'board.kicad_pcb',uuid:'fp-one'})];
+  const linked=api.open({objects:sameRef,scope:'linked',modal:false,storage:{getItem:()=>null,setItem:()=>writes++},onLocate:o=>located.push(o)});
+  assert.equal(linked.modeless,true);assert.equal(linked.modal,undefined);
+  const before=located.length;
+  assert.equal(linked.setSelection(sameRef[1]),true);assert.equal(linked.getSelectedPart(),sameRef[1]);assert.equal(located.length,before,'incoming selection never echoes a locate callback');
+  const linkedSearch=find(linked,n=>n.tag==='input'&&n.type==='search');linkedSearch.value='hidden';linkedSearch.events.input();
+  assert.equal(linked.setSelection(sameRef[0]),true);assert.equal(linkedSearch.value,'hidden');assert.equal(linked.getSelectedPart(),sameRef[0]);assert.match(find(linked,n=>n.className==='bom-manager-feedback').textContent,/hidden by the current BoM filters/);
+  assert.equal(linked.setSelection({...sameRef[0],path:'foreign.kicad_sch'}),false);assert.equal(linked.getSelectedPart(),sameRef[0]);
+  linkedSearch.value='';linkedSearch.events.input();assert.equal(linked.setSelection(sameRef[2]),true);assert.equal(linked.getSelectedPart(),sameRef[2],'exact incoming PCB identity switches source kind without reference-only matching');
+  assert.equal(linked.setSelection(null),true);assert.equal(linked.getSelectedPart(),null);assert.equal(located.length,before);assert.equal(writes,0);linked.events.keydown({key:'Escape',preventDefault(){},stopPropagation(){}});assert.equal(linked.parent.children.includes(linked),false,'Escape closes a focused linked panel');
+  const many=Array.from({length:220},(_,i)=>part('R'+(i+1))),bounded=api.open({objects:many,scope:'bounded',storage:{getItem:()=>null,setItem(){}},onLocate(){}});
+  assert.equal(bounded.setSelection(many[219]),true);assert.ok(find(bounded,n=>n.className?.startsWith('bom-manager-reference')&&n.textContent==='R220'),'incoming selection beyond the first table page stays visible without rendering every part');bounded.close();
  }finally{global.document=original;}
 });
 

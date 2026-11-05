@@ -168,3 +168,7 @@ body .bom-management-dialog .bom-manager-column-controls{display:flex;align-item
 body .bom-management-dialog .bom-manager-column-controls input{flex:1 1 150px;min-width:0;min-height:30px}
 body .bom-management-dialog .bom-manager-column-controls button,body .bom-management-dialog .bom-manager-columns-button{min-height:30px;padding:4px 8px;font-size:12px;white-space:nowrap}
 body .bom-management-dialog .bom-manager-field-settings tr[hidden]{display:none!important}
+
+/* The linked BoM stays beside the drawing so picking either surface is possible. */
+body dialog.bom-management-dialog.bom-cross-select[open]{position:fixed;inset:auto 8px 8px auto;margin:0;width:min(860px,62vw);height:min(620px,65dvh);max-width:calc(100vw - 16px);max-height:calc(100dvh - 56px);min-width:280px;min-height:240px;z-index:36;resize:both;box-shadow:0 10px 35px #0005}
+@media(max-width:700px){body dialog.bom-management-dialog.bom-cross-select[open]{inset:auto 0 0;margin:0;width:100vw;height:48dvh;min-width:0;min-height:200px;max-width:100vw;max-height:75dvh;resize:vertical;border-radius:10px 10px 0 0}}
