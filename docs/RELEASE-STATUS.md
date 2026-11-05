@@ -1,5 +1,11 @@
 # Distribution status
 
+**0.12.86 preparation (5 November 2026):** license naming and public screenshot
+update for VS Code and Firefox. Firefox packaging now includes the project license
+and static Terms page. Upload and approval are not yet claimed. Chrome's pending
+0.12.85 review remains running; Android 1.88 is unchanged. Mozilla's public icon,
+license metadata and three new screenshots were saved and verified separately.
+
 **KiCad Online 0.12.85 / Android 1.88 (4 November 2026):**
 [GitHub preview published](https://github.com/wayri/KiCad-Online/releases/tag/v0.12.85)
 with 23 assets; all remote sizes and SHA-256 hashes match local audited packages.
