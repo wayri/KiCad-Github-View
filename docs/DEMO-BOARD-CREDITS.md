@@ -13,6 +13,8 @@ These links identify the recorded public source snapshots. Per-capture manifests
 
 ## Separate Altium beta test inputs
 
+Thanks to **Lime Microsystems, Myriad-RF and the [LimeSDR-USB contributors](https://github.com/myriadrf/LimeSDR-USB/tree/c6ea7cea27b90e94625b8e49b71ee2a10a5345bb/hardware/plug/1v4)** for the public v1.4 Altium schematics used in the separate beta screenshot collection: block diagram, LMS7002M RF1, USB 3.0 device and board power supply. These were opened locally at the pinned revision; this does not establish installed-extension repository transport or full board fidelity.
+
 The unreleased Altium experiment has also used the [SimpleFOC Mini design and its contributors](https://github.com/simplefoc/SimpleFOCMini/blob/8e10d4ba398624bd0ef970e82c03d7a6bcc2220d/Altium/simplefocmini_2024-04-26.pcbdoc), and the public BeaglePlay power-tree and power-supply parser fixtures distributed by [tscircuit/altiumts](https://github.com/tscircuit/altiumts/tree/144f597984495285fe6ea82dec6c6a8b041e9add). Thanks to those design authors and fixture contributors. These are separate beta tests, not Altium support in the released KiCad packages. The experiment's source notes retain the file-level provenance.
 
 ## Other public regression inputs
