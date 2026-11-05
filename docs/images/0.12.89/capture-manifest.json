@@ -1,0 +1,42 @@
+{
+  "schemaVersion": 1,
+  "release": "0.12.89",
+  "sourceRepository": "BerkeleyLab/Marble",
+  "sourceRevision": "a426777d92c0f22a546d4740b419a3937e0c1f90",
+  "sourcePath": "design/Marble.kicad_pcb",
+  "sourceSha256": "482850dbaaef9157e2e98af765a3c0d4d9c9f800daae224a54bf10e0621f52b0",
+  "surface": "Integrated browser, production viewer, locally buffered saved public source",
+  "linkedComponentModels": false,
+  "captures": [
+    {
+      "file": "marble-3d-layer.jpg",
+      "bytes": 134944,
+      "sha256": "078ac339474c3affd30292c5d40f57144984a31e2071cd0ba6dbbedc7c591faf"
+    },
+    {
+      "file": "marble-3d-probe-accent.jpg",
+      "bytes": 139822,
+      "sha256": "6ab4318c2561b724c6dcf9aa0be5c7f7ae75792e7b3a83c0631b06b5d2442ac3"
+    },
+    {
+      "file": "marble-3d-probe-layer.jpg",
+      "bytes": 136751,
+      "sha256": "c163354f7b62c5467210c32c9fe243e0a4c6fb232b23b9efbbb94fffe5ed25bb"
+    },
+    {
+      "file": "marble-layout-intvcc0-layer.jpg",
+      "bytes": 210030,
+      "sha256": "05cc41fd922a03bcfbe073118f663c6b35ec6eee9fd2ade10846598a8f7a9f08"
+    },
+    {
+      "file": "marble-layout-layer.jpg",
+      "bytes": 263123,
+      "sha256": "b81e15b9c23fbb76bb027da2317c14c62c5ea6017a8480cbb75f2371cf2459b0"
+    },
+    {
+      "file": "marble-layout-probe-layer.jpg",
+      "bytes": 274938,
+      "sha256": "100734c335ecfcab39dfb25efe6d1ba2be8f3a3d636547d0e8f38034f4aa6b02"
+    }
+  ]
+}

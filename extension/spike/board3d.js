@@ -683,7 +683,7 @@ export function mountBoard3D(container, source, options = {}) {
   const selectionAppearance=createSelectionAppearance(THREE,()=>{const objects=[];boardGroup.traverse(object=>{if(object.material)objects.push(object);});return objects;});
   selectionAppearanceReady=true;
   const selectionGeometry=createSelectionGeometry(THREE,{scene,objects:()=>pickables,limit:2000,dark:initialDark});
-  let externalSelection = {};
+  let externalSelection = {},netHighlightColor='layer';
   const selectionNotice = document.createElement('div'); selectionNotice.className = 'hint'; selectionNotice.style.bottom = '42px'; selectionNotice.hidden = true; stage.append(selectionNotice);
   function setSelection(selection = {}) {
     invalidate();
@@ -703,7 +703,7 @@ export function mountBoard3D(container, source, options = {}) {
       const visible=netState.tracks+netState.pads+netState.vias+netState.platedPads+netState.fills+netState.boundaries;
       return {highlighted:visible,matched:visible,limited:netState.omitted>0||netState.sourceLimited,fullNet3D:true};
     }
-    const state=selectionGeometry.update(matches);
+    const state=selectionGeometry.update(matches,{colorForRecord:netHighlightColor==='layer'&&(externalSelection.netNames?.length||externalSelection.netCodes?.length)?record=>record?.layer?layerThreeColor(record.layer):null:null});
     selectionNotice.hidden=!state.limited;selectionNotice.textContent=`Showing ${state.highlighted} of ${state.matched} selected source meshes`;selectionNotice.style.display=state.limited?'block':'none';
     selectionAppearance.update(matches,state.matched>0&&selectionDim);
     return state;
@@ -866,7 +866,7 @@ export function mountBoard3D(container, source, options = {}) {
       return probeRegistry.create(()=>createSharedProbeViewport({THREE,OrbitControls,host:probeHost,source:boardGroup,sourceScene:scene,sourceRenderer:renderer,board,
         materialFor:object=>probeMaterials.get(object)||object.material,instanceColorFor:object=>probeInstanceColors.has(object)?probeInstanceColors.get(object):object.instanceColor,
         netInspectionSource:{board:{...board,tracks:refinedTracks.tracks},plan:copperPlan,zones:savedZones.records,sourceLimited:savedZones.truncated,pads:nativePads,world,colorForLayer:layerThreeColor},
-        dark:host.dataset.theme!=='light',terminalSource,showNetNames:terminalAnnotations.getState().nets,showTerminalNumbers:terminalAnnotations.getState().numbers,...probeOptions}));
+        netHighlightColor,dark:host.dataset.theme!=='light',terminalSource,showNetNames:terminalAnnotations.getState().nets,showTerminalNumbers:terminalAnnotations.getState().numbers,...probeOptions}));
     },
     objectVisibilityCapabilities(){return {supportedTypes:[...objectVisibility.supportedTypes],unsupportedTypes:['graphics','texts','regions','dimensions','rooms','footprints']};},
     setObjectVisibility(input={}) {
@@ -903,6 +903,7 @@ export function mountBoard3D(container, source, options = {}) {
     setSelection,
     projectAnchor,
     setAnchor(anchor){activeAnchor=anchor&&typeof anchor==='object'?anchor:null;anchorSignature='';if(activeAnchor)notifyAnchor();else options.onAnchor?.({anchor:null,point:null});},
+    setNetHighlightColor(value){const next=value==='layer'?'layer':'accent';if(next===netHighlightColor)return;netHighlightColor=next;netInspection.setColorMode(next);probeRegistry.forEach(probe=>probe.setNetHighlightColor?.(next));setSelection(externalSelection);},
     setSelectionDim(enabled){selectionDim=Boolean(enabled);setSelection(externalSelection);return selectionDim;},
     selectionAppearanceCapabilities(){return {dim:true,instanceColors:true,desaturatesTextures:true,fullNet3d:true,internalCopper:true,viaSpans:true,translucentContext:true};},
     setLighting(value,{persist=true}={}){return applyLighting(value,persist);},

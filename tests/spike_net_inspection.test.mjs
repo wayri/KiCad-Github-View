@@ -43,3 +43,17 @@ test('full selected net is independent of the 2000 outline cap and bounds unique
  const other=fixture();other.board.tracks=[];other.board.vias=[];other.board.pads.splice(0,other.board.pads.length,...Array.from({length:600},(_,i)=>({id:String(i),nativeType:'smd',net:'SIGNAL',layer:'F.Cu',at:[0,0],shape:'rect',width:1+i/1000,height:1,drill:0})));
  state=other.view.update({netNames:['SIGNAL']});assert.ok(state.omitted>0);assert.ok(state.meshes<=512);assert.match(state.warnings.join(' '),/budget/);other.view.dispose();
 });
+
+test('layer/accent switching recolors all copper surfaces without rebuilding geometry or mutating source',{skip:!THREE},()=>{
+ const {view,board}=fixture(),before=JSON.stringify(board);view.update({netNames:['SIGNAL']});const objects=[...view.group.children],geometry=objects.map(o=>o.geometry);
+ assert.ok(objects.every(o=>o.material.color.getHex()===0x44ddff));view.setColorMode('accent');assert.ok(objects.every(o=>o.material.color.getHex()===0xffe18b));assert.equal(view.state().colorMode,'accent');
+ view.setColorMode('layer');assert.ok(objects.every(o=>o.material.color.getHex()===0x44ddff));assert.deepEqual(view.group.children,objects);assert.deepEqual(view.group.children.map(o=>o.geometry),geometry);assert.equal(JSON.stringify(board),before);
+ view.setColorMode('accent');view.update({netNames:['OTHER']});assert.ok(view.group.children.every(o=>o.material.color.getHex()===0xffe18b));view.dispose();
+});
+
+test('real layer palette distinguishes four copper layers and via entry layers',{skip:!THREE},()=>{
+ const {board,plan}=fixture(),palette={'F.Cu':0xfa6f68,'In1.Cu':0x7fc87f,'In2.Cu':0xce7d2c,'B.Cu':0x63a5ff};
+ const view=createNetInspection(THREE,{board,plan,zones:[],pads:board.pads,world:([x,y])=>[x,-y],colorForLayer:layer=>palette[layer]});view.update({netNames:['SIGNAL']});
+ for(const layer of board.layers){const objects=view.group.children.filter(o=>o.userData.layer===layer);assert.ok(objects.length);assert.ok(objects.every(o=>o.material.color.getHex()===palette[layer]));}
+ view.setColorMode('accent');view.setColorMode('layer');assert.equal(view.group.children.find(o=>o.userData.layer==='B.Cu').material.color.getHex(),palette['B.Cu']);view.dispose();
+});

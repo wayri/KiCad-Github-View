@@ -40,3 +40,9 @@ test('main selection budget is visibly disclosed and clearing removes the warnin
 test('main full-net inspection retains its own internal copper overlay and translucent context',()=>{
  const state={active:true,nets:['VCC'],tracks:2,pads:1,vias:1,platedPads:0,fills:1,boundaries:0,omitted:0,sourceLimited:false,warnings:[]},ui=setup([],state),result=ui.setSelection({netNames:['VCC']});assert.equal(result.fullNet3D,true);assert.equal(result.highlighted,5);assert.equal(ui.selectionGeometry.group.children.length,0);assert.deepEqual(ui.appearance.at(-1).options,{translucent:true});assert.equal(ui.appearance.at(-1).enabled,true);ui.selectionGeometry.dispose();
 });
+
+test('source-only net selection tints exact instances by layer and restores ordinary part highlighting',()=>{
+ const scene=new THREE.Scene(),geometry=new THREE.BoxGeometry(1,1,.03),mesh=new THREE.InstancedMesh(geometry,new THREE.MeshBasicMaterial(),2);mesh.userData.records=[{net:'SIGNAL',layer:'F.Cu'},{net:'SIGNAL',layer:'B.Cu'}];mesh.setMatrixAt(0,new THREE.Matrix4());mesh.setMatrixAt(1,new THREE.Matrix4().makeTranslation(2,0,0));scene.add(mesh);const sourceMaterial=mesh.material,display=createSelectionGeometry(THREE,{scene,objects:()=>[mesh]});
+ display.update(r=>r.net==='SIGNAL',{colorForRecord:r=>r.layer==='F.Cu'?0xfa6f68:0x63a5ff});const overlays=display.group.children;assert.equal(overlays[0].material.color.getHex(),0xfa6f68);assert.equal(overlays[1].material.color.getHex(),0x63a5ff);assert.ok(overlays.every(o=>o.geometry===geometry));assert.equal(mesh.material,sourceMaterial);
+ display.update(()=>true);assert.ok(display.group.children.every(o=>o.material.color.getHex()===0x4de3ee));display.dispose();geometry.dispose();sourceMaterial.dispose();
+});

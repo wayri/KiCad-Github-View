@@ -14,7 +14,7 @@ function descendants(element){return[element,...element.children.flatMap(descend
 function fixture(count=5,options={}){const document={createElement:tag=>new Element(tag,document)},holder=new Element('div',document),viewports=[],located=[];
  const designs=Array.from({length:count},(_,i)=>({primitives:[{type:'line',uuid:'line'+i,points:[{x:i,y:0},{x:i+3,y:4}],layer:'F.Cu'}],layers:['F.Cu']}));
  const entries=designs.map((design,i)=>({path:'sheet'+i+'.kicad_sch',label:'Sheet '+i,instanceId:'instance'+i,design,groups:[{id:'net'+i,name:'Power '+i,primitives:design.primitives}]}));
- const canvasAPI={bounds:owned.bounds,mount(host){const viewport={canvas:new Element('canvas',document),viewport:{camera:new owned.Camera(280,280)},setDocument(design,path){this.design=design;this.path=path;},setNetHighlights(groups){this.groups=groups;},draw(){},requestDraw(){this.drawRequests=(this.drawRequests||0)+1;},dispose(){this.disposed=true;}};host.append(viewport.canvas);viewports.push(viewport);return viewport;}};
+ const canvasAPI={bounds:owned.bounds,mount(host){const viewport={canvas:new Element('canvas',document),viewport:{camera:new owned.Camera(280,280)},setDocument(design,path){this.design=design;this.path=path;},setNetHighlights(groups,options){this.groups=groups;this.highlightOptions=options;},draw(){},requestDraw(){this.drawRequests=(this.drawRequests||0)+1;},dispose(){this.disposed=true;}};host.append(viewport.canvas);viewports.push(viewport);return viewport;}};
  const quick=mount({holder,getEntries:()=>entries,onLocate:(...args)=>located.push(args),canvasAPI,document,...options});const button=label=>descendants(holder).find(element=>element.tag==='button'&&element.attributes['aria-label']===label);return{document,holder,quick,entries,viewports,located,button,canvasAPI};}
 test('occurrences use only saved primitives from each exact source and preserve hierarchy instances',()=>{
  const live={uuid:'pad',type:'pad'},stale={...live},design={primitives:[live]};const entries=[{path:'a.kicad_sch',instanceId:'one',design,groups:[{id:'net',name:'VCC',primitives:[live,stale]}]},{path:'a.kicad_sch',instanceId:'two',design,groups:[{id:'net',name:'VCC',primitives:[live]}]}],before=JSON.stringify(entries),rows=occurrences(entries);
@@ -219,4 +219,10 @@ test('popup to popup guides retain identical endpoints and tangents inside both 
  inside.forEach((svg,index)=>{assert.equal(svg.children[0].attributes.d,curve,'all boundary pieces must use exactly the same cubic control points');assert.equal(svg.children[0].attributes.transform,'translate('+(-rects[index].left)+' '+(-rects[index].top)+')');});
  assert.deepEqual([Number(inside[0].children[1].attributes.cx)+20,Number(inside[0].children[1].attributes.cy)+80],[100,170]);const endpoint=curve.match(/-?\d+(?:\.\d+)?/g).map(Number).slice(-2);assert.deepEqual(endpoint,[Number(inside[1].children[1].attributes.cx)+620,Number(inside[1].children[1].attributes.cy)+180]);
  hosts[0].emit('pointerdown',{clientX:130,clientY:210});hosts[0].emit('pointerup',{clientX:130,clientY:210});await new Promise(resolve=>setTimeout(resolve,22));assert.match(outer.children[0].attributes.d,/^M 130 210 C/);inside.forEach(svg=>assert.equal(svg.children[0].attributes.d,outer.children[0].attributes.d));f.quick.dispose();
+});
+
+test('layout probes inherit and update layer colors while schematic probes keep their accent',()=>{
+ let color='layer';const f=fixture(1,{getNetHighlightColor:()=>color});f.entries[0].path='board.kicad_pcb';f.quick.open();f.button('Power 0 · Sheet 0').emit('click');assert.equal(f.viewports[0].highlightOptions.selectionColor,'layer');
+ color='accent';f.quick.setHighlightMode();assert.equal(f.viewports[0].highlightOptions.selectionColor,'accent');f.quick.dispose();
+ const sch=fixture(1,{getNetHighlightColor:()=>'layer'});sch.quick.open();sch.button('Power 0 · Sheet 0').emit('click');assert.equal(sch.viewports[0].highlightOptions.selectionColor,'accent');sch.quick.dispose();
 });

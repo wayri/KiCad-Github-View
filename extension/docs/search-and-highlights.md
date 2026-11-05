@@ -45,3 +45,9 @@ Select a saved component, pin/pad or net, then choose **Probe views**. Each mini
 **Schematic**, **Layout** and **3D** switch the probe to the corresponding saved drawing. **Open probe** creates another independent window. All windows belong to the main workspace, so closing the originating popup leaves its children open. The **Links** toggle controls subtle curved provenance links. Cross-view matching uses saved identities and qualified net names; missing or ambiguous matches produce a diagnostic rather than guessing another sheet or unit.
 
 Up to four probes can be open, including two interactive 3D probes alongside their parent 3D scene. The 3D probe shares loaded CPU geometry and model data, with its own camera and a bounded GPU context. It shows geometry visible in the parent scene; it does not generate new internal-copper geometry. Closing the main workspace releases all probes. The shared implementation passed integrated-browser checks on small saved fixtures: direct 2D pin picking, 3D part picking, independent windows, cross-view switching and popup-to-popup creation. Complex-board performance and packaged-platform checks remain pending. These changes are included in 0.12.78.
+
+## Net highlight colors (development)
+
+In the PCB highlight controls, choose **Net color → Layer colors** to keep each selected track, arc, pad and copper fill in its layer's color instead of the single accent. The selection glow and existing Bright, Dim context and Isolate options still apply. The choice is remembered and shared with other viewer windows on the same host. **Accent** restores the single highlight color. Schematic highlights retain their contrasting schematic accent.
+
+The choice also applies to 2D and 3D probe windows and the full-net 3D overlay, including saved internal copper and via annuli. Via barrels use their saved entry-layer color. Switching colors reuses the existing 3D overlay geometry and does not fetch or parse the project again.

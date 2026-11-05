@@ -8,8 +8,11 @@ import {smoothPadOutline as nativePadOutline,copperStrokeBatches,smoothDrillOutl
 export function createNetInspection(THREE,{board,plan,zones,pads,world,colorForLayer,sourceLimited=false}) {
  const group=new THREE.Group();group.name='Selected net — all copper layers';group.visible=false;
  const emptyState=()=>({active:false,nets:[],tracks:0,pads:0,vias:0,platedPads:0,fills:0,boundaries:0,omitted:0,sourceLimited:false,warnings:[]});let signature='',state=emptyState();
- const resources=new Set(),materials=new Map(),budget=200000;
- const material=layer=>{if(materials.has(layer))return materials.get(layer);const m=new THREE.MeshBasicMaterial({color:colorForLayer(layer),side:THREE.DoubleSide,toneMapped:false});resources.add(m);materials.set(layer,m);return m;};
+ const resources=new Set(),materials=new Map(),budget=200000;let colorMode='layer';
+ const color=layer=>colorMode==='layer'?colorForLayer(layer):0xffe18b;
+ const tagMaterial=(m,layer)=>{m.userData.netLayer=layer;return m;};
+ function setColorMode(value){const next=value==='accent'?'accent':'layer';if(next===colorMode)return; colorMode=next;for(const m of resources)if(m.isMaterial&&m.userData.netLayer)m.color.set(color(m.userData.netLayer));}
+ const material=layer=>{if(materials.has(layer))return materials.get(layer);const m=tagMaterial(new THREE.MeshBasicMaterial({color:color(layer),side:THREE.DoubleSide,toneMapped:false}),layer);resources.add(m);materials.set(layer,m);return m;};
  const shapeFor=outline=>{const shape=new THREE.Shape(outline.outline.map(([x,y])=>new THREE.Vector2(x,-y)));if(outline.drill)shape.holes.push(new THREE.Path(outline.drill.map(([x,y])=>new THREE.Vector2(x,-y))));return shape;};
  function clear(){for(const resource of resources)resource.dispose();resources.clear();materials.clear();group.clear();group.visible=false;signature='';state=emptyState();}
  function instances(geometry,records,layer,place){
@@ -39,7 +42,7 @@ export function createNetInspection(THREE,{board,plan,zones,pads,world,colorForL
    for(const zone of zones){
     if(zone.layer!==layer.name||!take(zone)||!shapeBudget())continue;
     const points=zone.points.map(point=>{const[x,y]=world(point);return new THREE.Vector2(x,y);});
-    if(!zone.filled){const geo=new THREE.BufferGeometry().setFromPoints(points.map(p=>new THREE.Vector3(p.x,p.y,z))),mat=new THREE.LineBasicMaterial({color:colorForLayer(layer.name),toneMapped:false});resources.add(geo);resources.add(mat);const line=new THREE.LineLoop(geo,mat);line.userData.record={...zone,type:'Zone boundary'};group.add(line);state.boundaries++;continue;}
+    if(!zone.filled){const geo=new THREE.BufferGeometry().setFromPoints(points.map(p=>new THREE.Vector3(p.x,p.y,z))),mat=tagMaterial(new THREE.LineBasicMaterial({color:color(layer.name),toneMapped:false}),layer.name);resources.add(geo);resources.add(mat);const line=new THREE.LineLoop(geo,mat);line.userData.record={...zone,type:'Zone boundary'};group.add(line);state.boundaries++;continue;}
     const geometry=new THREE.ExtrudeGeometry(new THREE.Shape(points),{depth:thickness,bevelEnabled:false,curveSegments:8});resources.add(geometry);const fillMaterial=material(layer.name).clone();fillMaterial.transparent=true;fillMaterial.opacity=.28;fillMaterial.depthWrite=false;resources.add(fillMaterial);const mesh=new THREE.Mesh(geometry,fillMaterial);mesh.userData.record={...zone,type:'Zone'};mesh.position.z=z-thickness/2;group.add(mesh);state.fills++;
    }
   }
@@ -68,6 +71,6 @@ export function createNetInspection(THREE,{board,plan,zones,pads,world,colorForL
   if(state.omitted)state.warnings.push(`${state.omitted} selected primitives were omitted because saved geometry was unsupported or the display budget was reached.`);
   return snapshot();
  }
- function snapshot(){return {...state,nets:[...state.nets],warnings:[...state.warnings],layers:plan.layers.map(({name,z})=>({name,z})),meshes:group.children.length};}
- return {group,update,clear,dispose:clear,state:snapshot};
+ function snapshot(){return {...state,colorMode,nets:[...state.nets],warnings:[...state.warnings],layers:plan.layers.map(({name,z})=>({name,z})),meshes:group.children.length};}
+ return {group,update,setColorMode,clear,dispose:clear,state:snapshot};
 }

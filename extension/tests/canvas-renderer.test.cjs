@@ -359,3 +359,12 @@ test('15-degree views preserve fit, inverse picking, mirroring and full-turn sta
  }
  c.quarterTurns=0;for(let i=0;i<24;i++)canvas.rotateDegrees(15);near(c.quarterTurns,0);canvas.rotateDegrees(-15);near(c.quarterTurns,23/6);canvas.rotateDegrees(15);near(c.quarterTurns,0);canvas.dispose();
 });
+
+test('layer-color net highlight retains front/back/internal identity, holes and filters in both themes',()=>{
+ const palette=require('../layer-colors.js'),{canvas}=runtime(1,{KiCadLayerColors:palette}),layers=['F.Cu','In1.Cu','B.Cu'];
+ const members=layers.map((layer,i)=>({type:'circle',kind:i?'track':'pad',x:i*3,y:0,r:1,layer,color:'#123456'})),hole={...members[0],hole:true},other={...members[0],x:12};
+ const source=JSON.stringify(members);canvas.setDocument({primitives:[...members,hole,other],layers},'board');canvas.visibleLayers=new Set(layers);canvas.viewport.camera.center.set(5,0);canvas.viewport.camera.zoom=20;canvas.netClassColors=new Map(members.map(p=>[p,'#abcdef']));
+ const painted=[];canvas.paint=(p,style)=>painted.push({p,style});
+ for(const dark of [true,false]){canvas.dark=dark;canvas.setNetHighlights([{primitives:members}],{selectionColor:'layer',mode:'dim'});painted.length=0;canvas.draw();for(const p of members)assert.equal(painted.find(x=>x.p===p).style.color,palette.reviewColorFor(p.layer,dark));assert.equal(painted.find(x=>x.p===other).style.opacity,.42);assert.equal(painted.find(x=>x.p===hole).style.opacity,1);}
+ canvas.visibleLayers.delete('B.Cu');painted.length=0;canvas.draw();assert.equal(painted.some(x=>x.p===members[2]),false);canvas.setNetHighlights([{primitives:members}],{selectionColor:'accent',mode:'bright'});painted.length=0;canvas.draw();assert.equal(painted.find(x=>x.p===members[0]).style.color,'#ffe18b');assert.equal(JSON.stringify(members),source);canvas.dispose();
+});

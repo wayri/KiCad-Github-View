@@ -54,22 +54,22 @@ export function cloneProbeTree(THREE,source,{materialFor=node=>node.material,ins
 // Own only generated overlay buffers. Saved records/stackup remain read-only and shared.
 export function createProbeNetInspection(THREE,source,{maxRecords=8192,maxZonePoints=32768}={}){
  if(!Number.isInteger(maxRecords)||maxRecords<1||maxRecords>8192||!Number.isInteger(maxZonePoints)||maxZonePoints<3||maxZonePoints>32768)throw Error('Invalid probe copper budget.');
- const group=new THREE.Group();group.name='Probe selected net — all copper layers';let current=null,signature='',omitted=0,pointsOmitted=0;
+ const group=new THREE.Group();group.name='Probe selected net — all copper layers';let current=null,signature='',omitted=0,pointsOmitted=0,colorMode='layer';
  const state=()=>{const result=current?.state()||{active:false,nets:[],tracks:0,pads:0,vias:0,platedPads:0,fills:0,boundaries:0,omitted:0,sourceLimited:false,warnings:[],layers:source.plan.layers.map(({name,z})=>({name,z})),meshes:0};return {...result,omitted:result.omitted+omitted,sourceLimited:result.sourceLimited||omitted>0,warnings:[...result.warnings,...(omitted?[`${omitted} selected source records omitted by the probe copper budget (${maxRecords} records / ${maxZonePoints} zone points); ${pointsOmitted} exceeded the zone-point budget.`]:[])],maxRecords,maxZonePoints};};
  function clear(){current?.dispose();current=null;group.clear();signature='';omitted=0;pointsOmitted=0;}
  function update(selection={},enabled=true){
   const nets=[...selectionNetNames(selection,source.board)].sort(),key=JSON.stringify(nets);if(!enabled||!nets.length){clear();return state();}if(key===signature)return state();clear();signature=key;
   const wanted=new Set(nets);let used=0,points=0;const take=(records,zones=false)=>{const result=[];for(const record of records||[]){if(!wanted.has(record.net))continue;if(used>=maxRecords){omitted++;continue;}if(zones){const count=record.points?.length||0;if(points+count>maxZonePoints){omitted++;pointsOmitted++;continue;}points+=count;}used++;result.push(record);}return result;};
   const tracks=take(source.board.tracks),pads=take(source.pads),vias=take(source.board.vias),zones=take(source.zones,true);
-  current=createNetInspection(THREE,{...source,board:{...source.board,tracks,pads,vias},pads,zones,sourceLimited:source.sourceLimited||omitted>0});group.add(current.group);current.update(selection,true);return state();
+  current=createNetInspection(THREE,{...source,board:{...source.board,tracks,pads,vias},pads,zones,sourceLimited:source.sourceLimited||omitted>0});current.setColorMode(colorMode);group.add(current.group);current.update(selection,true);return state();
  }
- return {group,update,state,dispose:clear};
+ return {group,update,state,setColorMode(value){colorMode=value==='accent'?'accent':'layer';current?.setColorMode(colorMode);},dispose:clear};
 }
 
-export function createSharedProbeViewport({THREE,OrbitControls,host,source,sourceScene,sourceRenderer,board,materialFor,instanceColorFor,selection={},selectionMode='all',dark=true,onSelect,onViewChange,terminalSource,netInspectionSource,showNetNames=false,showTerminalNumbers,raf=requestAnimationFrame,caf=cancelAnimationFrame,Observer=ResizeObserver}){
+export function createSharedProbeViewport({THREE,OrbitControls,host,source,sourceScene,sourceRenderer,board,materialFor,instanceColorFor,selection={},selectionMode='all',netHighlightColor='layer',dark=true,onSelect,onViewChange,terminalSource,netInspectionSource,showNetNames=false,showTerminalNumbers,raf=requestAnimationFrame,caf=cancelAnimationFrame,Observer=ResizeObserver}){
  if(!host?.append)throw Error('A connected probe viewport host is required.');
  const tree=cloneProbeTree(THREE,source,{materialFor,instanceColorFor}),scene=new THREE.Scene();scene.background=new THREE.Color(dark?0x151820:0xe7ebf1);scene.add(tree.root);
- const netInspection=netInspectionSource?createProbeNetInspection(THREE,netInspectionSource):null;if(netInspection)scene.add(netInspection.group);let netStatus=null;
+ const netInspection=netInspectionSource?createProbeNetInspection(THREE,netInspectionSource):null;if(netInspection){netInspection.setColorMode(netHighlightColor);scene.add(netInspection.group);}let netStatus=null;
  // Reuse light settings, not shadow targets or GPU-generated PMREM targets,
  // which belong to the main context. No new shadow/AO/environment targets.
  for(const light of sourceScene.children.filter(node=>node.isLight)){const copy=light.clone();copy.castShadow=false;scene.add(copy);}
@@ -127,7 +127,7 @@ export function createSharedProbeViewport({THREE,OrbitControls,host,source,sourc
   }
   observer=new Observer(resize);observer.observe(host);resize();setSelection(selection);fit();
  }catch(error){dispose();throw error;}
- return {fit,setSelection,setSelectionDim(enabled){selectionDim=Boolean(enabled);setSelection(currentSelection);return selectionDim;},projectAnchor,setTerminalNumbers(value){const result=terminalAnnotations?.setNumbers(value);invalidate();return result;},setTerminalLabels(value){const result=terminalAnnotations?.setNets(value);invalidate();return result;},getTerminalLabelState(){return terminalAnnotations?.getState()||null;},setSelectionMode(value){mode=['all','part','net','pin'].includes(value)?value:'all';},setTheme(value){if(!alive)return;scene.background.setHex(value?0x151820:0xe7ebf1);overlayMaterial.color.setHex(value?0x4de3ee:0x007b91);invalidate();},
+ return {fit,setSelection,setNetHighlightColor(value){netInspection?.setColorMode(value);invalidate();},setSelectionDim(enabled){selectionDim=Boolean(enabled);setSelection(currentSelection);return selectionDim;},projectAnchor,setTerminalNumbers(value){const result=terminalAnnotations?.setNumbers(value);invalidate();return result;},setTerminalLabels(value){const result=terminalAnnotations?.setNets(value);invalidate();return result;},getTerminalLabelState(){return terminalAnnotations?.getState()||null;},setSelectionMode(value){mode=['all','part','net','pin'].includes(value)?value:'all';},setTheme(value){if(!alive)return;scene.background.setHex(value?0x151820:0xe7ebf1);overlayMaterial.color.setHex(value?0x4de3ee:0x007b91);invalidate();},
   setView(view){if(!alive||!boardViewPresets.some(preset=>preset.id===view))return false;return fit(view);},
   rotate(degrees=15){if(!alive||!Number.isFinite(degrees))return false;const offset=camera.position.clone().sub(controls.target).applyAxisAngle(camera.up,degrees*Math.PI/180);camera.position.copy(controls.target).add(offset);controls.update();invalidate();return true;},
   flip(){if(!alive)return false;const offset=camera.position.clone().sub(controls.target);camera.position.copy(controls.target).sub(offset);controls.update();invalidate();return true;},

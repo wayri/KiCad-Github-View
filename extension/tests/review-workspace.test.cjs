@@ -1614,3 +1614,10 @@ test('keep-context checkbox defaults on and consistently controls 2D and 3D sele
  view.get('keepContextColors').checked=true;view.get('keepContextColors').onchange();assert.equal(dim,false);assert.equal(view.canvas.highlightMode,'bright');
  view.workspace.setScene(null);assert.equal(view.canvas.highlightMode,'bright');view.workspace.dispose();
 });
+
+test('net color choice persists independently of context dimming and reaches the 3D host',()=>{
+ const view=workspaceRuntime();view.load();assert.equal(view.get('netHighlightColor').value,'accent');assert.equal(view.get('netHighlightColorControl').hidden,false);
+ const colors=[];view.workspace.setScene({setPopulation(){},setSelection(){},setNetHighlightColor:value=>colors.push(value)});
+ view.get('netHighlightColor').value='layer';view.get('netHighlightColor').onchange();assert.equal(colors.at(-1),'layer');assert.equal(view.receipts.get('kicad:net-highlight-color:v1'),'layer');assert.equal(view.get('keepContextColors').checked,true);
+ view.get('keepContextColors').checked=false;view.get('keepContextColors').onchange();assert.equal(colors.at(-1),'layer');view.get('netHighlightColor').value='accent';view.get('netHighlightColor').onchange();assert.equal(colors.at(-1),'accent');view.workspace.dispose();
+});
