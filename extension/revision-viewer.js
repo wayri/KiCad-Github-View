@@ -119,11 +119,11 @@
     floatingLayers.setAttribute('role','group');floatingLayers.setAttribute('aria-label','PCB layer selector');
     floatingLayers.title='Select a copper layer · scroll here to cycle layers · arrow keys also work';
     let layerWheel=0,lastLayerCycle=0;
-    const stepCopper=step=>{if(scene)return;const copper=(canvas.design?.layers||[]).filter(layer=>layer.endsWith('.Cu'));if(!copper.length)return;const index=copper.indexOf(canvas.focusedLayer),next=index<0?(step>0?0:copper.length-1):(index+step+copper.length)%copper.length;canvas.focusLayer(copper[next],'isolate');$('layerFocusMode').value='isolate';layers();canvas.draw();};
+    const stepCopper=step=>{if(scene)return;const copper=(canvas.design?.layers||[]).filter(layer=>layer.endsWith('.Cu'));if(!copper.length)return;const index=copper.indexOf(canvas.focusedLayer),next=index<0?(step>0?0:copper.length-1):(index+step+copper.length)%copper.length;canvas.focusLayer(copper[next],$('layerFocusMode').value==='isolate'?'isolate':'dim');layers();canvas.draw();};
     floatingLayers.addEventListener('wheel',event=>{if(scene||event.ctrlKey)return;event.preventDefault();event.stopPropagation();layerWheel+=(event.deltaY||event.deltaX||0)*(event.deltaMode===1?16:event.deltaMode===2?400:1);if(Math.abs(layerWheel)<30||Date.now()-lastLayerCycle<120)return;stepCopper(layerWheel>0?1:-1);layerWheel=0;lastLayerCycle=Date.now();},{passive:false});
     floatingLayers.addEventListener('keydown',event=>{if(!['ArrowLeft','ArrowRight','ArrowUp','ArrowDown'].includes(event.key))return;event.preventDefault();event.stopPropagation();stepCopper(['ArrowRight','ArrowDown'].includes(event.key)?1:-1);});
     floatingLayers.hidden=true;if(pcb)host.append(floatingLayers);
-    let floatingSignature='',floatingToggle=null;
+    let floatingSignature='',floatingToggle=null,floatingFocusMode=null;
     const compactLayerBar=!globalThis.KiCadAndroidUI;
     if(compactLayerBar)addEventListener('pointerdown',event=>{if(!floatingLayers.contains(event.target)&&floatingToggle){floatingLayers.classList.remove('layers-expanded');floatingToggle.setAttribute('aria-expanded','false');}});
     syncFloatingLayers=()=>{
@@ -146,7 +146,8 @@
           button.onclick=()=>{if(scene)return;action();layers();canvas.draw();if(floatingToggle){floatingLayers.classList.remove('layers-expanded');floatingToggle.setAttribute('aria-expanded','false');}};
           floatingButtons.set(name,button);(compactLayerBar?layerOptions:floatingLayers).append(button);
         };
-        for(const layer of copper)add(layer,'Show only '+layer,()=>{canvas.focusLayer(layer,'isolate');$('layerFocusMode').value='isolate';},KiCadPCBRenderer.colorFor?.(layer)||'#8c9cab');
+        floatingFocusMode=document.createElement('select');floatingFocusMode.setAttribute('aria-label','Layer selection style');floatingFocusMode.title='Highlight keeps other visible layers as context; Isolate hides them';for(const [value,label]of [['dim','Highlight layer'],['isolate','Isolate layer']]){const option=document.createElement('option');option.value=value;option.textContent=label;floatingFocusMode.append(option);}floatingFocusMode.value=$('layerFocusMode').value==='isolate'?'isolate':'dim';floatingFocusMode.onchange=()=>{$('layerFocusMode').value=floatingFocusMode.value;if(canvas.focusedLayer)canvas.focusLayer(canvas.focusedLayer,floatingFocusMode.value);layers();canvas.draw();};(compactLayerBar?layerOptions:floatingLayers).append(floatingFocusMode);
+        for(const layer of copper)add(layer,'Focus layer '+layer,()=>{canvas.focusLayer(layer,$('layerFocusMode').value==='isolate'?'isolate':'dim');},KiCadPCBRenderer.colorFor?.(layer)||'#8c9cab');
         add('All','Show all saved board layers',()=>canvas.layerPreset('all'));
         add('Overview','Restore layer view before focusing',()=>canvas.restoreLayers());
         add('Filled copper','Toggle saved filled copper zones',()=>canvas.setZoneVisibility({filled:canvas.showFilledCopper===false}));
@@ -159,6 +160,7 @@
         const selected=name==='Worksheet'?canvas.paperVisible:name==='Numbers'?canvas.showTerminalNumbers!==false:name==='Net names'?canvas.showNetNames===true:name==='Filled copper'?canvas.showFilledCopper!==false:name==='Zone outlines'?canvas.showZoneOutlines!==false:name==='All'?!canvas.focusedLayer&&(canvas.design.layers||[]).every(layer=>canvas.visibleLayers.has(layer)):name==='Overview'?!canvas.focusedLayer&&!canvas.layerSnapshot:canvas.focusedLayer===name;
         if(button.getAttribute('aria-pressed')!==String(selected))button.setAttribute('aria-pressed',String(selected));
       }
+      if(floatingFocusMode)floatingFocusMode.value=$('layerFocusMode').value==='isolate'?'isolate':'dim';
       if(floatingToggle&&floatingToggle.textContent!==(canvas.focusedLayer||'Layers'))floatingToggle.textContent=canvas.focusedLayer||'Layers';
     };
 

@@ -17,6 +17,11 @@
       "file": "orthographic-top.jpg",
       "bytes": 44375,
       "sha256": "062a09323a6154c9a12b64516efd74cd002186d4bf3496bbd7388c717dd8d76f"
+    },
+    {
+      "file": "layer-focus.jpg",
+      "bytes": 74060,
+      "sha256": "375f3ce806f4356dd528f93c0fb62c80de49d1480357d5b80d8f99995be8a8f6"
     }
   ]
 }

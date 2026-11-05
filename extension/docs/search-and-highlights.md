@@ -55,3 +55,7 @@ The choice also applies to 2D and 3D probe windows and the full-net 3D overlay, 
 ### Orthographic 3D inspection
 
 Use **View → Top** (or **Z**) and enable **Ortho** beside the 3D view selector for a parallel projection without perspective distortion. The toggle preserves target-plane framing when switching back to perspective. Pad annotations, picking and comment/probe links follow the active camera. A 3D probe has its own **Orthographic projection** toggle in its view tools; changing it does not change the main camera.
+
+### Layer focus
+
+Open **Layers** and choose **Highlight layer**, then select a copper layer. The chosen layer remains prominent while other visible layers stay dimmed; hidden layers remain hidden. Scroll or use arrow keys over the selector to cycle layers with the same style. Choose **Isolate layer** to hide the other layers, or **Overview** to restore the saved visibility from before focusing. This is a layer-wide PCB layout focus, separate from the selected-net color preference.
