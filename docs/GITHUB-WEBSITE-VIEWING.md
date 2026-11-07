@@ -34,4 +34,4 @@ not a claim of unlimited service access. Imported local projects remain availabl
 without GitHub access.
 
 
-Development update: [Client-side project access](CLIENT-SIDE-REPOSITORY-LOADING.md) describes the on-click permission model, signed-in private context resolution and token-free GitLab adapter now in source. This is newer than the published0.12.80 package; installed behavior changes only after an update.
+[Client-side project access](CLIENT-SIDE-REPOSITORY-LOADING.md) explains site permissions and signed-in loading for private GitHub and GitLab projects.

@@ -1,141 +1,76 @@
-# Review comments and Git host integration
+# Comments and review conversations
 
-KiCad Online stores comments alongside the design context they refer to: repository, revision, KiCad file, optional object identity or reference, and a point or rectangular area in drawing coordinates. Each note can also carry severity (`info`, `level-1`, `minor`, `major`, or `critical`), tags, mentions, text, timestamps, and a local state (`open`, `closed`, `skipped`, `resolved`, or `wont-fix`). Area captures can include a PNG. These annotations help reviewers discuss saved design data; they do not modify the schematic or board.
+Record findings against a drawing, component, property, BoM field or rectangular area. Notes retain the saved file, revision and available location so you can return to the same design context.
 
-## Version 0.12.77 workflow
+[User guide](../USER-GUIDE.md#6-record-share-and-transfer-a-review) · [Repository access](GIT-HOSTS.md) · [Synchronization](REVIEW-SYNC.md)
 
-The first remote send asks for destination and Terms acceptance. Acceptance remains in installation storage until removed/uninstalled or the Terms version changes. Later sends to a valid selected destination go directly; use **Destination…** under composer options to change it. New Discussion creation is explicit. Browse existing Issues/Discussions in the panel and reply there; opening by number remains available.
+## Add a local note
 
-Visible annotation/thread readers normally refresh every 3 seconds, with backoff on failures; hidden panels do not poll. Conditional responses and account-bound read-only permission snapshots reduce repeated requests. This is polling rather than server push: provider limits, permissions and connectivity can delay updates. Remote writes still check fresh authority. A confirmed post with a subsequent local-save/readback failure is identified as posted with a local recovery warning, avoiding a misleading failed-publication message.
+1. Select a part, pin or net, then open **Comments**. Use **C** from the drawing to start at the selection.
+2. Choose a point or draw an area if the finding refers to a location.
+3. Enter the finding and choose its severity and review state.
+4. Choose **Save draft** or **Save comment** in local mode.
 
-Point and rectangular comments carry canonical file, sheet label, optional saved sheet/instance identity, and drawing coordinates in millimetres. Rectangles preserve start/end coordinates in both human-readable text and the validated `kicad-review:v1` marker. Locate prefers saved identity, then explicit coordinates on the matching file; it never guesses another object. Ordinary provider comments without a marker appear in conversation threads, not as invented drawing locations.
+A local save does not post to GitHub or GitLab. Design values and connectivity remain unchanged.
 
-## Where notes are stored
+For a property, use the comment icon beside its field in **Properties**. In **Assembly / BoM**, use the icon beside a cell. The draft retains the field name, reviewed value and part reference; grouped BoM rows retain up to 100 references. Ungroup a larger group before commenting. These actions apply to drawing-linked BoMs, not standalone imported report tables.
 
-In the browser extension, notes use browser-local storage by default. To share them through Git, open the extension's **Options**, choose **Connect existing file** or **Create review file**, and select `.kicad-review.json` in your checkout. The extension validates the file and its permission, then reads and writes it as the shared annotation store. Stage and commit the file with your normal Git workflow; the extension does not create commits. Chrome may ask you to renew file access after a restart. Disconnecting the file returns the viewer to browser-local drafts; it does not migrate those drafts automatically. Use the review JSON export/import controls when you want to move drafts explicitly.
+## Send to GitHub or GitLab
 
-The sidecar uses schema version 1 and contains annotations, including confirmed GitHub or GitLab thread references, but never credentials. It is limited to 1,000 notes and 4 MiB. Notes have a 4,000-character text limit and at most 20 tags of 40 characters each. JSON import/export is limited to 100 notes and 1 MiB; browser-local storage is limited to 100 notes per file and revision. PNG captures are limited to 1,024 pixels per side and 262,144 data-URL characters, and the total sidecar limit still applies. Remove captures or store large evidence separately if the sidecar approaches its limit.
+Choose the destination before sending: a new Issue, an existing Issue, or a supported Discussion. Browse existing threads in the panel or open one by number. GitHub requires a category for a new Discussion. GitLab Discussions are threads inside an existing Issue.
 
-The extension serializes its own browser-tab writes, checks whether the file changed externally before saving, and rejects stale note edits. This is optimistic conflict detection, not a lock shared with other applications. Avoid editing the sidecar in an editor while the browser is saving. Invalid existing JSON is left intact rather than replaced. If a conflict is reported, reload the notes and retry your edit.
+Review the destination, message and optional screenshot, then explicitly select **Comment**, **Post** or **Publish**. The exact label depends on the host and composer. The first remote send asks for destination and Terms acceptance; it is requested again if the stored acceptance is removed or the Terms version changes. Use **Destination…** to change a selected destination.
 
-## Connecting GitHub
+Supported GitHub website-session Issue workflows can send and read back comments using the matching signed-in browser tab, without connecting broad repository OAuth access. Other operations may require an optional [connected account](GITHUB-SIGNIN.md). GitLab requires access to the selected server and the relevant project permissions. Organization restrictions and repository comment policies still apply.
 
-Open **Review → Add comment**. The compact composer has three colored dropdowns: Issue/Discussion, severity and local review state. Write the title on the first line and the review on following lines. Type `@` for account suggestions (arrow keys and Enter work), or enter a username yourself. Paste PNG/JPEG/WebP screenshots directly into the box; they are normalized to a bounded PNG preview. Tags and account/Markdown controls live under **Tags and advanced options**. The destination beside **Comment** defaults to New issue. Select an existing thread and enter its number, or choose Discussion and load a category for a new discussion. **Save draft** never publishes. A saved note retains its Issue/Discussion type; publication checks type, permissions and repository policy.
+Use **Open GitHub composer** to prepare a draft on GitHub instead. Opening the form does not submit it. Attach any screenshot manually when using this route.
 
-![Compact comment composer](images/integration/simple-comment-composer.png)
+## Read replies and synchronize
 
-The screenshot uses actual rendering and mocked transport. No live post was made.
+Open **Comments → Threads** or **View comments**, choose an Issue or Discussion and load it. Select **Reply** to prepare a response. Ordinary messages appear in the conversation; they need no drawing metadata.
 
-In Chrome and Android, GitHub publishing is optional. Open the account settings, choose repository access and press **Sign in with GitHub**. Users approve a device code on GitHub. Public access requests `public_repo`; private access requests the broad read/write `repo` scope. From v0.11.10, the publisher App public client ID is included, so normal users do not need advanced configuration. [Publisher setup](GITHUB-SIGNIN.md) documents maintenance and custom builds. Advanced settings offer a custom client ID or a manual personal access token. A manual token must have access to the repositories you review. Issue and pull-request comments require Issues write access. Discussions require access through GitHub GraphQL. Fine-grained tokens may also need access to the target repository. GitHub decides final permissions, and denied or missing access is reported.
+Visible readers normally check for updates every three seconds, with backoff after failures. Hidden panels do not poll. Use Refresh for a manual check. Provider limits, connection failures and background behavior can delay updates; this is not a live push service.
 
-Browser extension tokens are encrypted in extension session storage with keys held only in memory. Supported Chrome sessions retain keys through background idle; browser restart, extension reload or key-worker loss requires sign-in again. Other browsers also lose sessions on background restart. Sessions expire within eight hours. Tokens are not written to `.kicad-review.json` or exposed to host page scripts. Pending OAuth device secrets stay in background memory; a custom public client ID is stored in local settings. **Sign out** purges credentials and cancels login; **Reset GitHub connection** also clears that ID. Uninstall clears local storage but does not revoke GitHub authorization. See [security, revocation and live-browser verification limits](../SECURITY.md).
+Synchronized KiCad Online annotations can display a marker or rectangular area in the schematic, layout or supported 3D view. Their metadata includes drawing path, saved revision and point/area coordinates in millimetres. **Locate** uses the saved identity or explicit coordinates on the matching drawing. A plain GitHub/GitLab comment without location metadata remains a conversation message; the viewer does not invent a marker for it.
 
-## Repository comment policy
+Only matching, validated annotations become drawing notes. If a location cannot be resolved or the displayed source differs, open the referenced revision and drawing. Bounded thread reads can omit older messages; truncation warnings link to the original provider thread.
 
-Before publishing, the extension checks the target repository's `.kicad-review-policy.json` on its default branch. If the file is absent, the default policy allows any signed-in account that can publish to the repository. A malformed or unverifiable policy blocks publication. The file format is:
+## Filter findings
 
-```json
-{
-  "schemaVersion": 1,
-  "commenting": {
-    "mode": "contributors",
-    "allowlist": ["reviewer-login"]
-  }
-}
-```
+Use **Issues**, **Discussions** or **All**, then filter by state, severity, read status, text or creation date. Sort by severity or creation/update time. Filters also control the annotation markers displayed on the drawing.
 
-`mode` can be `all`, `contributors`, `collaborators`, or `allowlist`. The optional `allowlist` is limited to 100 GitHub logins. In `all` mode, a connected account may publish. The other modes require the extension to identify the signed-in account; the repository owner and listed accounts are accepted, while `contributors` additionally checks GitHub's contributor list and `collaborators` checks collaborator permission. `allowlist` accepts only the owner or listed accounts. If GitHub cannot verify the required identity or repository status, publication is blocked rather than assuming access. The policy is checked against the public default branch, so changes there govern all revisions being reviewed.
+Severity runs from **Info** through **Level 1**, **Minor**, **Major** and **Critical**. It is per-comment metadata and does not create provider labels.
 
-## Publishing a note
+A linked note can display the provider thread's last fetched Open/Closed state. Refresh before relying on it. **Skip review** is local to the reader/profile; **Follow issue state** resumes the linked state. Changing a local dropdown or filter does not close a shared Issue. The separate **Close/Reopen issue or discussion** action requires permission and confirmation.
 
-Use **Comment** in the composer to save and publish in one action, or save a draft first. Choose its GitHub destination (a new issue, an existing issue or pull request, a new discussion, or an existing discussion); for a new discussion, load and select a category. Then click **Publish to GitHub** on the note. Saving or opening a drawing never publishes automatically. The extension posts a new issue for a new issue destination, an issue comment for an existing issue or pull request, a new discussion, or a discussion comment, as appropriate.
+## Mentions and screenshots
 
-Published text includes the note, severity, state, tags, mentions, date, repository, revision, file, and available object/location/variant anchors. **Post to GitHub** uploads an area capture as a GitHub repository attachment and inserts its image URL into the Issue or Discussion body. Upload requires repository write access and an OAuth or personal access token. If it fails, the draft remains and no text-only post is made: fix access or remove the screenshot explicitly. A confirmed upload is reused when retrying the same image/note/destination repository. GitHub App tokens and Enterprise Server uploads are unsupported. This follows [GitHub's official attachment uploader](https://github.com/cli/cli/blob/trunk/internal/attachments/client.go).
+Type `@` for available account suggestions, or enter a username manually. Suggestions depend on provider access; notifications happen only when the message is posted.
 
-A hidden `kicad-review:v1` marker preserves validated note metadata and attachment URLs for readback. PNG bytes remain in the local review file and are excluded from that marker. In the browser edition, **Open GitHub composer** fills a form without submitting; this manual path still requires downloading and attaching the PNG yourself. Review the selected repository and screenshot before posting, especially for private designs. GitHub controls attachment access and retention; deleting a local note or signing out does not remove an uploaded asset. An upload followed by failed text publication may leave an unreferenced asset. Automated tests exercise simulated API responses; live screenshot publication remains unverified.
+Paste a PNG, JPEG or WebP into the composer to preview a bounded PNG capture. Review the image before sending, especially for private designs. The connected attachment route needs the provider's upload permissions. A failed upload retains the draft rather than silently posting without the image. Deleting a local note or signing out does not delete a remote attachment.
 
-On confirmed success, the local note records the GitHub repository, thread number, URL, publication time, and available remote ID. Repeating a confirmed publication recovers its saved receipt and does not create another post. If the request outcome is uncertain (for example, a network interruption after GitHub may have accepted it), the extension marks it pending and will not retry automatically, because that could duplicate a comment. Inspect GitHub before taking further action. Since v0.12.9, for newly recorded uncertain GitHub posts, enter the Issue or Discussion number in the recovery control shown after a posting error and choose **Recover published comment**. This performs read-only annotation lookup and requires one exact saved annotation from the account that attempted publication. It records the confirmed link and screenshot attachment receipt without posting again. Changed annotations, another author/account, multiple matches, missing posts, and old pending records without an author/content binding remain protected from retry. The bounded thread scan can omit older comments; inspect GitHub manually if recovery finds no exact match.
+![Local review composer on the public PIC Programmer demo](images/0.12.85/08-comment-composer.jpg)
 
-The state shown on a note is local review metadata. Marking a note resolved or skipped does not close a GitHub issue or edit an earlier GitHub post. The extension does not automatically synchronize remote issue state or edits back into the note.
+This capture shows a local note, not a live provider post.
 
-## Reading existing GitHub annotations
+## Keep notes between sessions and devices
 
-**Load GitHub annotations** uses the connected account when available, including for authorized private repositories. Public Issue/PR reads use the anonymous REST API when signed out. Only valid markers matching the exact repository, revision and drawing become cards; ordinary messages do not become drawing annotations. Use the separate thread reader below for the full conversation.
+Browser notes are local to the profile by default. Export review JSON for backup or transfer. Where supported, Options offers **Connect existing file** or **Create review file** for a `.kicad-review.json` sidecar in your checkout. Stage and commit it with your normal Git tools; the extension does not commit it. Firefox uses explicit import/export instead of automatic selected-file writes.
 
-Select **Issue / Existing issue** and its number to read the body and up to 500 comments. Selected PRs use their body and Issue-comment conversation. Without a selected thread, refresh scans at most 200 recent Issue/PR bodies, without fetching every conversation.
+VS Code keeps the sidecar in the workspace. Remote publication and pinned annotation readback require a trusted checkout, a matching remote and displayed source that matches committed Git blobs. Commit and reopen changed drawings when requested. Browser, Android and VS Code account sessions are separate.
 
-For Discussions, sign in, choose **Discussion / Existing discussion**, enter its number and **Load GitHub annotations**. Authenticated GraphQL reads marked body, comments and replies, bounded to 500 source records and 20 requests. Warnings describe truncation, invalid data and API limits.
+Avoid editing one sidecar simultaneously in several applications. If a conflict is reported, reload notes before retrying. Disconnecting a sidecar does not automatically migrate its drafts into browser storage.
 
-Cards show actual GitHub authors, posting/editing times and canonical links. **Reply** creates a fresh draft at the same anchor and selects the existing thread; enter text and **Post to GitHub** explicitly. Successful posts select their confirmed thread for subsequent refresh. Multiple reviewers can append posts and refresh them. Discussion replies from this viewer append to the conversation, rather than nesting under an individual reply.
+## Send failures and recovery
 
-Readback holds one account identity through pagination. Sign-out, account changes or credential expiry abort it. It does not synchronize remote state or edits into existing local notes, close issues or replace GitHub conversations and notifications. Authorized private PR revision comparison is supported.
+A confirmed post records its destination link. If posting succeeds but local saving or readback fails, the viewer reports a recovery warning rather than treating the remote post as absent.
 
-## GitLab and VS Code
+An interrupted request can have an uncertain outcome. Check the provider before retrying to avoid duplicates. **Recover published comment**, when offered, searches for an exact matching saved annotation without posting again. If it finds no unique match, inspect the provider thread manually.
 
-GitLab notes are isolated by HTTPS server, project, revision and file. In Options → **GitLab accounts and servers**, connect an expiring token or configure a non-confidential OAuth Application ID and exact browser redirect URI. OAuth uses PKCE with `api` scope; no bundled GitLab Application ID or client secret is supplied. Private reads use the selected server's credentials; posting also needs project write permissions. For self-hosted GitLab, first choose **Grant server access** for its exact HTTPS origin. Credentials use the encrypted session lifecycle described in [SECURITY.md](../SECURITY.md).
+For access errors, check the matching source tab, account permissions, destination and repository policy. Signing out clears the local account session but does not remove remote posts or revoke the provider's authorization.
 
-In the editor select **Issue** to create a new issue or add a note to an existing one, or **Discussion** to create a discussion thread within an existing issue. GitLab discussions require an issue number and have no standalone category selector. **Preview GitLab Markdown** shows the formatted section; **Post to GitLab** saves a draft and explicitly publishes it. Confirmed links are saved in the annotation. Uncertain publication outcomes block automatic retries. Mentions can notify users when actually posted, subject to GitLab behavior and permissions; local mentions alone send no notification.
+## Storage limits
 
-In the **GitLab** tab, select an existing issue number and **Load GitLab annotations**. Readback scans its description and up to 500 issue notes for validated markers matching the server/project/revision/drawing. Ordinary comments and grouped replies are available through **Load thread**, separately from drawing annotations; annotation refresh does not synchronize remote edits into local notes. GitLab posts upload captures as project PNG attachments and embed the validated image URL. Private/internal projects must enable **Require authentication to view media files** first ([GitLab media security](https://docs.gitlab.com/security/user_file_uploads/)). Remote private previews may additionally require website sign-in. Upload receipts prevent repeated confirmed uploads; uncertain outcomes block automatic retry. Removing a local note does not delete remote uploads. Marking a note resolved/skipped never closes the remote issue. Repository policies are checked before posting; contributors-only mode fails closed without verifiable account membership or an explicit allowlist. Prefer `collaborators` or `allowlist` when controlling reviewers. Browser GitLab notes remain local/exportable; that browser's connected GitHub sidecar control is not used for GitLab. VS Code keeps either provider's confirmed references in its workspace sidecar. Current merge-request Changes pages support an inline changed-drawing selector. Historical diff versions, merge-request comment publication and URL-subpath installations are not supported. See the [illustrated GitLab guide](using-gitlab-integration/README.md).
+Local browser notes are limited to 100 per drawing and revision. Review JSON import/export supports up to 100 notes and 1 MiB; a connected sidecar supports up to 1,000 notes and 4 MiB. Note text is limited to 4,000 characters. Captures count toward storage limits, so keep large evidence separately.
 
-The VS Code extension keeps local annotations in the workspace `.kicad-review.json` and supports remote collaboration when a trusted local checkout has a matching Git remote. In **Review**, open the account/settings control: GitHub uses VS Code native sign-in and repository consent; GitLab asks for an exact-host token stored in VS Code SecretStorage. No manual GitHub token or device code is required in VS Code. Credentials never enter the webview or sidecar.
-
-Choose Issue or Discussion, enter its number and click **Load thread**. To create an issue or reply, check the draft, destination and optional screenshot, then explicitly choose **Comment** or **Publish**. GitLab Discussions belong to an existing issue. Both providers enforce repository policy and permissions; successful uploads and publications retain receipts to protect retries.
-
-Before pinned annotation readback or publication, VS Code verifies the displayed drawings against raw committed Git blobs. If they differ, commit the changes and reopen the drawing. Ordinary conversation reading remains available without attributing dirty source to HEAD. A changed remote or commit also requires reopening. Native Git is required for this source check; Restricted Mode, projects without a matching remote and historical snapshots do not publish. Local anchors stay local in the sidecar; the host maps validated publication anchors to the remote commit and repository path. Copying a sidecar alone does not configure an account or authorize remote writes. Browser and VS Code writes do not share an atomic lock, so avoid editing the same sidecar from both at once.
-
-VS Code annotation refresh without a selected GitHub thread scans up to five recent issue conversations. Select a specific issue or Discussion number for targeted readback. GitLab annotation refresh requires a selected issue. These scans can be incomplete and do not constitute an issue inbox.
-
-Automated checks use mocked provider responses. They do not create live issues, discussions, or comments, and they do not prove that a particular repository's token permissions or policy will allow publication.
-
-
-## Direct posting from the comment editor
-
-The note editor has a **Post to GitHub** section. Select Issue or Discussion, new or existing thread, a title or thread number, and a category for a new Discussion. **Preview GitHub Markdown** displays the generated section without posting. **Post to GitHub** saves a draft, sends the formatted review through the selected GitHub API, then records its confirmed link. **Save draft** keeps a note without a remote write. Failed posts retain an editable draft; ambiguous results retain the backend's pending-publication protection rather than automatically retrying.
-
-Posted Markdown contains review text and a design-context table with severity/state, Issue/Discussion type, component or net, point/area, repository, revision/file permalink, variant, identifiers, tags, mentions and UTC times. The validated hidden annotation marker remains available for supported readback. PNG data is excluded from the API body.
-
-Authorized private repositories can receive Issue/Discussion posts. The connected account must have the relevant write permission and Contents read permission for policy verification. Private policy requests are authenticated on GitHub's API. A private policy 404 is treated as absence only after a complete authenticated root listing verifies that no policy file exists. Unverifiable access or policy blocks the post. Public policies retain anonymous verification. Authorized private annotation readback is supported; authorized private PR comparison is supported.
-
-**Mention people** offers authenticated contributor/assignee suggestions on GitHub and project-member suggestions on GitLab, plus explicit account search. Select a result to add `@username`, or enter names manually. Listings are bounded and roles are suggestions, not access guarantees. No notifications occur until publication. Opening the composer automatically restores controls and a usable panel height; close it to maximize the drawing again.
-
-In **Comments → View comments**, **Filter and sort comments** opens by default. Filter by Open, Closed (Resolved or Won’t fix), Skipped, an exact review state, severity, read status or text. Sort severity highest/lowest first, creation date newest/oldest first, or update date newest/oldest first. **Reset filters** restores all notes in the selected category in severity order. These choices also filter drawing annotation markers; they do not change saved review state or the remote issue status.
-
-The Comments sidebar has **Issues** and **Discussions** category tabs, each with **Add comment** and **View comments**. Issue drafts map to GitHub Issues; discussion drafts map to GitHub Discussions, with a category required for new discussions. Use an existing thread number to add to that conversation. Selecting a category sets the type of new drafts, while browsing categories preserves an existing unsaved draft’s text and type. The editor’s Thread type control can explicitly change the draft type. **All** shows both categories and older unassigned notes; legacy notes with a confirmed remote conversation are classified from that conversation. State/severity/date filters, drawing markers, unread navigation and linked conversations respect the category. Saving a draft or browsing tabs never posts to GitHub. GitLab Discussions remain conversations within an existing GitLab issue, not GitHub-style standalone Discussions.
-
-
-## Read conversations and filter creation dates
-
-In **View comments**, choose Issue or Discussion, enter a thread number, and click **Load thread**. Linked annotation cards and conversations also provide **View thread**. Authors, timestamps, the original message, ordinary comments and Discussion reply relationships appear within Comments. **Reply** prepares a new anchored draft addressed to that thread; click **Comment** to submit it. Replies append to the conversation, rather than nesting under an individual Discussion reply. Reload with **Load thread** to see other reviewers' changes. There is no live subscription or automatic remote-state synchronization.
-
-The gear button at the top exposes state, severity, read status, sort/search and **Created from / Created through** dates. Dates use UTC and include the entire final day. They filter drawing notes and loaded conversation messages; they do not restrict who can publish or alter GitHub history. Invalid or reversed ranges show an error. Reset filters clears the dates.
-
-![Conversation reader and date controls](images/integration/comment-thread-dates.png)
-
-This screenshot uses a synthetic conversation. The reader is read-only and bounded to 200 comments, 10 requests, 64 KiB of text per entry and 1 MiB total. Truncation warnings direct users to the original provider thread. Public Issues can be read anonymously; Discussions and private threads require extension sign-in and repository access. Bodies are displayed as safe text, so arbitrary HTML and remote media cannot execute or load from a thread. GitLab also loads the selected issue description, ordinary notes and grouped discussion replies in Chrome, Android and VS Code. GitLab Discussions remain issue conversations. Its reader is bounded to 200 comments, eight discussion pages and 1 MiB of text, with explicit truncation warnings. There is no notification feed, full issue inbox or automatic refresh.
-
-Clipboard images must be PNG, JPEG or WebP, at most 8 MiB and 40 megapixels before normalization. Screenshot publication uses the existing authenticated attachment upload; failure retains the draft instead of silently omitting its image. Cancelling or replacing a draft discards any still-running paste conversion.
-
-### Review severity levels
-
-The five levels, in increasing severity, are **Info** (blue), **Level 1** (green), **Minor** (yellow), **Major** (orange), and **Critical** (red). Existing values retain their meaning; Level 1 is stored as `level-1`. Select the level in the always-visible composer row before saving or posting. Review-note filters, sorting, drawing markers and attached chat reviews use the same scale. Attached chat review controls appear above the message box.
-
-New GitHub Issue/Discussion posts and review replies include a self-contained coloured-symbol severity banner and a readable severity row. No external badge image is loaded. This is per-comment metadata in the message body; it does not automatically create repository labels or change the severity of an entire existing issue. Older annotations still load and display their saved severity.
-
-The KiCad launcher uses this same compact browser composer. Local mode presents **Save comment** directly beside the composer actions; it saves a local note and does not publish to GitHub. Its design sources remain read-only.
-
-### Review state and linked issues
-
-**Open** is green, **Closed** purple, and **Skipped** amber. Legacy **Resolved** and **Won’t fix** notes remain supported; the Closed filter includes them. The state selector is visible in the note composer. State filters apply to review cards, the conversation catalog and messages in an opened thread.
-
-A linked comment follows the provider issue/discussion's last fetched Open/Closed state. Fetching the conversation or refreshing its catalog updates that inference without rewriting the annotation. If a comment links to several threads, any known open thread keeps it Open; it is inferred Closed only when all linked thread states are known to be Closed. An unavailable provider state falls back to the saved review state and is identified in the badge tooltip. State can change on the provider after a fetch; refresh before relying on it.
-
-Use the conversation **⋯ → Close issue/discussion** or **Reopen issue/discussion** action to control the provider state. The action requires provider permission, current repository policy and an explicit confirmation; a stale provider revision blocks the write. Confirmed changes update the displayed linked state. Changing a local review dropdown or filter never silently closes a shared issue.
-
-For a linked comment, **Skip review** records a reader/profile-specific local override; **Follow issue state** resumes inference. Skipped is not a native provider issue state. Unlinked notes save their selected review state normally. Published state banners describe the annotation at posting time; the provider's own issue status remains authoritative. Exact-source local/provider copies of the same annotation are displayed once.
-
-### Comments on properties and BoM fields
-
-In the drawing Properties table, use the small comment icon beside a field. In **Assembly / BoM**, the same icon beside a cell starts a review of that field; grouped rows retain their reference list (up to 100 references; ungroup larger groups first). The compact BoM explorer also offers a comment action per part.
-
-The draft carries the saved file/revision, part UUID/reference and position, field name and a snapshot of its reviewed value. These details appear in the comment and provider Markdown and survive local export/import and provider readback. The existing Locate action returns to the saved object or position. Saving stays local; posting still requires an explicit send through the configured review connection. Design values are not changed. This applies to the drawing-linked BoM, rather than standalone imported report tables.
+For schema, policy, provider-specific limits and implementation history, see the [technical comment reference](maintainers/COMMENTS-REFERENCE.md). [Contact support](mailto:support.kivi@sigharmonic.com) with a non-confidential example if a problem persists.

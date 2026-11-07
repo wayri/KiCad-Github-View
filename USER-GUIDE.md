@@ -2,13 +2,13 @@
 
 Demo designs: thank you to OLIMEX, the Berkeley Lab Marble contributors, Ttl/FMCW3 contributors and the KiCad PIC Programmer demo authors. [Board credits, sources and license boundaries](docs/DEMO-BOARD-CREDITS.md).
 
-**Latest visual walkthrough:** the [0.12.83 capability gallery](docs/SCREENSHOT-GALLERY-0.12.83.md) contains 123 screenshots, including 67 fresh captures from the packaged viewer. Use the [searchable HTML gallery](docs/SCREENSHOT-GALLERY-0.12.83.html) and [coverage/gaps index](docs/CAPABILITY-SCREENSHOT-COVERAGE-0.12.83.md) to find drawings, probes, comments, calculators, assembly, fabrication, Draftsman and saved analysis views. Public-board examples, synthetic fixtures, responsive previews and historical captures are labelled separately. The [0.12.79 real-board walkthrough](docs/SCREENSHOT-GALLERY-0.12.79.md) remains available.
+Browse the [screenshot gallery](docs/SCREENSHOT-GALLERY-0.12.83.md) for examples of drawings, probes, comments, calculators, assembly, fabrication and saved results. Captures include public boards and labelled demonstration fixtures; their source details are linked with each collection.
 
-Firefox and Firefox derivatives have a separate [installation, signing and Mozilla deployment guide](docs/FIREFOX.md), including Zen, LibreWolf and Waterfox compatibility limits. The current unsigned Firefox ZIP is temporary; Firefox Android extension acceptance is pending.
+The [Firefox guide](docs/FIREFOX.md) covers store installation, temporary desktop previews and mobile compatibility.
 
 Open saved KiCad projects, inspect schematics and layouts, and record review or assembly findings without a KiCad installation. Design sources are read-only during ordinary viewing. Review notes, assembly progress and variants are separate data; the VS Code conflict resolver is an explicit exception that can write a resolved drawing after confirmation.
 
-This guide describes the **0.12.77** development source (Android **1.77**); store and installed versions can lag. Draftsman refinements marked **0.12.70** require that build (Android 1.72); a store may still offer an earlier version. This guide distinguishes shared drawing tools from host-specific pages and account features.
+This guide covers the shared tools in **0.12.90 / Android 1.92**. Menus and available features differ by platform; store versions can lag GitHub. See [installation and release availability](docs/INSTALL.md).
 
 Start with the [installation guide](docs/INSTALL.md) for Android, Windows, Linux and macOS. Check the [KiCad compatibility matrix](docs/KICAD-COMPATIBILITY.md) before reviewing a new file format. Recognized KiCad 8, 9 and 10 constructs use the shared viewer; coverage is narrower for 8/9, and newer constructs may display warnings or incomplete previews.
 
@@ -480,7 +480,7 @@ Use **Detach** or drag a drawing tab outside the viewer window to separate the
 schematic, PCB layout or 3D view. Each has its own camera; **Cross-select detached
 views** controls selection sharing. [Supported hosts and setup](docs/DETACHED-VIEWS.md).
 
-### Project-wide search (0.12.76)
+### Project-wide search
 
 Use the centered **Search entire project** field or **Ctrl+K** to find saved parts,
 pins/pads, net names, project files/settings, supported simulation/report text and
@@ -492,7 +492,7 @@ reads saved results and does not run simulation source or repository HTML.
 Draftsman documents must still match their original source fingerprints.
 
 
-### Variant and history shortcuts (0.12.77)
+### Variant and history shortcuts
 
 Use **Variant** beside the selection filter to switch saved assembly overlays. **Manage variants** remains in View options. No source geometry is changed by the selection.
 
@@ -501,8 +501,8 @@ Open **History / compare → Browse commit history** to see the available websit
 Highlight a net, then choose **Net instances** for the list of loaded occurrences. Open up to four mini views, drag their headers, rotate clockwise/counterclockwise, fit or Locate. These windows reuse loaded saved geometry; they do not download the repository again.
 
 
-### Probe navigation and keyboard controls (0.12.80)
+### Probe navigation and keyboard controls
 
-Select a part, pin or net and press **P** to open a miniature probe (multiple matches show the occurrence list). A schematic probe has its own sheet dropdown plus **Previous / Next occurrence** for the selected net's connected sheets. Manually browsing another sheet leaves the main drawing unchanged. Probe options contain flip and 90-degree rotation; focus a probe and use **F**, **R / Shift+R**, or **[ / ]**. **P** opens a sibling probe from that probe, all owned by the main window.
+Select a part, pin or net and press **P** to open a miniature probe (multiple matches show the occurrence list). A schematic probe has its own sheet dropdown plus **Previous / Next occurrence** for the selected net's connected sheets. Manually browsing another sheet leaves the main drawing unchanged. Probe options contain flip and 15-degree rotation; focus a probe and use **F**, **R / Shift+R**, or **[ / ]**. **P** opens a sibling probe from that probe, all owned by the main window.
 
 Main drawing shortcuts: **D** opens the selected component's datasheet (HTTP/HTTPS only), **C** starts a comment at the selected object, **P** opens a probe, **F** flips, **R / Shift+R** rotates clockwise/counterclockwise. **T** toggles drawing theme; **Shift+F** fits the drawing. Editable text fields retain normal typing. Main PCB **[ / ]** still cycles layers.

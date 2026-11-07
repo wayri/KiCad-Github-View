@@ -19,7 +19,7 @@ Offline copies belong to the app and disappear when app data is cleared or the a
 
 ### Firefox and Firefox derivatives
 
-Use the dedicated Firefox ZIP and the [Firefox installation guide](FIREFOX.md). Temporary desktop loading uses `about:debugging`; future permanent installs require the official AMO listing or a signed XPI. Zen, LibreWolf and current Waterfox are unverified compatibility candidates. The guide also covers publisher deployment, updates and Firefox Android limits. Local viewing and provider access remain subject to the host differences documented there.
+Install through [Mozilla Add-ons](https://addons.mozilla.org/en-US/firefox/addon/pocket-kiview-kicad-review/), or follow the [Firefox guide](FIREFOX.md) for temporary desktop previews, Firefox-based browsers and Android limits.
 
 ### Chromium browser extension
 

@@ -19,7 +19,7 @@ Viewing and comparison have rendering/connectivity limits. Saved ERC/DRC finding
 ## Choose an edition
 
 - [VS Code Marketplace](https://marketplace.visualstudio.com/items?itemName=wayri.kicad-visual-review): review beside source code, keep review sidecars and compare marker-based Git conflicts visually. VS Code 1.95 or newer is declared by the package.
-- [Chrome companion](https://github.com/wayri/kiview-marketplace-assets/blob/main/CHROME-HOME.md): local file/folder and supported GitHub/GitLab page review. Chrome Web Store publication is pending; no public store URL is advertised yet.
+- [Chrome Web Store](https://chromewebstore.google.com/detail/klfdjlbngpoopegjmbajaidgodpmjaoc): local file/folder and supported GitHub/GitLab page review.
 
 Each edition works independently. Portable exports transfer supported review state; feature availability differs by host. KiCad, Microsoft and Google do not endorse this independent product.
 

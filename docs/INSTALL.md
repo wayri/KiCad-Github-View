@@ -17,9 +17,9 @@ desktop installer or Google Play installation is included in this preview.
 
 | Platform | Recommended route | Other options |
 | --- | --- | --- |
-| Windows | VS Code Marketplace or unpacked Chromium extension | Firefox temporary add-on; source-based local browser launcher |
-| Linux | VS Code Marketplace or unpacked Chromium extension | Firefox temporary add-on; source-based local browser launcher |
-| macOS | VS Code Marketplace or unpacked Chromium extension | Firefox temporary add-on; Safari development conversion with Xcode |
+| Windows | VS Code Marketplace or Chrome Web Store | Firefox temporary add-on; source-based local browser launcher |
+| Linux | VS Code Marketplace or Chrome Web Store | Firefox temporary add-on; source-based local browser launcher |
+| macOS | VS Code Marketplace or Chrome Web Store | Firefox temporary add-on; Safari development conversion with Xcode |
 | Android 8+ | Download the APK from Releases | No Google Play installation is available yet |
 
 ## VS Code — Windows, Linux and macOS
@@ -46,6 +46,10 @@ code --install-extension ./kicad-visual-review-vscode-0.12.90.vsix
 On macOS, VS Code's **Shell Command: Install 'code' command in PATH** enables this optional terminal route. The Extensions UI does not need it.
 
 ## Chrome / Chromium — Windows, Linux and macOS
+
+For the store version, open the [Chrome Web Store listing](https://chromewebstore.google.com/detail/klfdjlbngpoopegjmbajaidgodpmjaoc) and choose **Add to Chrome**. Review permissions and pin the icon if desired. Managed browsers may require IT approval.
+
+For a newer GitHub preview, install the unpacked package:
 
 1. Download the Chromium extension ZIP and extract it into a permanent folder. On Windows use **Extract All**; on macOS double-click the ZIP; on Linux use the archive manager or `unzip <downloaded-file.zip>`.
 2. Check that `manifest.json` is directly inside the selected folder.
@@ -77,16 +81,11 @@ For online projects, open a normal repository file page for `.kicad_sch` or `.ki
 
 ## Firefox and derivatives — Windows, Linux and macOS
 
-1. Download the [Firefox 0.12.82 ZIP](https://github.com/wayri/KiCad-Online/releases/download/v0.12.82/kicad-visual-review-firefox-0.12.82.zip), verify its checksum and extract it.
-2. In desktop Firefox 128+, open `about:debugging#/runtime/this-firefox`, choose **Load Temporary Add-on**, and select the extracted `manifest.json`.
-3. Click the extension icon for local files/folders, or refresh a GitHub/GitLab design page. Preferences/Options contains optional provider accounts and approved servers.
-4. To update, reload its `about:debugging` card after replacing the extracted files and refresh design tabs. Load it again after restarting Firefox.
+Install the signed store version from [Mozilla Add-ons](https://addons.mozilla.org/en-US/firefox/addon/pocket-kiview-kicad-review/). The store lists the version currently available; it may differ from GitHub while an update is under review.
 
-The unsigned preview is temporary; no permanent signed XPI or AMO listing is supplied. When a signed package is published, use its official AMO page or `about:addons` → settings gear → **Install Add-on From File…** with the **signed XPI**. Renaming a ZIP does not sign it. Export local notes before removing/replacing an installation.
+To try the unsigned [Firefox 0.12.90 ZIP](https://github.com/wayri/KiCad-Online/releases/download/v0.12.90/kicad-visual-review-firefox-0.12.90.zip), use desktop Firefox 140+, extract it, open `about:debugging#/runtime/this-firefox`, and select **Load Temporary Add-on → manifest.json**. Temporary installations end at browser restart.
 
-Zen, LibreWolf, current Waterfox and other Firefox derivatives are candidates using the **Firefox** package, not the Chromium ZIP. Their Gecko/API versions and add-on manager must support it; installed acceptance is unverified. The [Firefox/derivative guide](FIREFOX.md) covers vendor references, signing, updates and troubleshooting. Firefox Android extension acceptance is pending; use the Android APK now. Its future signed-XPI route is documented separately there.
-
-Publishers should follow the [Mozilla deployment steps and current consent-metadata blocker](FIREFOX.md#publish-to-mozilla-add-ons-or-distribute-a-signed-xpi) for AMO and signed self-distribution. Keep signature checks and organizational policies enabled.
+The [Firefox guide](FIREFOX.md) covers updates, local projects, Firefox-based browsers and mobile limits. Firefox Android 142+ is declared by the package; physical-device extension testing is not complete. The separate Android APK is available below. Keep signature checks and organization policies enabled.
 
 ## Safari — macOS development option
 
@@ -99,7 +98,7 @@ Safari cannot load the Chromium ZIP as a normal extension. The Safari developmen
 3. Open **KiCad Online**. Import a project folder/ZIP through the app's file picker, or browse a supported repository.
 4. Updates are manual: download and install the newer APK over the existing app when its package and signing identity match.
 
-The current GitHub 1.82 APK is a **development-signed preview**. It is not a Play Store release. Development and future distribution/Play signing identities may differ. If Android reports a signature conflict, preserve/export projects and review state before deciding how to migrate; do not immediately uninstall or clear app data. Installing an older version over a newer version may also be rejected.
+The current GitHub 1.92 APK is a **development-signed preview**. It is not a Play Store release. Development and future distribution/Play signing identities may differ. If Android reports a signature conflict, preserve/export projects and review state before deciding how to migrate; do not immediately uninstall or clear app data. Installing an older version over a newer version may also be rejected.
 
 Android Chrome does not provide the desktop **Load unpacked** workflow. Use the Android app rather than trying to install the desktop extension in mobile Chrome.
 
@@ -157,6 +156,6 @@ A matching hash verifies bytes against the published checksum; it is not a publi
 | Managed Chrome/Edge cannot open public files | Ask IT to check `ExtensionSettings` runtime hosts and network access to GitHub, its API and raw source host; the extension cannot override policy |
 | Missing sheet/model | Import the whole project folder; inspect relative paths, format/size warnings and library references |
 | APK will not install | Check Android version, free storage, version downgrade and signing identity; preserve data before migration |
-| Download requires sign-in | This GitHub repository/release is still private; request access or wait for public availability |
+| Public download unexpectedly requests sign-in | Use the public release links above and check the URL; private project downloads use the account authorized for that repository |
 
 Continue with the [user guide](USER-GUIDE.md). Report reproducible problems to [support.kivi@sigharmonic.com](mailto:support.kivi@sigharmonic.com), including version, operating system, steps and a non-confidential sample. Do not send credentials or private designs without authorization.

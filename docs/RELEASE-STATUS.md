@@ -1,4 +1,26 @@
-# Distribution status
+# Downloads and store availability
+
+KiCad Online releases are available from GitHub and the platform stores. Stores review updates independently, so their installable versions can differ from the GitHub preview.
+
+| Channel | Recorded state on 6 November 2026 | Download |
+| --- | --- | --- |
+| GitHub | **0.12.90 / Android 1.92** preview published | [Release files and checksums](https://github.com/wayri/KiCad-Online/releases/tag/v0.12.90) |
+| Chrome Web Store | **0.12.90 pending review**; previously published 0.12.88 | [Chrome listing](https://chromewebstore.google.com/detail/klfdjlbngpoopegjmbajaidgodpmjaoc) |
+| VS Code Marketplace | **0.12.90 public**; verification finished | [Marketplace listing](https://marketplace.visualstudio.com/items?itemName=wayri.kicad-visual-review) |
+| Mozilla Add-ons | **0.12.90 awaiting review**; readable source attached | [Firefox listing](https://addons.mozilla.org/en-US/firefox/addon/pocket-kiview-kicad-review/) |
+| Android app | **1.92 development-signed APK** on GitHub; manual updates | [APK](https://github.com/wayri/KiCad-Online/releases/download/v0.12.90/pocket-kivi-android-phone-tablet-1.92-development.apk) |
+| Safari | **0.12.85 development package**; requires Mac conversion and signing | [Safari instructions](SAFARI.md) |
+
+This is a dated snapshot, not a live status feed. Each store listing shows the version currently available to install. A successful upload or clean validator result does not mean an update has been approved.
+
+There is no Google Play release; the AAB is unsigned. Altium beta is separate from the main KiCad Online release. Firefox Android compatibility is declared, but physical-device extension testing is not complete.
+
+[Installation](INSTALL.md) · [User guide](../USER-GUIDE.md) · [Release notes](https://github.com/wayri/KiCad-Online/releases)
+
+<details>
+<summary>Release evidence and historical distribution records</summary>
+
+The following records preserve observations made during earlier releases. References to “current” or “pending” in these entries apply to their recorded dates.
 
 **0.12.90 store submissions (6 November 2026):** VS Code Marketplace **0.12.90 is Public**, verification finished. Chrome **0.12.90 is Pending review**, automatic publication selected; release text updated and three authentic feature captures added (comment composer, public Marble layer-color cross-probe, top Draftsman controls), bringing the listing to five screenshots. Existing Chrome 0.12.88 had published before this update; no review was cancelled. Mozilla **0.12.90 is Awaiting Review** (version 6673742, file 5217835), zero validation errors/warnings, desktop and Android compatibility declared, readable source attached (View current). Store submission is not approval. Altium beta excluded; Android 1.92 remains the GitHub APK, with no phone installation or Google Play publication in this attempt.
 
@@ -98,3 +120,5 @@ The [illustrated user guide](../USER-GUIDE.md) includes setup, review workflows 
 ## Shared viewer updates
 
 0.12.76 includes improved project-model path recovery and the detachable browser schematic/layout/3D windows introduced in 0.12.74, with independent cameras and linked cross-selection toggle. Native Android and VS Code Webviews retain split views. See [release notes](releases/v0.12.76.md). The new search spans saved design objects, net names, project paths/settings, supported report/simulation text and scoped Draftsman documents; limits are shown in the search UI.
+
+</details>

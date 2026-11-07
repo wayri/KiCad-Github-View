@@ -1,0 +1,70 @@
+# Git host implementation reference
+
+Technical reference retained from earlier documentation. Some version-specific descriptions are historical. Start with the current [comment guide](../COMMENTS.md) and [repository guide](../GIT-HOSTS.md) for user workflows.
+
+# Git host compatibility
+
+The browser extension embeds read-only viewers in supported repository file pages. A GitHub App cannot replace the website file renderer; the browser extension supplies that integration.
+
+| Capability | GitHub.com | GitLab.com and approved self-hosted GitLab | VS Code local checkout |
+| --- | --- | --- | --- |
+| Schematic and PCB selection, properties and hierarchy | Public and authorized private file reads | Public and authorized private project reads, including subgroup namespaces | Saved local files |
+| Project setup and supported repository-linked models | Yes | Yes, credentials bound to the selected server | Yes |
+| Branch/commit visual comparison | Yes | Yes | Pinned historical snapshots and marker-conflict comparison |
+| Inline PR / merge-request review | Public and authorized private GitHub pull-request file cards | Current merge-request Changes page selector (development after v0.12.9) | Not applicable |
+| Local annotations and review JSON export | Yes | Yes, isolated by provider and server | Git-tracked sidecar |
+| Existing browser login for private reads | Open matching GitHub tab; drawing/text reads, with API account needed for history and binary assets | Open matching project tab on approved server; source, history, comparison and binary asset reads | Not applicable |
+| Account and remote review publication | Issues, PR comments and GitHub Discussions | New issues, comments and discussion threads within existing issues | Matching Git remote: GitHub native sign-in; GitLab exact-host SecretStorage token |
+| Annotation marker readback | Public and authorized private Issue/PR markers; selected Discussion bodies/comments/replies | Markers on a selected issue, with authorized private access | Sidecar plus remote readback after committed-source verification |
+| Ordinary conversation reading | Selected Issue or Discussion body, comments and replies | Selected issue body, ordinary notes and grouped discussion replies | Same provider readers through the trusted host |
+| Self-hosted hostnames | Enterprise not implemented | Explicit HTTPS origin permission required; URL subpaths unsupported | Host-independent local files |
+
+## GitLab accounts and servers
+
+Reload the current browser package and open Options → **GitLab accounts and servers**. GitLab.com is built in. For another server, enter an exact origin such as `https://gitlab.example.com` and choose **Grant server access**. Approve only your intended server. A server hosted beneath a URL prefix such as `/gitlab` is not supported. Up to twenty additional servers may be configured. Removing a server deletes its credentials and OAuth Application ID, unregisters its preview and removes the browser permission; review notes are retained.
+
+For private read-only viewing, open the project in a signed-in GitLab tab and keep it open. The extension can fall back to that tab's existing session for project files, hierarchy, inventory, branches, history, comparisons, merge-request metadata, models and PDFs. This uses [GitLab's documented session-cookie authentication](https://docs.gitlab.com/api/rest/authentication/). Requests stay on the exact approved server and matching project tab, use GET only, reject redirects and never copy cookies or CSRF tokens into extension storage. Fork source reads require an open source-project tab as well. Session responses are capped at 32 MiB; existing pagination/source budgets still apply. Sign-out or permission removal stops subsequent reads. Live installed private-session acceptance remains pending; automated fixtures cover these boundaries.
+
+For remote review operations or independent viewer access, select the server and connect an account. An expiring token with `read_api` access may suffice for private viewing; issue publication requires `api` access and project permissions. OAuth is implemented: register a non-confidential application on that server, copy the exact **Browser redirect URI** from Options, select `api` scope, and enter its **Public Application ID**. Choose **Sign in with GitLab**. PKCE and random state protect the authorization flow; no client secret is used. No publisher GitLab Application ID is bundled. Registration is specific to the server and browser redirect URI. If the browser identity API is unavailable, use the token connection. Android uses its own protected account connection, not another browser's cookies.
+
+Credentials are AES-256-GCM encrypted with keys only in background memory, bound to the server, and expire within eight hours or the provider's shorter expiry. Background restart requires reconnection. Sign-out/reset purge credentials; remote revocation is a separate account action. See [SECURITY.md](../../SECURITY.md).
+
+## Viewing and comparison
+
+Open a `.kicad_sch`, `.kicad_pcb` or supported project file under the repository **Files** page. Repository/ref/file metadata disambiguates branches containing slashes. Missing metadata leaves the normal source page intact. Requests use the selected server's REST API, never GitHub credentials; redirects with credentials are rejected. References resolve to commit SHAs before project loading. Pagination, file/model byte limits and time limits apply, and incomplete discovery is reported. A private-project 404 can mean denied access as well as a missing file.
+
+Since v0.12.9: when GitLab reports a timed-out or size-limited comparison, the extension recovers changed drawings by comparing blob identities in both immutable commit trees. This fallback requires complete tree discovery (at most 1,000 entries per revision); incomplete discovery stops the comparison rather than inferring missing or deleted files. Unique byte-identical moves are shown as renames. Edited or ambiguous moves appear as additions/removals, with a visible explanation. Ordinary large/collapsed text diffs still use the saved drawing files for rendering. Automated provider and authorized self-hosted worker fixtures cover this fallback; installed-server acceptance remains pending.
+
+## Merge-request comparison
+
+Development after v0.12.9: open a current GitLab merge request's **Changes** page (`/-/merge_requests/NUMBER/diffs`). A KiCad selector appears above the normal diff. Select a drawing to compare the target merge base and the source head inside the page; only one drawing preview is mounted at a time. **Refresh revisions** captures a fresh comparison. GitLab's source diff remains visible. The existing viewer supports saved-object comparison, linked cameras, layers, sheet navigation and review notes. Notes still publish through the existing Issue / issue-discussion destinations; merge-request comment publication is not supplied.
+
+Fork reads use the source project's namespace at its immutable head commit, while the base uses the target project. Requests remain on the selected, permission-granted GitLab server with that server's credential. The extension rechecks merge-request revisions after discovery and rejects a moving comparison. Metadata that is not ready, missing fork access or incomplete tree discovery produces an explicit error. At most 1,000 tree entries per side are discovered. Byte-identical unique moves are recognized as renames; edited or ambiguous moves appear as added/removed with a warning. Historical `diff_id`/revision-comparison URLs are left untouched instead of silently displaying the latest commits. This uses [GitLab's documented merge-request revision identities](https://docs.gitlab.com/api/merge_requests/).
+
+Provider, authenticated self-hosted worker and SPA navigation tests pass. A local browser fixture renders PCB revision pairs and switches to schematics with simulated GitLab transport; installed GitLab UI acceptance remains pending.
+
+## GitLab review comments
+
+Choose **Review → Comments** to create a part, point or area note. Choose **Issue** for a new issue or an existing issue note. Choose **Discussion** for a discussion thread within an existing issue; GitLab has no standalone GitHub-style Discussion categories. Set the existing issue number when required, preview the formatted Markdown, and choose **Post to GitLab** or **Publish to GitLab**. Saving a draft never posts automatically. Successful publication records its link; uncertain results block automatic retries to avoid duplicates.
+
+In **View comments**, enter the existing issue number and choose **Load thread** to read its original message, ordinary comments and grouped discussion replies. This reader is available in Chrome, Android and VS Code. It is bounded to 200 comments and 1 MiB of displayed text; warnings point to GitLab when results are incomplete. **Reply** prepares a draft for that issue; publication still requires an explicit **Comment** or **Publish** action. Reload manually to see later changes.
+
+Annotation readback is separate: only validated markers matching the server, project, revision and drawing become drawing notes. Ordinary conversation messages stay in the thread reader. There is no full issue inbox, notification feed or live subscription. PNG captures can be uploaded with the explicitly previewed publication through the connected account, subject to private-media authentication policy. Local state changes do not close issues or synchronize remote edits.
+
+Owners may provide `.kicad-review-policy.json` on the default branch. Malformed or unverifiable policy blocks publication. Use `all`, `collaborators` or `allowlist` as appropriate; contributors-only checks fail closed without verifiable account membership or an explicit allowlist because commit emails do not establish account identity. Provider permissions remain authoritative. Browser GitLab notes use local storage/export rather than the connected GitHub sidecar workflow. VS Code uses its workspace review sidecar for both providers.
+
+## VS Code accounts and saved Git revisions
+
+Open a trusted local Git checkout with a matching GitHub or GitLab remote. In **Review**, open the account/settings control. GitHub uses VS Code's native account consent with repository access; no device code or manually copied token is required in this host. GitLab asks for a token for the exact server identified by the checkout's remote and stores it in VS Code SecretStorage. Browser and Android account sessions are separate.
+
+Choose Issue or Discussion, enter a number and select **Load thread**. GitLab discussions belong to an existing issue. To post, create or reply to a note, check the destination and screenshot, then explicitly choose **Comment** or **Publish**. Repository policy and account permissions apply. Credentials stay in the extension host and never enter the webview or review sidecar.
+
+Pinned annotation readback and publication require displayed source to match the raw committed Git blobs. Dirty drawings must be committed and reopened first; ordinary thread reading remains available. A changed remote or HEAD requires reopening the viewer. Restricted Mode and unbound projects retain local inspection without remote collaboration.
+
+In **Repository**, choose a commit and **Browse files** to inspect its immutable file tree. Supported saved drawings open as read-only snapshots using that commit's source and linked assets; this does not check out a branch or replace working files. Native Git and workspace trust are required. Historical snapshots disable workspace annotation writes and remote publication. Missing objects or unavailable Git support produce an explicit error rather than substituting current working files.
+
+## Boundaries and validation
+
+Transport is isolated in `extension/gitlab-provider.js`; authentication/publication in `gitlab-review-api.js`; approved server registration in `gitlab-hosts.js`; routes and page mounting in `parsing.js` and `content.js`. Bitbucket, Azure DevOps, Gitea, Forgejo and GitHub Enterprise remain unimplemented. All hosts share renderer limitations; the browser displays imported ERC/DRC reports rather than running native checks.
+
+Chromium, Firefox and Safari development packages share these capabilities. Safari conversion/signing and installed-browser OAuth acceptance require a Mac; a generated ZIP is not a signed store release. Automated fixtures verify routing and API contracts, not real account permissions, provider availability or every server's page markup.

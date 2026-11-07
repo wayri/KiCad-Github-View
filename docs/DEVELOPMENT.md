@@ -36,6 +36,13 @@ Browser output goes to `dist/`; VSIX output goes to `build/`. Android packaging 
 
 Optional packages have their own scripts: `package_firefox.py`, `package_safari.py` and `package_local_viewer.py`. Building a package is not proof of an installed-browser test.
 
+## Maintainer references
+
+- [Store publishing](STORE-PUBLISHING.md) and [dated distribution records](RELEASE-STATUS.md)
+- [Firefox packaging and Mozilla submission](maintainers/FIREFOX.md)
+- [GitHub OAuth configuration](maintainers/GITHUB-OAUTH.md)
+- [Safari distribution verification](maintainers/SAFARI-ACCEPTANCE.md)
+
 ## Verification and releases
 
 ```sh

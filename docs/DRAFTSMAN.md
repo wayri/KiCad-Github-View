@@ -12,11 +12,11 @@ Open **Draftsman** with a loaded PCB to create mechanical and assembly documenta
 4. Add outline dimensions, manual dimensions, notes or a fitted-parts BoM. Add sheets for further views rather than crowding one page.
 5. Save a draft, then download the editable document and a PDF. Keep the source project with the editable document: reopening verifies its source fingerprints.
 
-## Templates and snapping (0.12.70 / Android 1.72)
+## Templates and snapping
 
 The template picker switches between **Modern** and **KiCad sheet**. The latter uses a KiCad-style boundary, coordinate-zone labels and divided title block. Legacy schematic documents retain their saved colours; new views use mechanical 3D. This is an alternative built-in template, not a loader for custom KiCad `.kicad_wks` files. Existing documents without a template setting keep Modern.
 
-Select a drawing view, activate **Dimension**, and keep the magnet enabled. Move near a saved hole/circle centre, corner, endpoint, straight edge or rounded edge; the cursor cue identifies the selected target and coordinates. Snapping uses mechanical geometry and saved component-drill centres, excludes hidden/electrical geometry, and is currently available only on top mechanical views. Hold **Alt** to bypass snapping or **Shift** to constrain the second point to an axis. On touch screens, drag to preview and release to place each point. **Escape** cancels the pending dimension. These refinements are newer than the first Draftsman implementation in 0.12.69.
+Select a drawing view, activate **Dimension**, and keep the magnet enabled. Move near a saved hole/circle centre, corner, endpoint, straight edge or rounded edge; the cursor cue identifies the selected target and coordinates. Snapping uses mechanical geometry and saved component-drill centres, excludes hidden/electrical geometry, and is currently available only on top mechanical views. Hold **Alt** to bypass snapping or **Shift** to constrain the second point to an axis. On touch screens, drag to preview and release to place each point. **Escape** cancels the pending dimension.
 
 ## Create and customize
 
@@ -40,18 +40,18 @@ The small toolbar scrolls horizontally when space is limited. **Properties** hid
 
 No remote write occurs when opening, measuring, filtering or downloading. Declining the repository confirmation performs no repository write. Authentication remains in the extension worker, not the document or page. There are no new host permissions.
 
-## Evidence and limits
+## Document limits
 
 Each document records its source repository/ref and SHA-256 fingerprints of the loaded drawing sources. Manual dimensions and notes are user-entered; automatic dimensions are calculated from saved outline geometry. Unsaved KiCad editor state, library resolution outside the loaded files, manufacturing tolerances and current native DRC/ERC results are outside this document's evidence boundary.
 
 Documents support 1–128 loaded boards, 20 sheets, 200 items per sheet and at most 16 mechanical views. Legacy documents retain their 64-view schema limit. Editable JSON is capped at 4 MiB. Mechanical captures use a bounded 1200×900 host with an 1800-pixel maximum capture dimension; legacy raster views use a shared 16-megapixel preview budget; large documents should be split into volumes. SVG rendering and PDF pixels/bytes are bounded, and repository exports are capped at 16 MiB. Inputs with unsupported versions/fields, detached dimensions, unsafe paths, remote image URLs or changed source fingerprints are rejected. No document can execute scripts or change circuit connectivity.
 
-The 0.12.69 preview includes this workspace; older binaries require an update. Repository writes are covered by mocked provider tests, not a live publish test.
+Repository saves require a connected account with write permission. Review the destination before saving and check the reported result if a provider write fails.
 
 Mechanical images are orthographic, generated locally, with no copper information. Top views map to saved source XY for dimensions; source-coordinate dimensions are rejected on other projections. Model availability, stand-ins, missing saved stackup thickness and omitted drill geometry remain disclosed. Component models do not establish manufacturing accuracy.
 
 Legacy drawing documents still require their exact original loaded source set and fingerprints. Adding a companion board changes that source set; retain/export the original document with its original viewer/source set before migration. No saved document is overwritten automatically.
 
-The final-output actions sit together at the bottom of Draftsman. **Download PDF** generates the complete multi-sheet PDF locally; select SVG or editable document to change the download format. **Save to GitHub** saves the PDF, SVG sheets and editable JSON together on the new documentation branch, then offers **Open saved PDF** and **Editable document** links. A connected account with repository write permission is required. For local-only projects, downloads and folder saves remain available. Repository output packages are limited to 16 MiB; larger documents can be downloaded instead.
+The drawing tools and save/export actions sit at the top of Draftsman. On narrow screens, open the **Tools** and **Save & export** menus. **Download PDF** generates the complete multi-sheet PDF locally; select SVG or editable document to change the download format. **Save to GitHub** saves the PDF, SVG sheets and editable JSON together on the new documentation branch, then offers **Open saved PDF** and **Editable document** links. A connected account with repository write permission is required. For local-only projects, downloads and folder saves remain available. Repository output packages are limited to 16 MiB; larger documents can be downloaded instead.
 
 Generated download links stay available until the Draftsman workspace closes or another export replaces them, so downloads can be retried without rerendering. The browser controls the final download location.
